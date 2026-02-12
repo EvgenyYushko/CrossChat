@@ -14,13 +14,14 @@ namespace CrossChat.Controllers
 		private const string INSTAGRAM_OAUTH_URL = "https://www.instagram.com/consent/?flow=ig_biz_login_oauth";
 		private const string INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 		private const string INSTAGRAM_GRAPH_URL = "https://graph.instagram.com";
+		private const string INSTAGRAM_API_AUTH = "https://api.instagram.com/oauth/authorize";
 
 		private string AppId => "1660493108654598";
 		private string AppSecret => "bdf384bf7e6388dd00d811dc47b3d94c";
-		private string BaseUrl => "https://krossmediahub.onrender.com";
 
-		private string redirectUri = "localhost/instagram/auth/callback";
+		private const string BaseUrl = "https://crosschat-fabc.onrender.com";
 
+		private const string redirectUri = $"{BaseUrl}/instagram/auth/callback";
 
 		public InstagramController(ILogger<InstagramController> logger)
 		{
@@ -110,7 +111,7 @@ namespace CrossChat.Controllers
         <p>Подключите Instagram чтобы продолжить</p>
         
         <!-- КНОПКА ВХОДА ЧЕРЕЗ INSTAGRAM -->
-        <button onclick=""window.location.href='https://api.instagram.com/oauth/authorize?client_id=1660493108654598&redirect_uri=localhost/instagram/auth/callback&scope=user_profile,user_media&response_type=code'"" 
+        <button onclick=""window.location.href='https://api.instagram.com/oauth/authorize?client_id=1660493108654598&redirect_uri=https://crosschat-fabc.onrender.com/instagram/auth/callback&scope=user_profile,user_media&response_type=code'"" 
                 class=""instagram-btn"">
             <span>Войти через Instagram</span>
         </button>
@@ -172,7 +173,7 @@ namespace CrossChat.Controllers
 					try
 					{
 						// Декодируем URL-кодирование
-						var decodedState = HttpUtility.UrlDecode(state);
+						var decodedState = state;
 						_logger.LogInformation($"Decoded state: {decodedState}");
 
 						// Убираем экранирование кавычек
@@ -191,7 +192,6 @@ namespace CrossChat.Controllers
 						_logger.LogError(ex, "Failed to parse state");
 					}
 				}
-
 
 				var tokenResponse = await ExchangeCodeForTokenAsync(code, redirectUri);
 
@@ -236,7 +236,7 @@ namespace CrossChat.Controllers
 			var stateJson = JsonConvert.SerializeObject(state);
 			var encodedState = HttpUtility.UrlEncode(stateJson);
 
-			return $"https://api.instagram.com/oauth/authorize?" +
+			return $"{INSTAGRAM_API_AUTH}?" +
 				   $"client_id={AppId}&" +
 				   $"redirect_uri={HttpUtility.UrlEncode($"{BaseUrl}/instagram/auth/callback")}&" +
 				   $"scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments, instagram_business_content_publish&" +
@@ -275,6 +275,9 @@ namespace CrossChat.Controllers
 
 				var shortLivedResponse = await client.SendAsync(shortLivedRequest);
 				var shortLivedJson = await shortLivedResponse.Content.ReadAsStringAsync();
+
+				_logger.LogInformation("Короткий токен" + shortLivedJson);
+
 				var shortLivedToken = JsonConvert.DeserializeObject<InstagramShortLivedToken>(shortLivedJson);
 
 				// Логируем получение кратковременного токена
@@ -282,7 +285,6 @@ namespace CrossChat.Controllers
 					shortLivedToken.UserId);
 
 				// ШАГ 2: Обмен КРАТКОВРЕМЕННОГО на ДОЛГОВРЕМЕННЫЙ токен (60 дней)
-				// ВАЖНО: Используем graph.instagram.com, НЕ graph.facebook.com!
 				var longLivedUrl = $"https://graph.instagram.com/access_token" +
 					$"?grant_type=ig_exchange_token" +
 					$"&client_secret={Uri.EscapeDataString(AppSecret)}" +
@@ -358,66 +360,66 @@ namespace CrossChat.Controllers
 	}
 
 	#region Models
-		public class InstagramShortLivedToken
-		{
-			[JsonProperty("access_token")]
-			public string AccessToken { get; set; }
+	public class InstagramShortLivedToken
+	{
+		[JsonProperty("access_token")]
+		public string AccessToken { get; set; }
 
-			[JsonProperty("user_id")]
-			public long UserId { get; set; }
+		[JsonProperty("user_id")]
+		public long UserId { get; set; }
 
-			[JsonProperty("permissions")]
-			public List<string> Permissions { get; set; }
+		[JsonProperty("permissions")]
+		public List<string> Permissions { get; set; }
 
-			[JsonIgnore]
-			public string RawResponse { get; set; }
-		}
+		[JsonIgnore]
+		public string RawResponse { get; set; }
+	}
 
-		public class InstagramLongLivedToken
-		{
-			[JsonProperty("access_token")]
-			public string AccessToken { get; set; }
+	public class InstagramLongLivedToken
+	{
+		[JsonProperty("access_token")]
+		public string AccessToken { get; set; }
 
-			[JsonProperty("token_type")]
-			public string TokenType { get; set; }
+		[JsonProperty("token_type")]
+		public string TokenType { get; set; }
 
-			[JsonProperty("expires_in")]
-			public int ExpiresIn { get; set; }
+		[JsonProperty("expires_in")]
+		public int ExpiresIn { get; set; }
 
-			[JsonIgnore]
-			public string RawResponse { get; set; }
-		}
+		[JsonIgnore]
+		public string RawResponse { get; set; }
+	}
 
-		// Models/InstagramAuthModels.cs
-		public class InstagramAuthState
-		{
-			[JsonProperty("user_id")]
-			public string UserId { get; set; }
+	// Models/InstagramAuthModels.cs
+	public class InstagramAuthState
+	{
+		[JsonProperty("user_id")]
+		public string UserId { get; set; }
 
-			[JsonProperty("provider")]
-			public string Provider { get; set; }
+		[JsonProperty("provider")]
+		public string Provider { get; set; }
 
-			[JsonProperty("token")]
-			public string Token { get; set; }
+		[JsonProperty("token")]
+		public string Token { get; set; }
 
-			[JsonProperty("callback_url")]
-			public string CallbackUrl { get; set; }
+		[JsonProperty("callback_url")]
+		public string CallbackUrl { get; set; }
 
-			[JsonProperty("messages_callback")]
-			public string MessagesCallback { get; set; }
-		}
+		[JsonProperty("messages_callback")]
+		public string MessagesCallback { get; set; }
+	}
 
-		public class InstagramTokenResponse
-		{
-			[JsonProperty("access_token")]
-			public string AccessToken { get; set; }
+	public class InstagramTokenResponse
+	{
+		[JsonProperty("access_token")]
+		public string AccessToken { get; set; }
 
-			[JsonProperty("user_id")]
-			public long UserId { get; set; }
+		[JsonProperty("user_id")]
+		public long UserId { get; set; }
 
-			[JsonProperty("expires_in")]
-			public int ExpiresIn { get; set; }
-		}
+		[JsonProperty("expires_in")]
+		public int ExpiresIn { get; set; }
+	}
 
-		#endregion
+	#endregion
 }
