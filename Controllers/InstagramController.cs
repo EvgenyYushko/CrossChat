@@ -9,9 +9,9 @@ namespace CrossChat.Controllers
 {
 	[ApiController]
 	[Route("instagram")]
-	public class InstagramBusinessLoginController : ControllerBase
+	public class InstagramController : ControllerBase
 	{
-		private readonly ILogger<InstagramBusinessLoginController> _logger;
+		private readonly ILogger<InstagramController> _logger;
 		private readonly SocialMediaSettings _settings;
 		private readonly HttpClient _httpClient;
 
@@ -26,7 +26,7 @@ namespace CrossChat.Controllers
 
 		private string faceBookRedirectUri = $"{APP_URL}/instagram/facebook/auth/callback";
 
-		public InstagramBusinessLoginController(ILogger<InstagramBusinessLoginController> logger, IOptions<SocialMediaSettings> options)
+		public InstagramController(ILogger<InstagramController> logger, IOptions<SocialMediaSettings> options)
 		{
 			_logger = logger;
 			_settings = options.Value;
@@ -515,7 +515,7 @@ namespace CrossChat.Controllers
 				// -----------------------------------------------------------------------
 				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 									$"client_id={AppId}&" +
-									$"redirect_uri={RedirectUri}&" +
+									$"redirect_uri={faceBookRedirectUri}&" +
 									$"client_secret={AppSecret}&" +
 									$"code={code}";
 
@@ -610,158 +610,6 @@ namespace CrossChat.Controllers
 			{
 				_logger.LogError(ex, "Critical Error in Facebook Callback");
 				return ReturnHtmlPage(false, "System Error", ex.Message, ex.StackTrace, "");
-			}
-		}
-
-		// Обмен кода на токен
-		public async Task<InstagramTokenResponse> ExchangeCodeForTokenAsync(string code, string redirectUri)
-		{
-			try
-			{
-				_logger.LogInformation("=== [Business Login] Step 1: Exchanging code for short-lived token ===");
-				_logger.LogInformation("AppId: {AppId}", AppId);
-				_logger.LogInformation("RedirectUri: {RedirectUri}", redirectUri);
-				_logger.LogInformation("Code length: {CodeLength}", code?.Length);
-
-				using var client = new HttpClient();
-
-				// --- ШАГ 1: Обмен кода на КОРОТКОЖИВУЩИЙ токен (2 часа) ---
-				// URL для Business Login: graph.facebook.com, НЕ api.instagram.com
-				var tokenExchangeUrl = "https://graph.facebook.com/v22.0/oauth/access_token";
-
-				var formData = new Dictionary<string, string>
-				{
-					["client_id"] = AppId,
-					["client_secret"] = AppSecret,
-					["redirect_uri"] = redirectUri,
-					["code"] = code
-				};
-
-				_logger.LogInformation("Sending POST to {Url}", tokenExchangeUrl);
-				var shortLivedResponse = await client.PostAsync(tokenExchangeUrl, new FormUrlEncodedContent(formData));
-				var shortLivedJson = await shortLivedResponse.Content.ReadAsStringAsync();
-
-				_logger.LogInformation("Short-lived token response status: {StatusCode}", shortLivedResponse.StatusCode);
-				_logger.LogInformation("Short-lived token response body: {ResponseBody}", shortLivedJson);
-
-				if (!shortLivedResponse.IsSuccessStatusCode)
-				{
-					throw new Exception($"Failed to get short-lived token: {shortLivedJson}");
-				}
-
-				_logger.LogInformation("КОроткий токен:" + shortLivedJson);
-
-				// Парсим ответ. В Business Login приходит access_token и НЕ приходит user_id в этом ответе!
-				var shortLivedTokenObj = JsonDocument.Parse(shortLivedJson).RootElement;
-				var shortLivedAccessToken = shortLivedTokenObj.GetProperty("access_token").GetString();
-
-				_logger.LogInformation("Short-lived token obtained successfully.");
-
-				// --- ШАГ 2: Обмен КОРОТКОГО на ДОЛГОЖИВУЩИЙ токен (60 дней) ---
-				_logger.LogInformation("=== [Business Login] Step 2: Exchanging for long-lived token ===");
-
-				var longLivedUrl = "https://graph.facebook.com/v22.0/oauth/access_token?" +
-								   "grant_type=fb_exchange_token&" +
-								   $"client_id={Uri.EscapeDataString(AppId)}&" +
-								   $"client_secret={Uri.EscapeDataString(AppSecret)}&" +
-								   $"fb_exchange_token={Uri.EscapeDataString(shortLivedAccessToken)}";
-
-				_logger.LogInformation("Requesting long-lived token from: {Url}", longLivedUrl.Replace(AppSecret, "***SECRET***"));
-
-				var longLivedResponse = await client.GetAsync(longLivedUrl);
-				var longLivedJson = await longLivedResponse.Content.ReadAsStringAsync();
-
-				_logger.LogInformation("Long-lived token response status: {StatusCode}", longLivedResponse.StatusCode);
-				_logger.LogInformation("Long-lived token response body: {ResponseBody}", longLivedJson);
-
-				if (!longLivedResponse.IsSuccessStatusCode)
-				{
-					throw new Exception($"Failed to get long-lived token: {longLivedJson}");
-				}
-
-				var longLivedTokenObj = JsonDocument.Parse(longLivedJson).RootElement;
-				var longLivedAccessToken = longLivedTokenObj.GetProperty("access_token").GetString();
-				var expiresIn = longLivedTokenObj.GetProperty("expires_in").GetInt32();
-				var tokenType = longLivedTokenObj.TryGetProperty("token_type", out var tt) ? tt.GetString() : "bearer";
-
-				_logger.LogInformation("Long-lived token obtained. Expires in: {ExpiresIn}s", expiresIn);
-
-				// --- ИСПРАВЛЕННЫЙ ШАГ 3 В InstagramController.cs ---
-				// Вставьте этот код ВМЕСТО старого блока "Step 3" внутри метода ExchangeCodeForTokenAsync
-
-				_logger.LogInformation("=== [Business Login] Step 3: Finding connected instagramFromFaceBook Business Account ===");
-
-				long instagramBusinessUserId = 0;
-
-				try
-				{
-					// 1. Мы получили токен. Этот токен дает доступ к СТРАНИЦАМ пользователя.
-					// Мы просим Facebook: "Дай мне список страниц этого юзера и покажи, привязан ли к ним Instagram".
-
-					var pagesUrl = $"https://graph.facebook.com/v22.0/me/accounts?" +
-								   $"fields=name,instagram_business_account&" +
-								   $"access_token={Uri.EscapeDataString(longLivedAccessToken)}";
-
-					_logger.LogInformation("Scanning user pages for Instagram connection...");
-
-					var response = await client.GetAsync(pagesUrl);
-					var jsonString = await response.Content.ReadAsStringAsync();
-
-					if (response.IsSuccessStatusCode)
-					{
-						using var doc = JsonDocument.Parse(jsonString);
-						var root = doc.RootElement;
-
-						// Facebook возвращает массив "data" со списком страниц
-						if (root.TryGetProperty("data", out var dataArray))
-						{
-							foreach (var page in dataArray.EnumerateArray())
-							{
-								// Проверяем каждую страницу: есть ли у неё поле instagram_business_account?
-								if (page.TryGetProperty("instagram_business_account", out var instaAccount))
-								{
-									if (instaAccount.TryGetProperty("id", out var idElement))
-									{
-										// УРА! НАШЛИ!
-										var idStr = idElement.GetString();
-										if (long.TryParse(idStr, out instagramBusinessUserId))
-										{
-											var pageName = page.TryGetProperty("name", out var pName) ? pName.GetString() : "Unknown";
-											_logger.LogInformation($"SUCCESS: Found Instagram ID {instagramBusinessUserId} linked to Page '{pageName}'");
-											break; // Выходим из цикла, берем первый найденный
-										}
-									}
-								}
-							}
-						}
-					}
-					else
-					{
-						_logger.LogError($"Failed to fetch pages. Error: {jsonString}");
-					}
-				}
-				catch (Exception ex)
-				{
-					_logger.LogError(ex, "Error while parsing pages");
-				}
-
-				if (instagramBusinessUserId == 0)
-				{
-					_logger.LogWarning("COULD NOT FIND INSTAGRAM ACCOUNT. Make sure the user is an Admin of a Facebook Page linked to an Instagram Business Account.");
-				}
-
-				// Возвращаем результат (даже если 0, токен мы сохраним, чтобы вы могли диагностировать)
-				return new InstagramTokenResponse
-				{
-					AccessToken = longLivedAccessToken,
-					UserId = instagramBusinessUserId,
-					ExpiresIn = expiresIn
-				};
-			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "Error exchanging code for token in Business Login flow");
-				throw;
 			}
 		}
 
