@@ -1,3 +1,5 @@
+using CrossChat.Worker.Contracts;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CrossChat.Controllers
@@ -6,11 +8,13 @@ namespace CrossChat.Controllers
 	[Route("[controller]")]
 	public class InstagramWebhookController : ControllerBase
 	{
+		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly ILogger<InstagramWebhookController> _logger;
 		private const string VerifyToken = "test"; // Задайте свой токен
 
-		public InstagramWebhookController(ILogger<InstagramWebhookController> logger)
+		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint)
 		{
+			_publishEndpoint = publishEndpoint;
 			_logger = logger;
 		}
 
@@ -44,6 +48,13 @@ namespace CrossChat.Controllers
 				var body = await reader.ReadToEndAsync();
 
 				_logger.LogInformation($"Received Instagram webhook: {body}");
+
+				await _publishEndpoint.Publish(new InstagramMessageReceived
+				{
+					DialogId = "1",
+					MessageText = "test",
+					ReceivedAt = DateTime.UtcNow
+				});
 
 				return Ok();
 			}
