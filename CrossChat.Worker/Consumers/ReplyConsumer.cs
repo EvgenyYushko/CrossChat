@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -6,29 +7,56 @@ namespace CrossChat.Worker.Consumers;
 
 public class ReplyConsumer : IConsumer<ProcessDialogReply>
 {
-    private readonly ILogger<ReplyConsumer> _logger;
+	private readonly ILogger<ReplyConsumer> _logger;
 
-    // Сюда потом внедришь свои сервисы: IInstagramService, IAiService
-    public ReplyConsumer(ILogger<ReplyConsumer> logger)
+	// Статический лимитер (один на всё приложение)
+	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
+    // Настройка: 15 запросов в 1 минуту (Безопасно для Free Tier)
+    private static readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
     {
-        _logger = logger;
-    }
+        PermitLimit = 20,                     // Сколько разрешаем (20 шт)
+        Window = TimeSpan.FromMinutes(1),     // За какое время (1 мин)
+        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        QueueLimit = 0
+    });
 
-    public async Task Consume(ConsumeContext<ProcessDialogReply> context)
-    {
-        var senderId = context.Message.SenderId;
+	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
+	public ReplyConsumer(ILogger<ReplyConsumer> logger)
+	{
+		_logger = logger;
+	}
 
-        _logger.LogInformation($"[Reply] ⏰ 30 секунд прошло для {senderId}. Начинаем формировать ответ!");
+	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
+	{
+		// Пытаемся получить разрешение на выполнение
+		using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
 
-        // 1. Получить историю переписки через API Инстаграма
-        // var history = await _instaService.GetHistory(senderId);
+		if (lease.IsAcquired)
+		{
+			// УРА! Нам разрешено. Выполняем логику.
+			var senderId = context.Message.SenderId;
 
-        // 2. Отправить в AI
-        // var answer = await _aiService.GetAnswer(history);
+			_logger.LogInformation($"[Reply] ⏰ 30 секунд прошло для {senderId}. Начинаем формировать ответ!");
 
-        // 3. Отправить ответ пользователю
-        // await _instaService.SendMessage(senderId, answer);
+			// 1. Получить историю переписки через API Инстаграма
+			// var history = await _instaService.GetHistory(senderId);
 
-        await Task.CompletedTask;
-    }
+			// 2. Отправить в AI
+			// var answer = await _aiService.GetAnswer(history);
+
+			// 3. Отправить ответ пользователю
+			// await _instaService.SendMessage(senderId, answer);
+		}
+		else
+		{
+			// Лимит исчерпан. 
+			// Говорим RabbitMQ: "Я не смог, верни сообщение в очередь, попробую позже".
+			throw new Exception("Rate limit exceeded (Gemini). Throttling...");
+
+			// Благодаря этому исключению RabbitMQ сделает Redelivery через пару секунд,
+			// когда окно лимита освободится.
+		}
+
+		await Task.CompletedTask;
+	}
 }
