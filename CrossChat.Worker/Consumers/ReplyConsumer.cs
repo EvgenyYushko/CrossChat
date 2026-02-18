@@ -16,18 +16,18 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
     public async Task Consume(ConsumeContext<ProcessDialogReply> context)
     {
-        var dialogId = context.Message.DialogId;
+        var senderId = context.Message.SenderId;
 
-        _logger.LogInformation($"[Reply] ⏰ 30 секунд прошло для {dialogId}. Начинаем формировать ответ!");
+        _logger.LogInformation($"[Reply] ⏰ 30 секунд прошло для {senderId}. Начинаем формировать ответ!");
 
         // 1. Получить историю переписки через API Инстаграма
-        // var history = await _instaService.GetHistory(dialogId);
+        // var history = await _instaService.GetHistory(senderId);
 
         // 2. Отправить в AI
         // var answer = await _aiService.GetAnswer(history);
 
         // 3. Отправить ответ пользователю
-        // await _instaService.SendMessage(dialogId, answer);
+        // await _instaService.SendMessage(senderId, answer);
 
         await Task.CompletedTask;
     }

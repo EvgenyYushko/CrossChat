@@ -19,10 +19,10 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 	public async Task Consume(ConsumeContext<InstagramMessageReceived> context)
 	{
 		var message = context.Message;
-		var dialogId = message.DialogId;
+		var senderId = message.SenderId;
 
 		// Ключ блокировки: "lock:dialog_id"
-		var lockKey = $"debounce:{dialogId}";
+		var lockKey = $"debounce:{senderId}";
 
 		// Пытаемся установить ключ в Redis.
 		// StringSetAsync вернет TRUE, только если ключа НЕ существовало (When.NotExists).
@@ -36,17 +36,17 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 
 		if (isFirstMessage)
 		{
-			_logger.LogInformation($"[Debounce] Первое сообщение от {dialogId}. Запускаем таймер на 30 сек.");
+			_logger.LogInformation($"[Debounce] Первое сообщение от {senderId}. Запускаем таймер на 30 сек.");
 
 			// ИСПОЛЬЗУЕМ SchedulePublish ВМЕСТО ScheduleSend
 			// Нам не нужно знать URI очереди. MassTransit сам найдет ReplyConsumer.
 			await context.SchedulePublish(
-				TimeSpan.FromSeconds(10),
-				new ProcessDialogReply { DialogId = dialogId });
+				TimeSpan.FromSeconds(30),
+				new ProcessDialogReply { SenderId = senderId });
 		}
 		else
 		{
-			_logger.LogInformation($"[Debounce] Сообщение от {dialogId} пропущено (таймер уже идет).");
+			_logger.LogInformation($"[Debounce] Сообщение от {senderId} пропущено (таймер уже идет).");
 		}
 	}
 }

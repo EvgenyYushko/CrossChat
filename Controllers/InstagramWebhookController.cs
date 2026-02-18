@@ -1,4 +1,6 @@
+using System.Text.Json;
 using CrossChat.Worker.Contracts;
+using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 
@@ -47,14 +49,69 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 
-				_logger.LogInformation($"Received Instagram webhook: {body}");
+				// Десериализуем
+				var payload = JsonSerializer.Deserialize<InstagramWebhookPayload>(body);
 
-				await _publishEndpoint.Publish(new InstagramMessageReceived
+				if (payload?.Entry == null) return Ok();
+
+				foreach (var entry in payload.Entry)
 				{
-					DialogId = "1",
-					MessageText = "test",
-					ReceivedAt = DateTime.UtcNow
-				});
+					// 1. Обработка Сообщений (Direct)
+					if (entry.Messaging != null)
+					{
+						foreach (var messaging in entry.Messaging)
+						{
+							// Это простое сообщение?
+							if (messaging.Message != null && !messaging.Message.IsEcho)
+							{
+								// Проверка на ответ на сторис
+								if (messaging.Message.ReplyTo != null)
+								{
+									_logger.LogInformation($"Логика ответа на сторис {messaging.Message.ReplyTo}");
+								}
+								// Обычный текст
+								else if (!string.IsNullOrEmpty(messaging.Message.Text))
+								{
+									await _publishEndpoint.Publish(new InstagramMessageReceived
+									{
+										SenderId = messaging.Sender.Id,
+										RecipientId = messaging.Recipient.Id, // владелец аккаунта
+										MessageId = messaging.Message.MessageId,
+										ReceivedAt = DateTime.UtcNow
+									});
+								}
+								// Картинка/Видео
+								else if (messaging.Message.Attachments != null)
+								{
+									_logger.LogInformation($"Логика Обработка медиа штук:{messaging.Message.Attachments.Count}");
+								}
+							}
+							// Это реакция?
+							else if (messaging.Reaction != null)
+							{
+								_logger.LogInformation($"Пользователь поставил реакцию {messaging.Reaction.Emoji}");
+							}
+							// Это удаление?
+							else if (messaging.Message != null && messaging.Message.IsDeleted)
+							{
+								_logger.LogInformation("Пользователь удалил сообщение");
+							}
+						}
+					}
+
+					// 2. Обработка Комментариев (Changes)
+					if (entry.Changes != null)
+					{
+						foreach (var change in entry.Changes)
+						{
+							if (change.Field == "comments")
+							{
+								_logger.LogInformation($"Новый коммент от {change.Value.From.Username}: {change.Value.Text}");
+								// Тут можно тоже кидать в RabbitMQ, но в другую очередь, например
+							}
+						}
+					}
+				}
 
 				return Ok();
 			}

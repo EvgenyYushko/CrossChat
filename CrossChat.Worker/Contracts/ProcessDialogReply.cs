@@ -1,5 +1,5 @@
 namespace CrossChat.Worker.Contracts;
 public record ProcessDialogReply
 {
-	public string DialogId { get; set; } = string.Empty;
+	public string SenderId { get; set; } = string.Empty;
 }

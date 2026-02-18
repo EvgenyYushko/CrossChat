@@ -20,12 +20,6 @@ builder.Services.AddControllers();
 // 1. == НАСТРОЙКА REDIS ==
 // Теперь этот метод найдет значение, так как файл уже загружен выше
 var redisConn = GetConfigOrThrow("ExternalHostingsSettings:Redis");
-
-// ВАЖНО: Если строка начинается с "redis://", StackExchange.Redis может её не понять.
-// Обычно для него нужен формат "host:port,password=...".
-// Если будет ошибка подключения, попробуй убрать "redis://" из строки:
-// redisConn = redisConn.Replace("redis://", ""); 
-
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
 
 var rabbitMqUrl = GetConfigOrThrow("ExternalHostingsSettings:RabbitMq");
