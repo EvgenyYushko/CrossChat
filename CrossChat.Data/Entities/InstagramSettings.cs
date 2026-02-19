@@ -12,6 +12,9 @@ public class InstagramSettings
     // Ссылка на юзера
     public User User { get; set; } = null!;
 
+    public string? ProfilePictureUrl { get; set; } 
+    public string? Username { get; set; }
+
     // Данные от Facebook, когда он подключит аккаунт
     public string? InstagramBusinessId { get; set; } // ID бизнес-аккаунта
     public string? AccessToken { get; set; }         // Токен доступа

@@ -216,13 +216,12 @@ namespace CrossChat.Controllers
 		public async Task<IActionResult> Callback(string? code, string? error)
 		{
 			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
-				return RedirectToAction("Profile", "Auth"); // Если ошибка - просто назад в профиль
+				return RedirectToAction("Profile", "Auth");
 
 			try
 			{
 				// 1. Получаем Short Token
 				var cleanCode = code.Replace("#_", "");
-				var shortTokenUrl = "https://api.instagram.com/oauth/access_token";
 				var formData = new Dictionary<string, string>
 				{
 					{ "client_id", InstagramAppId },
@@ -232,72 +231,57 @@ namespace CrossChat.Controllers
 					{ "code", cleanCode }
 				};
 
-				var shortResponse = await _httpClient.PostAsync(shortTokenUrl, new FormUrlEncodedContent(formData));
-				var shortJsonStr = await shortResponse.Content.ReadAsStringAsync();
-
-				if (!shortResponse.IsSuccessStatusCode)
+				var shortResp = await _httpClient.PostAsync("https://api.instagram.com/oauth/access_token", new FormUrlEncodedContent(formData));
+				if (!shortResp.IsSuccessStatusCode)
 				{
-					_logger.LogError("Не удалось получить короткий токен.");
+					_logger.LogError("Error getting short token");
 					return RedirectToAction("Profile", "Auth");
 				}
 
-				using var shortDoc = JsonDocument.Parse(shortJsonStr);
-				var shortRoot = shortDoc.RootElement;
+				using var shortDoc = JsonDocument.Parse(await shortResp.Content.ReadAsStringAsync());
+				var shortToken = shortDoc.RootElement.GetProperty("access_token").GetString();
 
-				if (!shortRoot.TryGetProperty("access_token", out JsonElement shortTokenEl))
+				// 2. Меняем на Long Token
+				var longUrl = $"https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret={InstagramAppSecret}&access_token={shortToken}";
+				var longResp = await _httpClient.GetAsync(longUrl);
+				if (!longResp.IsSuccessStatusCode)
 				{
-					_logger.LogError("Ошибка JSON\", \"В ответе нет access_token.");
+					_logger.LogError("Error getting long token");
 					return RedirectToAction("Profile", "Auth");
 				}
 
-				var shortAccessToken = shortTokenEl.GetString();
+				using var longDoc = JsonDocument.Parse(await longResp.Content.ReadAsStringAsync());
+				var longAccessToken = longDoc.RootElement.GetProperty("access_token").GetString();
+				var expiresIn = longDoc.RootElement.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 5184000;
+				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
-				// -----------------------------------------------------------------------
-				// 3. STEP 3: Обмен на Long-Lived Token (60 дней)
-				// -----------------------------------------------------------------------
-				var longTokenUrl = $"https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret={InstagramAppSecret}&access_token={shortAccessToken}";
-				var longResponse = await _httpClient.GetAsync(longTokenUrl);
-				var longJsonStr = await longResponse.Content.ReadAsStringAsync();
-
-				if (!longResponse.IsSuccessStatusCode)
-				{
-					_logger.LogError("Не удалось получить длинный токен.");
-					return RedirectToAction("Profile", "Auth");
-				}
-
-				using var longDoc = JsonDocument.Parse(longJsonStr);
-				var longRoot = longDoc.RootElement;
-				var longAccessToken = longRoot.GetProperty("access_token").GetString();
-				var expiresInSeconds = longRoot.GetProperty("expires_in").GetInt32();
-				var expireDate = DateTime.UtcNow.AddSeconds(expiresInSeconds);
-
-				// -----------------------------------------------------------------------
-				// 4. STEP 4: Получаем имя пользователя (для проверки)
-				// -----------------------------------------------------------------------
-				var userUrl = $"https://graph.instagram.com/me?fields=id,username&access_token={longAccessToken}";
+				// 3. Получаем данные пользователя (ID, Username, Avatar)
+				// Запрашиваем поля: id, user_id (для Deauth), username, profile_picture_url
+				var userUrl = $"https://graph.instagram.com/me?fields=id,user_id,username,profile_picture_url&access_token={longAccessToken}";
 				var userResponse = await _httpClient.GetAsync(userUrl);
-				var userJsonStr = await userResponse.Content.ReadAsStringAsync();
 
 				var username = "Unknown";
-				var userId = "Unknown";
+				var instagramScopedUserId = ""; // Это user_id (для Deauth)
+				var profilePicUrl = "";         // Ссылка на фото
 
 				if (userResponse.IsSuccessStatusCode)
 				{
-					var userDoc = JsonDocument.Parse(userJsonStr);
-					if (userDoc.RootElement.TryGetProperty("username", out var u)) username = u.GetString();
-					if (userDoc.RootElement.TryGetProperty("id", out var i)) userId = i.GetString();
+					using var userDoc = JsonDocument.Parse(await userResponse.Content.ReadAsStringAsync());
+					var root = userDoc.RootElement;
+
+					if (root.TryGetProperty("username", out var u)) username = u.GetString();
+					if (root.TryGetProperty("profile_picture_url", out var p)) profilePicUrl = p.GetString();
+					if (root.TryGetProperty("user_id", out var i)) instagramScopedUserId = i.GetString();
 				}
 
-				// 3. СОХРАНЯЕМ В БД
-				await SaveTokenToDatabase(longAccessToken, userId, expireDate);
+				// 4. Сохраняем в БД
+				await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
 
-				// 4. Редирект обратно в профиль
 				return RedirectToAction("Profile", "Auth");
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Instagram Auth Error");
-				// Можно добавить параметр error, чтобы показать плашку в профиле
 				return RedirectToAction("Profile", "Auth");
 			}
 		}
@@ -530,7 +514,7 @@ namespace CrossChat.Controllers
 					$"shortAccessToken = {shortAccessToken}");
 
 				// D. Сохраняем
-				await SaveTokenToDatabase(longAccessToken, fbId, expireDate);
+				await SaveTokenToDatabase(longAccessToken, fbId, expireDate, null, null);
 
 				return RedirectToAction("Profile", "Auth");
 			}
@@ -544,36 +528,41 @@ namespace CrossChat.Controllers
 		// =========================================================
 		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
 		// =========================================================
-		private async Task SaveTokenToDatabase(string accessToken, string businessId, DateTime expiresInSeconds)
+		private async Task SaveTokenToDatabase(
+			string accessToken,
+			string instagramUserId, // Это user_id 
+			DateTime expiresIn,
+			string? profilePicUrl,
+			string? username)
 		{
-			// 1. Находим ID текущего пользователя из куки авторизации
 			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (string.IsNullOrEmpty(userIdStr)) return;
 
 			var userId = int.Parse(userIdStr);
 
-			// 2. Достаем юзера из БД
 			var user = await _db.Users
 				.Include(u => u.InstagramSettings)
 				.FirstOrDefaultAsync(u => u.Id == userId);
 
 			if (user == null) return;
 
-			// 3. Создаем настройки, если их нет
 			if (user.InstagramSettings == null)
 			{
 				user.InstagramSettings = new InstagramSettings { UserId = userId };
 			}
 
-			// 4. Обновляем данные
+			// Обновляем все поля
 			user.InstagramSettings.AccessToken = accessToken;
-			user.InstagramSettings.InstagramBusinessId = businessId; // ID страницы / аккаунта
-			user.InstagramSettings.TokenExpiresAt = expiresInSeconds;
+			user.InstagramSettings.InstagramBusinessId = instagramUserId; // Теперь здесь правильный ID для удаления
+			user.InstagramSettings.TokenExpiresAt = expiresIn;
+			user.InstagramSettings.IsActive = true;
 
+			// Новые поля
+			user.InstagramSettings.ProfilePictureUrl = profilePicUrl;
+			user.InstagramSettings.Username = username;
 
-			// 5. Сохраняем
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"Token saved for User {userId}");
+			_logger.LogInformation($"Token, Avatar and Username saved for User {userId} (Insta ID: {instagramUserId})");
 		}
 
 		private async Task<bool> DisconnectInstagramUser(string instagramUserId, bool fullDataDelete)

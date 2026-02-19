@@ -185,7 +185,26 @@
 
             @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
             {
-                <p style="margin-bottom: 1rem;">Ваш бизнес-аккаунт успешно подключен. Бот готов к работе.</p>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 1rem;">
+                    <!-- Аватарка Инстаграма -->
+                    @if (!string.IsNullOrEmpty(Model.InstagramSettings.ProfilePictureUrl))
+                    {
+                        <img src="@Model.InstagramSettings.ProfilePictureUrl" alt="Insta Pic"
+                             style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #e1306c;">
+                    }
+
+                    <div>
+                        <!-- Имя аккаунта -->
+                        <strong style="display: block; font-size: 1.1rem;">
+                            @@@(Model.InstagramSettings.Username ?? "Instagram User")
+                        </strong>
+                        <span style="color: #888; font-size: 0.8rem;">
+                            ID: @Model.InstagramSettings.InstagramBusinessId
+                        </span>
+                    </div>
+                </div>
+
+                <p style="margin-bottom: 1rem;">Бот активен и отвечает на сообщения.</p>
                 <!-- Тут потом сделаем кнопку отключения -->
             }
             else
