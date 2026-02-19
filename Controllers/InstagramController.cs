@@ -19,15 +19,14 @@ namespace CrossChat.Controllers
 		private readonly ILogger<InstagramController> _logger;
 		private readonly SocialMediaSettings _settings;
 		private readonly HttpClient _httpClient;
-		private readonly AppDbContext _db; // Добавили контекст БД
+		private readonly AppDbContext _db;
 
 		private string InstagramAppId => _settings.InstagramAppId;
 		private string InstagramAppSecret => _settings.InstagramAppSecret;
-
-		private string RedirectUri => $"{APP_URL}/instagram/auth/callback";
 		private string AppId => _settings.AppId;
 		private string AppSecret => _settings.AppSecret;
 
+		private string RedirectUri => $"{APP_URL}/instagram/auth/callback";
 		private string FaceBookRedirectUri => $"{APP_URL}/instagram/facebook/auth/callback";
 
 		public InstagramController(
@@ -41,16 +40,22 @@ namespace CrossChat.Controllers
 			_httpClient = new HttpClient();
 		}
 
+		// ==========================================================
+		// 1. ГЛАВНАЯ СТРАНИЦА НАСТРОЕК (/instagram)
+		// ==========================================================
 		[HttpGet]
-		public IActionResult Index()
+		public async Task<IActionResult> Index()
 		{
-			// Проверка: если пользователь не залогинен в нашей системе, отправляем на вход
-			if (!User.Identity.IsAuthenticated)
-			{
-				return RedirectToAction("Login", "Auth");
-			}
+			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
-			// 1. Ссылка для Instagram Login
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+			// Загружаем настройки, чтобы передать их во View
+			var user = await _db.Users
+				.Include(u => u.InstagramSettings)
+				.FirstOrDefaultAsync(u => u.Id == userId);
+
+			// Генерируем ссылки для кнопок (они нужны, если user.InstagramSettings == null)
 			var instaScopes = string.Join(",",
 				"instagram_business_basic",
 				"instagram_business_manage_messages",
@@ -58,8 +63,7 @@ namespace CrossChat.Controllers
 				"instagram_business_content_publish",
 				"instagram_business_manage_insights"
 			);
-
-			var instaLoginUrl = $"https://www.instagram.com/oauth/authorize?" +
+			ViewBag.InstaLoginUrl = $"https://www.instagram.com/oauth/authorize?" +
 						   $"client_id={InstagramAppId}&" +
 						   $"redirect_uri={RedirectUri}&" + // Важно: URI должен быть добавлен в Instagram Login Settings
 						   $"response_type=code&" +
@@ -76,140 +80,60 @@ namespace CrossChat.Controllers
 				"pages_read_engagement",
 				"business_management"
 			);
-
-			var fbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?" +
+			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?" +
 							  $"client_id={AppId}&" + // Здесь ID Facebook приложения
 							  $"redirect_uri={FaceBookRedirectUri}&" +
 							  $"response_type=code&" +
 							  $"auth_type=reauthenticate&" +
 							  $"scope={fbScopes}";
 
-			var html = $@"<!DOCTYPE html>
-            <html lang=""ru"">
-            <head>
-                <meta charset=""UTF-8"">
-                <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-                <title>Подключение интеграции</title>
-                <style>
-                    body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #f0f2f5 0%, #eef2f3 100%);
-        }}
-        
-        .card {{
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-        }}
+			// Передаем модель настроек (может быть null)
+			return View(user?.InstagramSettings);
+		}
 
-        h1 {{ margin: 0 0 10px; font-size: 24px; color: #1c1e21; font-weight: 700; }}
-        p {{ color: #65676b; font-size: 15px; margin-bottom: 30px; line-height: 1.5; }}
+		// ==========================================================
+		// 3. ОТКЛЮЧЕНИЕ АККАУНТА (ПОЛЬЗОВАТЕЛЕМ)
+		// ==========================================================
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect()
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
-        /* ОБЩИЙ СТИЛЬ КНОПОК */
-        .btn {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 16px;
-            font-weight: 600;
-            color: white;
-            transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-            margin-bottom: 15px; /* Отступ между кнопками */
-            box-sizing: border-box;
-        }}
+			if (settings != null)
+			{
+				// Не удаляем запись полностью, просто стираем токены
+				settings.AccessToken = null;
+				settings.InstagramBusinessId = null;
+				settings.Username = null;
+				settings.ProfilePictureUrl = null;
+				settings.IsActive = false;
 
-        .btn:hover {{
-            transform: translateY(-2px);
-            opacity: 0.95;
-        }}
+				await _db.SaveChangesAsync();
+			}
 
-        .btn svg {{
-            width: 24px;
-            height: 24px;
-            fill: white;
-        }}
+			return RedirectToAction("Index");
+		}
 
-        /* СТИЛЬ INSTAGRAM */
-        .btn-insta {{
-            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-            box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
-        }}
-        .btn-insta:hover {{
-            box-shadow: 0 8px 20px rgba(220, 39, 67, 0.35);
-        }}
+		// ==========================================================
+		// 2. ОБНОВЛЕНИЕ НАСТРОЕК (ПРОМПТ / ВКЛЮЧЕНИЕ)
+		// ==========================================================
+		[HttpPost("update-settings")]
+		[Authorize]
+		public async Task<IActionResult> UpdateSettings(string systemPrompt, bool isActive)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
-        /* СТИЛЬ FACEBOOK */
-        .btn-fb {{
-            background-color: #1877F2; /* Официальный цвет FB */
-            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
-        }}
-        .btn-fb:hover {{
-            box-shadow: 0 8px 20px rgba(24, 119, 242, 0.35);
-        }}
+			if (settings != null)
+			{
+				settings.SystemPrompt = systemPrompt;
+				settings.IsActive = isActive;
+				await _db.SaveChangesAsync();
+			}
 
-        .separator {{
-            display: flex;
-            align-items: center;
-            text-align: center;
-            color: #ccc;
-            margin: 20px 0;
-            font-size: 13px;
-        }}
-        .separator::before, .separator::after {{
-            content: '';
-            flex: 1;
-            border-bottom: 1px solid #e0e0e0;
-        }}
-        .separator::before {{ margin-right: 10px; }}
-        .separator::after {{ margin-left: 10px; }}
-
-                </style>
-            </head>
-            <body>
-                <div class=""card"">
-                    <h1>Подключение каналов</h1>
-                    <p>Выберите способ, чтобы дать боту доступ к сообщениям.</p>
-                     <!-- КНОПКА INSTAGRAM -->
-                    <a href=""{instaLoginUrl}"" class=""btn btn-insta"">
-                        <svg viewBox=""0 0 24 24"">
-                            <path d=""M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z""/>
-                        </svg>
-                        <span>Войти через Instagram</span>
-                    </a>
-
-                    <div class=""separator"">ИЛИ</div>
-
-                    <!-- КНОПКА FACEBOOK -->
-                    <a href=""{fbLoginUrl}"" class=""btn btn-fb"">
-                        <!-- Официальная иконка Facebook (F) -->
-                        <svg viewBox=""0 0 24 24"">
-                            <path d=""M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z""/>
-                        </svg>
-                        <span>Войти через Facebook</span>
-                    </a>
-                    <br>
-                    <a href=""/auth/profile"" style=""color: #666; font-size: 0.9em;"">Вернуться в профиль</a>
-                </div>
-            </body>
-            </html>";
-
-			return Content(html, "text/html");
+			return RedirectToAction("Index"); // Остаемся на этой же странице
 		}
 
 		[HttpGet("auth/callback")]
@@ -235,7 +159,7 @@ namespace CrossChat.Controllers
 				if (!shortResp.IsSuccessStatusCode)
 				{
 					_logger.LogError("Error getting short token");
-					return RedirectToAction("Profile", "Auth");
+					return RedirectToAction("Index"); 
 				}
 
 				using var shortDoc = JsonDocument.Parse(await shortResp.Content.ReadAsStringAsync());
@@ -247,7 +171,7 @@ namespace CrossChat.Controllers
 				if (!longResp.IsSuccessStatusCode)
 				{
 					_logger.LogError("Error getting long token");
-					return RedirectToAction("Profile", "Auth");
+					return RedirectToAction("Index"); 
 				}
 
 				using var longDoc = JsonDocument.Parse(await longResp.Content.ReadAsStringAsync());
@@ -277,12 +201,12 @@ namespace CrossChat.Controllers
 				// 4. Сохраняем в БД
 				await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
 
-				return RedirectToAction("Profile", "Auth");
+				return RedirectToAction("Index"); 
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Instagram Auth Error");
-				return RedirectToAction("Profile", "Auth");
+				return RedirectToAction("Index"); 
 			}
 		}
 
@@ -459,7 +383,7 @@ namespace CrossChat.Controllers
 				if (!shortResponse.IsSuccessStatusCode)
 				{
 					_logger.LogError("Не удалось обменять код на токен.");
-					return RedirectToAction("Profile", "Auth");
+					return RedirectToAction("Index");
 				}
 
 				using var shortDoc = JsonDocument.Parse(shortJsonStr);
@@ -480,7 +404,7 @@ namespace CrossChat.Controllers
 				if (!longResponse.IsSuccessStatusCode)
 				{
 					_logger.LogError($"Короткий токен получен, но обмен на длинный не удался.Short Token: {shortAccessToken} Error: {longJsonStr}");
-					return RedirectToAction("Profile", "Auth");
+					return RedirectToAction("Index");
 				}
 
 				using var longDoc = JsonDocument.Parse(longJsonStr);
@@ -516,12 +440,12 @@ namespace CrossChat.Controllers
 				// D. Сохраняем
 				await SaveTokenToDatabase(longAccessToken, fbId, expireDate, null, null);
 
-				return RedirectToAction("Profile", "Auth");
+				return RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Facebook Auth Error");
-				return RedirectToAction("Profile", "Auth");
+				return RedirectToAction("Index");
 			}
 		}
 
@@ -584,6 +508,9 @@ namespace CrossChat.Controllers
 				settings.IsActive = false;
 				settings.TokenExpiresAt = null;
 				settings.InstagramBusinessId = null;
+				settings.ProfilePictureUrl = null;
+				settings.Username = null;
+
 				_logger.LogInformation($"Instagram settings deleted for BusinessId: {instagramUserId}");
 			}
 			else
@@ -592,6 +519,9 @@ namespace CrossChat.Controllers
 				settings.AccessToken = null;
 				settings.IsActive = false;
 				settings.TokenExpiresAt = null;
+				settings.ProfilePictureUrl = null;
+				settings.Username = null;
+
 				_logger.LogInformation($"Access Token cleared for BusinessId: {instagramUserId}");
 			}
 

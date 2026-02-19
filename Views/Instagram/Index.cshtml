@@ -1,0 +1,353 @@
+@model CrossChat.Data.Entities.InstagramSettings
+@{
+    ViewData["Title"] = "Управление Instagram";
+    bool isConnected = Model != null && !string.IsNullOrEmpty(Model.AccessToken);
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewData["Title"]</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-secondary: #a1a1aa;
+            --accent-color: #6366f1;
+            --insta-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 4rem auto;
+            padding: 0 1rem;
+        }
+
+        .back-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            margin-bottom: 2rem;
+            display: inline-block;
+        }
+
+            .back-link:hover {
+                color: white;
+            }
+
+        /* Карточка */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            text-align: center; /* Центрируем контент по умолчанию */
+        }
+
+        /* --- СТИЛИ ДЛЯ ПОДКЛЮЧЕННОГО СОСТОЯНИЯ --- */
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #e1306c;
+            padding: 4px;
+            background: transparent;
+            margin-bottom: 1rem;
+        }
+
+        .username {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-id {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+
+        .form-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            padding-top: 2rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        textarea {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+        }
+
+            textarea:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
+
+        /* --- ОБЩИЕ КНОПКИ --- */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+            width: 100%;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+            /* Стилизация SVG внутри кнопок */
+            .btn svg {
+                width: 24px;
+                height: 24px;
+                fill: white;
+            }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            margin-top: 1rem;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            margin-top: 2rem;
+        }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.3);
+            }
+
+        /* --- КНОПКИ ВХОДА (LOGIN) --- */
+        .login-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-insta {
+            background: var(--insta-gradient);
+            color: white;
+            box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
+        }
+
+            .btn-insta:hover {
+                box-shadow: 0 8px 20px rgba(220, 39, 67, 0.35);
+                transform: translateY(-2px);
+            }
+
+        .btn-fb {
+            background: #1877F2;
+            color: white;
+            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
+        }
+
+            .btn-fb:hover {
+                box-shadow: 0 8px 20px rgba(24, 119, 242, 0.35);
+                transform: translateY(-2px);
+            }
+
+        /* Разделитель ИЛИ */
+        .separator {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-secondary);
+            margin: 20px 0;
+            font-size: 13px;
+        }
+
+            .separator::before, .separator::after {
+                content: '';
+                flex: 1;
+                border-bottom: 1px solid var(--glass-border);
+            }
+
+            .separator::before {
+                margin-right: 10px;
+            }
+
+            .separator::after {
+                margin-left: 10px;
+            }
+
+        /* Тоггл */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
+            }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <a href="/auth/profile" class="back-link">← Вернуться в профиль</a>
+
+        <div class="card">
+            @if (isConnected)
+            {
+                /* === БЛОК: АККАУНТ ПОДКЛЮЧЕН === */
+                <div class="connected-header">
+                    @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                    {
+                        <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                    }
+                    else
+                    {
+                        <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">IG</div>
+                    }
+                    <div class="username">@@@(Model.Username ?? "Instagram User")</div>
+                    <div class="user-id">Business ID: @Model.InstagramBusinessId</div>
+                </div>
+
+                <!-- Форма настроек -->
+                <div class="form-section">
+                    <form action="/instagram/update-settings" method="post">
+
+                        <div class="switch-container">
+                            <label style="margin:0; font-size: 1.1rem; color: white;">Бот включен</label>
+                            <label class="switch">
+                                <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Системный промпт</label>
+                            <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@(Model.SystemPrompt)</textarea>
+                            <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
+                                ИИ будет использовать эту инструкцию при ответе подписчикам.
+                            </p>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                    </form>
+                </div>
+
+                <!-- Кнопка отключения -->
+                <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
+                    <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
+                </form>
+            }
+            else
+            {
+                /* === БЛОК: АККАУНТ НЕ ПОДКЛЮЧЕН (ВХОД) === */
+                <div>
+                    <h1>Подключение каналов</h1>
+                    <p style="color:var(--text-secondary); margin-bottom:2rem;">
+                        Выберите способ, чтобы дать боту доступ к сообщениям.
+                    </p>
+
+                    <div class="login-buttons">
+
+                        <!-- КНОПКА INSTAGRAM -->
+                        <a href="@ViewBag.InstaLoginUrl" class="btn btn-insta">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                            </svg>
+                            <span>Войти через Instagram</span>
+                        </a>
+
+                        <div class="separator">ИЛИ</div>
+
+                        <!-- КНОПКА FACEBOOK -->
+                        <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
+                            <!-- Официальная иконка Facebook (F) -->
+                            <svg viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                            </svg>
+                            <span>Войти через Facebook</span>
+                        </a>
+
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+</body>
+</html>
