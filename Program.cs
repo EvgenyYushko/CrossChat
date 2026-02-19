@@ -113,26 +113,33 @@ app.Run();
 
 using (var scope = app.Services.CreateScope())
 {
-	var services = scope.ServiceProvider;
-	try
-	{
-		var dbContext = services.GetRequiredService<AppDbContext>();
-
-		// Эта команда применит все ожидающие миграции.
-		// Если база пустая - она создаст таблицы.
-		// Если база актуальна - она ничего не сделает.
-		dbContext.Database.Migrate();
-
-		// (Опционально) Log: Миграции успешно применены
-	}
-	catch (Exception ex)
-	{
-		// Если миграции упали - приложение не должно запускаться, 
-		// иначе оно будет работать с неверной схемой данных.
-		var logger = services.GetRequiredService<ILogger<Program>>();
-		logger.LogError(ex, "An error occurred while migrating the database.");
-		throw; // Пробрасываем ошибку, чтобы Render показал, что деплой упал
-	}
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+        
+        // Добавляем лог перед началом
+        logger.LogInformation("⏳ Начинаю применение миграций...");
+        
+        // Получаем список миграций, которые нужно применить
+        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+        if (pendingMigrations.Any())
+        {
+            logger.LogInformation($"Найдено {pendingMigrations.Count()} новых миграций. Применяю...");
+            await context.Database.MigrateAsync();
+            logger.LogInformation("✅ Миграции успешно применены!");
+        }
+        else
+        {
+            logger.LogInformation("👌 База данных уже актуальна (миграций нет).");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "❌ КРИТИЧЕСКАЯ ОШИБКА МИГРАЦИИ БАЗЫ ДАННЫХ");
+        // Не пробрасываем throw, чтобы приложение хотя бы запустилось и мы увидели логи
+    }
 }
 
 string GetConfigOrThrow(string key)
