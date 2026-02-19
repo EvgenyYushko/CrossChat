@@ -8,22 +8,22 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-# --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-# 1. Копируем основной проект.
-# Так как он лежит в КОРНЕ, мы копируем его в корень контейнера ("."), а не в папку CrossChat/
+# 1. Копируем основной проект (он в корне)
 COPY ["CrossChat.csproj", "."]
 
-# 2. Копируем проект Воркера.
-# Он лежит в папке, поэтому копируем папку в папку.
+# 2. Копируем проект Воркера
 COPY ["CrossChat.Worker/CrossChat.Worker.csproj", "CrossChat.Worker/"]
 
-# 3. Восстанавливаем зависимости
+COPY ["CrossChat.Data/CrossChat.Data.csproj", "CrossChat.Data/"]
+
+# 4. Восстанавливаем зависимости
+# Теперь dotnet найдет все три проекта
 RUN dotnet restore "./CrossChat.csproj"
 
-# 4. Копируем все остальные файлы
+# 5. Копируем все остальные файлы исходного кода
 COPY . .
 
-# 5. Сборка (мы уже в корне /src, никуда переходить не надо)
+# 6. Сборка
 WORKDIR "/src/."
 RUN dotnet build "CrossChat.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
