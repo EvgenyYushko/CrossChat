@@ -97,20 +97,6 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-	app.MapOpenApi();
-}
-
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-app.UseAuthentication(); // Кто ты?
-app.UseAuthorization();  // Можно ли тебе сюда?
-app.MapRazorPages();
-app.MapControllers();
-
-app.Run();
-
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -141,6 +127,20 @@ using (var scope = app.Services.CreateScope())
         // Не пробрасываем throw, чтобы приложение хотя бы запустилось и мы увидели логи
     }
 }
+
+if (app.Environment.IsDevelopment())
+{
+	app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseAuthentication(); // Кто ты?
+app.UseAuthorization();  // Можно ли тебе сюда?
+app.MapRazorPages();
+app.MapControllers();
+
+app.Run();
 
 string GetConfigOrThrow(string key)
 {
