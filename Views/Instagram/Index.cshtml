@@ -260,6 +260,57 @@
                 transform: translateX(24px);
             }
 
+        /* Зеленый - всё работает */
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* Желтый - подключено, но стоит на паузе */
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        /* Серый - не подключено */
+        .status-disconnected {
+            background: rgba(255, 255, 255, 0.1);
+            color: #9ca3af;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* Пульсирующая точка для активного статуса */
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        .status-active .dot {
+            animation: pulse 2s infinite;
+        }
+
+        @@keyframes pulse {
+            0%{opacity: 1;}
+            50% {opacity: 0.4;}
+            100% {opacity: 1;}
+        }
+
     </style>
 </head>
 <body>
@@ -270,7 +321,6 @@
         <div class="card">
             @if (isConnected)
             {
-                /* === БЛОК: АККАУНТ ПОДКЛЮЧЕН === */
                 <div class="connected-header">
                     @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
                     {
@@ -280,18 +330,43 @@
                     {
                         <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">IG</div>
                     }
+
                     <div class="username">@@@(Model.Username ?? "Instagram User")</div>
-                    <div class="user-id">Business ID: @Model.InstagramBusinessId</div>
+
+                    <!-- ЯВНЫЙ СТАТУС ПОД ИМЕНЕМ -->
+                    <div style="margin-top: 10px;">
+                        @if (Model.IsActive)
+                        {
+                            <span class="status-badge status-active" style="font-size: 0.9rem; padding: 6px 16px;">
+                                <span class="dot"></span> Бот работает
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="status-badge status-paused" style="font-size: 0.9rem; padding: 6px 16px;">
+                                ⚠️ Требует включения
+                            </span>
+                            <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 8px;">
+                                Подписка на сообщения отключена. Бот не видит новые диалоги.
+                            </p>
+                        }
+                    </div>
                 </div>
 
                 <!-- Форма настроек -->
                 <div class="form-section">
                     <form action="/instagram/update-settings" method="post">
 
-                        <div class="switch-container">
-                            <label style="margin:0; font-size: 1.1rem; color: white;">Бот включен</label>
+                        <div class="switch-container" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                            <div>
+                                <label style="margin:0; font-size: 1.1rem; color: white; cursor: pointer;" for="isActiveCheck">Включить автоответы</label>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                                    @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Бот спит. Включите, чтобы активировать.")
+                                </div>
+                            </div>
+
                             <label class="switch">
-                                <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                                <input type="checkbox" id="isActiveCheck" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
                                 <span class="slider"></span>
                             </label>
                         </div>

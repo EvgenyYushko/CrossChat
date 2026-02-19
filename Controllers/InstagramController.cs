@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
@@ -21,6 +22,7 @@ namespace CrossChat.Controllers
 		private readonly HttpClient _httpClient;
 		private readonly AppDbContext _db;
 
+		private const string GraphApiVersion = "v21.0";
 		private string InstagramAppId => _settings.InstagramAppId;
 		private string InstagramAppSecret => _settings.InstagramAppSecret;
 		private string AppId => _settings.AppId;
@@ -101,14 +103,24 @@ namespace CrossChat.Controllers
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
-			if (settings != null)
+			if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
 			{
-				// Не удаляем запись полностью, просто стираем токены
+				// Сначала пытаемся честно отписаться от вебхуков
+				try
+				{
+					await ManageWebhooksAsync(settings.AccessToken, false);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
+				}
+
+				// Стираем данные
 				settings.AccessToken = null;
 				settings.InstagramBusinessId = null;
 				settings.Username = null;
 				settings.ProfilePictureUrl = null;
-				settings.IsActive = false;
+				settings.IsActive = false; // Важно сбросить
 
 				await _db.SaveChangesAsync();
 			}
@@ -126,14 +138,100 @@ namespace CrossChat.Controllers
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
-			if (settings != null)
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return RedirectToAction("Index");
+
+			try
 			{
+				// Если статус меняется (был выкл -> стал вкл, или наоборот)
+				if (settings.IsActive != isActive)
+				{
+					// Вызываем метод управления вебхуками
+					bool success = await ManageWebhooksAsync(settings.AccessToken, isActive);
+
+					if (!success)
+					{
+						// Если API Инстаграма вернуло ошибку, не меняем статус в БД
+						// Можно добавить TempData["Error"] = "Не удалось обновить подписку";
+						_logger.LogError($"Failed to change subscription state to {isActive} for user {userId}");
+					}
+					else
+					{
+						settings.IsActive = isActive;
+					}
+				}
+
+				// Промпт обновляем в любом случае
 				settings.SystemPrompt = systemPrompt;
-				settings.IsActive = isActive;
+
 				await _db.SaveChangesAsync();
 			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error updating settings");
+			}
 
-			return RedirectToAction("Index"); // Остаемся на этой же странице
+			return RedirectToAction("Index");
+		}
+
+		// ==========================================================
+		// ВСПОМОГАТЕЛЬНЫЙ МЕТОД: ПОДПИСКА НА ВЕБХУКИ
+		// ==========================================================
+		private async Task<bool> ManageWebhooksAsync(string accessToken, bool subscribe)
+		{
+			var url = $"https://graph.instagram.com/{GraphApiVersion}/me/subscribed_apps?access_token={accessToken}";
+
+			HttpResponseMessage response;
+
+			if (subscribe)
+			{
+				// === ПОДПИСКА (POST) ===
+				var payload = new
+				{
+					subscribed_fields = new[]
+					{
+						"messages",
+						"messaging_postbacks",
+						"messaging_seen",
+						"messaging_handover",
+						"messaging_referral",
+						"message_reactions",
+						"standby",
+						"comments",
+						"live_comments",
+						"mentions",
+						"story_insights"
+					}
+				};
+
+				var json = System.Text.Json.JsonSerializer.Serialize(payload);
+				response = await _httpClient.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json"));
+				_logger.LogInformation("Subscribing to Webhooks...");
+			}
+			else
+			{
+				// === ОТПИСКА (DELETE) ===
+				response = await _httpClient.DeleteAsync(url);
+				_logger.LogInformation("Unsubscribing from Webhooks...");
+			}
+
+			var content = await response.Content.ReadAsStringAsync();
+
+			if (!response.IsSuccessStatusCode)
+			{
+				_logger.LogError($"Webhook Management Error ({subscribe}): {content}");
+				return false;
+			}
+
+			using var doc = JsonDocument.Parse(content);
+			// Успешный ответ обычно: { "success": true }
+			if (doc.RootElement.TryGetProperty("success", out var successProp))
+			{
+				return successProp.GetBoolean();
+			}
+
+			// Иногда ответ просто { "data": [] } при подписке, считаем успехом если 200 OK
+			return true;
 		}
 
 		[HttpGet("auth/callback")]
@@ -159,7 +257,7 @@ namespace CrossChat.Controllers
 				if (!shortResp.IsSuccessStatusCode)
 				{
 					_logger.LogError("Error getting short token");
-					return RedirectToAction("Index"); 
+					return RedirectToAction("Index");
 				}
 
 				using var shortDoc = JsonDocument.Parse(await shortResp.Content.ReadAsStringAsync());
@@ -171,7 +269,7 @@ namespace CrossChat.Controllers
 				if (!longResp.IsSuccessStatusCode)
 				{
 					_logger.LogError("Error getting long token");
-					return RedirectToAction("Index"); 
+					return RedirectToAction("Index");
 				}
 
 				using var longDoc = JsonDocument.Parse(await longResp.Content.ReadAsStringAsync());
@@ -201,12 +299,12 @@ namespace CrossChat.Controllers
 				// 4. Сохраняем в БД
 				await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
 
-				return RedirectToAction("Index"); 
+				return RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Instagram Auth Error");
-				return RedirectToAction("Index"); 
+				return RedirectToAction("Index");
 			}
 		}
 
@@ -479,7 +577,7 @@ namespace CrossChat.Controllers
 			user.InstagramSettings.AccessToken = accessToken;
 			user.InstagramSettings.InstagramBusinessId = instagramUserId; // Теперь здесь правильный ID для удаления
 			user.InstagramSettings.TokenExpiresAt = expiresIn;
-			user.InstagramSettings.IsActive = true;
+			user.InstagramSettings.IsActive = false;
 
 			// Новые поля
 			user.InstagramSettings.ProfilePictureUrl = profilePicUrl;

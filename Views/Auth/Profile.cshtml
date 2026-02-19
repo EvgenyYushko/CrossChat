@@ -122,6 +122,57 @@
         }
         .status-connected { background: rgba(16, 185, 129, 0.2); color: var(--success-color); }
 
+        /* Зеленый - всё работает */
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* Желтый - подключено, но стоит на паузе */
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        /* Серый - не подключено */
+        .status-disconnected {
+            background: rgba(255, 255, 255, 0.1);
+            color: #9ca3af;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* Пульсирующая точка для активного статуса */
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        .status-active .dot {
+            animation: pulse 2s infinite;
+        }
+
+        @@keyframes pulse {
+            0% {opacity: 1;}
+            50% {opacity: 0.4;}
+            100% {opacity: 1;}
+        }
+
         /* Тоггл переключатель */
         .switch-container { display: flex; align-items: center; justify-content: space-between; }
         .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
@@ -173,38 +224,58 @@
         <div class="card">
             <div class="card-header">
                 <h3>Instagram Бот</h3>
+
                 @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
                 {
-                    <span class="status-badge status-connected">Активен</span>
+                    if (Model.InstagramSettings.IsActive)
+                    {
+                        <span class="status-badge status-active"><span class="dot"></span>Активен</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused"><span class="dot"></span>На паузе</span>
+                    }
                 }
                 else
                 {
-                    <span class="status-badge">Не настроен</span>
+                    <span class="status-badge status-disconnected">Не подключено</span>
                 }
             </div>
 
             @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
             {
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 1.5rem;">
+                    <!-- Аватарка -->
                     @if (!string.IsNullOrEmpty(Model.InstagramSettings.ProfilePictureUrl))
                     {
-                        <img src="@Model.InstagramSettings.ProfilePictureUrl" style="width: 40px; height: 40px; border-radius: 50%;">
+                        <img src="@Model.InstagramSettings.ProfilePictureUrl" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #333;">
                     }
+
                     <div>
-                        <strong>@Model.InstagramSettings.Username</strong><br>
-                        <span style="font-size:0.8rem; color:#888;">Бот включен: @(Model.InstagramSettings.IsActive ? "Да" : "Нет")</span>
+                        <strong style="font-size: 1.1rem;">@Model.InstagramSettings.Username</strong>
+                        <div style="margin-top: 4px;">
+                            @if (Model.InstagramSettings.IsActive)
+                            {
+                                <span style="font-size: 0.85rem; color: #10b981;">● Бот отвечает на сообщения</span>
+                            }
+                            else
+                            {
+                                <span style="font-size: 0.85rem; color: #fbbf24;">⚠️ Бот выключен (сообщения не читаются)</span>
+                            }
+                        </div>
                     </div>
                 </div>
 
-                <!-- ССЫЛКА НА НАСТРОЙКИ -->
-                <a href="/instagram" class="btn btn-instagram" style="background: #333; border: 1px solid #555;">
-                    ⚙️ Управление и Промпт
+                <a href="/instagram" class="btn btn-instagram" style="background: #333; border: 1px solid #555; width: 100%; text-align: center;">
+                    ⚙️ Настроить и @(Model.InstagramSettings.IsActive ? "Выключить" : "Включить")
                 </a>
             }
             else
             {
-                <p style="margin-bottom: 1rem;">Подключите аккаунт, чтобы настроить автоответы.</p>
-                <a href="/instagram" class="btn btn-instagram">Подключить</a>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    Подключите аккаунт, чтобы настроить автоответы с помощью ИИ.
+                </p>
+                <a href="/instagram" class="btn btn-instagram" style="width: 100%; text-align: center;">Подключить Instagram</a>
             }
         </div>
 </body>
