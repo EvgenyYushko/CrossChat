@@ -5,8 +5,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Личный кабинет — CrossChat</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <title>Личный кабинет</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-color: #050505;
@@ -14,9 +14,6 @@
             --glass-border: rgba(255, 255, 255, 0.1);
             --text-main: #ffffff;
             --text-secondary: #a1a1aa;
-            --accent-color: #6366f1;
-            --success-color: #10b981;
-            --danger-color: #ef4444;
         }
 
         body {
@@ -25,140 +22,139 @@
             color: var(--text-main);
             margin: 0;
             padding: 0;
-            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        /* Навбар */
+        /* NAVBAR - Логотип слева */
         .navbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 2rem;
+            padding: 1rem 1.5rem;
+            background: rgba(5, 5, 5, 0.9);
             border-bottom: 1px solid var(--glass-border);
-            background: rgba(5, 5, 5, 0.8);
-            backdrop-filter: blur(10px);
         }
 
-        .logo { font-weight: 800; font-size: 1.2rem; color: white; text-decoration: none; }
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+
+        .logo-text {
+            font-weight: 700;
+            color: white;
+            font-size: 1.1rem;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-email {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @@media(max - width: 600px)
+
+        {
+            .user-email
+
+        {
+            display: none;
+        }
+
+        }
 
         .logout-btn {
-            background: none; border: 1px solid var(--glass-border); color: var(--text-secondary);
-            padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; transition: 0.2s;
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
         }
-        .logout-btn:hover { background: rgba(255,255,255,0.1); color: white; }
 
-        /* Контейнер */
         .container {
-            max-width: 900px;
-            margin: 3rem auto;
+            max-width: 600px;
+            margin: 2rem auto;
             padding: 0 1rem;
-            display: grid;
-            gap: 2rem;
         }
 
-        /* Карточки */
         .card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: 16px;
-            padding: 2rem;
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+            padding: 1.5rem;
             margin-bottom: 1.5rem;
         }
 
-        .avatar {
-            width: 64px; height: 64px; border-radius: 50%; background: #333; object-fit: cover;
-        }
-
-        h2 { margin: 0; font-size: 1.5rem; }
-        p { margin: 0.5rem 0 0; color: var(--text-secondary); }
-
-        /* Формы и инпуты */
-        .form-group { margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-size: 0.9rem; }
-
-        textarea, input[type="text"] {
-            width: 100%;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--glass-border);
-            color: white;
-            padding: 1rem;
-            border-radius: 8px;
-            font-family: inherit;
-            resize: vertical;
-        }
-
-        textarea:focus { outline: none; border-color: var(--accent-color); }
-
-        .btn {
-            display: inline-block;
-            padding: 0.8rem 1.5rem;
-            border-radius: 8px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: 0.2s;
-        }
-
-        .btn-primary { background: var(--accent-color); color: white; }
-        .btn-primary:hover { filter: brightness(1.1); }
-
+        /* КНОПКА INSTAGRAM (Фикс) */
         .btn-instagram {
-            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%; /* На всю ширину */
+            box-sizing: border-box; /* Учитываем padding */
+            padding: 12px;
+            background: #262626;
+            border: 1px solid #404040;
+            border-radius: 8px;
             color: white;
-            width: 100%;
-            text-align: center;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: background 0.2s;
         }
 
+            .btn-instagram:hover {
+                background: #333;
+            }
+
+        /* СТАТУСЫ */
         .status-badge {
-            display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem;
-            background: rgba(255,255,255,0.1);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
         }
-        .status-connected { background: rgba(16, 185, 129, 0.2); color: var(--success-color); }
 
-        /* Зеленый - всё работает */
+        .status-disconnected {
+            background: rgba(255,255,255,0.1);
+            color: #888;
+        }
+
         .status-active {
             background: rgba(16, 185, 129, 0.2);
             color: #10b981;
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
 
-        /* Желтый - подключено, но стоит на паузе */
         .status-paused {
             background: rgba(234, 179, 8, 0.2);
             color: #fbbf24;
             border: 1px solid rgba(234, 179, 8, 0.3);
         }
 
-        /* Серый - не подключено */
-        .status-disconnected {
-            background: rgba(255, 255, 255, 0.1);
-            color: #9ca3af;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        /* Пульсирующая точка для активного статуса */
         .dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background-color: currentColor;
         }
@@ -166,65 +162,62 @@
         .status-active .dot {
             animation: pulse 2s infinite;
         }
-
         @@keyframes pulse {
-            0% {opacity: 1;}
-            50% {opacity: 0.4;}
-            100% {opacity: 1;}
+            0%
+
+        {
+            opacity: 1;
         }
 
-        /* Тоггл переключатель */
-        .switch-container { display: flex; align-items: center; justify-content: space-between; }
-        .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--success-color); }
-        input:checked + .slider:before { transform: translateX(24px); }
+        50% {
+            opacity: 0.4;
+        }
 
+        100% {
+            opacity: 1;
+        }
+
+        }
     </style>
 </head>
 <body>
 
-    <!-- Навигация -->
     <nav class="navbar">
-        <a href="/" class="logo">CrossChat</a>
-        <div style="display: flex; gap: 1rem; align-items: center;">
-            <span style="color: var(--text-secondary);">@Model.Email</span>
-            <form action="/auth/logout" method="post" style="margin:0;">
-                <button type="submit" class="logout-btn">Выйти</button>
+        <a href="/" class="logo-container">
+            <img src="/images/CrossChatLogo.jpeg" alt="Logo" class="logo-img">
+            <span class="logo-text">CrossChat</span>
+        </a>
+        <div class="user-menu">
+            <span class="user-email">@Model.Email</span>
+            <form action="/auth/logout" method="post" style="margin:0">
+                <button class="logout-btn">Выйти</button>
             </form>
         </div>
     </nav>
 
     <div class="container">
-
-        <!-- Карточка профиля -->
-        <div class="card">
-            <div class="card-header">
-                <!-- Аватарка (если есть, иначе заглушка) -->
-                @if (!string.IsNullOrEmpty(Model.AvatarUrl))
-                {
-                    <img src="@Model.AvatarUrl" class="avatar" alt="Avatar">
-                }
-                else
-                {
-                    <div class="avatar" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem;">
-                        @Model.Name.Substring(0, 1)
-                    </div>
-                }
-                <div>
-                    <h2>Привет, @Model.Name!</h2>
-                    <p>ID пользователя: #@Model.Id</p>
+        <!-- Приветствие -->
+        <div class="card" style="display:flex; align-items:center; gap:15px;">
+            @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+            {
+                <img src="@Model.AvatarUrl" style="width:50px; height:50px; border-radius:50%;" alt="Avatar">
+            }
+            else
+            {
+                <div style="width:50px; height:50px; border-radius:50%; background:#333; display:flex; align-items:center; justify-content:center;">
+                    @Model.Name.Substring(0, 1)
                 </div>
+            }
+            <div>
+                <h2 style="margin:0; font-size:1.2rem;">Привет, @Model.Name!</h2>
+                <span style="color:var(--text-secondary); font-size:0.9rem;">ID: #@Model.Id</span>
             </div>
         </div>
 
         <!-- Карточка Instagram -->
         <div class="card">
-            <div class="card-header">
-                <h3>Instagram Бот</h3>
-
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 style="margin:0; font-size:1.2rem;">Instagram Бот</h3>
                 @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
                 {
                     if (Model.InstagramSettings.IsActive)
@@ -233,50 +226,53 @@
                     }
                     else
                     {
+
                         <span class="status-badge status-paused"><span class="dot"></span>На паузе</span>
                     }
                 }
                 else
                 {
+
                     <span class="status-badge status-disconnected">Не подключено</span>
                 }
             </div>
 
             @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
             {
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 1.5rem;">
-                    <!-- Аватарка -->
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
                     @if (!string.IsNullOrEmpty(Model.InstagramSettings.ProfilePictureUrl))
                     {
-                        <img src="@Model.InstagramSettings.ProfilePictureUrl" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #333;">
+                        <img src="@Model.InstagramSettings.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border:2px solid #333;">
                     }
-
                     <div>
-                        <strong style="font-size: 1.1rem;">@Model.InstagramSettings.Username</strong>
-                        <div style="margin-top: 4px;">
+                        <div style="font-weight:600;">@Model.InstagramSettings.Username</div>
+                        <div style="font-size:0.85rem; margin-top:2px;">
                             @if (Model.InstagramSettings.IsActive)
                             {
-                                <span style="font-size: 0.85rem; color: #10b981;">● Бот отвечает на сообщения</span>
+                                <span style="color:#10b981;">● Бот отвечает на сообщения</span>
                             }
                             else
                             {
-                                <span style="font-size: 0.85rem; color: #fbbf24;">⚠️ Бот выключен (сообщения не читаются)</span>
+
+                                <span style="color:#fbbf24;">⚠️ Бот выключен</span>
                             }
                         </div>
                     </div>
                 </div>
 
-                <a href="/instagram" class="btn btn-instagram" style="background: #333; border: 1px solid #555; width: 100%; text-align: center;">
+                <a href="/instagram" class="btn-instagram">
                     ⚙️ Настроить и @(Model.InstagramSettings.IsActive ? "Выключить" : "Включить")
                 </a>
             }
             else
             {
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Подключите аккаунт, чтобы настроить автоответы с помощью ИИ.
-                </p>
-                <a href="/instagram" class="btn btn-instagram" style="width: 100%; text-align: center;">Подключить Instagram</a>
+                <p style="color:#aaa; font-size:0.9rem; margin-bottom:0;">Подключите аккаунт, чтобы настроить автоответы.</p>
+                <a href="/instagram" class="btn-instagram">
+                    + Подключить Instagram
+                </a>
             }
         </div>
+    </div>
+
 </body>
 </html>

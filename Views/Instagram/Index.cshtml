@@ -29,36 +29,64 @@
             margin: 0;
             padding: 0;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 4rem auto;
-            padding: 0 1rem;
+        /* NAVBAR (Единый) */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background: rgba(5, 5, 5, 0.9);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+
+        .logo-text {
+            font-weight: 700;
+            color: white;
+            font-size: 1.1rem;
         }
 
         .back-link {
             color: var(--text-secondary);
             text-decoration: none;
-            margin-bottom: 2rem;
-            display: inline-block;
+            font-size: 0.9rem;
         }
 
             .back-link:hover {
                 color: white;
             }
 
-        /* Карточка */
+        .container {
+            max-width: 800px;
+            margin: 3rem auto;
+            padding: 0 1rem;
+        }
+
         .card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            text-align: center; /* Центрируем контент по умолчанию */
+            text-align: center;
         }
 
-        /* --- СТИЛИ ДЛЯ ПОДКЛЮЧЕННОГО СОСТОЯНИЯ --- */
+        /* HEADER ПОДКЛЮЧЕННОГО */
         .big-avatar {
             width: 120px;
             height: 120px;
@@ -82,6 +110,7 @@
             font-family: monospace;
         }
 
+        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -112,7 +141,7 @@
                 border-color: var(--accent-color);
             }
 
-        /* --- ОБЩИЕ КНОПКИ --- */
+        /* КНОПКИ */
         .btn {
             display: flex;
             align-items: center;
@@ -130,12 +159,12 @@
             box-sizing: border-box;
         }
 
-            /* Стилизация SVG внутри кнопок */
             .btn svg {
                 width: 24px;
                 height: 24px;
                 fill: white;
             }
+        /* Иконки */
 
         .btn-primary {
             background: var(--accent-color);
@@ -153,7 +182,7 @@
                 background: rgba(239, 68, 68, 0.3);
             }
 
-        /* --- КНОПКИ ВХОДА (LOGIN) --- */
+        /* КНОПКИ ВХОДА */
         .login-buttons {
             display: flex;
             flex-direction: column;
@@ -167,23 +196,12 @@
             box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
         }
 
-            .btn-insta:hover {
-                box-shadow: 0 8px 20px rgba(220, 39, 67, 0.35);
-                transform: translateY(-2px);
-            }
-
         .btn-fb {
             background: #1877F2;
             color: white;
             box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
         }
 
-            .btn-fb:hover {
-                box-shadow: 0 8px 20px rgba(24, 119, 242, 0.35);
-                transform: translateY(-2px);
-            }
-
-        /* Разделитель ИЛИ */
         .separator {
             display: flex;
             align-items: center;
@@ -207,12 +225,47 @@
                 margin-left: 10px;
             }
 
-        /* Тоггл */
+        /* СТАТУСЫ */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* ТОГГЛ */
         .switch-container {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 1.5rem;
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
         }
 
         .switch {
@@ -259,68 +312,24 @@
             input:checked + .slider:before {
                 transform: translateX(24px);
             }
-
-        /* Зеленый - всё работает */
-        .status-active {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        /* Желтый - подключено, но стоит на паузе */
-        .status-paused {
-            background: rgba(234, 179, 8, 0.2);
-            color: #fbbf24;
-            border: 1px solid rgba(234, 179, 8, 0.3);
-        }
-
-        /* Серый - не подключено */
-        .status-disconnected {
-            background: rgba(255, 255, 255, 0.1);
-            color: #9ca3af;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        /* Пульсирующая точка для активного статуса */
-        .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: currentColor;
-        }
-
-        .status-active .dot {
-            animation: pulse 2s infinite;
-        }
-
-        @@keyframes pulse {
-            0%{opacity: 1;}
-            50% {opacity: 0.4;}
-            100% {opacity: 1;}
-        }
-
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <a href="/auth/profile" class="back-link">← Вернуться в профиль</a>
+    <!-- Навбар такой же, как в профиле, но с кнопкой Назад -->
+    <nav class="navbar">
+        <a href="/" class="logo-container">
+            <img src="/images/CrossChatLogo.jpeg" alt="Logo" class="logo-img">
+            <span class="logo-text">CrossChat</span>
+        </a>
+        <a href="/auth/profile" class="back-link">← Назад в профиль</a>
+    </nav>
 
+    <div class="container">
         <div class="card">
             @if (isConnected)
             {
+                /* === ПОДКЛЮЧЕНО === */
                 <div class="connected-header">
                     @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
                     {
@@ -333,19 +342,14 @@
 
                     <div class="username">@@@(Model.Username ?? "Instagram User")</div>
 
-                    <!-- ЯВНЫЙ СТАТУС ПОД ИМЕНЕМ -->
                     <div style="margin-top: 10px;">
                         @if (Model.IsActive)
                         {
-                            <span class="status-badge status-active" style="font-size: 0.9rem; padding: 6px 16px;">
-                                <span class="dot"></span> Бот работает
-                            </span>
+                            <span class="status-badge status-active"><span class="dot"></span> Бот работает</span>
                         }
                         else
                         {
-                            <span class="status-badge status-paused" style="font-size: 0.9rem; padding: 6px 16px;">
-                                ⚠️ Требует включения
-                            </span>
+                            <span class="status-badge status-paused">⚠️ Требует включения</span>
                             <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 8px;">
                                 Подписка на сообщения отключена. Бот не видит новые диалоги.
                             </p>
@@ -353,15 +357,14 @@
                     </div>
                 </div>
 
-                <!-- Форма настроек -->
                 <div class="form-section">
                     <form action="/instagram/update-settings" method="post">
 
-                        <div class="switch-container" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                        <div class="switch-container">
                             <div>
                                 <label style="margin:0; font-size: 1.1rem; color: white; cursor: pointer;" for="isActiveCheck">Включить автоответы</label>
                                 <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
-                                    @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Бот спит. Включите, чтобы активировать.")
+                                    @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Передвиньте, чтобы активировать.")
                                 </div>
                             </div>
 
@@ -375,7 +378,7 @@
                             <label>Системный промпт</label>
                             <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@(Model.SystemPrompt)</textarea>
                             <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
-                                ИИ будет использовать эту инструкцию при ответе подписчикам.
+                                Инструкция для ИИ (Gemini).
                             </p>
                         </div>
 
@@ -383,14 +386,13 @@
                     </form>
                 </div>
 
-                <!-- Кнопка отключения -->
                 <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
                     <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
                 </form>
             }
             else
             {
-                /* === БЛОК: АККАУНТ НЕ ПОДКЛЮЧЕН (ВХОД) === */
+                /* === НЕ ПОДКЛЮЧЕНО (С ИКОНКАМИ) === */
                 <div>
                     <h1>Подключение каналов</h1>
                     <p style="color:var(--text-secondary); margin-bottom:2rem;">
@@ -411,7 +413,6 @@
 
                         <!-- КНОПКА FACEBOOK -->
                         <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
-                            <!-- Официальная иконка Facebook (F) -->
                             <svg viewBox="0 0 24 24">
                                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                             </svg>
