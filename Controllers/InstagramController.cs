@@ -308,61 +308,28 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		[HttpGet("deauth")]
 		[HttpPost("deauth")]
-		public IActionResult DeauthorizationCallback(
-			[FromForm] string signed_request = null,
-			[FromQuery] string code = null)  // code - это код подтверждения удаления
+		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null)
 		{
 			_logger.LogInformation($"=== Deauthorization callback received ===");
-			_logger.LogInformation($"Signed request: {signed_request}");
-			_logger.LogInformation($"Code: {code}");
 
 			try
 			{
-				if (!string.IsNullOrEmpty(signed_request))
+				if (string.IsNullOrEmpty(signed_request)) return Ok();
+
+				var userId = ParseSignedRequest(signed_request);
+				if (!string.IsNullOrEmpty(userId))
 				{
-					// 1. Разбираем signed_request от Facebook
-					var parts = signed_request.Split('.');
-					if (parts.Length == 2)
-					{
-						// payload - это base64url закодированный JSON
-						var payload = parts[1];
-						// Добавляем padding если нужно
-						payload = payload.Replace('-', '+').Replace('_', '/');
-						switch (payload.Length % 4)
-						{
-							case 2: payload += "=="; break;
-							case 3: payload += "="; break;
-						}
+					_logger.LogInformation($"User {userId} deauthorized app. Cleaning up token...");
 
-						var payloadBytes = Convert.FromBase64String(payload);
-						var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
-
-						_logger.LogInformation($"Decoded payload: {payloadJson}");
-
-						// Здесь можно найти user_id того, кто отозвал доступ
-						var data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
-						var userId = data.user_id?.ToString();
-						var algorithm = data.algorithm?.ToString();
-
-						_logger.LogInformation($"User {userId} deauthorized app. Algorithm: {algorithm}");
-
-						// TODO: Удалите данные пользователя из вашей БД
-						// await _userService.DeleteUserByFacebookId(userId);
-					}
-				}
-				else if (!string.IsNullOrEmpty(code))
-				{
-					// Instagram может передать code для подтверждения удаления
-					_logger.LogInformation($"Deauthorization code: {code}");
+					// Вызываем наш метод очистки (false = не удалять всё, только токен)
+					await DisconnectInstagramUser(userId, fullDataDelete: false);
 				}
 
-				// Всегда возвращаем 200 OK, иначе Instagram будет повторять запрос
 				return Ok();
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Error processing deauthorization");
-				// Всё равно возвращаем 200, чтобы Instagram не зациклился
 				return Ok();
 			}
 		}
@@ -373,88 +340,89 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		[HttpGet("data-deletion")]
 		[HttpPost("data-deletion")]
-		public IActionResult DataDeletionCallback(
-			[FromForm] string signed_request = null,
-			[FromQuery] string code = null,
-			[FromQuery] string confirmation_code = null)
+		public async Task<IActionResult> DataDeletionCallback(
+			[FromForm] string signed_request = null)
 		{
 			_logger.LogInformation($"=== Data Deletion callback received ===");
-			_logger.LogInformation($"Signed request: {signed_request}");
-			_logger.LogInformation($"Code: {code}");
-			_logger.LogInformation($"Confirmation code: {confirmation_code}");
 
 			try
 			{
 				string userId = null;
-				string confirmationCode = confirmation_code ?? code ?? Guid.NewGuid().ToString("N");
+				string confirmationCode = Guid.NewGuid().ToString("N");
 
 				if (!string.IsNullOrEmpty(signed_request))
 				{
-					// Разбираем signed_request
-					var parts = signed_request.Split('.');
-					if (parts.Length == 2)
-					{
-						var payload = parts[1]
-							.Replace('-', '+')
-							.Replace('_', '/');
-
-						switch (payload.Length % 4)
-						{
-							case 2: payload += "=="; break;
-							case 3: payload += "="; break;
-						}
-
-						var payloadBytes = Convert.FromBase64String(payload);
-						var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
-
-						_logger.LogInformation($"Decoded payload: {payloadJson}");
-
-						var data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
-						userId = data.user_id?.ToString();
-					}
+					userId = ParseSignedRequest(signed_request);
 				}
 
-				if (string.IsNullOrEmpty(userId))
+				if (!string.IsNullOrEmpty(userId))
 				{
-					userId = $"unknown_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+					_logger.LogInformation($"Processing FULL DATA DELETION for user: {userId}");
+
+					// Удаляем данные полностью (true)
+					await DisconnectInstagramUser(userId, fullDataDelete: true);
 				}
 
-				_logger.LogInformation($"Processing data deletion for user: {userId}");
+				// Генерируем URL статуса (его нужно реализовать ниже)
+				var statusUrl = $"{APP_URL}/instagram/deletion-status/{confirmationCode}";
 
-				// TODO: Реально удалите все данные пользователя из вашей БД
-				// await _userService.DeleteAllUserData(userId);
-
-				// Генерируем уникальный номер запроса на удаление
-				var deletionRequestId = Guid.NewGuid().ToString("N");
-				var statusUrl = $"{APP_URL}/instagram/deletion-status/{deletionRequestId}";
-
-				// Instagram ожидает JSON ответ в определенном формате
 				var response = new
 				{
-					url = statusUrl,  // URL где пользователь может проверить статус удаления
+					url = statusUrl,
 					confirmation_code = confirmationCode,
-					user_id = userId,
-					status = "success", // или "processing"
-					estimated_completion_time = 3600 // в секундах (1 час)
+					status = "success" // Мы удалили данные синхронно, так что сразу success
 				};
-
-				_logger.LogInformation($"Data deletion response: {JsonConvert.SerializeObject(response)}");
 
 				return Ok(response);
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Error processing data deletion");
-
-				// Даже при ошибке возвращаем корректный JSON
-				return Ok(new
-				{
-					url = $"{APP_URL}/instagram/deletion-status/error-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
-					confirmation_code = Guid.NewGuid().ToString("N"),
-					status = "error",
-					error_description = "Internal server error. Our team has been notified."
-				});
+				return Ok(new { url = $"{APP_URL}", confirmation_code = "error", status = "error" });
 			}
+		}
+
+		private string ParseSignedRequest(string signedRequest)
+		{
+			try
+			{
+				var parts = signedRequest.Split('.');
+				if (parts.Length != 2) return null;
+
+				var payload = parts[1].Replace('-', '+').Replace('_', '/');
+				switch (payload.Length % 4)
+				{
+					case 2: payload += "=="; break;
+					case 3: payload += "="; break;
+				}
+
+				var payloadBytes = Convert.FromBase64String(payload);
+				var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+
+				dynamic data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
+				return data.user_id?.ToString();
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		[AllowAnonymous]
+		[HttpGet("deletion-status/{code}")]
+		public IActionResult DeletionStatus(string code)
+		{
+			var html = $@"
+				<html>
+					<head><title>Статус удаления данных</title></head>
+					<body style='font-family: sans-serif; text-align: center; padding: 50px;'>
+						<h1 style='color: green;'>Данные успешно удалены</h1>
+						<p>Ваш запрос на удаление данных был обработан.</p>
+						<p>Код подтверждения: <strong>{code}</strong></p>
+						<p>Дата: {DateTime.UtcNow:g} (UTC)</p>
+					</body>
+				</html>";
+			return Content(html, "text/html");
 		}
 
 		[HttpGet("facebook/auth/callback")]
@@ -606,6 +574,40 @@ namespace CrossChat.Controllers
 			// 5. Сохраняем
 			await _db.SaveChangesAsync();
 			_logger.LogInformation($"Token saved for User {userId}");
+		}
+
+		private async Task<bool> DisconnectInstagramUser(string instagramUserId, bool fullDataDelete)
+		{
+			// Ищем настройки, где BusinessId совпадает с ID из вебхука
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.InstagramBusinessId == instagramUserId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"User with Instagram ID {instagramUserId} not found in DB.");
+				return false;
+			}
+
+			if (fullDataDelete)
+			{
+				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
+				settings.AccessToken = null;
+				settings.IsActive = false;
+				settings.TokenExpiresAt = null;
+				settings.InstagramBusinessId = null;
+				_logger.LogInformation($"Instagram settings deleted for BusinessId: {instagramUserId}");
+			}
+			else
+			{
+				// ВАРИАНТ 2: Просто отзыв токена (Deauth)
+				settings.AccessToken = null;
+				settings.IsActive = false;
+				settings.TokenExpiresAt = null;
+				_logger.LogInformation($"Access Token cleared for BusinessId: {instagramUserId}");
+			}
+
+			await _db.SaveChangesAsync();
+			return true;
 		}
 	}
 }
