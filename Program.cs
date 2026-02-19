@@ -4,6 +4,7 @@ using CrossChat.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 using StackExchange.Redis;
@@ -99,39 +100,44 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var logger = services.GetRequiredService<ILogger<Program>>();
-    try
-    {
-        var context = services.GetRequiredService<AppDbContext>();
-        
-        // Добавляем лог перед началом
-        logger.LogInformation("⏳ Начинаю применение миграций...");
-        
-        // Получаем список миграций, которые нужно применить
-        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-        if (pendingMigrations.Any())
-        {
-            logger.LogInformation($"Найдено {pendingMigrations.Count()} новых миграций. Применяю...");
-            await context.Database.MigrateAsync();
-            logger.LogInformation("✅ Миграции успешно применены!");
-        }
-        else
-        {
-            logger.LogInformation("👌 База данных уже актуальна (миграций нет).");
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "❌ КРИТИЧЕСКАЯ ОШИБКА МИГРАЦИИ БАЗЫ ДАННЫХ");
-        // Не пробрасываем throw, чтобы приложение хотя бы запустилось и мы увидели логи
-    }
+	var services = scope.ServiceProvider;
+	var logger = services.GetRequiredService<ILogger<Program>>();
+	try
+	{
+		var context = services.GetRequiredService<AppDbContext>();
+
+		// Добавляем лог перед началом
+		logger.LogInformation("⏳ Начинаю применение миграций...");
+
+		// Получаем список миграций, которые нужно применить
+		var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+		if (pendingMigrations.Any())
+		{
+			logger.LogInformation($"Найдено {pendingMigrations.Count()} новых миграций. Применяю...");
+			await context.Database.MigrateAsync();
+			logger.LogInformation("✅ Миграции успешно применены!");
+		}
+		else
+		{
+			logger.LogInformation("👌 База данных уже актуальна (миграций нет).");
+		}
+	}
+	catch (Exception ex)
+	{
+		logger.LogError(ex, "❌ КРИТИЧЕСКАЯ ОШИБКА МИГРАЦИИ БАЗЫ ДАННЫХ");
+		// Не пробрасываем throw, чтобы приложение хотя бы запустилось и мы увидели логи
+	}
 }
 
 if (app.Environment.IsDevelopment())
 {
 	app.MapOpenApi();
 }
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+	ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
