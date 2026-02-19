@@ -20,9 +20,20 @@ namespace CrossChat.Controllers
 			string logoUrl = "/images/CrossChatLogo.jpeg";
 			string platformImageUrl = "/images/CrossChat.jpeg";
 
-			// Если используете Resources (как во 2-м варианте решения):
-			// string logoUrl = "/Resources/Images/CrossChatLogo.jpeg";
-			// string platformImageUrl = "/Resources/Images/CrossChat.jpeg";
+			// Проверяем, вошел ли пользователь
+            bool isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+            string buttonHtml;
+
+            if (isAuthenticated)
+            {
+                // Если вошел - кнопка "В кабинет"
+                buttonHtml = @"<a href=""/auth/profile"" class=""btn btn-primary"">Открыть профиль</a>";
+            }
+            else
+            {
+                // Если не вошел - кнопка "Войти" (ведет на наш контроллер)
+                buttonHtml = @"<a href=""/auth/login"" class=""btn btn-primary"">Войти / Начать</a>";
+            }
 
 			string html = $@"<!DOCTYPE html>
 <html lang=""ru"">
@@ -334,7 +345,8 @@ namespace CrossChat.Controllers
             </p>
             
             <div class=""buttons"">
-                <a href=""/instagram"" class=""btn btn-primary"">Подключить Instagram</a>
+                {buttonHtml}
+            
                 <a href=""#"" class=""btn btn-outline"">Документация</a>
             </div>
         </div>

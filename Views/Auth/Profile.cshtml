@@ -1,0 +1,230 @@
+@model CrossChat.Data.Entities.User
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет — CrossChat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-secondary: #a1a1aa;
+            --accent-color: #6366f1;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* Навбар */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(5, 5, 5, 0.8);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo { font-weight: 800; font-size: 1.2rem; color: white; text-decoration: none; }
+
+        .logout-btn {
+            background: none; border: 1px solid var(--glass-border); color: var(--text-secondary);
+            padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; transition: 0.2s;
+        }
+        .logout-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* Контейнер */
+        .container {
+            max-width: 900px;
+            margin: 3rem auto;
+            padding: 0 1rem;
+            display: grid;
+            gap: 2rem;
+        }
+
+        /* Карточки */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 2rem;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .avatar {
+            width: 64px; height: 64px; border-radius: 50%; background: #333; object-fit: cover;
+        }
+
+        h2 { margin: 0; font-size: 1.5rem; }
+        p { margin: 0.5rem 0 0; color: var(--text-secondary); }
+
+        /* Формы и инпуты */
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-size: 0.9rem; }
+
+        textarea, input[type="text"] {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        textarea:focus { outline: none; border-color: var(--accent-color); }
+
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+        }
+
+        .btn-primary { background: var(--accent-color); color: white; }
+        .btn-primary:hover { filter: brightness(1.1); }
+
+        .btn-instagram {
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            color: white;
+            width: 100%;
+            text-align: center;
+        }
+
+        .status-badge {
+            display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem;
+            background: rgba(255,255,255,0.1);
+        }
+        .status-connected { background: rgba(16, 185, 129, 0.2); color: var(--success-color); }
+
+        /* Тоггл переключатель */
+        .switch-container { display: flex; align-items: center; justify-content: space-between; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success-color); }
+        input:checked + .slider:before { transform: translateX(24px); }
+
+    </style>
+</head>
+<body>
+
+    <!-- Навигация -->
+    <nav class="navbar">
+        <a href="/" class="logo">CrossChat</a>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <span style="color: var(--text-secondary);">@Model.Email</span>
+            <form action="/auth/logout" method="post" style="margin:0;">
+                <button type="submit" class="logout-btn">Выйти</button>
+            </form>
+        </div>
+    </nav>
+
+    <div class="container">
+
+        <!-- Карточка профиля -->
+        <div class="card">
+            <div class="card-header">
+                <!-- Аватарка (если есть, иначе заглушка) -->
+                @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+                {
+                    <img src="@Model.AvatarUrl" class="avatar" alt="Avatar">
+                }
+                else
+                {
+                    <div class="avatar" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem;">
+                        @Model.Name.Substring(0, 1)
+                    </div>
+                }
+                <div>
+                    <h2>Привет, @Model.Name!</h2>
+                    <p>ID пользователя: #@Model.Id</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Карточка Instagram -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Подключение Instagram</h3>
+                @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
+                {
+                    <span class="status-badge status-connected">Подключено</span>
+                }
+                else
+                {
+                    <span class="status-badge">Не подключено</span>
+                }
+            </div>
+
+            @if (Model.InstagramSettings != null && !string.IsNullOrEmpty(Model.InstagramSettings.AccessToken))
+            {
+                <p style="margin-bottom: 1rem;">Ваш бизнес-аккаунт успешно подключен. Бот готов к работе.</p>
+                <!-- Тут потом сделаем кнопку отключения -->
+            }
+            else
+            {
+                <p style="margin-bottom: 1.5rem;">Подключите бизнес-аккаунт, чтобы бот мог отвечать на сообщения.</p>
+                <a href="/instagram" class="btn btn-instagram">Подключить Инстаграм</a>
+            }
+        </div>
+
+        <!-- Карточка Настроек Бота -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Настройки ИИ</h3>
+            </div>
+
+            <form action="/auth/update-settings" method="post">
+
+                <!-- Тоггл активности -->
+                <div class="form-group switch-container">
+                    <label style="margin:0">Бот включен</label>
+                    <label class="switch">
+                        <!-- Если IsActive true, ставим checked -->
+                        <input type="checkbox" name="isActive" value="true" @(Model.InstagramSettings?.IsActive == true ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <!-- Системный промпт -->
+                <div class="form-group">
+                    <label>Системный промпт (Инструкция для ИИ)</label>
+                    <textarea name="systemPrompt" rows="5">@(Model.InstagramSettings?.SystemPrompt ?? "Ты вежливый помощник. Отвечай кратко и по делу.")</textarea>
+                    <p style="font-size: 0.8rem; margin-top: 5px;">Опишите, как бот должен себя вести, какие услуги продавать и в каком тоне общаться.</p>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+            </form>
+        </div>
+
+    </div>
+
+</body>
+</html>

@@ -1,44 +1,56 @@
+using System.Security.Claims;
 using System.Text.Json;
+using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
 {
-	[ApiController]
+	[Authorize]
 	[Route("instagram")]
-	public class InstagramController : ControllerBase
+	public class InstagramController : Controller // Наследуем от Controller, чтобы работали View и Redirect
 	{
 		private readonly ILogger<InstagramController> _logger;
 		private readonly SocialMediaSettings _settings;
 		private readonly HttpClient _httpClient;
+		private readonly AppDbContext _db; // Добавили контекст БД
 
-		// ИСПОЛЬЗУЕМ META APP ID (Ключ от "Умного дома", а не от "Сарая")
 		private string InstagramAppId => _settings.InstagramAppId;
-		private string InstagramAppSecret => _settings.InstagramAppSecret; // Секрет от Meta App 
+		private string InstagramAppSecret => _settings.InstagramAppSecret;
 
 		private string RedirectUri => $"{APP_URL}/instagram/auth/callback";
-
 		private string AppId => _settings.AppId;
 		private string AppSecret => _settings.AppSecret;
 
-		private string faceBookRedirectUri = $"{APP_URL}/instagram/facebook/auth/callback";
+		private string FaceBookRedirectUri => $"{APP_URL}/instagram/facebook/auth/callback";
 
-		public InstagramController(ILogger<InstagramController> logger, IOptions<SocialMediaSettings> options)
+		public InstagramController(
+			ILogger<InstagramController> logger,
+			IOptions<SocialMediaSettings> options,
+			AppDbContext db)
 		{
 			_logger = logger;
 			_settings = options.Value;
+			_db = db;
 			_httpClient = new HttpClient();
 		}
 
 		[HttpGet]
 		public IActionResult Index()
 		{
-			// ========================================================================
-			// 1. НАСТРОЙКА INSTAGRAM BUSINESS LOGIN (Через Instagram API)
-			// ========================================================================
+			// Проверка: если пользователь не залогинен в нашей системе, отправляем на вход
+			if (!User.Identity.IsAuthenticated)
+			{
+				return RedirectToAction("Login", "Auth");
+			}
+
+			// 1. Ссылка для Instagram Login
 			var instaScopes = string.Join(",",
 				"instagram_business_basic",
 				"instagram_business_manage_messages",
@@ -54,9 +66,6 @@ namespace CrossChat.Controllers
 						   $"force_reauth=true&" +
 						   $"scope={instaScopes}";
 
-			// ========================================================================
-			// 2. НАСТРОЙКА FACEBOOK LOGIN (Через Facebook API)
-			// ========================================================================
 			var fbScopes = string.Join(",",
 				"instagram_basic",
 				"instagram_manage_messages",
@@ -70,22 +79,19 @@ namespace CrossChat.Controllers
 
 			var fbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?" +
 							  $"client_id={AppId}&" + // Здесь ID Facebook приложения
-							  $"redirect_uri={faceBookRedirectUri}&" +
+							  $"redirect_uri={FaceBookRedirectUri}&" +
 							  $"response_type=code&" +
 							  $"auth_type=reauthenticate&" +
 							  $"scope={fbScopes}";
 
-			// ========================================================================
-			// 3. ГЕНЕРАЦИЯ HTML
-			// ========================================================================
 			var html = $@"<!DOCTYPE html>
-<html lang=""ru"">
-<head>
-    <meta charset=""UTF-8"">
-    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-    <title>Вход в систему</title>
-    <style>
-        body {{
+            <html lang=""ru"">
+            <head>
+                <meta charset=""UTF-8"">
+                <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+                <title>Подключение интеграции</title>
+                <style>
+                    body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             justify-content: center;
@@ -173,83 +179,76 @@ namespace CrossChat.Controllers
         .separator::before {{ margin-right: 10px; }}
         .separator::after {{ margin-left: 10px; }}
 
-    </style>
-</head>
-<body>
-    <div class=""card"">
-        <h1>Подключение каналов</h1>
-        <p>Выберите способ авторизации, чтобы подключить чат-бота к вашим страницам.</p>
-        
-        <!-- КНОПКА INSTAGRAM -->
-        <a href=""{instaLoginUrl}"" class=""btn btn-insta"">
-            <svg viewBox=""0 0 24 24"">
-                <path d=""M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z""/>
-            </svg>
-            <span>Войти через Instagram</span>
-        </a>
+                </style>
+            </head>
+            <body>
+                <div class=""card"">
+                    <h1>Подключение каналов</h1>
+                    <p>Выберите способ, чтобы дать боту доступ к сообщениям.</p>
+                     <!-- КНОПКА INSTAGRAM -->
+                    <a href=""{instaLoginUrl}"" class=""btn btn-insta"">
+                        <svg viewBox=""0 0 24 24"">
+                            <path d=""M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z""/>
+                        </svg>
+                        <span>Войти через Instagram</span>
+                    </a>
 
-        <div class=""separator"">ИЛИ</div>
+                    <div class=""separator"">ИЛИ</div>
 
-        <!-- КНОПКА FACEBOOK -->
-        <a href=""{fbLoginUrl}"" class=""btn btn-fb"">
-            <!-- Официальная иконка Facebook (F) -->
-            <svg viewBox=""0 0 24 24"">
-                <path d=""M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z""/>
-            </svg>
-            <span>Войти через Facebook</span>
-        </a>
-    </div>
-</body>
-</html>";
+                    <!-- КНОПКА FACEBOOK -->
+                    <a href=""{fbLoginUrl}"" class=""btn btn-fb"">
+                        <!-- Официальная иконка Facebook (F) -->
+                        <svg viewBox=""0 0 24 24"">
+                            <path d=""M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z""/>
+                        </svg>
+                        <span>Войти через Facebook</span>
+                    </a>
+                    <br>
+                    <a href=""/auth/profile"" style=""color: #666; font-size: 0.9em;"">Вернуться в профиль</a>
+                </div>
+            </body>
+            </html>";
 
 			return Content(html, "text/html");
 		}
 
 		[HttpGet("auth/callback")]
-		public async Task<IActionResult> Callback(string? code, string? error, string? error_description)
+		public async Task<IActionResult> Callback(string? code, string? error)
 		{
-			// -----------------------------------------------------------------------
-			// 1. ОБРАБОТКА ОШИБОК (Отказ пользователя)
-			// -----------------------------------------------------------------------
 			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
-			{
-				return ReturnHtmlPage(false,
-					"Ошибка авторизации",
-					"Вы отменили вход или произошла ошибка на стороне Instagram.",
-					$"Error: {error}<br/>Details: {error_description}",
-					"");
-			}
+				return RedirectToAction("Profile", "Auth"); // Если ошибка - просто назад в профиль
 
 			try
 			{
+				// 1. Получаем Short Token
 				var cleanCode = code.Replace("#_", "");
-
-				// -----------------------------------------------------------------------
-				// 2. STEP 2: Обмен кода на Short-Lived Token
-				// -----------------------------------------------------------------------
 				var shortTokenUrl = "https://api.instagram.com/oauth/access_token";
 				var formData = new Dictionary<string, string>
-		{
-			{ "client_id", InstagramAppId },
-			{ "client_secret", InstagramAppSecret },
-			{ "grant_type", "authorization_code" },
-			{ "redirect_uri", RedirectUri },
-			{ "code", cleanCode }
-		};
+				{
+					{ "client_id", InstagramAppId },
+					{ "client_secret", InstagramAppSecret },
+					{ "grant_type", "authorization_code" },
+					{ "redirect_uri", RedirectUri },
+					{ "code", cleanCode }
+				};
 
 				var shortResponse = await _httpClient.PostAsync(shortTokenUrl, new FormUrlEncodedContent(formData));
 				var shortJsonStr = await shortResponse.Content.ReadAsStringAsync();
 
 				if (!shortResponse.IsSuccessStatusCode)
 				{
-					return ReturnHtmlPage(false, "Ошибка Step 2", "Не удалось получить короткий токен.", shortJsonStr, "");
+					_logger.LogError("Не удалось получить короткий токен.");
+					return RedirectToAction("Profile", "Auth");
 				}
 
 				using var shortDoc = JsonDocument.Parse(shortJsonStr);
 				var shortRoot = shortDoc.RootElement;
 
 				if (!shortRoot.TryGetProperty("access_token", out JsonElement shortTokenEl))
-					return ReturnHtmlPage(false, "Ошибка JSON", "В ответе нет access_token.", shortJsonStr, "");
+				{
+					_logger.LogError("Ошибка JSON\", \"В ответе нет access_token.");
+					return RedirectToAction("Profile", "Auth");
+				}
 
 				var shortAccessToken = shortTokenEl.GetString();
 
@@ -262,7 +261,8 @@ namespace CrossChat.Controllers
 
 				if (!longResponse.IsSuccessStatusCode)
 				{
-					return ReturnHtmlPage(false, "Ошибка Step 3", "Не удалось получить длинный токен.", longJsonStr, "");
+					_logger.LogError("Не удалось получить длинный токен.");
+					return RedirectToAction("Profile", "Auth");
 				}
 
 				using var longDoc = JsonDocument.Parse(longJsonStr);
@@ -288,28 +288,17 @@ namespace CrossChat.Controllers
 					if (userDoc.RootElement.TryGetProperty("id", out var i)) userId = i.GetString();
 				}
 
-				// -----------------------------------------------------------------------
-				// 5. ГЕНЕРАЦИЯ HTML С КНОПКОЙ КОПИРОВАНИЯ
-				// -----------------------------------------------------------------------
-				var infoHtml = $@"
-            <div class='info-grid'>
-                <div><strong>Username:</strong> @{username}</div>
-                <div><strong>User ID:</strong> {userId}</div>
-                <div><strong>Истекает:</strong> {expireDate:dd.MM.yyyy HH:mm} (UTC)</div>
-            </div>
-            
-            <div class='token-section'>
-                <p>Ваш Long-Lived Access Token (60 дней):</p>
-                <textarea id='tokenArea' readonly onclick='this.select()'>{longAccessToken}</textarea>
-                <button onclick='copyToken()' id='copyBtn'>📋 Скопировать токен</button>
-                <span id='copyMsg' style='display:none; color: green; margin-left: 10px; font-weight:bold;'>Скопировано!</span>
-            </div>";
+				// 3. СОХРАНЯЕМ В БД
+				await SaveTokenToDatabase(longAccessToken, userId, expireDate);
 
-				return ReturnHtmlPage(true, "Успешно!", "Instagram Business подключен.", infoHtml, longAccessToken);
+				// 4. Редирект обратно в профиль
+				return RedirectToAction("Profile", "Auth");
 			}
 			catch (Exception ex)
 			{
-				return ReturnHtmlPage(false, "System Error", ex.Message, ex.StackTrace, "");
+				_logger.LogError(ex, "Instagram Auth Error");
+				// Можно добавить параметр error, чтобы показать плашку в профиле
+				return RedirectToAction("Profile", "Auth");
 			}
 		}
 
@@ -474,17 +463,8 @@ namespace CrossChat.Controllers
 			[FromQuery] string error_reason = null,
 			[FromQuery] string error_description = null)
 		{
-			// -----------------------------------------------------------------------
-			// 1. ОБРАБОТКА ОШИБОК ОТ FACEBOOK
-			// -----------------------------------------------------------------------
 			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
-			{
-				return ReturnHtmlPage(false,
-					"Ошибка авторизации Facebook",
-					"Пользователь отменил вход или возникла ошибка API.",
-					$"Error: {error}<br/>Reason: {error_reason}<br/>Description: {error_description}",
-					"");
-			}
+				return RedirectToAction("Profile", "Auth");
 
 			try
 			{
@@ -515,7 +495,7 @@ namespace CrossChat.Controllers
 				// -----------------------------------------------------------------------
 				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 									$"client_id={AppId}&" +
-									$"redirect_uri={faceBookRedirectUri}&" +
+									$"redirect_uri={FaceBookRedirectUri}&" +
 									$"client_secret={AppSecret}&" +
 									$"code={code}";
 
@@ -524,8 +504,8 @@ namespace CrossChat.Controllers
 
 				if (!shortResponse.IsSuccessStatusCode)
 				{
-					return ReturnHtmlPage(false, "Ошибка Step A (Short Token)",
-						"Не удалось обменять код на токен.", shortJsonStr, "");
+					_logger.LogError("Не удалось обменять код на токен.");
+					return RedirectToAction("Profile", "Auth");
 				}
 
 				using var shortDoc = JsonDocument.Parse(shortJsonStr);
@@ -545,10 +525,8 @@ namespace CrossChat.Controllers
 
 				if (!longResponse.IsSuccessStatusCode)
 				{
-					// Если не удалось получить длинный, показываем ошибку, но выводим короткий, который успели получить
-					return ReturnHtmlPage(false, "Ошибка Step B (Long Token)",
-						"Короткий токен получен, но обмен на длинный не удался.",
-						$"Short Token: {shortAccessToken}<br/><br/>Error: {longJsonStr}", "");
+					_logger.LogError($"Короткий токен получен, но обмен на длинный не удался.Short Token: {shortAccessToken} Error: {longJsonStr}");
+					return RedirectToAction("Profile", "Auth");
 				}
 
 				using var longDoc = JsonDocument.Parse(longJsonStr);
@@ -577,103 +555,55 @@ namespace CrossChat.Controllers
 					if (meDoc.RootElement.TryGetProperty("id", out var i)) fbId = i.GetString();
 				}
 
-				// -----------------------------------------------------------------------
-				// 6. ГЕНЕРАЦИЯ HTML
-				// -----------------------------------------------------------------------
-				var infoHtml = $@"
-					<div class='info-grid'>
-						<div><strong>FB Name:</strong> {fbName}</div>
-						<div><strong>FB User ID:</strong> {fbId}</div>
-						<div><strong>Internal ID:</strong> {internalUserId}</div>
-						<div><strong>Истекает:</strong> {expireDate:dd.MM.yyyy HH:mm} (UTC)</div>
-					</div>
-            
-					<div class='token-section'>
-						<p>Ваш Long-Lived Facebook Token (60 дней):</p>
-						<textarea id='tokenArea' readonly onclick='this.select()'>{longAccessToken}</textarea>
-						<button onclick='copyToken()' id='copyBtn'>📋 Скопировать токен</button>
-						<span id='copyMsg' style='display:none; color: green; margin-left: 10px; font-weight:bold;'>Скопировано!</span>
-					</div>
+				_logger.LogInformation($"longAccessToken = {longAccessToken} " +
+					$"fbId ={fbId} internalUserId ={internalUserId} fbName = {fbName} expireDate = {expireDate:dd.MM.yyyy HH:mm}" +
+					$"shortAccessToken = {shortAccessToken}");
 
-					<div style='margin-top: 20px;'>
-						 <details>
-							<summary style='cursor:pointer; color:#555;'>Показать Short-Lived Token (Техническая инфо)</summary>
-							<div class='raw-error' style='background:#f1f1f1; color:#333; border:none;'>
-								{shortAccessToken}
-							</div>
-						 </details>
-					</div>";
+				// D. Сохраняем
+				await SaveTokenToDatabase(longAccessToken, fbId, expireDate);
 
-				return ReturnHtmlPage(true, "Facebook Подключен!", "Авторизация прошла успешно.", infoHtml, longAccessToken);
+				return RedirectToAction("Profile", "Auth");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Critical Error in Facebook Callback");
-				return ReturnHtmlPage(false, "System Error", ex.Message, ex.StackTrace, "");
+				_logger.LogError(ex, "Facebook Auth Error");
+				return RedirectToAction("Profile", "Auth");
 			}
 		}
 
-		// ---------------------------------------------------------------------------
-		// ВСПОМОГАТЕЛЬНЫЙ МЕТОД ГЕНЕРАЦИИ HTML
-		// ---------------------------------------------------------------------------
-		private ContentResult ReturnHtmlPage(bool isSuccess, string title, string message, string htmlContent, string rawToken)
+		// =========================================================
+		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
+		// =========================================================
+		private async Task SaveTokenToDatabase(string accessToken, string businessId, DateTime expiresInSeconds)
 		{
-			var color = isSuccess ? "#2ecc71" : "#e74c3c"; // Зеленый / Красный
-			var icon = isSuccess ? "check_circle" : "error";
+			// 1. Находим ID текущего пользователя из куки авторизации
+			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userIdStr)) return;
 
-			var page = $@"
-    <!DOCTYPE html>
-    <html lang='ru'>
-    <head>
-        <meta charset='utf-8'>
-        <title>{title}</title>
-        <link href='https://fonts.googleapis.com/icon?family=Material+Icons' rel='stylesheet'>
-        <style>
-            body {{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
-            .card {{ background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 700px; text-align: center; }}
-            .icon {{ font-size: 64px; color: {color}; margin-bottom: 20px; }}
-            h1 {{ color: #2c3e50; margin: 0 0 10px 0; }}
-            p.subtitle {{ color: #7f8c8d; font-size: 18px; margin-bottom: 30px; }}
-            
-            .info-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; font-size: 14px; border: 1px solid #e9ecef; }}
-            
-            .token-section {{ text-align: left; margin-top: 20px; }}
-            .token-section p {{ font-weight: bold; color: #34495e; margin-bottom: 5px; }}
-            
-            textarea {{ width: 100%; height: 100px; padding: 10px; border: 2px solid #dfe6e9; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; color: #2d3436; resize: none; background: #fafafa; box-sizing: border-box; }}
-            textarea:focus {{ outline: none; border-color: {color}; }}
-            
-            button {{ background-color: {color}; color: white; border: none; padding: 12px 25px; font-size: 16px; border-radius: 8px; cursor: pointer; margin-top: 10px; transition: background 0.3s; display: inline-flex; align-items: center; justify-content: center; }}
-            button:hover {{ opacity: 0.9; }}
-            
-            .raw-error {{ background: #fff0f0; color: #c0392b; padding: 15px; border-radius: 5px; text-align: left; font-family: monospace; font-size: 12px; overflow-x: auto; margin-top: 20px; border: 1px solid #ffcccc; }}
-        </style>
-        <script>
-            function copyToken() {{
-                var copyText = document.getElementById('tokenArea');
-                copyText.select();
-                copyText.setSelectionRange(0, 99999); /* For mobile devices */
-                navigator.clipboard.writeText(copyText.value).then(function() {{
-                    document.getElementById('copyMsg').style.display = 'inline';
-                    setTimeout(function() {{ document.getElementById('copyMsg').style.display = 'none'; }}, 3000);
-                }}, function(err) {{
-                    alert('Не удалось скопировать автоматически. Пожалуйста, скопируйте вручную.');
-                }});
-            }}
-        </script>
-    </head>
-    <body>
-        <div class='card'>
-            <span class='material-icons icon'>{icon}</span>
-            <h1>{title}</h1>
-            <p class='subtitle'>{message}</p>
-            
-            {htmlContent}
-        </div>
-    </body>
-    </html>";
+			var userId = int.Parse(userIdStr);
 
-			return Content(page, "text/html");
+			// 2. Достаем юзера из БД
+			var user = await _db.Users
+				.Include(u => u.InstagramSettings)
+				.FirstOrDefaultAsync(u => u.Id == userId);
+
+			if (user == null) return;
+
+			// 3. Создаем настройки, если их нет
+			if (user.InstagramSettings == null)
+			{
+				user.InstagramSettings = new InstagramSettings { UserId = userId };
+			}
+
+			// 4. Обновляем данные
+			user.InstagramSettings.AccessToken = accessToken;
+			user.InstagramSettings.InstagramBusinessId = businessId; // ID страницы / аккаунта
+			user.InstagramSettings.TokenExpiresAt = expiresInSeconds;
+
+
+			// 5. Сохраняем
+			await _db.SaveChangesAsync();
+			_logger.LogInformation($"Token saved for User {userId}");
 		}
 	}
 }

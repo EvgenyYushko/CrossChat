@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossChat", "CrossChat.cspr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossChat.Worker", "CrossChat.Worker\CrossChat.Worker.csproj", "{9FA449F6-7DA8-4BA0-A5D4-83FB4762A919}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossChat.Data", "CrossChat.Data\CrossChat.Data.csproj", "{0AD658CD-92B7-4CA6-BDF0-4CA0252711F6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{9FA449F6-7DA8-4BA0-A5D4-83FB4762A919}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9FA449F6-7DA8-4BA0-A5D4-83FB4762A919}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9FA449F6-7DA8-4BA0-A5D4-83FB4762A919}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0AD658CD-92B7-4CA6-BDF0-4CA0252711F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0AD658CD-92B7-4CA6-BDF0-4CA0252711F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0AD658CD-92B7-4CA6-BDF0-4CA0252711F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0AD658CD-92B7-4CA6-BDF0-4CA0252711F6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
