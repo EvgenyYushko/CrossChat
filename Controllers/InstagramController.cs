@@ -305,10 +305,11 @@ namespace CrossChat.Controllers
 		/// <summary>
 		/// Эндпоинт для деавторизации (Instagram вызывает при отзыве доступа)
 		/// </summary>
+		[AllowAnonymous]
 		[HttpGet("deauth")]
 		[HttpPost("deauth")]
 		public IActionResult DeauthorizationCallback(
-			[FromQuery] string signed_request = null,
+			[FromForm] string signed_request = null,
 			[FromQuery] string code = null)  // code - это код подтверждения удаления
 		{
 			_logger.LogInformation($"=== Deauthorization callback received ===");
@@ -369,10 +370,11 @@ namespace CrossChat.Controllers
 		/// <summary>
 		/// Эндпоинт для удаления данных пользователя (Data Deletion Request)
 		/// </summary>
+		[AllowAnonymous]
 		[HttpGet("data-deletion")]
 		[HttpPost("data-deletion")]
 		public IActionResult DataDeletionCallback(
-			[FromQuery] string signed_request = null,
+			[FromForm] string signed_request = null,
 			[FromQuery] string code = null,
 			[FromQuery] string confirmation_code = null)
 		{
