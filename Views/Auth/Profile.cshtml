@@ -219,6 +219,33 @@
             background: linear-gradient(135deg, #2AABEE 0%, #229ED9 100%);
             box-shadow: 0 4px 12px rgba(34, 158, 217, 0.3);
         }
+
+        /* Стиль для Telegram */
+    .icon-tg {
+        background: linear-gradient(135deg, #2AABEE 0%, #229ED9 100%);
+        box-shadow: 0 4px 12px rgba(34, 158, 217, 0.3);
+    }
+
+    /* Кнопка Telegram */
+    .btn-telegram {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        width: 100%; box-sizing: border-box; padding: 12px;
+        background: #262626; border: 1px solid #404040;
+        border-radius: 8px; color: white; text-decoration: none; font-weight: 600;
+        margin-top: 1rem; transition: background 0.2s; cursor: pointer;
+    }
+    .btn-telegram:hover {
+        background: #2AABEE; /* Синий при наведении */
+        border-color: #2AABEE;
+    }
+
+    /* Статус "Скоро" */
+    .status-soon {
+        background: rgba(124, 58, 237, 0.15); 
+        color: #a78bfa; 
+        border: 1px solid rgba(124, 58, 237, 0.2);
+    }
+
     </style>
 </head>
 <body>
@@ -324,6 +351,39 @@
                 </a>
             }
         </div>
+
+        <!-- Карточка Telegram (Заглушка) -->
+        <div class="card" style="opacity: 0.9;">
+            <!-- Чуть прозрачнее, пока не активна -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+
+                <!-- Иконка + Заголовок -->
+                <div style="display:flex; align-items:center;">
+                    <div class="service-icon icon-tg">
+                        <!-- SVG Самолетика Telegram -->
+                        <svg viewBox="0 0 24 24" style="margin-left: -2px;">
+                            <!-- Чуть сдвинем для визуального центра -->
+                            <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.441z" />
+                        </svg>
+                    </div>
+                    <h3 style="margin:0; font-size:1.2rem;">Telegram</h3>
+                </div>
+
+                <!-- Статус -->
+                <span class="status-badge status-soon">Скоро</span>
+            </div>
+
+            <p style="color:var(--text-secondary); margin-bottom: 1.5rem;">
+                Интеграция с Telegram-ботами находится в разработке.
+                Мы уведомим вас, когда она станет доступна.
+            </p>
+
+            <!-- Кнопка-заглушка -->
+            <a href="javascript:void(0)" onclick="alert('Эта интеграция пока в разработке. Следите за обновлениями!');" class="btn-telegram">
+                + Подключить
+            </a>
+        </div>
+
     </div>
 
 </body>
