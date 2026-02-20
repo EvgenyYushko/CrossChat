@@ -22,7 +22,6 @@
             --insta-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
         }
 
-        /* ГЛОБАЛЬНЫЙ ФИКС РАЗМЕРОВ */
         * {
             margin: 0;
             padding: 0;
@@ -96,7 +95,7 @@
             text-align: center;
         }
 
-        /* ЭЛЕМЕНТЫ */
+        /* HEADER ПОДКЛЮЧЕННОГО */
         .big-avatar {
             width: 120px;
             height: 120px;
@@ -120,6 +119,7 @@
             font-family: monospace;
         }
 
+        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -150,6 +150,7 @@
                 border-color: var(--accent-color);
             }
 
+        /* КНОПКИ */
         .btn {
             display: flex;
             align-items: center;
@@ -164,6 +165,7 @@
             transition: 0.2s;
             width: 100%;
             font-size: 1rem;
+            box-sizing: border-box;
         }
 
             .btn svg {
@@ -192,7 +194,7 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
-            margin-top: 2rem;
+            margin-top: 1rem;
         }
 
         .btn-insta {
@@ -230,6 +232,7 @@
                 margin-left: 10px;
             }
 
+        /* СТАТУСЫ */
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -315,11 +318,125 @@
             input:checked + .slider:before {
                 transform: translateX(24px);
             }
+
+        /* --- СТИЛИ ДЛЯ ИНСТРУКЦИИ (Обновленные) --- */
+        .instruction-btn {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-bottom: 2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+
+            .instruction-btn:hover {
+                border-color: var(--text-main);
+                color: var(--text-main);
+                background: rgba(255,255,255,0.05);
+            }
+
+        .instruction-content {
+            display: none;
+            text-align: left;
+            background: #121212;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .safety-note {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid #10b981;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #d1fae5;
+        }
+
+        .instruction-step {
+            margin-bottom: 2rem;
+        }
+
+        .step-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-num {
+            background: var(--insta-gradient);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        /* Стили для списков в инструкции */
+        .step-list {
+            margin-left: 10px;
+            padding-left: 15px;
+            border-left: 2px solid #333;
+        }
+
+            .step-list li {
+                margin-bottom: 8px;
+                color: var(--text-secondary);
+                font-size: 0.95rem;
+                list-style: none;
+            }
+
+                .step-list li strong {
+                    color: white;
+                }
+
+        .tip-box {
+            background: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #ccc;
+        }
+
+        .open {
+            display: block;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @@keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
     </style>
 </head>
 <body>
 
-    <!-- Навбар такой же, как в профиле, но с кнопкой Назад -->
     <nav class="navbar">
         <a href="/" class="logo-container">
             <img src="/images/CrossChatLogo.jpeg" alt="Logo" class="logo-img">
@@ -395,16 +512,65 @@
             }
             else
             {
-                /* === НЕ ПОДКЛЮЧЕНО (С ИКОНКАМИ) === */
+                /* === НЕ ПОДКЛЮЧЕНО (С ИНСТРУКЦИЕЙ) === */
                 <div>
-                    <h1>Подключение каналов</h1>
+                    <h1>Подключение Instagram</h1>
                     <p style="color:var(--text-secondary); margin-bottom:2rem;">
-                        Выберите способ, чтобы дать боту доступ к сообщениям.
+                        Чтобы бот заработал, аккаунт должен быть правильно настроен.
                     </p>
+
+                    <!-- КНОПКА ОТКРЫТИЯ ИНСТРУКЦИИ -->
+                    <button class="instruction-btn" onclick="toggleInstruction()">
+                        <span>📖</span> Инструкция: Как подготовить аккаунт?
+                    </button>
+
+                    <!-- БЛОК С ИНСТРУКЦИЕЙ (ИЗ ТВОЕГО ТЕКСТА) -->
+                    <div id="instructionBlock" class="instruction-content">
+
+                        <!-- Вступление про безопасность -->
+                        <div class="safety-note">
+                            <strong>Безопасно и официально</strong><br>
+                            CrossChat работает по официальному API Instagram. Блокировки аккаунта за использование нашего сервиса исключены. Мы соблюдаем все правила компании Meta.
+                        </div>
+
+                        <!-- Шаг 1 -->
+                        <div class="instruction-step">
+                            <div class="step-title"><div class="step-num">1</div> Перевод в профессиональный режим</div>
+                            <ul class="step-list">
+                                <li>В профиле Instagram откройте <strong>"Настройки и действия"</strong></li>
+                                <li>Перейдите в пункт <strong>"Тип аккаунта и инструменты"</strong></li>
+                                <li>Нажмите <strong>"Переключиться на профессиональный аккаунт"</strong> (Бизнес или Автор).</li>
+                            </ul>
+
+                            <div class="tip-box">
+                                <strong>💡 Как проверить, что у вас уже профи-аккаунт?</strong><br>
+                                Если в настройках вы видите раздел "Для профессиональных аккаунтов" и пункт "Инструменты для бизнеса/автора" — значит, всё уже готово.
+                            </div>
+                        </div>
+
+                        <!-- Шаг 2 -->
+                        <div class="instruction-step">
+                            <div class="step-title"><div class="step-num">2</div> Разрешение доступа к сообщениям</div>
+                            <p class="step-desc" style="color:#fbbf24; margin-bottom:10px;">⚠️ Это самый важный шаг!</p>
+                            <ul class="step-list">
+                                <li>В профиле откройте <strong>"Настройки и действия"</strong></li>
+                                <li>Перейдите в пункт <strong>"Сообщения и ответы на истории"</strong></li>
+                                <li>Откройте <strong>"Управление сообщениями"</strong> (Message Controls)</li>
+                                <li>Включите переключатель <strong>"Разрешить доступ к сообщениям"</strong> (Allow Access to Messages).</li>
+                            </ul>
+                        </div>
+
+                        <!-- Шаг 3 -->
+                        <div class="instruction-step">
+                            <div class="step-title"><div class="step-num">3</div> Подключение</div>
+                            <p class="step-desc">
+                                Теперь нажмите кнопку ниже. Если у вас запросят связь со страницей Facebook — создайте новую или выберите любую существующую.
+                            </p>
+                        </div>
+                    </div>
 
                     <div class="login-buttons">
 
-                        <!-- КНОПКА INSTAGRAM -->
                         <a href="@ViewBag.InstaLoginUrl" class="btn btn-insta">
                             <svg viewBox="0 0 24 24">
                                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
@@ -414,7 +580,6 @@
 
                         <div class="separator">ИЛИ</div>
 
-                        <!-- КНОПКА FACEBOOK -->
                         <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
                             <svg viewBox="0 0 24 24">
                                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -427,6 +592,18 @@
             }
         </div>
     </div>
+
+    <script>
+        function toggleInstruction() {
+            var block = document.getElementById('instructionBlock');
+            if (block.style.display === 'block') {
+                block.style.display = 'none';
+            } else {
+                block.style.display = 'block';
+                block.classList.add('open');
+            }
+        }
+    </script>
 
 </body>
 </html>
