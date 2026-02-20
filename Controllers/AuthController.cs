@@ -47,6 +47,7 @@ public class AuthController : Controller
 		var googleId = claims?.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 		var email = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
 		var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+		var avatarUrl = claims?.FirstOrDefault(c => c.Type == "urn:google:picture")?.Value;
 
 		if (string.IsNullOrEmpty(googleId) || string.IsNullOrEmpty(email))
 		{
@@ -66,12 +67,21 @@ public class AuthController : Controller
 				GoogleId = googleId,
 				Email = email,
 				Name = name ?? "User",
+				AvatarUrl = avatarUrl,
 				CreatedAt = DateTime.UtcNow,
 				// Сразу создаем пустые настройки инсты
 				InstagramSettings = new InstagramSettings()
 			};
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
+		}
+		else
+		{
+			if (user.AvatarUrl != avatarUrl)
+			{
+				user.AvatarUrl = avatarUrl;
+				await _db.SaveChangesAsync();
+			}
 		}
 
 		// ВХОД: Создаем нашу собственную куку сессии

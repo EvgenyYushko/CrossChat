@@ -2,6 +2,7 @@ using CrossChat.BackgroundServices;
 using CrossChat.Data;
 using CrossChat.Models;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -73,6 +74,7 @@ builder.Services.AddAuthentication(options =>
 
 	// Сохраняем токены (если потом захочешь обращаться к API Google)
 	options.SaveTokens = true;
+	options.ClaimActions.MapJsonKey("urn:google:picture", "picture", "url");
 });
 
 // === НАСТРОЙКА MASSTRANSIT (RABBITMQ) ===
