@@ -87,6 +87,7 @@
             padding: 0 1rem;
         }
 
+        /* КАРТОЧКА */
         .card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
@@ -95,7 +96,7 @@
             text-align: center;
         }
 
-        /* HEADER ПОДКЛЮЧЕННОГО */
+        /* ЭЛЕМЕНТЫ ПОДКЛЮЧЕННОГО ПРОФИЛЯ */
         .big-avatar {
             width: 120px;
             height: 120px;
@@ -111,15 +112,15 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
+            word-break: break-word;
         }
-
+        /* Защита от длинных ников */
         .user-id {
             color: var(--text-secondary);
             font-size: 0.9rem;
             font-family: monospace;
         }
 
-        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -155,8 +156,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            padding: 14px 24px;
+            gap: 10px;
+            padding: 14px 20px; /* Чуть меньше паддинг по бокам */
             border-radius: 12px;
             border: none;
             font-weight: 600;
@@ -166,14 +167,16 @@
             width: 100%;
             font-size: 1rem;
             box-sizing: border-box;
+            white-space: nowrap; /* Запрещаем перенос строк */
         }
 
             .btn svg {
                 width: 24px;
                 height: 24px;
                 fill: white;
+                flex-shrink: 0;
             }
-
+        /* Иконка не сжимается */
         .btn-primary {
             background: var(--accent-color);
             color: white;
@@ -279,6 +282,7 @@
             display: inline-block;
             width: 50px;
             height: 26px;
+            flex-shrink: 0;
         }
 
             .switch input {
@@ -319,20 +323,23 @@
                 transform: translateX(24px);
             }
 
-        /* --- СТИЛИ ДЛЯ ИНСТРУКЦИИ (Обновленные) --- */
+        /* ИНСТРУКЦИЯ */
         .instruction-btn {
             background: transparent;
             border: 1px solid var(--glass-border);
             color: var(--text-secondary);
-            padding: 12px 24px;
+            padding: 12px 20px;
             border-radius: 30px;
             font-size: 0.95rem;
             cursor: pointer;
             margin-bottom: 2rem;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
             transition: all 0.3s;
+            width: 100%; /* На мобилке кнопка во всю ширину */
+            box-sizing: border-box;
         }
 
             .instruction-btn:hover {
@@ -389,7 +396,6 @@
             flex-shrink: 0;
         }
 
-        /* Стили для списков в инструкции */
         .step-list {
             margin-left: 10px;
             padding-left: 15px;
@@ -433,6 +439,39 @@
             }
         }
 
+        /* --- МОБИЛЬНАЯ АДАПТАЦИЯ (САМОЕ ВАЖНОЕ) --- */
+        @@media (max-width: 600px) {
+            /* Уменьшаем отступы контейнера и карточки */
+            .container {
+                padding: 0 1rem; /* Минимальные поля по краям */
+                margin-top: 5rem;
+            }
+
+            .card {
+                padding: 1.5rem; /* Было 2.5rem - слишком много */
+            }
+            /* Инструкция: сжимаем отступы */
+            .instruction-content {
+                padding: 1rem;
+            }
+
+            .instruction-step {
+                margin-bottom: 1.5rem;
+            }
+            /* Кнопки: уменьшаем шрифт, чтобы влезло в одну строку */
+            .btn {
+                padding: 12px 10px; /* Меньше боковых отступов */
+                font-size: 0.9rem; /* Чуть меньше шрифт */
+            }
+            /* Заголовок "Подключение..." чуть меньше */
+            h1 {
+                font-size: 1.5rem;
+            }
+            /* Текст тумблера */
+            .switch-container label {
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
 <body>
