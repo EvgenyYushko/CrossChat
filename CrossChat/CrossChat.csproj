@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Твои пакеты (MassTransit и т.д.) оставляем как есть -->
     <PackageReference Include="MassTransit.Quartz" Version="8.5.8" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.24" />
@@ -34,18 +35,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="CrossChat.Data\CrossChat.Data.csproj" />
-    <ProjectReference Include="CrossChat.Worker\CrossChat.Worker.csproj" />
+    <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлено "..\" в начале путей -->
+    <ProjectReference Include="..\CrossChat.Data\CrossChat.Data.csproj" />
+    <ProjectReference Include="..\CrossChat.Worker\CrossChat.Worker.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Говорим компилятору полностью игнорировать папку воркера -->
-    <Compile Remove="CrossChat.Worker\**" />
-    <EmbeddedResource Remove="CrossChat.Worker\**" />
-    <None Remove="CrossChat.Worker\**" />
+  <!-- Блок <Compile Remove> ПОЛНОСТЬЮ УДАЛЕН -->
 
-    <Compile Remove="CrossChat.Data\**" />
-    <EmbeddedResource Remove="CrossChat.Data\**" />
-    <None Remove="CrossChat.Data\**" />
-  </ItemGroup>
 </Project>
