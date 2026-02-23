@@ -75,6 +75,14 @@ builder.Services.AddAuthentication(options =>
 	// Сохраняем токены (если потом захочешь обращаться к API Google)
 	options.SaveTokens = true;
 	options.ClaimActions.MapJsonKey("urn:google:picture", "picture", "url");
+
+	options.Events.OnRemoteFailure = context =>
+    {
+        // Если произошла ошибка (нажали "Назад", протух токен и т.д.)
+        context.Response.Redirect("/auth/login"); // Редиректим обратно на вход
+        context.HandleResponse(); // Говорим "Я обработал ошибку, не падай"
+        return Task.CompletedTask;
+    };
 });
 
 // === НАСТРОЙКА MASSTRANSIT (RABBITMQ) ===

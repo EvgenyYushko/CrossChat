@@ -22,8 +22,11 @@ public class AuthController : Controller
 
 	// 1. Нажатие на кнопку "Войти через Google"
 	[HttpGet("login")]
-	public IActionResult Login()
+	public async Task<IActionResult> Login()
 	{
+		// 1. Принудительно очищаем куки перед новой попыткой
+		await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
 		var properties = new AuthenticationProperties
 		{
 			RedirectUri = Url.Action("GoogleResponse")
@@ -122,14 +125,29 @@ public class AuthController : Controller
 	[Authorize] // Только для вошедших
 	public async Task<IActionResult> Profile()
 	{
-		// Получаем ID текущего юзера из куки
-		var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+		// Безопасно пытаемся достать ID
+		var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+		// Если ID нет или он не число (битая кука)
+		if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+		{
+			// ЭВАКУАЦИЯ: Чистим куки и шлем на вход
+			await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+			return RedirectToAction("Index", "Home");
+		}
 
 		var user = await _db.Users
 			.Include(u => u.InstagramSettings)
 			.FirstOrDefaultAsync(u => u.Id == userId);
 
-		return View(user); // Или вернуть JSON, если фронт на React/Vue
+		// Если юзер был удален из базы, а кука осталась
+		if (user == null)
+		{
+			await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+			return RedirectToAction("Index", "Home");
+		}
+
+		return View(user);
 	}
 
 	[HttpPost("update-settings")]
