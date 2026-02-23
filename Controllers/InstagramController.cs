@@ -599,6 +599,23 @@ namespace CrossChat.Controllers
 				return false;
 			}
 
+			if (!string.IsNullOrEmpty(settings.AccessToken))
+			{
+				try
+				{
+					// false = отписка (DELETE запрос)
+					// Мы не проверяем результат (true/false), потому что если юзер уже отозвал права,
+					// этот запрос вернет ошибку (Invalid Token), и это НОРМАЛЬНО.
+					await ManageWebhooksAsync(settings.AccessToken, false);
+					_logger.LogInformation($"Unsubscribe request sent for {instagramUserId}");
+				}
+				catch (Exception ex)
+				{
+					// Логируем, но не останавливаем удаление данных из БД
+					_logger.LogWarning($"Could not unsubscribe webhooks (token might be invalid): {ex.Message}");
+				}
+			}
+
 			if (fullDataDelete)
 			{
 				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
