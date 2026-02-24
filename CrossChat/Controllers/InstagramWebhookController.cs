@@ -3,6 +3,7 @@ using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Controllers
 {
@@ -48,6 +49,8 @@ namespace CrossChat.Controllers
 			{
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
+
+				_logger.LogInformation(body);
 
 				// Десериализуем
 				var payload = JsonSerializer.Deserialize<InstagramWebhookPayload>(body);
