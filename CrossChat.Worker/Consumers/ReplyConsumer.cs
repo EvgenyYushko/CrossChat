@@ -164,7 +164,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			// 3. Рассчитываем паузу для ТЕКУЩЕГО куска
 			// Чем короче кусок, тем быстрее мы его "печатаем"
-			int typingTime = Math.Clamp(chunk.Length * 70, 1500, 5000);
+			int typingTime = Math.Clamp(chunk.Length * 70, 1500, 6000);
 			await Task.Delay(typingTime);
 
 			await _instaService.SendMessageAsync(userId, chunk, token);
@@ -172,7 +172,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// 5. Маленькая пауза между отправкой и началом печати следующего (как будто человек нажал Enter)
 			if (i < chunks.Count - 1)
 			{
-				await Task.Delay(Random.Shared.Next(500, 1200));
+				await Task.Delay(Random.Shared.Next(500, 2000));
 			}
 		}
 
