@@ -143,4 +143,42 @@ public class InstagramService : IInstagramService
 			// Игнорируем ошибки "печатания", они не критичны
 		}
 	}
+
+	public async Task SendReactionAsync(string recipientId, string messageId, string accessToken)
+	{
+		var url = $"{ApiVersion}/me/messages?access_token={accessToken}";
+
+		var payload = new
+		{
+			recipient = new { id = recipientId },
+			sender_action = "react",
+			payload = new
+			{
+				message_id = messageId,
+				reaction = "love"
+			}
+		};
+
+		var json = JsonSerializer.Serialize(payload);
+		var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+		try
+		{
+			var response = await _httpClient.PostAsync(url, content);
+
+			if (response.IsSuccessStatusCode)
+			{
+				Console.WriteLine($"[Reaction] Отправлена реакция \"love\" на сообщение {messageId}");
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				Console.WriteLine($"[Reaction Error] Не удалось отправить реакцию: {error}");
+			}
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[Reaction Error] Ошибка: {ex.Message}");
+		}
+	}
 }

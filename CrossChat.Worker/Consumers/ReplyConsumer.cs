@@ -73,7 +73,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
-		if (string.IsNullOrEmpty(settings.AccessToken))
+		var accessInstaToken = settings.AccessToken;
+
+		if (string.IsNullOrEmpty(accessInstaToken))
 		{
 			_logger.LogError($"[Reply] ❌ Токен отсутствует для BusinessID {businessAccountId}.");
 			return;
@@ -83,7 +85,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		{
 			// 3. Получаем историю переписки (используя токен юзера)
 			// Реализуешь получение истории в InstagramService позже
-			var messages = await _instaService.GetHistoryAsync(senderId, settings.AccessToken);
+			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken);
 
 			// 4. Отправляем в ИИ (через твой gRPC сервис)
 			// Берем системный промпт из настроек
@@ -129,16 +131,41 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 			}
 
-			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
+			var random = new Random();
 
-			if (string.IsNullOrWhiteSpace(aiResponse))
+			// Если есть непрочитанные сообщения от юзера и выпал шанс (например > 50 из 100)
+			if (unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
 			{
-				_logger.LogWarning("[Reply] ИИ вернул пустой ответ.");
-				return;
+				// Выбираем случайное сообщение из списка непрочитанных
+				string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
+
+				// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
+				await _instaService.SendReactionAsync(senderId, targetMessageId, accessInstaToken); // Например "love" или рандом
+
+				// Небольшая пауза для реалистичности перед тем как "печатать"
+				await Task.Delay(1500);
 			}
 
-			// 5. Отправляем ответ в Инстаграм
-			await SendLongMessageAsHumanAsync(senderId, aiResponse, settings.AccessToken);
+			await _instaService.SetTypingStatusAsync(senderId, accessInstaToken);
+
+			try
+			{
+				var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
+
+				if (string.IsNullOrWhiteSpace(aiResponse))
+				{
+					_logger.LogWarning("[Reply] ИИ вернул пустой ответ.");
+					return;
+				}
+
+				// 5. Отправляем ответ в Инстаграм
+				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError($"Ошибка отправки ответа пользаку {senderId} в инсте: {ex.Message}");
+				return;
+			}
 
 			_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 		}
