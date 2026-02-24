@@ -138,7 +138,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			// 5. Отправляем ответ в Инстаграм
-			await _instaService.SendMessageAsync(senderId, aiResponse, settings.AccessToken);
+			await SendLongMessageAsHumanAsync(senderId, aiResponse, settings.AccessToken);
 
 			_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 		}
@@ -149,6 +149,106 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// Если ошибка в логике (например, ИИ упал) - лучше повторить.
 			throw;
 		}
+	}
+
+	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
+	{
+		// 1. Разбиваем текст на части (например, по ~200 символов или по предложениям)
+		var chunks = SplitMessageIntoHumanChunks(fullText, 100);
+
+		for (int i = 0; i < chunks.Count; i++)
+		{
+			await _instaService.SetTypingStatusAsync(userId, token);
+
+			var chunk = chunks[i];
+
+			// 3. Рассчитываем паузу для ТЕКУЩЕГО куска
+			// Чем короче кусок, тем быстрее мы его "печатаем"
+			int typingTime = Math.Clamp(chunk.Length * 70, 1500, 5000);
+			await Task.Delay(typingTime);
+
+			await _instaService.SendMessageAsync(userId, chunk, token);
+
+			// 5. Маленькая пауза между отправкой и началом печати следующего (как будто человек нажал Enter)
+			if (i < chunks.Count - 1)
+			{
+				await Task.Delay(Random.Shared.Next(500, 1200));
+			}
+		}
+
+		if (chunks.Count == 1)
+		{
+			var random = new Random();
+
+			// Если выпадает число от 1 до 3 (из 10), то отправляем стикер. Шанс 30%.
+			if (random.Next(1, 11) <= 3)
+			{
+				await _instaService.SetTypingStatusAsync(userId, token);
+
+				// Небольшая задержка перед стикером, чтобы выглядело естественно (1-3 сек)
+				//await Task.Delay(random.Next(1000, 3000));
+
+				//string stickerToSend;
+
+				//if (random.Next(1, 101) > 10)
+				//{
+				//	stickerToSend = "like_heart";
+				//}
+				//else
+				//{
+				//	// Берем случайный URL из нашей коллекции
+				//	int index = random.Next(StickerCollection.Urls.Count);
+				//	stickerToSend = StickerCollection.Urls[index];
+				//}
+
+				//await SendSticker(userId, stickerToSend);
+			}
+		}
+	}
+
+	private List<string> SplitMessageIntoHumanChunks(string text, int maxChunkLength)
+	{
+		var chunks = new List<string>();
+		if (string.IsNullOrEmpty(text)) return chunks;
+
+		// 1. Сначала разбиваем по переносам строк (абзацам)
+		var paragraphs = text.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+		foreach (var paragraph in paragraphs)
+		{
+			// Если абзац короткий, добавляем его как есть
+			if (paragraph.Length <= maxChunkLength)
+			{
+				chunks.Add(paragraph.Trim());
+				continue;
+			}
+
+			// 2. Если абзац длинный, бьем его на предложения
+			// Используем регулярку, чтобы оставить знаки препинания (.!?) на месте
+			var sentences = System.Text.RegularExpressions.Regex.Split(paragraph, @"(?<=[.!?])\s+");
+
+			var currentChunk = "";
+
+			foreach (var sentence in sentences)
+			{
+				// Если текущий кусок + новое предложение влезают в лимит — склеиваем
+				if ((currentChunk.Length + sentence.Length) <= maxChunkLength)
+				{
+					currentChunk += (currentChunk.Length > 0 ? " " : "") + sentence;
+				}
+				else
+				{
+					// Если не влезают — сохраняем текущий кусок и начинаем новый
+					if (!string.IsNullOrEmpty(currentChunk)) chunks.Add(currentChunk.Trim());
+					currentChunk = sentence;
+				}
+			}
+
+			// Добавляем хвостик
+			if (!string.IsNullOrEmpty(currentChunk)) chunks.Add(currentChunk.Trim());
+		}
+
+		return chunks;
 	}
 
 	private async Task<string> ResolveMessageContentAsync(MessageItem msg)

@@ -9,5 +9,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		// Отправить сообщение
 		Task SendMessageAsync(string recipientId, string text, string accessToken);
+
+		Task SetTypingStatusAsync(string recipientId, string accessToken, bool on = true);
 	}
 }
