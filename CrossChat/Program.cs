@@ -11,6 +11,8 @@ using Quartz;
 using StackExchange.Redis;
 using static CrossChat.Worker.WorkerInstaller;
 
+string GEMINI_API_KEY = "GEMINI_API_KEY";
+
 var builder = WebApplication.CreateBuilder(args);
 
 // --- ИСПРАВЛЕНИЕ: ПОДКЛЮЧАЕМ КОНФИГ В САМОМ НАЧАЛЕ ---
@@ -89,6 +91,8 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddMassTransit(x =>
 {
 	x.AddWorkerConsumers();
+	var geminiToken = GetConfigOrThrow(GEMINI_API_KEY);
+	x.AddWorkerServices(geminiToken);
 	x.AddQuartzConsumers();
 	x.AddPublishMessageScheduler();
 

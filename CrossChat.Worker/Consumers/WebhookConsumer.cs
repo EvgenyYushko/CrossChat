@@ -18,8 +18,11 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 
 	public async Task Consume(ConsumeContext<InstagramMessageReceived> context)
 	{
+		_logger.LogInformation($"[Consume] Начало метода");
+
 		var message = context.Message;
 		var senderId = message.SenderId;
+		var recipientId = message.RecipientId;
 
 		// Ключ блокировки: "lock:dialog_id"
 		var lockKey = $"debounce:{senderId}";
@@ -42,7 +45,7 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 			// Нам не нужно знать URI очереди. MassTransit сам найдет ReplyConsumer.
 			await context.SchedulePublish(
 				TimeSpan.FromSeconds(30),
-				new ProcessDialogReply { SenderId = senderId });
+				new ProcessDialogReply { SenderId = senderId, RecipientId = recipientId });
 		}
 		else
 		{

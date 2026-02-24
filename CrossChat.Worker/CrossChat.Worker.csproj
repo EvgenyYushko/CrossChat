@@ -7,16 +7,23 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client.Web" Version="2.76.0" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.24">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.13" />
     <PackageReference Include="StackExchange.Redis" Version="2.11.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Modules\Instagram\Services\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CrossChat.Data\CrossChat.Data.csproj" />
+    <ProjectReference Include="..\CrossChat.Integrations\CrossChat.Integrations.csproj" />
   </ItemGroup>
 
 </Project>
