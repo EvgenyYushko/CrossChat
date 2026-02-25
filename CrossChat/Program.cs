@@ -1,5 +1,6 @@
 using CrossChat.BackgroundServices;
 using CrossChat.Data;
+using CrossChat.Helpers;
 using CrossChat.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Console;
 using Quartz;
 using StackExchange.Redis;
 using static CrossChat.Worker.WorkerInstaller;
@@ -111,12 +113,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 
 builder.Logging.ClearProviders(); // Удаляем стандартные провайдеры
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.IncludeScopes = false;
-    options.SingleLine = true;
-    options.TimestampFormat = "[HH:mm:ss] "; // Добавляем время
-});
+// Регистрируем наш форматтер и говорим консоли использовать его
+builder.Logging.AddConsole(options => options.FormatterName = "clean")
+    .AddConsoleFormatter<CleanConsoleFormatter, ConsoleFormatterOptions>();
 
 var app = builder.Build();
 
