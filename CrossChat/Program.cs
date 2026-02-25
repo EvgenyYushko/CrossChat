@@ -110,6 +110,14 @@ builder.Services.AddHostedService<HealthCheckBackgroundService>();
 builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 
+builder.Logging.ClearProviders(); // Удаляем стандартные провайдеры
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.IncludeScopes = false;
+    options.SingleLine = true;
+    options.TimestampFormat = "[HH:mm:ss] "; // Добавляем время
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
