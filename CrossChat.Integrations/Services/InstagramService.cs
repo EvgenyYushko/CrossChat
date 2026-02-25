@@ -43,7 +43,7 @@ public class InstagramService : IInstagramService
 
 		if (response.IsSuccessStatusCode)
 		{
-			_logger.LogInformation($"[Instagram] ✅ Сообщение отправлено пользователю {recipientId}");
+			//_logger.LogInformation($"[Instagram] ✅ Сообщение отправлено пользователю {recipientId}");
 		}
 		else
 		{
@@ -136,7 +136,7 @@ public class InstagramService : IInstagramService
 			// Мы не ждем ответа (fire and forget), чтобы не тормозить основной поток,
 			// или можно ждать, если критично. Обычно ошибки тут не важны.
 			await _httpClient.PostAsync(url, content);
-			Console.WriteLine($"[System] Показали статус 'печатает' для {recipientId}");
+			//Console.WriteLine($"[System] Показали статус 'печатает' для {recipientId}");
 		}
 		catch
 		{

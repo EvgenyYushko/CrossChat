@@ -18,8 +18,6 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 
 	public async Task Consume(ConsumeContext<InstagramMessageReceived> context)
 	{
-		_logger.LogInformation($"[Consume] Начало метода");
-
 		var message = context.Message;
 		var senderId = message.SenderId;
 		var recipientId = message.RecipientId;

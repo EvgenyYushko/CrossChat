@@ -39,8 +39,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
 	{
-		_logger.LogInformation($"Consume Start");
-
 		// Пытаемся получить разрешение на выполнение
 		using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
 
@@ -154,7 +152,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				if (string.IsNullOrWhiteSpace(aiResponse))
 				{
-					_logger.LogWarning("[Reply] ИИ вернул пустой ответ.");
+					_logger.LogError("[Reply] ИИ вернул пустой ответ.");
 					return;
 				}
 
