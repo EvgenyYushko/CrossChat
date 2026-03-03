@@ -36,8 +36,7 @@ public class InstagramService : IInstagramService
 		};
 
 		// Важно: Добавляем токен в заголовок для этого запроса
-		_httpClient.DefaultRequestHeaders.Authorization =
-			new AuthenticationHeaderValue("Bearer", accessToken);
+		_httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
 		var response = await _httpClient.PostAsJsonAsync(url, payload);
 
@@ -180,5 +179,17 @@ public class InstagramService : IInstagramService
 		{
 			Console.WriteLine($"[Reaction Error] Ошибка: {ex.Message}");
 		}
+	}
+
+	public async Task<InstagramUserProfile> GetInstagramUserProfileAsync(string userId, string accessToken)
+	{
+		var fields = "name,username,profile_pic,is_verified_user,follower_count,is_user_follow_business,is_business_follow_user";
+		var url = $"v19.0/{userId}?fields={fields}&access_token={accessToken}";
+
+		var response = await _httpClient.GetAsync(url);
+		if (!response.IsSuccessStatusCode) return null;
+
+		var json = await response.Content.ReadAsStringAsync();
+		return JsonSerializer.Deserialize<InstagramUserProfile>(json);
 	}
 }

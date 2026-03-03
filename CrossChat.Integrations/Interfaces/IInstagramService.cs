@@ -35,5 +35,11 @@ namespace CrossChat.Integrations.Interfaces
 		/// <param name="messageId">id сообщения</param>
 		/// <returns></returns>
 		Task SendReactionAsync(string recipientId, string messageId, string accessToken);
+
+		/// <summary>
+		/// Получить информацию о профиле пользователя
+		/// </summary>
+		/// <param name="userId">Id польователя инсты</param>
+		Task<InstagramUserProfile> GetInstagramUserProfileAsync(string userId, string accessToken);
 	}
 }

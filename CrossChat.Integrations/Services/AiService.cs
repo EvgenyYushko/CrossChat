@@ -39,6 +39,26 @@ namespace CrossChat.Integrations.Services
 			return rsponce.GeneratedText;
 		}
 
+		public async Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token)
+		{
+			var response = await _geminiServiceClient.RequestWithImageAsync(new()
+			{
+				Prompt = { new Prompt { Text = prompt } },
+				Base64Idata = base64Image
+			}, AddTokenToHeaders(token));
+			return response.GeneratedText;
+		}
+
+		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
+		{
+			var response = await _geminiServiceClient.RequestWithVideoAsync(new()
+			{
+				Prompt = { new Prompt { Text = prompt } },
+				Base64Idata = base64video
+			}, AddTokenToHeaders(token));
+			return response.GeneratedText;
+		}
+
 		private Metadata AddTokenToHeaders(string token)
 		{
 			var headers = new Metadata();
