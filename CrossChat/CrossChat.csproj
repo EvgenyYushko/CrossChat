@@ -40,6 +40,12 @@
     <ProjectReference Include="..\CrossChat.Worker\CrossChat.Worker.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="wwwroot\images\favicon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Блок <Compile Remove> ПОЛНОСТЬЮ УДАЛЕН -->
 
 </Project>

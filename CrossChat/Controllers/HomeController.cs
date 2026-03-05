@@ -25,6 +25,8 @@ namespace CrossChat.Controllers
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <title>CrossChat — Connect. Prompt. Respond.</title>
     <link href=""https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap"" rel=""stylesheet"">
+    <link rel=""icon"" type=""image/x-icon"" href=""/images/favicon.png"">
+    <link rel=""shortcut icon"" type=""image/x-icon"" href=""/images/favicon.png"">
     <style>
         :root {{
             --bg-color: #050505;

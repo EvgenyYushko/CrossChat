@@ -22,9 +22,36 @@ public class InstagramService : IInstagramService
 		_logger = logger;
 	}
 
-	// =================================================================
-	// 1. ОТПРАВКА СООБЩЕНИЯ
-	// =================================================================
+	public async Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken)
+	{
+		var url = $"refresh_access_token?grant_type=ig_refresh_token&access_token={currentToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			var content = await response.Content.ReadAsStringAsync();
+
+			if (!response.IsSuccessStatusCode)
+			{
+				_logger.LogError($"[TokenRefresh] Ошибка обновления токена: {content}");
+				return null;
+			}
+
+			using var doc = JsonDocument.Parse(content);
+			var root = doc.RootElement;
+
+			var newToken = root.GetProperty("access_token").GetString();
+			var expiresIn = root.GetProperty("expires_in").GetInt32();
+
+			return (newToken, expiresIn);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[TokenRefresh] Критическая ошибка запроса.");
+			return null;
+		}
+	}
+
 	public async Task SendMessageAsync(string recipientId, string text, string accessToken)
 	{
 		var url = $"{ApiVersion}/me/messages";

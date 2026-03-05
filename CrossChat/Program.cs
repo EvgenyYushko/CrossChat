@@ -57,6 +57,15 @@ var rabbitMqUrl = GetConfigOrThrow("ExternalHostingsSettings:RabbitMq");
 builder.Services.AddQuartz(q =>
 {
 	q.UseMicrosoftDependencyInjectionJobFactory();
+
+	var jobKey = new JobKey("TokenRefreshJob");
+    
+    q.AddJob<CrossChat.Worker.Jobs.TokenRefreshJob>(opts => opts.WithIdentity(jobKey));
+
+    q.AddTrigger(opts => opts
+        .ForJob(jobKey)
+        .WithIdentity("TokenRefreshJob-Trigger")
+        .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

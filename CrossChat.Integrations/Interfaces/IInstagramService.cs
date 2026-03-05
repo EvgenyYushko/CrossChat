@@ -41,5 +41,11 @@ namespace CrossChat.Integrations.Interfaces
 		/// </summary>
 		/// <param name="userId">Id польователя инсты</param>
 		Task<InstagramUserProfile> GetInstagramUserProfileAsync(string userId, string accessToken);
+
+		/// <summary>
+		/// Обновить токен
+		/// </summary>
+		/// <param name="currentToken">текущий ещё дивой токен</param>
+		Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken);
 	}
 }
