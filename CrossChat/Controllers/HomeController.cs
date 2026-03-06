@@ -15,7 +15,7 @@ namespace CrossChat.Controllers
 		[HttpGet("index")]
 		public ContentResult Index()
 		{
-			string logoUrl = "/images/CrossChatLogo.jpeg";
+			string logoUrl = "/images/favicon.png";
 			string platformImageUrl = "/images/CrossChat.jpeg";
 
 			string html = $@"<!DOCTYPE html>

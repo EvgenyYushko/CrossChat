@@ -552,7 +552,7 @@ namespace CrossChat.Controllers
 		// =========================================================
 		private async Task SaveTokenToDatabase(
 			string accessToken,
-			string instagramUserId, // Это user_id 
+			string instagramUserId,
 			DateTime expiresIn,
 			string? profilePicUrl,
 			string? username)
@@ -573,18 +573,31 @@ namespace CrossChat.Controllers
 				user.InstagramSettings = new InstagramSettings { UserId = userId };
 			}
 
-			// Обновляем все поля
-			user.InstagramSettings.AccessToken = accessToken;
-			user.InstagramSettings.InstagramBusinessId = instagramUserId; // Теперь здесь правильный ID для удаления
-			user.InstagramSettings.TokenExpiresAt = expiresIn;
-			user.InstagramSettings.IsActive = false;
+			// 1. Скачиваем картинку в Base64 (если ссылка есть)
+			string? base64Icon = null;
+			if (!string.IsNullOrEmpty(profilePicUrl))
+			{
+				base64Icon = await DownloadImageAsBase64(profilePicUrl);
+			}
 
-			// Новые поля
-			user.InstagramSettings.ProfilePictureUrl = profilePicUrl;
+			// 2. Обновляем поля
+			user.InstagramSettings.AccessToken = accessToken;
+			user.InstagramSettings.InstagramBusinessId = instagramUserId;
+			user.InstagramSettings.TokenExpiresAt = expiresIn;
+			user.InstagramSettings.IsActive = false; // По умолчанию выкл
+
+			// Если скачали новую иконку - сохраняем её. 
+			// Если не скачали (ошибка), но старая была - можно оставить старую или затереть.
+			// Сейчас логика: если есть новая - пишем новую.
+			if (base64Icon != null)
+			{
+				user.InstagramSettings.ProfilePictureUrl = base64Icon;
+			}
+
 			user.InstagramSettings.Username = username;
 
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"Token, Avatar and Username saved for User {userId} (Insta ID: {instagramUserId})");
+			_logger.LogInformation($"Token and Base64 Avatar saved for User {userId}");
 		}
 
 		private async Task<bool> DisconnectInstagramUser(string instagramUserId, bool fullDataDelete)
@@ -642,6 +655,32 @@ namespace CrossChat.Controllers
 
 			await _db.SaveChangesAsync();
 			return true;
+		}
+
+		private async Task<string?> DownloadImageAsBase64(string imageUrl)
+		{
+			if (string.IsNullOrEmpty(imageUrl)) return null;
+
+			try
+			{
+				// Используем _httpClient, который уже есть в контроллере, или создаем новый для чистых заголовков
+				using var client = new HttpClient();
+
+				// Притворяемся браузером, чтобы CDN не блочил
+				client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+				var imageBytes = await client.GetByteArrayAsync(imageUrl);
+				var base64String = Convert.ToBase64String(imageBytes);
+
+				// ВАЖНО: Возвращаем сразу готовый для HTML формат!
+				// Тогда во View ничего менять не придется.
+				return $"data:image/jpeg;base64,{base64String}";
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Error downloading profile image from {imageUrl}");
+				return null; // Если не вышло скачать - будет без аватарки
+			}
 		}
 	}
 }

@@ -41,6 +41,11 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token)
 		{
+			if(token is null)
+			{
+				token = _token;
+			}
+
 			var response = await _geminiServiceClient.RequestWithImageAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },
@@ -51,6 +56,11 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
 		{
+			if(token is null)
+			{
+				token = _token;
+			}
+
 			var response = await _geminiServiceClient.RequestWithVideoAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },

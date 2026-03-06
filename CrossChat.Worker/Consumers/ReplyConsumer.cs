@@ -207,7 +207,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				{
 					// Скачиваем фото в байты/base64 (используем ваш существующий метод)
 					var base64Image = await DownloadImageAsBase64(userProfile.ProfilePicUrl);
-					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", accessToken);
+					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", null);
 				}
 				catch (Exception ex)
 				{
@@ -242,7 +242,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		}
 	}
 
-	private async Task<string> AnalyzeImageAsync(string base64Image, string type, string token)
+	private async Task<string> AnalyzeImageAsync(string base64Image, string type, string aiToken)
 	{
 		_logger.LogInformation($"Starting {type} analysis");
 
@@ -256,11 +256,11 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		{
 			if (type == "video")
 			{
-				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, token);
+				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, aiToken);
 			}
 			else
 			{
-				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, token);
+				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, aiToken);
 			}
 			_logger.LogInformation($"Gemini response received: {responseText?.Substring(0, Math.Min(50, responseText.Length))}...");
 		}
