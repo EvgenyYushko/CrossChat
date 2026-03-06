@@ -4,101 +4,36 @@
     bool isConnected = Model != null && !string.IsNullOrEmpty(Model.AccessToken);
 }
 
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@ViewData["Title"]</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/x-icon" href="/images/favicon.png">
-    <link rel="shortcut icon" type="image/x-icon" href="/images/favicon.png">
+@section Styles {
+
     <style>
-        :root {
-            --bg-color: #050505;
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --text-main: #ffffff;
-            --text-secondary: #a1a1aa;
-            --accent-color: #6366f1;
-            --insta-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-        }
+        /* Уникальные стили для страницы Instagram */
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* NAVBAR */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            z-index: 1000;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.5rem;
-            background: rgba(5, 5, 5, 0.9);
-            border-bottom: 1px solid var(--glass-border);
-        }
-
-        .logo-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-        }
-
-        .logo-img {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            object-fit: cover;
-        }
-
-        .logo-text {
-            font-weight: 700;
-            color: white;
-            font-size: 1.1rem;
-        }
-
-        .back-link {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-
-            .back-link:hover {
-                color: white;
-            }
-
+        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
-            max-width: 800px;
+            max-width: 800px; /* Было 800px, проверь что это применилось */
+            width: 100%; /* Занимаем всю доступную ширину до 800px */
             margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
 
-        /* КАРТОЧКА */
         .card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            text-align: center;
+            /* Убираем text-align: center отсюда, чтобы формы были слева, а шапка по центру */
         }
 
-        /* ЭЛЕМЕНТЫ ПОДКЛЮЧЕННОГО ПРОФИЛЯ */
+        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
+        .connected-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Центрируем всё по горизонтали */
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
         .big-avatar {
             width: 120px;
             height: 120px;
@@ -114,15 +49,15 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
-            word-break: break-word;
         }
-        /* Защита от длинных ников */
+
         .user-id {
             color: var(--text-secondary);
             font-size: 0.9rem;
             font-family: monospace;
         }
 
+        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -138,6 +73,7 @@
 
         textarea {
             width: 100%;
+            box-sizing: border-box; /* Важно! */
             background: rgba(0,0,0,0.3);
             border: 1px solid var(--glass-border);
             color: white;
@@ -158,8 +94,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            padding: 14px 20px; /* Чуть меньше паддинг по бокам */
+            gap: 12px;
+            padding: 14px 24px;
             border-radius: 12px;
             border: none;
             font-weight: 600;
@@ -169,7 +105,6 @@
             width: 100%;
             font-size: 1rem;
             box-sizing: border-box;
-            white-space: nowrap; /* Запрещаем перенос строк */
         }
 
             .btn svg {
@@ -178,7 +113,7 @@
                 fill: white;
                 flex-shrink: 0;
             }
-        /* Иконка не сжимается */
+
         .btn-primary {
             background: var(--accent-color);
             color: white;
@@ -203,7 +138,7 @@
         }
 
         .btn-insta {
-            background: var(--insta-gradient);
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
             color: white;
             box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
         }
@@ -268,6 +203,7 @@
             background-color: currentColor;
         }
 
+        /* ТОГГЛ */
         .switch-container {
             display: flex;
             align-items: center;
@@ -330,18 +266,15 @@
             background: transparent;
             border: 1px solid var(--glass-border);
             color: var(--text-secondary);
-            padding: 12px 20px;
+            padding: 12px 24px;
             border-radius: 30px;
             font-size: 0.95rem;
             cursor: pointer;
             margin-bottom: 2rem;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
             gap: 10px;
             transition: all 0.3s;
-            width: 100%; /* На мобилке кнопка во всю ширину */
-            box-sizing: border-box;
         }
 
             .instruction-btn:hover {
@@ -386,7 +319,7 @@
         }
 
         .step-num {
-            background: var(--insta-gradient);
+            background: linear-gradient(45deg, #f09433, #bc1888);
             width: 28px;
             height: 28px;
             border-radius: 50%;
@@ -415,15 +348,6 @@
                     color: white;
                 }
 
-        .tip-box {
-            background: rgba(255,255,255,0.05);
-            padding: 1rem;
-            border-radius: 8px;
-            margin-top: 1rem;
-            font-size: 0.85rem;
-            color: #ccc;
-        }
-
         .open {
             display: block;
             animation: fadeIn 0.4s ease-in-out;
@@ -441,199 +365,34 @@
             }
         }
 
-        /* --- МОБИЛЬНАЯ АДАПТАЦИЯ (САМОЕ ВАЖНОЕ) --- */
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            /* Уменьшаем отступы контейнера и карточки */
             .container {
-                padding: 0 1rem; /* Минимальные поля по краям */
                 margin-top: 5rem;
             }
 
             .card {
-                padding: 1.5rem; /* Было 2.5rem - слишком много */
+                padding: 1.5rem;
             }
-            /* Инструкция: сжимаем отступы */
+
             .instruction-content {
                 padding: 1rem;
             }
 
-            .instruction-step {
-                margin-bottom: 1.5rem;
-            }
-            /* Кнопки: уменьшаем шрифт, чтобы влезло в одну строку */
             .btn {
-                padding: 12px 10px; /* Меньше боковых отступов */
-                font-size: 0.9rem; /* Чуть меньше шрифт */
-            }
-            /* Заголовок "Подключение..." чуть меньше */
-            h1 {
-                font-size: 1.5rem;
-            }
-            /* Текст тумблера */
-            .switch-container label {
-                font-size: 1rem;
+                padding: 12px 10px;
+                font-size: 0.9rem;
             }
         }
     </style>
-</head>
-<body>
 
-    <nav class="navbar">
-        <a href="/" class="logo-container">
-            <img src="/images/favicon.png" alt="Logo" class="logo-img">
-            <span class="logo-text">CrossChat</span>
-        </a>
-        <a href="/auth/profile" class="back-link">← Назад в профиль</a>
-    </nav>
+}
 
-    <div class="container">
-        <div class="card">
-            @if (isConnected)
-            {
-                /* === ПОДКЛЮЧЕНО === */
-                <div class="connected-header">
-                    @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
-                    {
-                        <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
-                    }
-                    else
-                    {
-                        <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">IG</div>
-                    }
+@section NavbarActions {
+    <a href="/auth/profile" class="back-link">← Назад в профиль</a>
+}
 
-                    <div class="username">@@@(Model.Username ?? "Instagram User")</div>
-
-                    <div style="margin-top: 10px;">
-                        @if (Model.IsActive)
-                        {
-                            <span class="status-badge status-active"><span class="dot"></span> Бот работает</span>
-                        }
-                        else
-                        {
-                            <span class="status-badge status-paused">⚠️ Требует включения</span>
-                            <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 8px;">
-                                Подписка на сообщения отключена. Бот не видит новые диалоги.
-                            </p>
-                        }
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <form action="/instagram/update-settings" method="post">
-
-                        <div class="switch-container">
-                            <div>
-                                <label style="margin:0; font-size: 1.1rem; color: white; cursor: pointer;" for="isActiveCheck">Включить автоответы</label>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
-                                    @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Передвиньте, чтобы активировать.")
-                                </div>
-                            </div>
-
-                            <label class="switch">
-                                <input type="checkbox" id="isActiveCheck" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>Системный промпт</label>
-                            <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@(Model.SystemPrompt)</textarea>
-                            <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
-                                Инструкция для ИИ (Gemini).
-                            </p>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary">Сохранить изменения</button>
-                    </form>
-                </div>
-
-                <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
-                    <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
-                </form>
-            }
-            else
-            {
-                /* === НЕ ПОДКЛЮЧЕНО (С ИНСТРУКЦИЕЙ) === */
-                <div>
-                    <h1>Подключение Instagram</h1>
-                    <p style="color:var(--text-secondary); margin-bottom:2rem;">
-                        Чтобы бот заработал, аккаунт должен быть правильно настроен.
-                    </p>
-
-                    <!-- КНОПКА ОТКРЫТИЯ ИНСТРУКЦИИ -->
-                    <button class="instruction-btn" onclick="toggleInstruction()">
-                        <span>📖</span> Инструкция: Как подготовить аккаунт?
-                    </button>
-
-                    <!-- БЛОК С ИНСТРУКЦИЕЙ (ИЗ ТВОЕГО ТЕКСТА) -->
-                    <div id="instructionBlock" class="instruction-content">
-
-                        <!-- Вступление про безопасность -->
-                        <div class="safety-note">
-                            <strong>Безопасно и официально</strong><br>
-                            CrossChat работает по официальному API Instagram. Блокировки аккаунта за использование нашего сервиса исключены. Мы соблюдаем все правила компании Meta.
-                        </div>
-
-                        <!-- Шаг 1 -->
-                        <div class="instruction-step">
-                            <div class="step-title"><div class="step-num">1</div> Перевод в профессиональный режим</div>
-                            <ul class="step-list">
-                                <li>В профиле Instagram откройте <strong>"Настройки и действия"</strong></li>
-                                <li>Перейдите в пункт <strong>"Тип аккаунта и инструменты"</strong></li>
-                                <li>Нажмите <strong>"Переключиться на профессиональный аккаунт"</strong> (Бизнес).</li>
-                            </ul>
-
-                            <div class="tip-box">
-                                <strong>💡 Как проверить, что у вас уже профи-аккаунт?</strong><br>
-                                Если в настройках вы видите раздел "Для профессиональных аккаунтов" и пункт "Инструменты для бизнеса/автора" — значит, всё уже готово.
-                            </div>
-                        </div>
-
-                        <!-- Шаг 2 -->
-                        <div class="instruction-step">
-                            <div class="step-title"><div class="step-num">2</div> Разрешение доступа к сообщениям</div>
-                            <p class="step-desc" style="color:#fbbf24; margin-bottom:10px;">⚠️ Это самый важный шаг!</p>
-                            <ul class="step-list">
-                                <li>В профиле откройте <strong>"Настройки и действия"</strong></li>
-                                <li>Перейдите в пункт <strong>"Сообщения и ответы на истории"</strong></li>
-                                <li>Откройте <strong>"Управление сообщениями"</strong> (Message Controls)</li>
-                                <li>Включите переключатель <strong>"Разрешить доступ к сообщениям"</strong> (Allow Access to Messages).</li>
-                            </ul>
-                        </div>
-
-                        <!-- Шаг 3 -->
-                        <div class="instruction-step">
-                            <div class="step-title"><div class="step-num">3</div> Подключение</div>
-                            <p class="step-desc">
-                                Теперь нажмите кнопку ниже.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="login-buttons">
-
-                        <a href="@ViewBag.InstaLoginUrl" class="btn btn-insta">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-                            </svg>
-                            <span>Войти через Instagram</span>
-                        </a>
-
-                        <div class="separator">ИЛИ</div>
-
-                        <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                            </svg>
-                            <span>Войти через Facebook</span>
-                        </a>
-
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
-
+@section Scripts {
     <script>
         function toggleInstruction() {
             var block = document.getElementById('instructionBlock');
@@ -645,6 +404,146 @@
             }
         }
     </script>
+}
 
-</body>
-</html>
+<div class="container">
+    <div class="card">
+        @if (isConnected)
+        {
+            /* === ПОДКЛЮЧЕНО === */
+            <div class="connected-header">
+                @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                {
+                    <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
+                else
+                {
+                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">IG</div>
+                }
+
+                <div class="username">@@@(Model.Username ?? "Instagram User")</div>
+
+                <div style="margin-top: 10px;">
+                    @if (Model.IsActive)
+                    {
+                        <span class="status-badge status-active"><span class="dot"></span> Бот работает</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused">⚠️ Требует включения</span>
+                        <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 8px;">
+                            Подписка на сообщения отключена.
+                        </p>
+                    }
+                </div>
+            </div>
+
+            <div class="form-section">
+                <form action="/instagram/update-settings" method="post">
+
+                    <div class="switch-container">
+                        <div>
+                            <label style="margin:0; font-size: 1.1rem; color: white; cursor: pointer;" for="isActiveCheck">Включить автоответы</label>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                                @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Передвиньте, чтобы активировать.")
+                            </div>
+                        </div>
+
+                        <label class="switch">
+                            <input type="checkbox" id="isActiveCheck" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Системный промпт</label>
+                        <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@(Model.SystemPrompt)</textarea>
+                        <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
+                            Инструкция для ИИ (Gemini).
+                        </p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                </form>
+            </div>
+
+            <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
+                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
+            </form>
+        }
+        else
+        {
+            /* === НЕ ПОДКЛЮЧЕНО === */
+            <div>
+                <h1>Подключение Instagram</h1>
+                <p style="color:var(--text-secondary); margin-bottom:2rem;">
+                    Чтобы бот заработал, аккаунт должен быть правильно настроен.
+                </p>
+
+                <button class="instruction-btn" onclick="toggleInstruction()">
+                    <span>📖</span> Инструкция: Как подготовить аккаунт?
+                </button>
+
+                <div id="instructionBlock" class="instruction-content">
+                    <!-- Вступление про безопасность -->
+                    <div class="safety-note">
+                        <strong>Безопасно и официально</strong><br>
+                        CrossChat работает по официальному API Instagram. Блокировки аккаунта за использование нашего сервиса исключены. Мы соблюдаем все правила компании Meta.
+                    </div>
+
+                    <!-- Шаг 1 -->
+                    <div class="instruction-step">
+                        <div class="step-title"><div class="step-num">1</div> Перевод в профессиональный режим</div>
+                        <ul class="step-list">
+                            <li>В профиле Instagram откройте <strong>"Настройки и действия"</strong></li>
+                            <li>Перейдите в пункт <strong>"Тип аккаунта и инструменты"</strong></li>
+                            <li>Нажмите <strong>"Переключиться на профессиональный аккаунт"</strong> (Бизнес).</li>
+                        </ul>
+
+                        <div class="tip-box">
+                            <strong>💡 Как проверить, что у вас уже профи-аккаунт?</strong><br>
+                            Если в настройках вы видите раздел "Для профессиональных аккаунтов" и пункт "Инструменты для бизнеса/автора" — значит, всё уже готово.
+                        </div>
+                    </div>
+
+                    <!-- Шаг 2 -->
+                    <div class="instruction-step">
+                        <div class="step-title"><div class="step-num">2</div> Разрешение доступа к сообщениям</div>
+                        <p class="step-desc" style="color:#fbbf24; margin-bottom:10px;">⚠️ Это самый важный шаг!</p>
+                        <ul class="step-list">
+                            <li>В профиле откройте <strong>"Настройки и действия"</strong></li>
+                            <li>Перейдите в пункт <strong>"Сообщения и ответы на истории"</strong></li>
+                            <li>Откройте <strong>"Управление сообщениями"</strong> (Message Controls)</li>
+                            <li>Включите переключатель <strong>"Разрешить доступ к сообщениям"</strong> (Allow Access to Messages).</li>
+                        </ul>
+                    </div>
+
+                    <!-- Шаг 3 -->
+                    <div class="instruction-step">
+                        <div class="step-title"><div class="step-num">3</div> Подключение</div>
+                        <p class="step-desc">
+                            Теперь нажмите кнопку ниже.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="login-buttons">
+                    <a href="@ViewBag.InstaLoginUrl" class="btn btn-insta">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                        </svg>
+                        <span>Войти через Instagram</span>
+                    </a>
+                    <div class="separator">ИЛИ</div>
+                    <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
+                        <span>Войти через Facebook</span>
+                    </a>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+

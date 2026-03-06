@@ -14,10 +14,12 @@ namespace CrossChat.Controllers;
 public class AuthController : Controller
 {
 	private readonly AppDbContext _db;
+	private readonly ILogger<AuthController> _logger;
 
-	public AuthController(AppDbContext db)
+	public AuthController(AppDbContext db, ILogger<AuthController> logger)
 	{
 		_db = db;
+		_logger = logger;
 	}
 
 	// 1. Нажатие на кнопку "Войти через Google"
@@ -52,6 +54,8 @@ public class AuthController : Controller
 		var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
 		var avatarUrl = claims?.FirstOrDefault(c => c.Type == "urn:google:picture")?.Value;
 
+		var base64Avatar = await DownloadImageAsBase64(avatarUrl);
+
 		if (string.IsNullOrEmpty(googleId) || string.IsNullOrEmpty(email))
 		{
 			return RedirectToAction("Index", "Home"); // Ошибка данных
@@ -70,7 +74,7 @@ public class AuthController : Controller
 				GoogleId = googleId,
 				Email = email,
 				Name = name ?? "User",
-				AvatarUrl = avatarUrl,
+				AvatarUrl = base64Avatar ?? avatarUrl,
 				CreatedAt = DateTime.UtcNow,
 				// Сразу создаем пустые настройки инсты
 				InstagramSettings = new InstagramSettings()
@@ -80,9 +84,9 @@ public class AuthController : Controller
 		}
 		else
 		{
-			if (user.AvatarUrl != avatarUrl)
+			if (user.AvatarUrl != base64Avatar)
 			{
-				user.AvatarUrl = avatarUrl;
+				user.AvatarUrl = base64Avatar ?? avatarUrl;
 				await _db.SaveChangesAsync();
 			}
 		}
@@ -176,5 +180,31 @@ public class AuthController : Controller
 		await _db.SaveChangesAsync();
 
 		return RedirectToAction("Profile");
+	}
+
+	private async Task<string?> DownloadImageAsBase64(string imageUrl)
+	{
+		if (string.IsNullOrEmpty(imageUrl)) return null;
+
+		try
+		{
+			// Используем _httpClient, который уже есть в контроллере, или создаем новый для чистых заголовков
+			using var client = new HttpClient();
+
+			// Притворяемся браузером, чтобы CDN не блочил
+			client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+			var imageBytes = await client.GetByteArrayAsync(imageUrl);
+			var base64String = Convert.ToBase64String(imageBytes);
+
+			// ВАЖНО: Возвращаем сразу готовый для HTML формат!
+			// Тогда во View ничего менять не придется.
+			return $"data:image/jpeg;base64,{base64String}";
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, $"Error downloading profile image from {imageUrl}");
+			return null; // Если не вышло скачать - будет без аватарки
+		}
 	}
 }
