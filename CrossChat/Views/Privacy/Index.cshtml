@@ -1,0 +1,320 @@
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Политика в отношении обработки персональных данных | CrossChat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="~/images/favicon.png">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-secondary: #a1a1aa;
+            --accent-color: #6366f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* NAVBAR */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(5, 5, 5, 0.95);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .logo-text {
+            font-weight: 700;
+            color: white;
+            font-size: 1.1rem;
+            letter-spacing: -0.02em;
+        }
+
+        /* CONTAINER */
+        .container {
+            flex: 1;
+            max-width: 960px;
+            margin: 6rem auto 4rem;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background: #121212; /* Чуть плотнее фон для читаемости текста */
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 3rem;
+        }
+
+        /* ТИПОГРАФИКА ДОКУМЕНТА */
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 1.5rem;
+        }
+
+        h2 {
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            color: white;
+            border-left: 3px solid var(--accent-color);
+            padding-left: 15px;
+        }
+
+        h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+            color: #e5e7eb;
+            font-weight: 600;
+        }
+
+        p {
+            color: #d1d5db;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            text-align: justify;
+        }
+
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 20px;
+            color: #d1d5db;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        a {
+            color: var(--accent-color);
+            text-decoration: none;
+            transition: 0.2s;
+        }
+
+            a:hover {
+                text-decoration: underline;
+                color: #818cf8;
+            }
+
+        .legal-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* FOOTER */
+        .footer {
+            border-top: 1px solid var(--glass-border);
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: auto;
+        }
+
+            .footer a {
+                color: var(--text-secondary);
+                margin: 0 10px;
+            }
+
+                .footer a:hover {
+                    color: white;
+                }
+
+        @@media (max-width: 600px) {
+            .card {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="/" class="logo-container">
+            <img src="/images/favicon.png" alt="Logo" class="logo-img">
+            <span class="logo-text">CrossChat</span>
+        </a>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h1>Политика в отношении обработки персональных данных</h1>
+            <div class="subtitle">
+                Редакция от @DateTime.Now.ToString("dd.MM.yyyy") г. <br>
+                Действует для всех пользователей сервиса CrossChat.
+            </div>
+
+            <p>
+                Настоящая Политика конфиденциальности (далее — Политика) действует в отношении всей информации,
+                которую Сервис <strong>CrossChat</strong> (далее — Оператор) может получить о Пользователе во время использования им веб-сайта
+                <a href="https://crosschat.ru">https://crosschat.ru</a> и связанных с ним сервисов.
+            </p>
+            <p>
+                Использование Сервиса означает безоговорочное согласие Пользователя с настоящей Политикой и указанными в ней условиями обработки его персональной информации.
+            </p>
+
+            <div class="legal-box">
+                <strong>Правовое основание:</strong><br>
+                Настоящая Политика разработана в соответствии с требованиями
+                <a href="https://pravo.by/document/?guid=12551&p0=H12100099" target="_blank">Закона Республики Беларусь от 7 мая 2021 г. № 99-З «О защите персональных данных»</a>,
+                а также международных норм (GDPR), применимых к деятельности Оператора.
+            </div>
+
+            <h2>1. Термины и определения</h2>
+            <ul>
+                <li><strong>Сервис</strong> — программный комплекс CrossChat, доступный по адресу crosschat.ru.</li>
+                <li><strong>Пользователь</strong> — любое физическое лицо, использующее Сервис.</li>
+                <li><strong>Персональные данные</strong> — любая информация, относящаяся к идентифицированному физическому лицу или физическому лицу, которое может быть идентифицировано.</li>
+                <li><strong>Обработка персональных данных</strong> — любое действие или совокупность действий, совершаемые с персональными данными, включая сбор, запись, хранение, использование, передачу и удаление.</li>
+            </ul>
+
+            <h2>2. Какие данные мы собираем</h2>
+            <p>Мы собираем только те данные, которые необходимы для корректной работы сервиса и предоставления услуг:</p>
+
+            <h3>2.1. Данные, получаемые при авторизации (Google OAuth)</h3>
+            <ul>
+                <li>Адрес электронной почты (E-mail).</li>
+                <li>Имя и Фамилия (как указано в профиле Google).</li>
+                <li>Изображение профиля (Аватар).</li>
+                <li>Уникальный идентификатор пользователя (Google ID).</li>
+            </ul>
+
+            <h3>2.2. Данные, получаемые при подключении Instagram/Facebook</h3>
+            <p>Мы используем официальный <strong>Meta Graph API</strong>. Мы получаем и обрабатываем:</p>
+            <ul>
+                <li>Instagram Scoped User ID (уникальный идентификатор для нашего приложения).</li>
+                <li>Имя пользователя (Username) и фото профиля Instagram.</li>
+                <li>Access Token (токен доступа) — хранится в зашифрованном виде.</li>
+                <li>Содержимое входящих сообщений (текст, медиа) — исключительно для генерации ответов ИИ в реальном времени.</li>
+            </ul>
+
+            <h3>2.3. Технические данные</h3>
+            <ul>
+                <li>IP-адрес и тип устройства.</li>
+                <li>Файлы Cookies (куки) для поддержания сессии.</li>
+            </ul>
+
+            <h2>3. Цели обработки данных</h2>
+            <p>Мы обрабатываем ваши данные для следующих целей:</p>
+            <ul>
+                <li><strong>Идентификация стороны:</strong> создание учетной записи и предоставление доступа к личному кабинету.</li>
+                <li><strong>Предоставление функционала:</strong> автоматические ответы на сообщения в Instagram с использованием Искусственного Интеллекта.</li>
+                <li><strong>Связь с Пользователем:</strong> отправка уведомлений, запросов и информации, касающейся использования Сервиса.</li>
+                <li><strong>Улучшение качества:</strong> анализ обезличенных данных для оптимизации работы алгоритмов.</li>
+            </ul>
+
+            <h2>4. Передача данных третьим лицам</h2>
+            <p>Мы не продаем и не распространяем ваши персональные данные. Передача данных возможна только в следующих случаях:</p>
+            <ol>
+                <li><strong>Google LLC (AI Service):</strong> Текст входящих сообщений передается в модель Gemini (через защищенный API) для генерации ответов. Данные не используются для обучения публичных моделей.</li>
+                <li><strong>Meta Platforms, Inc.:</strong> Взаимодействие с API Instagram для отправки ответов.</li>
+                <li><strong>Render (Cloud Provider):</strong> Хостинг серверов и баз данных (в зашифрованном виде).</li>
+                <li><strong>По требованию закона:</strong> В случаях, предусмотренных законодательством Республики Беларусь.</li>
+            </ol>
+
+            <h2>5. Сроки и порядок хранения</h2>
+            <p>
+                Персональные данные хранятся до момента удаления учетной записи Пользователем или отзыва согласия.
+                История сообщений не сохраняется в нашей базе данных на постоянной основе — мы храним только контекст последних сообщений для корректной работы диалога.
+            </p>
+
+            <h2>6. Права пользователя</h2>
+            <p>Согласно Закону № 99-З, вы имеете право:</p>
+            <ul>
+                <li>Отозвать согласие на обработку персональных данных.</li>
+                <li>Получить информацию, касающуюся обработки ваших персональных данных.</li>
+                <li>Требовать внесения изменений в свои персональные данные, если они являются неполными или устаревшими.</li>
+                <li>Требовать удаления своих персональных данных («Право на забвение»).</li>
+            </ul>
+
+            <h2>7. Удаление данных</h2>
+            <p>Вы можете удалить свои данные в любой момент одним из способов:</p>
+            <ol>
+                <li>В личном кабинете CrossChat нажать кнопку <strong>"Отключить аккаунт"</strong>.</li>
+                <li>В настройках Instagram/Facebook (раздел "Приложения и сайты") удалить доступ для приложения CrossChat.</li>
+                <li>Направить запрос на удаление на электронную почту: <a href="mailto:support@crosschat.ru">support@crosschat.ru</a>.</li>
+            </ol>
+
+            <h2>8. Контакты Оператора</h2>
+            <p>
+                <strong>Владелец сервиса:</strong> <br>
+                <strong>Email:</strong> <a href="mailto:support@crosschat.ru">support@crosschat.ru</a><br>
+                <strong>Регион:</strong> Республика Беларусь
+            </p>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; @DateTime.Now.Year CrossChat. Все права защищены.</p>
+        <div style="margin-top: 10px;">
+            <a href="/">Главная</a> •
+            <a href="/privacy">Политика конфиденциальности</a>
+        </div>
+    </footer>
+
+</body>
+</html>

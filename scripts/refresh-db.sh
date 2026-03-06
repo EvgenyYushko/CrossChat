@@ -20,7 +20,7 @@ OWNER_ID="tea-d66r41rh46gs7399udr0" # можно получить в любом 
 VERSION_DB="18"
 RENDER_SERVICE_TYPE="postgres"  # Тип сервиса для API Render
 BACKUP_FILE_NAME="backup.dump"
-SITE_URL="https://crosschat-fabc.onrender.com/"
+SITE_URL="https://crosschat.ru/"
 MAX_RETRIES=30                  # Максимальное количество попыток проверки доступности сайта
 RETRY_INTERVAL=45               # Интервал между проверками сайта (сек)
 

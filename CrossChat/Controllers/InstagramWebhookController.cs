@@ -3,7 +3,6 @@ using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Controllers
 {

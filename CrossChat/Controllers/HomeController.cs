@@ -148,6 +148,27 @@ namespace CrossChat.Controllers
         .feature h3 {{ color: white; margin-bottom: 0.5rem; font-size: 1.2rem; }}
         .feature p {{ color: var(--text-secondary); line-height: 1.5; font-size: 0.95rem; }}
         .feature-icon {{ font-size: 2rem; margin-bottom: 1rem; display: block; }}
+        
+        .footer {{
+            border-top: 1px solid var(--glass-border);
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: auto;
+        }}
+
+            .footer a {{
+                color: var(--text-secondary);
+                text-decoration: none;
+                margin: 0 10px;
+                transition: color 0.2s;
+            }}
+
+                .footer a:hover {{
+                    color: white;
+              }}
+
 
         @media (max-width: 768px) {{
             .hero h1 {{ font-size: 2.2rem; }}
@@ -209,6 +230,13 @@ namespace CrossChat.Controllers
             </div>
         </div>
     </div>
+    <footer class=""footer"">
+        <p>&copy; {DateTime.Now.Year} CrossChat Inc.</p>
+        <p style=""margin-top: 10px; opacity: 0.6; font-size: 0.9rem;"">
+            <a href=""/"" style=""color:inherit; text-decoration:none; margin:0 10px;"">Главная</a> •
+            <a href=""/privacy"" style=""color:inherit; text-decoration:none; margin:0 10px;"">Политика конфиденциальности</a>
+        </p>
+    </footer>
 </body>
 </html>";
 
