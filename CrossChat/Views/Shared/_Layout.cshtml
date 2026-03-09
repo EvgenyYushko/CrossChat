@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="facebook-domain-verification" content="s2c69ibwq316ensah92o2m5wzov0c8" />
     <title>@ViewData["Title"] - CrossChat</title>
 
     <!-- Шрифты -->
@@ -14,6 +15,21 @@
 
     <!-- ГЛОБАЛЬНЫЕ СТИЛИ (Общие для всех страниц) -->
     <style>
+
+         /* Фоновое свечение */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80vw;
+            height: 60vh;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, rgba(0,0,0,0) 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
         :root {
             --bg-color: #050505;
             --glass-bg: rgba(255, 255, 255, 0.05);
@@ -124,7 +140,7 @@
 
     <!-- ОБЩИЙ ФУТЕР -->
     <footer class="footer">
-        <p>&copy; @DateTime.Now.Year CrossChat Inc.</p>
+        @* <p>&copy; @DateTime.Now.Year CrossChat Inc.</p> *@
         <p style="margin-top: 10px; opacity: 0.6; font-size: 0.9rem;">
             <a href="/">Главная</a> •
             <a href="/privacy">Политика конфиденциальности</a>
