@@ -12,19 +12,19 @@
         }
 
         .card {
-            background: #121212;
+            background: var(--card-bg); /* ИСПРАВЛЕНО: Теперь берет цвет из темы */
             border: 1px solid var(--glass-border);
             border-radius: 12px;
             padding: 3rem;
+            transition: background-color 0.3s ease; /* Плавная смена темы */
         }
-
-            /* --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавил .card перед селекторами --- */
 
             .card h1 {
                 font-size: 2rem;
                 margin-bottom: 0.5rem;
                 font-weight: 800;
                 line-height: 1.2;
+                color: var(--text-main); /* ИСПРАВЛЕНО */
             }
 
             .card .subtitle {
@@ -39,7 +39,7 @@
                 margin-top: 2.5rem;
                 margin-bottom: 1rem;
                 font-size: 1.3rem;
-                color: white;
+                color: var(--text-main); /* ИСПРАВЛЕНО */
                 border-left: 3px solid var(--accent-color);
                 padding-left: 15px;
             }
@@ -48,29 +48,29 @@
                 margin-top: 1.5rem;
                 margin-bottom: 0.8rem;
                 font-size: 1.1rem;
-                color: #e5e7eb;
+                color: var(--text-main); /* ИСПРАВЛЕНО */
                 font-weight: 600;
             }
 
-            /* Теперь это влияет только на текст внутри карточки, футер не пострадает */
-            .card p {
-                color: #d1d5db;
+            /* ИСПРАВЛЕНИЕ: Общий цвет текста для параграфов и списков */
+            .card p, .card ul, .card ol, .card li {
+                color: var(--text-main);
                 line-height: 1.6;
-                margin-bottom: 1rem;
                 font-size: 0.95rem;
+            }
+
+            .card p {
+                margin-bottom: 1rem;
                 text-align: justify;
             }
 
             .card ul, .card ol {
                 margin-bottom: 1.5rem;
                 padding-left: 20px;
-                color: #d1d5db;
             }
 
             .card li {
                 margin-bottom: 0.5rem;
-                line-height: 1.6;
-                font-size: 0.95rem;
             }
 
             .card a {
@@ -81,11 +81,12 @@
 
                 .card a:hover {
                     text-decoration: underline;
-                    color: #818cf8;
+                    color: var(--text-main);
                 }
 
         .legal-box {
-            background: rgba(255, 255, 255, 0.03);
+            /* ИСПРАВЛЕНО: Универсальный серый цвет с прозрачностью работает в обеих темах */
+            background: rgba(128, 128, 128, 0.1);
             border: 1px solid var(--glass-border);
             padding: 1.5rem;
             border-radius: 8px;

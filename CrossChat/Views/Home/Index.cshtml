@@ -1,13 +1,11 @@
 @{
     ViewData["Title"] = "Connect. Prompt. Respond.";
-    string platformImageUrl = "/images/CrossChat.jpeg";
+    string platformImageUrl = "/images/CrossChatPng.png";
 }
 
 @section Styles {
     <style>
         /* Специфичные стили ТОЛЬКО для Главной */
-
-       
 
         .container {
             flex: 1;
@@ -29,35 +27,28 @@
             margin-bottom: 3rem;
         }
 
-        .preview-glow {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+
+        /* Hero Image Container */
+        .preview-wrapper {
+            position: relative;
             width: 100%;
-            height: 100%;
-            background: var(--primary-gradient);
-            filter: blur(60px);
-            opacity: 0.25;
-            z-index: -1;
-            border-radius: 50%;
+            max-width: 900px;
+            margin-bottom: 3rem;
         }
 
+        /* ИСПРАВЛЕНИЕ: Убрали рамку, фон и тень. Оставили только позиционирование */
         .platform-preview {
-            border-radius: 16px;
-            overflow: hidden;
-            border: 1px solid var(--glass-border);
-            background: rgba(20, 20, 20, 0.6);
-            backdrop-filter: blur(10px);
-            padding: 6px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative; /* Чтобы свечение было точно под ним */
+            z-index: 1; /* Картинка поверх свечения */
+            width: 100%;
         }
 
+            /* Картинка теперь не сжимается рамкой */
             .platform-preview img {
                 width: 100%;
                 height: auto;
                 display: block;
-                border-radius: 10px;
+                margin: 0 auto; /* Центрируем, если картинка меньше контейнера */
             }
 
         /* Hero Text */
@@ -164,13 +155,25 @@
         }
 
         }
+       
+        /* === КНОПКА В СВЕТЛОЙ ТЕМЕ === */
+        [data-theme="light"] .btn-primary {
+            background: #0f172a; /* Темно-синий/почти черный цвет */
+            color: #ffffff; /* Белый текст */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        [data-theme="light"] .btn-primary:hover {
+            background: #1e293b; /* Чуть светлее при наведении */
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
     </style>
 }
 
 <div class="container">
     <!-- 1. Картинка -->
     <div class="preview-wrapper">
-        <div class="preview-glow"></div>
         <div class="platform-preview">
             <img src="@platformImageUrl" alt="CrossChat Dashboard">
         </div>

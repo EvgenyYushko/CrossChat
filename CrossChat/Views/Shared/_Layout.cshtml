@@ -16,20 +16,6 @@
     <!-- ГЛОБАЛЬНЫЕ СТИЛИ (Общие для всех страниц) -->
     <style>
 
-         /* Фоновое свечение */
-        body::before {
-            content: '';
-            position: absolute;
-            top: -10%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80vw;
-            height: 60vh;
-            background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, rgba(0,0,0,0) 70%);
-            z-index: -1;
-            pointer-events: none;
-        }
-
         :root {
             --bg-color: #050505;
             --glass-bg: rgba(255, 255, 255, 0.05);
@@ -38,6 +24,24 @@
             --text-secondary: #a1a1aa;
             --accent-color: #6366f1;
             --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            --footer-bg: #020202;
+            --nav-bg: rgba(5, 5, 5, 0.9);
+            --card-bg: #121212;
+            --input-bg: rgba(0,0,0,0.3);
+        }
+
+        /* 2. СВЕТЛАЯ ТЕМА */
+        [data-theme="light"] {
+            --bg-color: #f8fafc; /* Светло-серый фон */
+            --glass-bg: rgba(255, 255, 255, 0.9); /* Почти белые карточки */
+            --glass-border: rgba(0, 0, 0, 0.1); /* Темные рамки */
+            --text-main: #0f172a; /* Темно-синий текст */
+            --text-secondary: #64748b; /* Серый текст */
+            --accent-color: #4f46e5; /* Чуть темнее индиго для контраста */
+            --footer-bg: #f1f5f9;
+            --nav-bg: rgba(255, 255, 255, 0.9);
+            --card-bg: #ffffff;
+            --input-bg: rgba(255,255,255,0.8);
         }
 
         * {
@@ -54,6 +58,7 @@
             display: flex;
             flex-direction: column;
             overflow-x: hidden;
+            transition: background-color 0.3s ease, color 0.3s ease; /* Плавный переход */
         }
 
         /* NAVBAR */
@@ -67,9 +72,10 @@
             justify-content: space-between;
             align-items: center;
             padding: 1rem 1.5rem;
-            background: rgba(5, 5, 5, 0.9);
+            background: var(--nav-bg);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--glass-border);
+            transition: background-color 0.3s ease;
         }
 
         .logo-container {
@@ -88,23 +94,49 @@
 
         .logo-text {
             font-weight: 700;
-            color: white;
+            color: var(--text-main);
             font-size: 1.1rem;
             letter-spacing: -0.02em;
         }
 
+        /* КНОПКА ТЕМЫ */
+        .theme-toggle {
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            transition: background 0.2s;
+            margin-right: 15px; /* Отступ от профиля/кнопки "Войти" */
+        }
+
+            .theme-toggle:hover {
+                background: var(--glass-bg);
+            }
+
+            .theme-toggle svg {
+                width: 20px;
+                height: 20px;
+                fill: currentColor;
+            }
+
         /* FOOTER */
         .footer {
-            width: 100%; /* Занимаем всю ширину */
-            box-sizing: border-box; /* Учитываем отступы */
-
+            width: 100%;
+            box-sizing: border-box;
             border-top: 1px solid var(--glass-border);
             padding: 2rem;
             text-align: center;
             color: var(--text-secondary);
             font-size: 0.9rem;
             margin-top: auto;
-            background: #020202;
+            background: var(--footer-bg);
+            transition: background-color 0.3s ease;
         }
 
             .footer a {
@@ -115,12 +147,20 @@
             }
 
                 .footer a:hover {
-                    color: white;
+                    color: var(--text-main);
                 }
+
     </style>
 
     <!-- Место для уникальных стилей страницы -->
     @await RenderSectionAsync("Styles", required: false)
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
+
 </head>
 <body>
 
@@ -131,8 +171,22 @@
             <span class="logo-text">CrossChat</span>
         </a>
 
-        <!-- Сюда можно будет потом вставить меню профиля -->
-        @await RenderSectionAsync("NavbarActions", required: false)
+        <div style="display: flex; align-items: center;">
+            <!-- КНОПКА ПЕРЕКЛЮЧЕНИЯ ТЕМЫ -->
+            <button class="theme-toggle" id="themeToggleBtn" aria-label="Сменить тему">
+                <!-- Иконка Солнца (показывается в темной теме) -->
+                <svg id="sun-icon" style="display: none;" viewBox="0 0 24 24">
+                    <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18.75a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-1.5a.75.75 0 01.75-.75zM6.166 17.834a.75.75 0 00-1.06 1.06l1.59 1.591a.75.75 0 101.06-1.061l-1.59-1.59zM4.5 12a.75.75 0 01-.75-.75H1.5a.75.75 0 010 1.5h2.25a.75.75 0 01.75-.75zM6.166 5.106a.75.75 0 00-1.06 1.06l1.59 1.591a.75.75 0 101.06-1.06l-1.59-1.591z" />
+                </svg>
+                <!-- Иконка Луны (показывается в светлой теме) -->
+                <svg id="moon-icon" style="display: none;" viewBox="0 0 24 24">
+                    <path d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" />
+                </svg>
+            </button>
+
+            <!-- Сюда вставляется меню пользователя -->
+            @await RenderSectionAsync("NavbarActions", required: false)
+        </div>
     </nav>
 
     <!-- СЮДА ВСТАВЛЯЕТСЯ КОНТЕНТ СТРАНИЦЫ -->
@@ -146,6 +200,41 @@
             <a href="/privacy">Политика конфиденциальности</a>
         </p>
     </footer>
+
+    <!-- СКРИПТ ПЕРЕКЛЮЧЕНИЯ ТЕМЫ -->
+    <script>
+        const btn = document.getElementById('themeToggleBtn');
+        const sunIcon = document.getElementById('sun-icon');
+        const moonIcon = document.getElementById('moon-icon');
+
+        // Функция обновления иконки
+        function updateIcon() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            if (currentTheme === 'light') {
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block'; // Показываем луну в светлой теме
+            } else {
+                sunIcon.style.display = 'block'; // Показываем солнце в темной теме
+                moonIcon.style.display = 'none';
+            }
+        }
+
+        // Инициализация при загрузке
+        updateIcon();
+
+        // Клик по кнопке
+        btn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            // Меняем атрибут у html
+            document.documentElement.setAttribute('data-theme', newTheme);
+            // Сохраняем в localStorage
+            localStorage.setItem('theme', newTheme);
+            // Обновляем иконку
+            updateIcon();
+        });
+    </script>
 
     @await RenderSectionAsync("Scripts", required: false)
 </body>

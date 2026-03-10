@@ -13,11 +13,10 @@
         }
 
         .card {
-            background: var(--glass-bg);
+            background: var(--card-bg); /* Теперь используется переменная! */
             border: 1px solid var(--glass-border);
-            border-radius: 16px;
+            border-radius: 16px; /* или 20px, как было */
             padding: 1.5rem;
-            margin-bottom: 1.5rem;
         }
 
         /* Кнопки сервисов */
@@ -166,6 +165,33 @@
                 display: none;
             }
         }
+
+        /* === СТИЛИ КНОПОК ДЛЯ СВЕТЛОЙ ТЕМЫ === */
+        [data-theme="light"] .btn-instagram,
+        [data-theme="light"] .btn-telegram {
+            background: #f1f5f9; /* Очень светлый серо-синий фон */
+            border: 1px solid #e2e8f0; /* Светлая рамка */
+            color: #0f172a; /* Темно-синий/почти черный текст */
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Легкая тенюшка */
+        }
+
+        /* Эффект наведения в светлой теме */
+        [data-theme="light"] .btn-instagram:hover,
+        [data-theme="light"] .btn-telegram:hover {
+            background: #e2e8f0; /* Чуть темнее при наведении */
+            color: #000000;
+        }
+
+        /* Для кнопки выхода в шапке (если она тоже темная) */
+        [data-theme="light"] .logout-btn {
+            border-color: #cbd5e1;
+            color: #475569;
+        }
+        [data-theme="light"] .logout-btn:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
     </style>
 }
 
