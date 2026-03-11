@@ -16,6 +16,17 @@ namespace CrossChat.Integrations.Services
 			_token = token;
 		}
 
+		public async Task<string> GeminiRequest(string prompt, string token)
+		{
+			if(token is null)
+			{
+				token = _token;
+			}
+
+			var response = await _geminiServiceClient.RequestAsync(new Prompt { Text = prompt }, AddTokenToHeaders(token));
+			return response.GeneratedText;
+		}
+
 		public async Task<string> GetAnswerAsync(string systemPrompt, List<AiRequest> messages, string token)
 		{
 			if(token is null)

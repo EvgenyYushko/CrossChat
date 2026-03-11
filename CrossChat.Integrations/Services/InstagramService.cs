@@ -219,4 +219,23 @@ public class InstagramService : IInstagramService
 		var json = await response.Content.ReadAsStringAsync();
 		return JsonSerializer.Deserialize<InstagramUserProfile>(json);
 	}
+
+	public async Task ReplyToCommentAsync(string commentId, string text, string accessToken)
+	{
+		var url = $"{ApiVersion}/{commentId}/replies?access_token={accessToken}";
+
+		var payload = new { message = text };
+		var response = await _httpClient.PostAsJsonAsync(url, payload);
+
+		if (response.IsSuccessStatusCode)
+		{
+			_logger.LogInformation($"[Instagram] ✅ Ответ на комментарий {commentId} отправлен.");
+		}
+		else
+		{
+			var errorContent = await response.Content.ReadAsStringAsync();
+			_logger.LogError($"[Instagram] ❌ Ошибка ответа на коммент: {errorContent}");
+			throw new Exception($"Instagram API Error: {errorContent}");
+		}
+	}
 }

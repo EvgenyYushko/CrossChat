@@ -108,8 +108,26 @@ namespace CrossChat.Controllers
 						{
 							if (change.Field == "comments")
 							{
-								_logger.LogInformation($"Новый коммент от {change.Value.From.Username}: {change.Value.Text}");
-								// Тут можно тоже кидать в RabbitMQ, но в другую очередь, например
+								var value = change.Value; // Это InstagramChangeValue (из твоей модели)
+
+								// Защита: не отвечаем самим себе (если бот написал коммент, не надо на него отвечать)
+								// (В идеале нужно проверить, не совпадает ли value.From.Id с entry.Id)
+								_logger.LogInformation($"[Webhook] Новый коммент от {value.From.Username}: {value.Text}");
+
+								if (value.From?.Id == entry.Id )
+								{
+									_logger.LogInformation($"Ignoring comment from self (bot)");
+								}
+
+								// Отправляем в RabbitMQ!
+								await _publishEndpoint.Publish(new InstagramCommentReceived
+								{
+									BusinessAccountId = entry.Id, // ID страницы, куда прилетел коммент
+									CommentId = value.Id,
+									Text = value.Text,
+									Username = value.From?.Username ?? "user",
+									// Если в модели есть ParentId, передай его, иначе оставь null
+								});
 							}
 						}
 					}

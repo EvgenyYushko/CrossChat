@@ -176,6 +176,10 @@ public class InstagramUser
 
 	[JsonPropertyName("username")]
 	public string? Username { get; set; }
+
+	[JsonPropertyName("self_ig_scoped_id")]
+	public string? Self_ig_scoped_id { get; set; }
+
 }
 
 // 12. Changes (Комментарии к постам)
@@ -201,6 +205,9 @@ public class InstagramChangeValue
 
 	[JsonPropertyName("media")]
 	public InstagramMediaShort Media { get; set; }
+
+	[JsonPropertyName("parent_id")]
+	public string ParentId { get; set; }
 }
 
 public class InstagramMediaShort

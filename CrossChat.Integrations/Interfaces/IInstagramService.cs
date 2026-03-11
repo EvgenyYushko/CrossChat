@@ -47,5 +47,7 @@ namespace CrossChat.Integrations.Interfaces
 		/// </summary>
 		/// <param name="currentToken">текущий ещё дивой токен</param>
 		Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken);
+
+		Task ReplyToCommentAsync(string commentId, string text, string accessToken);
 	}
 }
