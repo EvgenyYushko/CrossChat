@@ -117,6 +117,8 @@ namespace CrossChat.Controllers
 								if (value.From?.Id == entry.Id )
 								{
 									_logger.LogInformation($"Ignoring comment from self (bot)");
+
+         return Ok();
 								}
 
 								// Отправляем в RabbitMQ!
