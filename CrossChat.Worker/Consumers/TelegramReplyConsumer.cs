@@ -5,6 +5,7 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Quartz.Logging;
 using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers;
@@ -27,6 +28,8 @@ public class TelegramReplyConsumer : IConsumer<TelegramProcessReply>
 
 	public async Task Consume(ConsumeContext<TelegramProcessReply> context)
 	{
+		_logger.LogInformation("пришло  ообщение");
+
 		var chatId = context.Message.ChatId;
 		var token = context.Message.BotToken;
 		var key = $"tg_history:{chatId}";

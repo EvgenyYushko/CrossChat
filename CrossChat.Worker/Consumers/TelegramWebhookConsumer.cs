@@ -15,6 +15,8 @@ public class TelegramWebhookConsumer : IConsumer<TelegramMessageReceived>
 
 	public async Task Consume(ConsumeContext<TelegramMessageReceived> context)
     {
+		Console.WriteLine("пришло  ообщение на ответ");
+
         var chatId = context.Message.ChatId;
         
         // 1. Сохраняем сообщение в Redis для истории
