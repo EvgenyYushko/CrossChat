@@ -441,29 +441,29 @@
             <div class="form-section">
                 <form action="/instagram/update-settings" method="post">
 
+                    <!-- Переключатели -->
                     <div class="switch-container">
-                        <div>
-                            <label style="margin:0; font-size: 1.1rem; color: white; cursor: pointer;" for="isActiveCheck">Включить автоответы</label>
-                            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
-                                @(Model.IsActive ? "Бот читает сообщения и отвечает." : "Передвиньте, чтобы активировать.")
-                            </div>
-                        </div>
+                        <label>Автоответы в Direct</label>
+                        <input type="checkbox" name="isDirectEnabled" value="true" @(Model.IsDirectEnabled ? "checked" : "")>
+                    </div>
 
-                        <label class="switch">
-                            <input type="checkbox" id="isActiveCheck" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
-                            <span class="slider"></span>
-                        </label>
+                    <div class="switch-container">
+                        <label>Автоответы в Комментариях</label>
+                        <input type="checkbox" name="isCommentsEnabled" value="true" @(Model.IsCommentsEnabled ? "checked" : "")>
+                    </div>
+
+                    <!-- Промпты -->
+                    <div class="form-group">
+                        <label>Промпт для Direct (сообщения)</label>
+                        <textarea name="systemPrompt" rows="3">@Model.SystemPrompt</textarea>
                     </div>
 
                     <div class="form-group">
-                        <label>Системный промпт</label>
-                        <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@(Model.SystemPrompt)</textarea>
-                        <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
-                            Инструкция для ИИ (Gemini).
-                        </p>
+                        <label>Промпт для Комментариев</label>
+                        <textarea name="commentPrompt" rows="3">@Model.CommentPrompt</textarea>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
                 </form>
             </div>
 

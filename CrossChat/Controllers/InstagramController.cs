@@ -133,7 +133,7 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(string systemPrompt, bool isActive)
+		public async Task<IActionResult> UpdateSettings(string systemPrompt, string commentPrompt, bool isDirectEnabled, bool isCommentsEnabled)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
@@ -144,25 +144,15 @@ namespace CrossChat.Controllers
 			try
 			{
 				// Если статус меняется (был выкл -> стал вкл, или наоборот)
-				if (settings.IsActive != isActive)
-				{
-					// Вызываем метод управления вебхуками
-					bool success = await ManageWebhooksAsync(settings.AccessToken, isActive);
+				settings.IsActive = isDirectEnabled || isCommentsEnabled;
 
-					if (!success)
-					{
-						// Если API Инстаграма вернуло ошибку, не меняем статус в БД
-						// Можно добавить TempData["Error"] = "Не удалось обновить подписку";
-						_logger.LogError($"Failed to change subscription state to {isActive} for user {userId}");
-					}
-					else
-					{
-						settings.IsActive = isActive;
-					}
-				}
+				// Вызываем метод управления вебхуками
+				bool success = await ManageWebhooksAsync(settings.AccessToken, settings.IsActive);
 
-				// Промпт обновляем в любом случае
 				settings.SystemPrompt = systemPrompt;
+				settings.CommentPrompt = commentPrompt;
+				settings.IsDirectEnabled = isDirectEnabled;
+				settings.IsCommentsEnabled = isCommentsEnabled;
 
 				await _db.SaveChangesAsync();
 			}

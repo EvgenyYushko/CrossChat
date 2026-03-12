@@ -43,7 +43,7 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 			.AsNoTracking()
 			.FirstOrDefaultAsync(s => s.InstagramBusinessId == msg.BusinessAccountId);
 
-		if (settings == null || !settings.IsActive || string.IsNullOrEmpty(settings.AccessToken))
+		if (settings == null || !settings.IsActive || string.IsNullOrEmpty(settings.AccessToken) || !settings.IsCommentsEnabled)
 		{
 			_logger.LogInformation($"[Comment] Игнорируем коммент. Бот выключен или не настроен.");
 			return;
@@ -53,15 +53,12 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 		{
 			// 2. Формируем промпт для ИИ
 			// В системный промпт добавляем указание, что нужно ответить именно на комментарий
-			var basePrompt = settings.SystemPrompt ?? "Ты вежливый помощник.";
+			var fullPrompt = settings.CommentPrompt ?? "";
 
-			var fullPrompt = $@"{basePrompt}
-ВАЖНО: Сейчас ты отвечаешь на ПУБЛИЧНЫЙ КОММЕНТАРИЙ под постом (а не в личных сообщениях).
-Пользователь @{msg.Username} написал: ""{msg.Text}""
-Ответь кратко, дружелюбно, в 1-2 предложения. Можешь упомянуть пользователя по нику.";
+			fullPrompt += $"\nСейчас ты отвечаешь на ПУБЛИЧНЫЙ КОММЕНТАРИЙ под твоим постом."+
+				$"Пользователь @{msg.Username} написал: '{msg.Text}'.";
 
 			// 3. Отправляем в ИИ
-			// Для комментов история пустая, передаем только этот промпт
 			var aiResponse = await _aiService.GeminiRequest(fullPrompt, null);
 
 			if (string.IsNullOrWhiteSpace(aiResponse)) return;

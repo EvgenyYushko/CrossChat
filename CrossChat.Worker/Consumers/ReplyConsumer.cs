@@ -73,6 +73,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
+		if (!settings.IsDirectEnabled)
+		{
+			_logger.LogInformation($"[Reply] ⏸ У бота выключены ответы на сообщения. Пропускаем.");
+			return;
+		}
+
 		var accessInstaToken = settings.AccessToken;
 
 		if (string.IsNullOrEmpty(accessInstaToken))
