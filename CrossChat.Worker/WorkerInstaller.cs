@@ -38,6 +38,8 @@ namespace CrossChat.Worker
 				var client = provider.GetService<GeminiService.GeminiServiceClient>();
 				return new AiService(client, token);
 			});
+
+			services.AddSingleton<ITelegramService, TelegramService>();
 		}
 	}
 }

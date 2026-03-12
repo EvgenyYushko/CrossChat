@@ -1,0 +1,437 @@
+@model CrossChat.Data.Entities.TelegramSettings
+@{
+    bool isConnected = !string.IsNullOrEmpty(Model?.BotToken);
+}
+
+@section Styles {
+    <style>
+        /* Уникальные стили для страницы Instagram */
+
+        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
+        .container {
+            max-width: 800px; /* Было 800px, проверь что это применилось */
+            width: 100%; /* Занимаем всю доступную ширину до 800px */
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            /* Убираем text-align: center отсюда, чтобы формы были слева, а шапка по центру */
+        }
+
+        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
+        .connected-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Центрируем всё по горизонтали */
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #e1306c;
+            padding: 4px;
+            background: transparent;
+            margin-bottom: 1rem;
+        }
+
+        .username {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-id {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+
+        /* ФОРМА */
+        .form-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            padding-top: 2rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box; /* Важно! */
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+        }
+
+            textarea:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
+
+        /* КНОПКИ */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+            width: 100%;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+            .btn svg {
+                width: 24px;
+                height: 24px;
+                fill: white;
+                flex-shrink: 0;
+            }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            margin-top: 1rem;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            margin-top: 2rem;
+        }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.3);
+            }
+
+        .login-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn-insta {
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
+        }
+
+        .btn-fb {
+            background: #1877F2;
+            color: white;
+            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
+        }
+
+        .separator {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-secondary);
+            margin: 20px 0;
+            font-size: 13px;
+        }
+
+            .separator::before, .separator::after {
+                content: '';
+                flex: 1;
+                border-bottom: 1px solid var(--glass-border);
+            }
+
+            .separator::before {
+                margin-right: 10px;
+            }
+
+            .separator::after {
+                margin-left: 10px;
+            }
+
+        /* СТАТУСЫ */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* ТОГГЛ */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
+            }
+
+        /* ИНСТРУКЦИЯ */
+        .instruction-btn {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-bottom: 2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+
+            .instruction-btn:hover {
+                border-color: var(--text-main);
+                color: var(--text-main);
+                background: rgba(255,255,255,0.05);
+            }
+
+        .instruction-content {
+            display: none;
+            text-align: left;
+            background: #121212;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .safety-note {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid #10b981;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #d1fae5;
+        }
+
+        .instruction-step {
+            margin-bottom: 2rem;
+        }
+
+        .step-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-num {
+            background: linear-gradient(45deg, #f09433, #bc1888);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .step-list {
+            margin-left: 10px;
+            padding-left: 15px;
+            border-left: 2px solid #333;
+        }
+
+            .step-list li {
+                margin-bottom: 8px;
+                color: var(--text-secondary);
+                font-size: 0.95rem;
+                list-style: none;
+            }
+
+                .step-list li strong {
+                    color: white;
+                }
+
+        .open {
+            display: block;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @@keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
+        @@media (max-width: 600px) {
+            .container {
+                margin-top: 5rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .instruction-content {
+                padding: 1rem;
+            }
+
+            .btn {
+                padding: 12px 10px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        function toggleInstruction() {
+            var block = document.getElementById('instructionBlock');
+            if (block.style.display === 'block') {
+                block.style.display = 'none';
+            } else {
+                block.style.display = 'block';
+                block.classList.add('open');
+            }
+        }
+    </script>
+}
+
+<div class="container">
+    <div class="card">
+        <h1>Telegram Бот</h1>
+
+        @if (!isConnected)
+        {
+            <div class="instruction-btn" onclick="toggleInstruction()">📖 Инструкция @@BotFather</div>
+            <div id="instructionBlock" class="instruction-content">
+                <ol>
+                    <li>Напишите <a href="https://t.me/BotFather">@@BotFather</a> в Telegram.</li>
+                    <li>Отправьте команду <code>/newbot</code>.</li>
+                    <li>Получите <strong>API Token</strong> и вставьте его ниже.</li>
+                </ol>
+            </div>
+
+            <form action="/telegram/connect" method="post">
+                <input type="text" name="token" placeholder="Введите API Токен..." required>
+                <button type="submit" class="btn btn-primary">Подключить</button>
+            </form>
+        }
+        else
+        {
+            <form action="/telegram/update" method="post">
+                <div class="switch-container">
+                    <label>Бот активен</label>
+                    <input type="checkbox" name="isActive" @(Model.IsActive ? "checked" : "")>
+                </div>
+                <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </form>
+            <form action="/telegram/disconnect" method="post">
+                <button type="submit" class="btn btn-danger">Удалить бота</button>
+            </form>
+        }
+    </div>
+</div>
