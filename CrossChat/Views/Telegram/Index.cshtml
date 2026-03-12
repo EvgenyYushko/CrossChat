@@ -382,11 +382,94 @@
                 font-size: 0.9rem;
             }
         }
+
+        .text-input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            min-height: 150px; /* Сделали выше */
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
     </style>
 }
 
+<div class="container">
+    <div class="card">
+        <h1>Telegram Бот</h1>
+
+        @if (isConnected)
+        {
+            <!-- УВЕДОМЛЕНИЕ -->
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">
+                Настройки сохранены!
+            </div>
+
+            <form action="/telegram/update" method="post" id="settingsForm">
+                <div class="switch-container">
+                    <div>
+                        <label style="margin:0; font-size: 1.1rem; color: white;">Бот активен</label>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Включить ответы бота</div>
+                    </div>
+                    <label class="switch">
+                        <!-- Хак с hidden полем для чекбокса -->
+                        <input type="hidden" name="isActive" value="false" />
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Системный промпт для ИИ</label>
+                    <textarea name="systemPrompt" placeholder="Ты — вежливый помощник..." required>@Model.SystemPrompt</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+            </form>
+
+            <form action="/telegram/disconnect" method="post" onsubmit="return confirm('Удалить бота?');">
+                <button type="submit" class="btn btn-danger">Удалить бота</button>
+            </form>
+        }
+        else
+        {
+            <!-- Секция подключения -->
+            <div class="login-buttons">
+                <form action="/telegram/connect" method="post">
+                    <input type="text" name="token" class="text-input" placeholder="Введите API Токен от @@BotFather..." required>
+                    <button type="submit" class="btn btn-primary">Подключить бота</button>
+                </form>
+            </div>
+        }
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        // Показ уведомления, если в URL есть параметр ?saved=true
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('saved')) {
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
         function toggleInstruction() {
             var block = document.getElementById('instructionBlock');
             if (block.style.display === 'block') {
@@ -396,42 +479,7 @@
                 block.classList.add('open');
             }
         }
+
     </script>
+    
 }
-
-<div class="container">
-    <div class="card">
-        <h1>Telegram Бот</h1>
-
-        @if (!isConnected)
-        {
-            <div class="instruction-btn" onclick="toggleInstruction()">📖 Инструкция @@BotFather</div>
-            <div id="instructionBlock" class="instruction-content">
-                <ol>
-                    <li>Напишите <a href="https://t.me/BotFather">@@BotFather</a> в Telegram.</li>
-                    <li>Отправьте команду <code>/newbot</code>.</li>
-                    <li>Получите <strong>API Token</strong> и вставьте его ниже.</li>
-                </ol>
-            </div>
-
-            <form action="/telegram/connect" method="post">
-                <input type="text" name="token" placeholder="Введите API Токен..." required>
-                <button type="submit" class="btn btn-primary">Подключить</button>
-            </form>
-        }
-        else
-        {
-            <form action="/telegram/update" method="post">
-                <div class="switch-container">
-                    <label>Бот активен</label>
-                    <input type="checkbox" name="isActive" @(Model.IsActive ? "checked" : "")>
-                </div>
-                <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
-                <button type="submit" class="btn btn-primary">Сохранить</button>
-            </form>
-            <form action="/telegram/disconnect" method="post">
-                <button type="submit" class="btn btn-danger">Удалить бота</button>
-            </form>
-        }
-    </div>
-</div>

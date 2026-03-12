@@ -2,12 +2,14 @@ using System.Security.Claims;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
@@ -133,7 +135,10 @@ namespace CrossChat.Controllers
 		{
 			// Явно читаем чекбокс из формы
 			// Если "isActive" есть в форме - значит true, иначе false
-			bool isActive = Request.Form.ContainsKey("isActive") && Request.Form["isActive"] == "on";
+			var isActiveRaw = Request.Form["isActive"].ToString();
+
+			// Если строка содержит "true" — значит галочка была включена
+			bool isActive = isActiveRaw.Contains("true");
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.TelegramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -155,11 +160,11 @@ namespace CrossChat.Controllers
 					settings.IsActive = isActive;
 				}
 
-				settings.SystemPrompt = systemPrompt;
+				settings.SystemPrompt = systemPrompt ?? "";
 				await _db.SaveChangesAsync();
 			}
 
-			return RedirectToAction("Index", "Telegram");
+			return RedirectToAction("Index", "Telegram", new { saved = "true" });
 		}
 
 		[HttpPost("webhook/{token}")]
@@ -169,15 +174,15 @@ namespace CrossChat.Controllers
 
 			_logger.LogInformation("Получено сообщение от телеги");
 			// ВАЖНО: token в пути — это наш способ понять, чей это бот
-			//if (update.Type == UpdateType.Message && update.Message?.Text != null)
-			//{
-			//	await _publish.Publish(new TelegramMessageReceived
-			//	{
-			//		BotToken = token,
-			//		ChatId = update.Message.Chat.Id,
-			//		Text = update.Message.Text
-			//	});
-			//}
+			if (update.Type == UpdateType.Message && update.Message?.Text != null)
+			{
+				await _publish.Publish(new TelegramMessageReceived
+				{
+					BotToken = token,
+					ChatId = update.Message.Chat.Id,
+					Text = update.Message.Text
+				});
+			}
 			return Ok();
 		}
 

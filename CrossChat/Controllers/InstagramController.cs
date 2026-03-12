@@ -149,8 +149,8 @@ namespace CrossChat.Controllers
 				// Вызываем метод управления вебхуками
 				bool success = await ManageWebhooksAsync(settings.AccessToken, settings.IsActive);
 
-				settings.SystemPrompt = systemPrompt;
-				settings.CommentPrompt = commentPrompt;
+				settings.SystemPrompt = systemPrompt ?? "";
+				settings.CommentPrompt = commentPrompt ?? "";
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
 
