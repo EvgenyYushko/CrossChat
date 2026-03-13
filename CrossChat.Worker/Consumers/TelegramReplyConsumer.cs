@@ -27,8 +27,6 @@ public class TelegramReplyConsumer : IConsumer<TelegramProcessReply>
 
 	public async Task Consume(ConsumeContext<TelegramProcessReply> context)
 	{
-		_logger.LogInformation("пришло  ообщение");
-
 		var chatId = context.Message.ChatId;
 		var token = context.Message.BotToken;
 

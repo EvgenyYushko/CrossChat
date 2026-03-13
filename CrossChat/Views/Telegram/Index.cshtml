@@ -5,9 +5,37 @@
 
 @section Styles {
     <style>
-        /* Уникальные стили для страницы Instagram */
+        :root {
+            --bg-color: #050505;
+            --card-bg: #121212;
+            --text-main: #ffffff;
+            --text-secondary: #a1a1aa;
+            --accent-color: #6366f1;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
 
-        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
+        [data-theme="light"] {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-secondary: #64748b;
+            --glass-border: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            transition: background-color 0.3s ease;
+            min-height: 100vh;
+        }
+
         .container {
             max-width: 800px; /* Было 800px, проверь что это применилось */
             width: 100%; /* Занимаем всю доступную ширину до 800px */
@@ -16,209 +44,77 @@
         }
 
         .card {
-            background: var(--glass-bg);
+            background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            /* Убираем text-align: center отсюда, чтобы формы были слева, а шапка по центру */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         }
 
-        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
-        .connected-header {
-            display: flex;
-            flex-direction: column;
-            align-items: center; /* Центрируем всё по горизонтали */
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .big-avatar {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid #e1306c;
-            padding: 4px;
-            background: transparent;
-            margin-bottom: 1rem;
-        }
-
-        .username {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-
-        .user-id {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            font-family: monospace;
-        }
-
-        /* ФОРМА */
-        .form-section {
-            margin-top: 2rem;
-            border-top: 1px solid var(--glass-border);
-            padding-top: 2rem;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-secondary);
-        }
-
-        textarea {
-            width: 100%;
-            box-sizing: border-box; /* Важно! */
-            background: var(--input-bg);
-            border: 1px solid var(--glass-border);
+        h1 {
             color: var(--text-main);
-            padding: 1rem;
-            border-radius: 12px;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 120px;
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
         }
 
-            textarea:focus {
-                outline: none;
-                border-color: var(--accent-color);
-            }
-
-        /* КНОПКИ */
-        .btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 14px 24px;
-            border-radius: 12px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: 0.2s;
-            width: 100%;
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-
-            .btn svg {
-                width: 24px;
-                height: 24px;
-                fill: white;
-                flex-shrink: 0;
-            }
-
-        .btn-primary {
-            background: var(--accent-color);
-            color: white;
-            margin-top: 1rem;
-        }
-
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            margin-top: 2rem;
-        }
-
-            .btn-danger:hover {
-                background: rgba(239, 68, 68, 0.3);
-            }
-
-        .login-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .btn-insta {
-            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
-        }
-
-        .btn-fb {
-            background: #1877F2;
-            color: white;
-            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
-        }
-
-        .separator {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            color: var(--text-secondary);
-            margin: 20px 0;
-            font-size: 13px;
-        }
-
-            .separator::before, .separator::after {
-                content: '';
-                flex: 1;
-                border-bottom: 1px solid var(--glass-border);
-            }
-
-            .separator::before {
-                margin-right: 10px;
-            }
-
-            .separator::after {
-                margin-left: 10px;
-            }
-
-        /* СТАТУСЫ */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .status-active {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .status-paused {
-            background: rgba(234, 179, 8, 0.2);
-            color: #fbbf24;
-            border: 1px solid rgba(234, 179, 8, 0.3);
-        }
-
-        .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: currentColor;
-        }
-
-        /* ТОГГЛ */
+        /* Переключатель */
         .switch-container {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 1.5rem;
-            background: rgba(255,255,255,0.03);
-            padding: 15px;
+            background: rgba(128,128,128,0.1);
+            padding: 1.2rem;
             border-radius: 12px;
-            border: 1px solid var(--glass-border);
+            margin-bottom: 1.5rem;
         }
 
+        /* Текстовое поле */
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            resize: vertical;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+
+        /* Кнопки (Широкие и красивые) */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.2);
+            }
+
+        /* Чекбокс-слайдер */
         .switch {
             position: relative;
             display: inline-block;
-            width: 50px;
-            height: 26px;
-            flex-shrink: 0;
+            width: 45px;
+            height: 24px;
         }
 
             .switch input {
@@ -234,9 +130,9 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: #333;
+            background-color: #ccc;
             transition: .4s;
-            border-radius: 34px;
+            border-radius: 24px;
         }
 
             .slider:before {
@@ -244,8 +140,8 @@
                 content: "";
                 height: 18px;
                 width: 18px;
-                left: 4px;
-                bottom: 4px;
+                left: 3px;
+                bottom: 3px;
                 background-color: white;
                 transition: .4s;
                 border-radius: 50%;
@@ -256,158 +152,12 @@
         }
 
             input:checked + .slider:before {
-                transform: translateX(24px);
+                transform: translateX(21px);
             }
-
-        /* ИНСТРУКЦИЯ */
-        .instruction-btn {
-            background: transparent;
-            border: 1px solid var(--glass-border);
-            color: var(--text-secondary);
-            padding: 12px 24px;
-            border-radius: 30px;
-            font-size: 0.95rem;
-            cursor: pointer;
-            margin-bottom: 2rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            transition: all 0.3s;
-        }
-
-            .instruction-btn:hover {
-                border-color: var(--text-main);
-                color: var(--text-main);
-                background: rgba(255,255,255,0.05);
-            }
-
-        .instruction-content {
-            display: none;
-            text-align: left;
-            background: #121212;
-            border-radius: 16px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border: 1px solid var(--glass-border);
-        }
-
-        .safety-note {
-            background: rgba(16, 185, 129, 0.1);
-            border-left: 4px solid #10b981;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-            font-size: 0.9rem;
-            line-height: 1.6;
-            color: #d1fae5;
-        }
-
-        .instruction-step {
-            margin-bottom: 2rem;
-        }
-
-        .step-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .step-num {
-            background: linear-gradient(45deg, #f09433, #bc1888);
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            font-weight: bold;
-            flex-shrink: 0;
-        }
-
-        .step-list {
-            margin-left: 10px;
-            padding-left: 15px;
-            border-left: 2px solid #333;
-        }
-
-            .step-list li {
-                margin-bottom: 8px;
-                color: var(--text-secondary);
-                font-size: 0.95rem;
-                list-style: none;
-            }
-
-                .step-list li strong {
-                    color: white;
-                }
-
-        .open {
-            display: block;
-            animation: fadeIn 0.4s ease-in-out;
-        }
-
-        @@keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
-        @@media (max-width: 600px) {
-            .container {
-                margin-top: 5rem;
-            }
-
-            .card {
-                padding: 1.5rem;
-            }
-
-            .instruction-content {
-                padding: 1rem;
-            }
-
-            .btn {
-                padding: 12px 10px;
-                font-size: 0.9rem;
-            }
-        }
-
-        .text-input {
-            width: 100%;
-            padding: 1rem;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            color: white;
-            font-size: 1rem;
-            margin-bottom: 1rem;
-            box-sizing: border-box;
-        }
-
-        textarea {
-            width: 100%;
-            padding: 1rem;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            color: white;
-            font-size: 1rem;
-            min-height: 150px; /* Сделали выше */
-            margin-bottom: 1rem;
-            box-sizing: border-box;
-        }
     </style>
+}
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Назад в профиль</a>
 }
 
 <div class="container">
@@ -416,28 +166,21 @@
 
         @if (isConnected)
         {
-            <!-- УВЕДОМЛЕНИЕ -->
-            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">
-                Настройки сохранены!
-            </div>
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">Настройки сохранены!</div>
 
-            <form action="/telegram/update" method="post" id="settingsForm">
+            <form action="/telegram/update" method="post">
                 <div class="switch-container">
-                    <div>
-                        <label style="margin:0; font-size: 1.1rem; color: white;">Бот активен</label>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Включить ответы бота</div>
-                    </div>
+                    <label style="margin:0;">Бот активен</label>
                     <label class="switch">
-                        <!-- Хак с hidden полем для чекбокса -->
                         <input type="hidden" name="isActive" value="false" />
                         <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
                         <span class="slider"></span>
                     </label>
                 </div>
 
-                <div class="form-group">
-                    <label>Системный промпт для ИИ</label>
-                    <textarea name="systemPrompt" placeholder="Ты — вежливый помощник..." required>@Model.SystemPrompt</textarea>
+                <div class="form-group" style="text-align:left;">
+                    <label>Системный промпт</label>
+                    <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Сохранить изменения</button>
@@ -449,37 +192,35 @@
         }
         else
         {
-            <!-- Секция подключения -->
-            <div class="login-buttons">
-                <form action="/telegram/connect" method="post">
-                    <input type="text" name="token" class="text-input" placeholder="Введите API Токен от @@BotFather..." required>
-                    <button type="submit" class="btn btn-primary">Подключить бота</button>
-                </form>
+            <button class="instruction-btn" onclick="toggleInstruction()">📖 Как подготовить аккаунт?</button>
+            <div id="instructionBlock" class="instruction-content">
+                <p>1. Напишите <a href="https://t.me/BotFather">@@BotFather</a></p>
+                <p>2. Отправьте <code>/newbot</code></p>
+                <p>3. Получите API Token и вставьте его ниже.</p>
             </div>
+
+            <form action="/telegram/connect" method="post" style="margin-top:2rem;">
+                <input type="text" name="token" class="text-input" placeholder="Введите API Токен..." required>
+                <button type="submit" class="btn btn-primary">Подключить</button>
+            </form>
         }
     </div>
 </div>
 
 @section Scripts {
     <script>
-        // Показ уведомления, если в URL есть параметр ?saved=true
+        function toggleInstruction() {
+            var block = document.getElementById('instructionBlock');
+            block.style.display = (block.style.display === 'block') ? 'none' : 'block';
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('saved')) {
             const toast = document.getElementById('toast');
             toast.style.display = 'block';
             setTimeout(() => toast.style.display = 'none', 3000);
         }
-
-        function toggleInstruction() {
-            var block = document.getElementById('instructionBlock');
-            if (block.style.display === 'block') {
-                block.style.display = 'none';
-            } else {
-                block.style.display = 'block';
-                block.classList.add('open');
-            }
-        }
-
     </script>
+}
     
 }

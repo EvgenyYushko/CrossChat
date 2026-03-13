@@ -4,7 +4,6 @@
 
 @section Styles {
     <style>
-        /* Специфичные стили для текстового документа */
         .container {
             max-width: 960px;
             margin: 6rem auto 4rem;
@@ -12,11 +11,11 @@
         }
 
         .card {
-            background: var(--card-bg); /* ИСПРАВЛЕНО: Теперь берет цвет из темы */
+            background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: 12px;
             padding: 3rem;
-            transition: background-color 0.3s ease; /* Плавная смена темы */
+            transition: background-color 0.3s ease;
         }
 
             .card h1 {
@@ -24,7 +23,7 @@
                 margin-bottom: 0.5rem;
                 font-weight: 800;
                 line-height: 1.2;
-                color: var(--text-main); /* ИСПРАВЛЕНО */
+                color: var(--text-main);
             }
 
             .card .subtitle {
@@ -39,7 +38,7 @@
                 margin-top: 2.5rem;
                 margin-bottom: 1rem;
                 font-size: 1.3rem;
-                color: var(--text-main); /* ИСПРАВЛЕНО */
+                color: var(--text-main);
                 border-left: 3px solid var(--accent-color);
                 padding-left: 15px;
             }
@@ -48,13 +47,13 @@
                 margin-top: 1.5rem;
                 margin-bottom: 0.8rem;
                 font-size: 1.1rem;
-                color: var(--text-main); /* ИСПРАВЛЕНО */
+                color: var(--text-main);
                 font-weight: 600;
             }
 
-            /* ИСПРАВЛЕНИЕ: Общий цвет текста для параграфов и списков */
+            /* ИСПРАВЛЕНИЕ: Используем text-secondary для основного текста, он читается мягче */
             .card p, .card ul, .card ol, .card li {
-                color: var(--text-main);
+                color: var(--text-secondary);
                 line-height: 1.6;
                 font-size: 0.95rem;
             }
@@ -73,6 +72,7 @@
                 margin-bottom: 0.5rem;
             }
 
+            /* Ссылки */
             .card a {
                 color: var(--accent-color);
                 text-decoration: none;
@@ -81,11 +81,9 @@
 
                 .card a:hover {
                     text-decoration: underline;
-                    color: var(--text-main);
                 }
 
         .legal-box {
-            /* ИСПРАВЛЕНО: Универсальный серый цвет с прозрачностью работает в обеих темах */
             background: rgba(128, 128, 128, 0.1);
             border: 1px solid var(--glass-border);
             padding: 1.5rem;
@@ -100,9 +98,9 @@
                 padding: 1.5rem;
             }
 
-                .card h1 {
-                    font-size: 1.5rem;
-                }
+            h1 {
+                font-size: 1.5rem;
+            }
         }
     </style>
 }
@@ -217,11 +215,11 @@
             <li>Направить запрос на удаление на электронную почту: <a href="mailto:support@crosschat.ru">support@crosschat.ru</a>.</li>
         </ol>
 
-        <h2>8. Контакты Оператора</h2>
+       @*  <h2>8. Контакты Оператора</h2>
         <p>
             <strong>Владелец сервиса:</strong> <br>
             <strong>Email:</strong> <a href="mailto:support@crosschat.ru">support@crosschat.ru</a><br>
             <strong>Регион:</strong> Республика Беларусь
-        </p>
+        </p> *@
     </div>
 </div>

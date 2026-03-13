@@ -15,8 +15,6 @@ public class TelegramWebhookConsumer : IConsumer<TelegramMessageReceived>
 
 	public async Task Consume(ConsumeContext<TelegramMessageReceived> context)
 	{
-		Console.WriteLine("пришло  ообщение на ответ");
-
 		var chatId = context.Message.ChatId;
 		var token = context.Message.BotToken;
 

@@ -173,13 +173,10 @@ namespace CrossChat.Controllers
 			//if (token != settings.BotToken)
 
 			_logger.LogInformation("Получено сообщение от телеги");
-			_logger.LogInformation("update.Type =" + update.Type);
-			_logger.LogInformation("update.Message?.Text =" + update.Message?.Text);
 
 			// ВАЖНО: token в пути — это наш способ понять, чей это бот
 			if (update.Type == UpdateType.Message && update.Message?.Text != null)
 			{
-			_logger.LogInformation("111");
 
 				await _publish.Publish(new TelegramMessageReceived
 				{
@@ -190,6 +187,5 @@ namespace CrossChat.Controllers
 			}
 			return Ok();
 		}
-
 	}
 }
