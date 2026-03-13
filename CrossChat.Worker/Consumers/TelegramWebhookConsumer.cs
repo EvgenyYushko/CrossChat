@@ -6,32 +6,35 @@ namespace CrossChat.Worker.Consumers;
 
 public class TelegramWebhookConsumer : IConsumer<TelegramMessageReceived>
 {
-    private readonly IDatabase _redis;
+	private readonly IDatabase _redis;
 
 	public TelegramWebhookConsumer(IConnectionMultiplexer redisMux)
 	{
-        _redis = redisMux.GetDatabase();
+		_redis = redisMux.GetDatabase();
 	}
 
 	public async Task Consume(ConsumeContext<TelegramMessageReceived> context)
-    {
+	{
 		Console.WriteLine("пришло  ообщение на ответ");
 
-        var chatId = context.Message.ChatId;
-        
-        // 1. Сохраняем сообщение в Redis для истории
-        await _redis.ListRightPushAsync($"tg_history:{chatId}", context.Message.Text);
-        await _redis.KeyExpireAsync($"tg_history:{chatId}", TimeSpan.FromMinutes(10));
+		var chatId = context.Message.ChatId;
+		var token = context.Message.BotToken;
 
-        // 2. Логика Debounce (как в Инстаграм)
-        var lockKey = $"tg_debounce:{chatId}";
-        if (await _redis.StringSetAsync(lockKey, "active", TimeSpan.FromSeconds(30), When.NotExists))
-        {
-            await context.SchedulePublish(TimeSpan.FromSeconds(30), new TelegramProcessReply 
-            { 
-                ChatId = chatId, 
-                BotToken = context.Message.BotToken 
-            });
-        }
-    }
+		var historyKey = $"tg_history:{token}:{chatId}";
+		var debounceKey = $"tg_debounce:{token}:{chatId}";
+
+		// 1. Сохраняем сообщение
+		await _redis.ListRightPushAsync(historyKey, context.Message.Text);
+		await _redis.KeyExpireAsync(historyKey, TimeSpan.FromMinutes(10));
+
+		// 2. Логика Debounce
+		if (await _redis.StringSetAsync(debounceKey, "active", TimeSpan.FromSeconds(30), When.NotExists))
+		{
+			await context.SchedulePublish(TimeSpan.FromSeconds(10), new TelegramProcessReply
+			{
+				ChatId = chatId,
+				BotToken = token
+			});
+		}
+	}
 }

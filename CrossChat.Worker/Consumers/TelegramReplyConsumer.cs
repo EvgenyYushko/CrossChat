@@ -5,7 +5,6 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Quartz.Logging;
 using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers;
@@ -32,14 +31,15 @@ public class TelegramReplyConsumer : IConsumer<TelegramProcessReply>
 
 		var chatId = context.Message.ChatId;
 		var token = context.Message.BotToken;
-		var key = $"tg_history:{chatId}";
+
+		var historyKey = $"tg_history:{token}:{chatId}";
 
 		// 1. Ищем настройки в БД
 		var settings = await _db.TelegramSettings.FirstOrDefaultAsync(s => s.BotToken == token);
 		if (settings == null || !settings.IsActive) return;
 
 		// 2. Получаем историю, но НЕ удаляем её из Redis
-		var rawMessages = await _redis.ListRangeAsync(key, -15, -1);
+		var rawMessages = await _redis.ListRangeAsync(historyKey, -15, -1);
 		if (rawMessages == null || rawMessages.Length == 0) return;
 
 		var chatHistory = rawMessages.Select(v => new AiRequest
@@ -57,7 +57,7 @@ public class TelegramReplyConsumer : IConsumer<TelegramProcessReply>
 		await _telegramService.SendMessageAsync(token, chatId, answer);
 
 		// 5. Успех! Теперь чистим Redis
-		await _redis.KeyDeleteAsync(key);
+		await _redis.KeyDeleteAsync($"tg_debounce:{token}:{chatId}");
 
 		_logger.LogInformation($"[Reply] Успешно ответили пользователю {chatId} и очистили историю.");
 	}

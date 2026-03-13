@@ -142,6 +142,7 @@ public class AuthController : Controller
 
 		var user = await _db.Users
 			.Include(u => u.InstagramSettings)
+			.Include(u => u.TelegramSettings)
 			.FirstOrDefaultAsync(u => u.Id == userId);
 
 		// Если юзер был удален из базы, а кука осталась

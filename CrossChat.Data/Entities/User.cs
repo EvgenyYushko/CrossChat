@@ -19,4 +19,5 @@ public class User
 
 	// Связь 1 к 1 с настройками Инстаграма
 	public InstagramSettings? InstagramSettings { get; set; }
+	public TelegramSettings? TelegramSettings { get; set; }
 }
