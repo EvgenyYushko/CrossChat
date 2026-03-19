@@ -58,8 +58,10 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		// 2. Ищем настройки владельца бота в БД
 		// Нам нужно найти того юзера, у которого InstagramBusinessId совпадает с RecipientId
 		var settings = await _db.InstagramSettings
-			.AsNoTracking() // Читаем без отслеживания для скорости
+			.AsNoTracking()
 			.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
+
+		_logger.LogInformation($"[Reply] Проверка настроек: BotID={businessAccountId}, Active={settings.IsActive}, Prompt={settings.SystemPrompt}");
 
 		if (settings == null)
 		{
@@ -156,10 +158,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			try
 			{
+
 				string userContextInfo = await GetUserContextForAiAsync(senderId, accessInstaToken);
 				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n" 
 					+ userContextInfo;
 
+				_logger.LogInformation($"Системный промпт {systemPrompt}");
 				var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
 
 				if (string.IsNullOrWhiteSpace(aiResponse))
