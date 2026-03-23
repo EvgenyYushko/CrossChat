@@ -55,8 +55,8 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 			// В системный промпт добавляем указание, что нужно ответить именно на комментарий
 			var fullPrompt = settings.CommentPrompt ?? "";
 
-			fullPrompt += $"\nСейчас ты отвечаешь на ПУБЛИЧНЫЙ КОММЕНТАРИЙ под твоим постом."+
-				$"Пользователь @{msg.Username} написал: '{msg.Text}'.";
+			fullPrompt += $"\nYou are now replying to a PUBLIC COMMENT under your post."+
+				$"The user @{msg.Username} wrote: '{msg.Text}'.";
 
 			// 3. Отправляем в ИИ
 			var aiResponse = await _aiService.GeminiRequest(fullPrompt, null);

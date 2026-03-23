@@ -61,7 +61,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			.AsNoTracking()
 			.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
 
-		_logger.LogInformation($"[Reply] Проверка настроек: BotID={businessAccountId}, Active={settings.IsActive}, Prompt={settings.SystemPrompt}");
+		//_logger.LogInformation($"[Reply] Проверка настроек: BotID={businessAccountId}, Active={settings.IsActive}, Prompt={settings.SystemPrompt}");
 
 		if (settings == null)
 		{
@@ -163,7 +163,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n" 
 					+ userContextInfo;
 
-				_logger.LogInformation($"Системный промпт {systemPrompt}");
+				//_logger.LogInformation($"Системный промпт {systemPrompt}");
 				var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
 
 				if (string.IsNullOrWhiteSpace(aiResponse))
