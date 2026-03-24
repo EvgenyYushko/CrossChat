@@ -4,6 +4,7 @@ using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
+using Grpc.Core;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -198,10 +199,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				// 5. Отправляем ответ в Инстаграм
 				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
 			}
+			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
+			{
+				// ОШИБКА БЕЗОПАСНОСТИ (Google Policy) - ПОВТОР НЕ ПОМОЖЕТ
+				_logger.LogWarning("Gemini заблокировал контент. Прекращаем обработку.");
+			}
 			catch (Exception ex)
 			{
-				_logger.LogError($"Ошибка отправки ответа пользаку {senderId} в инсте: {ex.Message}");
-				return;
+				// ТЕХНИЧЕСКАЯ ОШИБКА (Сеть, API упало) - ПОВТОР ПОМОЖЕТ
+				_logger.LogError(ex, "Техническая ошибка. RabbitMQ сделает Retry.");
+				throw; // Вот здесь мы кидаем throw, чтобы сработал твой UseMessageRetry
 			}
 
 			_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
@@ -320,22 +327,18 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	{
 		if (!string.IsNullOrEmpty(msg.Text)) return msg.Text;
 
-		if (msg.Attachments?.Data != null && msg.Attachments.Data.Any())
+		string messageId = msg.Id;
+
+		if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList))
 		{
-			string messageId = msg.Id;
-
-			if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList))
+			lock (mediaList)
 			{
-				lock (mediaList)
-				{
-					// Если хоть одно медиа еще не обработано - возвращаем null (сигнал для Snooze)
-					if (mediaList.Any(m => !m.IsProcessed)) return null;
+				// Если хоть одно медиа еще не обработано - возвращаем null (сигнал для Snooze)
+				if (mediaList.Any(m => !m.IsProcessed)) return null;
 
-					// Если все обработаны - собираем все AiResult через пробел
-					return string.Join(" ", mediaList.Select(m => m.AiResult));
-				}
+				// Если все обработаны - собираем все AiResult через пробел
+				return string.Join(" ", mediaList.Select(m => m.AiResult));
 			}
-			return null; // В кэше пусто, значит MediaWorker еще даже не начал
 		}
 
 		return "[Empty message]";
