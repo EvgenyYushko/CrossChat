@@ -45,7 +45,8 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 			await context.SchedulePublish(TimeSpan.FromSeconds(30 + extensionTime), new ProcessDialogReply
 			{
 				SenderId = senderId,
-				RecipientId = recipientId
+				RecipientId = recipientId,
+				ReplyId = context.Message.MessageId
 			});
 		}
 	}

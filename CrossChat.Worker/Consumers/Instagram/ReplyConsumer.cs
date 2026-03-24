@@ -7,6 +7,7 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.Instagram;
 
@@ -33,18 +34,30 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		QueueLimit = 0
 	});
 
+	IDatabase _redis;
 	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
 	public ReplyConsumer(ILogger<ReplyConsumer> logger, AppDbContext db, IInstagramService instaService,
-		IAiService aiService)
+		IAiService aiService, IConnectionMultiplexer redisMux)
 	{
 		_logger = logger;
 		_db = db;
 		_instaService = instaService;
 		_aiService = aiService;
+		_redis = redisMux.GetDatabase();
 	}
 
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
 	{
+		var messageId = context.Message.ReplyId; // Передай сюда уникальный ID сообщения
+		var lockKey = $"processed:{messageId}";
+
+		// Если мы это сообщение УЖЕ обработали — выходим
+		if (!await _redis.StringSetAsync(lockKey, "done", TimeSpan.FromMinutes(5), When.NotExists))
+		{
+			_logger.LogInformation("Сообщение уже обработано, игнорируем дубль.");
+			return;
+		}
+
 		// Пытаемся получить разрешение на выполнение
 		using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
 

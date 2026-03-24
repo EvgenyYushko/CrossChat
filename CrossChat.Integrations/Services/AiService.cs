@@ -57,12 +57,20 @@ namespace CrossChat.Integrations.Services
 				token = _token;
 			}
 
-			var response = await _geminiServiceClient.RequestWithImageAsync(new()
+			try
 			{
-				Prompt = { new Prompt { Text = prompt } },
-				Base64Idata = base64Image
-			}, AddTokenToHeaders(token));
-			return response.GeneratedText;
+				var response = await _geminiServiceClient.RequestWithImageAsync(new()
+				{
+					Prompt = { new Prompt { Text = prompt } },
+					Base64Idata = base64Image
+				}, AddTokenToHeaders(token));
+				return response.GeneratedText;
+			}
+			catch (RpcException ex) when (ex.Status.StatusCode == StatusCode.Internal && ex.Status.Detail.Contains("blocked"))
+			{
+				Console.WriteLine("Gemini заблокировал контент. Прерываем обработку.");
+				return "[Извините, я не могу проанализировать этот контент из соображений безопасности.]";
+			}
 		}
 
 		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
@@ -72,12 +80,20 @@ namespace CrossChat.Integrations.Services
 				token = _token;
 			}
 
-			var response = await _geminiServiceClient.RequestWithVideoAsync(new()
+			try
 			{
-				Prompt = { new Prompt { Text = prompt } },
-				Base64Idata = base64video
-			}, AddTokenToHeaders(token));
-			return response.GeneratedText;
+				var response = await _geminiServiceClient.RequestWithVideoAsync(new()
+				{
+					Prompt = { new Prompt { Text = prompt } },
+					Base64Idata = base64video
+				}, AddTokenToHeaders(token));
+				return response.GeneratedText;
+			}
+			catch (RpcException ex) when (ex.Status.StatusCode == StatusCode.Internal && ex.Status.Detail.Contains("blocked"))
+			{
+				Console.WriteLine("Gemini заблокировал контент. Прерываем обработку.");
+				return "[Извините, я не могу проанализировать этот контент из соображений безопасности.]";
+			}
 		}
 
 		public async Task<string> GeminiAudioToText(string base64Iaudio, string token)
