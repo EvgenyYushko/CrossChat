@@ -11,5 +11,8 @@ namespace CrossChat.Integrations.Interfaces
 		Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token);
 
 		Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token);
+
+		Task<string> GeminiAudioToText(string base64Iaudio, string token);
+
 	}
 }

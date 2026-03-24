@@ -83,9 +83,30 @@ namespace CrossChat.Controllers
 									});
 								}
 								// Картинка/Видео
-								else if (messaging.Message.Attachments != null)
+								else if (messaging.Message.Attachments?.Count > 0)
 								{
-									_logger.LogInformation($"Логика Обработка медиа штук:{messaging.Message.Attachments.Count}");
+									foreach (var attach in messaging.Message.Attachments)
+									{
+										var type = attach.Type;
+										var url = attach.Payload?.Url;
+
+										// КИДАЕМ В ОЧЕРЕДЬ
+										await _publishEndpoint.Publish(new ProcessMediaCommand
+										{
+											MessageId = messaging.Message.MessageId,
+											Url = url,
+											MediaType = type
+										});
+									}
+
+									await _publishEndpoint.Publish(new InstagramMessageReceived
+									{
+										SenderId = messaging.Sender.Id,
+										RecipientId = messaging.Recipient.Id, // владелец аккаунта
+										MessageId = messaging.Message.MessageId,
+										ReceivedAt = DateTime.UtcNow,
+										HasAttachments = true
+									});
 								}
 							}
 							// Это реакция?
@@ -114,7 +135,7 @@ namespace CrossChat.Controllers
 								// (В идеале нужно проверить, не совпадает ли value.From.Id с entry.Id)
 								_logger.LogInformation($"[Webhook] Новый коммент от {value.From.Username}: {value.Text}");
 
-								if (value.From?.Id == entry.Id )
+								if (value.From?.Id == entry.Id)
 								{
 									_logger.LogInformation($"Ignoring comment from self (bot)");
 									return Ok();

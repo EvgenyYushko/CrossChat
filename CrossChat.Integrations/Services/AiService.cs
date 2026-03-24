@@ -18,7 +18,7 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GeminiRequest(string prompt, string token)
 		{
-			if(token is null)
+			if (token is null)
 			{
 				token = _token;
 			}
@@ -29,7 +29,7 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GetAnswerAsync(string systemPrompt, List<AiRequest> messages, string token)
 		{
-			if(token is null)
+			if (token is null)
 			{
 				token = _token;
 			}
@@ -52,7 +52,7 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token)
 		{
-			if(token is null)
+			if (token is null)
 			{
 				token = _token;
 			}
@@ -67,7 +67,7 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
 		{
-			if(token is null)
+			if (token is null)
 			{
 				token = _token;
 			}
@@ -76,6 +76,22 @@ namespace CrossChat.Integrations.Services
 			{
 				Prompt = { new Prompt { Text = prompt } },
 				Base64Idata = base64video
+			}, AddTokenToHeaders(token));
+			return response.GeneratedText;
+		}
+
+		public async Task<string> GeminiAudioToText(string base64Iaudio, string token)
+		{
+			if (token is null)
+			{
+				token = _token;
+			}
+
+			var prompt = "Распознай что сказано на этом аудио файле и верни только его содержимое, на том же языке, без всяких дополнителных кооментариев.";
+			var response = await _geminiServiceClient.RequestWithAudioAsync(new()
+			{
+				Prompt = { new Prompt { Text = prompt } },
+				Base64Idata = base64Iaudio
 			}, AddTokenToHeaders(token));
 			return response.GeneratedText;
 		}

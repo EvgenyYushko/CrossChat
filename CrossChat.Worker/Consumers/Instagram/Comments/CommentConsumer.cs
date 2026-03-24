@@ -6,7 +6,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CrossChat.Worker.Consumers;
+namespace CrossChat.Worker.Consumers.Instagram.Comments;
 
 public class CommentConsumer : IConsumer<InstagramCommentReceived>
 {

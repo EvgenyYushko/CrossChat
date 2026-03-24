@@ -1,6 +1,6 @@
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
-using CrossChat.Worker.Consumers;
+using CrossChat.Worker.Consumers.Instagram;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
 using MassTransit;

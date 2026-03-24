@@ -48,10 +48,35 @@ public class MessageItem
 	[JsonPropertyName("message")]
 	public string Text { get; set; }
 
-	// Пока упростим attachments и to, чтобы не раздувать код, 
-	// если они нужны для логики - раскомментируй
-	// [JsonPropertyName("attachments")]
-	// public AttachmentDataWrapper Attachments { get; set; }
+	[JsonPropertyName("attachments")]
+	public AttachmentDataWrapper Attachments { get; set; }
+
+	[JsonPropertyName("is_unsupported")]
+	public bool IsUnsupported { get; set; }
+}
+
+public class AttachmentDataWrapper
+{
+	[JsonPropertyName("data")]
+	public List<MessageAttachment> Data { get; set; }
+}
+
+public class MessageAttachment
+{
+	[JsonPropertyName("image_data")]
+	public InstagramMediaData ImageData { get; set; }
+
+	[JsonPropertyName("video_data")]
+	public InstagramMediaData VideoData { get; set; }
+}
+
+public class InstagramMediaData
+{
+	[JsonPropertyName("url")]
+	public string Url { get; set; }
+
+	[JsonPropertyName("preview_url")]
+	public string PreviewUrl { get; set; } // Полезно для превью видео
 }
 
 public class InstagramUserShort

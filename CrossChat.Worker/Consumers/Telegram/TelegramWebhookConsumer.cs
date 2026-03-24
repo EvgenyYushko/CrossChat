@@ -2,7 +2,7 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using StackExchange.Redis;
 
-namespace CrossChat.Worker.Consumers;
+namespace CrossChat.Worker.Consumers.Telegram;
 
 public class TelegramWebhookConsumer : IConsumer<TelegramMessageReceived>
 {

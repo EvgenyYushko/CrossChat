@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -12,14 +13,16 @@ public class InstagramService : IInstagramService
 {
 	private readonly HttpClient _httpClient;
 	private readonly ILogger<InstagramService> _logger;
+	private readonly IAiService _aiService;
 
 	// Используем актуальную версию API
 	private const string ApiVersion = "v21.0";
 
-	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger)
+	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger, IAiService aiService)
 	{
 		_httpClient = httpClient;
 		_logger = logger;
+		_aiService = aiService;
 	}
 
 	public async Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken)
@@ -236,6 +239,218 @@ public class InstagramService : IInstagramService
 			var errorContent = await response.Content.ReadAsStringAsync();
 			_logger.LogError($"[Instagram] ❌ Ошибка ответа на коммент: {errorContent}");
 			throw new Exception($"Instagram API Error: {errorContent}");
+		}
+	}
+
+	public static ConcurrentDictionary<string, string> ContextCache = new();
+
+	public async Task<string> GetUserContextForAiAsync(string userId, string accessToken)
+	{
+		// 1. Проверка КЭША
+		if (ContextCache.TryGetValue(userId, out string cachedContext))
+		{
+			_logger.LogInformation($"Взяли текст для userId: {userId} из кеша: {cachedContext}");
+			return cachedContext;
+		}
+
+		try
+		{
+			// 2. Запрос к API Instagram
+			var userProfile = await GetInstagramUserProfileAsync(userId, accessToken);
+			if (userProfile == null) return "";
+
+			// 3. Анализ внешности (Vision)
+			string appearanceDescription = "The profile photo is missing.";
+			if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl))
+			{
+				try
+				{
+					// Скачиваем фото в байты/base64 (используем ваш существующий метод)
+					var base64Image = await DownloadImageAsBase64(userProfile.ProfilePicUrl);
+					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", null);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogInformation($"[Profile Vision Error]: {ex.Message}");
+					appearanceDescription = "Failed to upload profile photo.";
+				}
+			}
+
+			// 4. Формирование текста контекста
+			var sb = new StringBuilder();
+			sb.AppendLine("INFORMATION ABOUT THE INTERLOCUTOR:");
+			sb.AppendLine($"Name: {userProfile.Name ?? "Not specified"}");
+			sb.AppendLine($"Nickname: @{userProfile.Username}");
+			sb.AppendLine($"Subscribers: {userProfile.FollowerCount}");
+			sb.AppendLine($"Subscribed to you: {(userProfile.IsFollowingMe ? "Yes" : "No")}");
+			sb.AppendLine($"Are you subscribed to it: {(userProfile.IsFollowingYou ? "Yes" : "No")}");
+			sb.AppendLine($"Verification check mark: {(userProfile.IsVerified ? "Yes" : "No")}");
+			sb.AppendLine($"Appearance (based on profile photo): {appearanceDescription}");
+
+			string finalContext = sb.ToString();
+
+			// 5. Сохранение в кэш
+			ContextCache.TryAdd(userId, finalContext);
+
+			_logger.LogInformation($"[User Profile] Сформирован контекст для {userProfile.Username}");
+			return finalContext;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError($"Ошибка получения профиля: {ex.Message}");
+			return "";
+		}
+	}
+
+	private async Task<string> AnalyzeImageAsync(string base64Image, string type, string aiToken)
+	{
+		_logger.LogInformation($"Starting {type} analysis");
+
+		var prompt = $"Analyze what is depicted on this {type} and give a description 2-3 sentences. " +
+					"Response format: only the response text, no quotes or formatting.";
+
+		_logger.LogInformation($"Calling Gemini with base64 {type} (length: {base64Image?.Length ?? 0})");
+
+		string responseText = "";
+		try
+		{
+			if (type == "video")
+			{
+				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, aiToken);
+			}
+			else
+			{
+				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, aiToken);
+			}
+			_logger.LogInformation($"Gemini response received: {responseText?.Substring(0, Math.Min(50, responseText.Length))}...");
+		}
+		catch (Exception geminiEx)
+		{
+			_logger.LogError(geminiEx, $"Gemini API error");
+		}
+
+		return responseText ?? "";
+	}
+
+	private async Task<string> ProcessAudioMessage(string audioBase64)
+	{
+		try
+		{
+			_logger.LogInformation($"Audio message received");
+
+			var audioText = await _aiService.GeminiAudioToText(audioBase64, null);
+			Console.WriteLine("Распознонное голосовое: " + audioText);
+			return audioText;
+			//await SendMessageWithHistory(audioText, senderId);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, $"Error processing audio");
+		}
+
+		return "";
+	}
+
+	public async Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId)
+	{
+		string resultText = "";
+		try
+		{
+			switch (media.MediaType)
+			{
+				case "audio":
+					{
+						var base64 = await DownloadAudioFileAsBase64(media.Url);
+						resultText = $"[voice message]: {await ProcessAudioMessage(base64)}";
+					}
+					break;
+				case "image":
+					{
+						var base64 = await DownloadImageAsBase64(media.Url);
+						resultText = $"[Photo]: {await AnalyzeImageAsync(base64, "photo", null)}";
+					}
+					break;
+				case "video":
+					{
+						var base64 = await DownloadImageAsBase64(media.Url);
+						resultText = $"[Video]: {await AnalyzeImageAsync(base64, "video", null)}";
+					}
+					break;
+				default:
+					resultText = $"[Медиа: {media.MediaType}]";
+					break;
+			}
+
+			// Записываем результат в сам объект
+			media.AiResult = resultText;
+			media.IsProcessed = true;
+
+			// Если это объект из КЭША, он там уже лежит по ссылке, изменения отразятся сразу.
+			// Если это новый объект из API, вызывающий код сам добавит его в словарь.
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Ошибка обработки медиа ({media.MediaType}): {ex.Message}");
+			resultText = $"[Failed to process {media.MediaType}]";
+		}
+
+		return resultText;
+	}
+
+	private async Task<string> DownloadImageAsBase64(string imageUrl)
+	{
+		try
+		{
+			using var httpClient = new HttpClient();
+
+			// Добавляем User-Agent чтобы избежать блокировки
+			httpClient.DefaultRequestHeaders.Add("User-Agent",
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+			var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
+			var base64String = Convert.ToBase64String(imageBytes);
+
+			// ВОТ ИСПРАВЛЕНИЕ: возвращаем ЧИСТЫЙ base64 без data URL префикса
+			return base64String; // ← Убрал создание data URL
+
+			// Если хочешь сохранить информацию о типе, можно вернуть так:
+			// return $"data:image/jpeg;base64,{base64String}"; // Но тогда нужно парсить в Gemini
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, $"Error downloading image from {imageUrl}");
+			return null;
+		}
+	}
+
+	private async Task<string> DownloadAudioFileAsBase64(string audioUrl)
+	{
+		try
+		{
+			using var httpClient = new HttpClient();
+			// Добавляем заголовки для успешного скачивания
+			httpClient.DefaultRequestHeaders.Add("User-Agent",
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+			var response = await httpClient.GetAsync(audioUrl);
+			if (response.IsSuccessStatusCode)
+			{
+				var audioBytes = await response.Content.ReadAsByteArrayAsync();
+
+				// Конвертируем в base64 строку
+				var base64String = Convert.ToBase64String(audioBytes);
+
+				_logger.LogInformation($"Audio converted to base64, length: {base64String.Length} chars");
+				return base64String;
+			}
+
+			_logger.LogInformation($"Failed to download audio: {response.StatusCode}");
+			return null;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error downloading audio file");
+			return null;
 		}
 	}
 }

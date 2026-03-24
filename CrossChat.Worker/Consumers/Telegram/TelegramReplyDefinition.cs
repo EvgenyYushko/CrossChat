@@ -1,6 +1,6 @@
 using MassTransit;
 
-namespace CrossChat.Worker.Consumers
+namespace CrossChat.Worker.Consumers.Telegram
 {
 	public class TelegramReplyDefinition : ConsumerDefinition<TelegramReplyConsumer>
 	{

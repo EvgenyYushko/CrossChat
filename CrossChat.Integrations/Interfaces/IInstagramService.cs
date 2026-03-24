@@ -49,5 +49,9 @@ namespace CrossChat.Integrations.Interfaces
 		Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken);
 
 		Task ReplyToCommentAsync(string commentId, string text, string accessToken);
+
+		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
+
+		Task<string> GetUserContextForAiAsync(string userId, string accessToken);
 	}
 }

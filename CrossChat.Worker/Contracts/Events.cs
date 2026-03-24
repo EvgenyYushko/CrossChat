@@ -7,5 +7,7 @@ public record InstagramMessageReceived
 	public string RecipientId { get; set; } = string.Empty;
 	public string MessageId { get; set; } = string.Empty;
 	public DateTime ReceivedAt { get; set; }
+
+	public bool HasAttachments { get; set; }
 }
 

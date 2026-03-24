@@ -9,10 +9,15 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CrossChat.Worker.Consumers;
+namespace CrossChat.Worker.Consumers.Instagram;
 
 public class ReplyConsumer : IConsumer<ProcessDialogReply>
 {
+	public static class MediaMessageStorage
+	{
+		public static ConcurrentDictionary<string, List<MediaDataEntry>> Storage = new();
+	}
+
 	private readonly ILogger<ReplyConsumer> _logger;
 	private readonly AppDbContext _db;
 	private readonly IInstagramService _instaService;
@@ -92,12 +97,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		try
 		{
 			// 3. Получаем историю переписки (используя токен юзера)
-			// Реализуешь получение истории в InstagramService позже
 			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken);
-
-			// 4. Отправляем в ИИ (через твой gRPC сервис)
-			// Берем системный промпт из настроек
-			var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
 
 			if (messages == null || messages.Count == 0) return;
 
@@ -119,8 +119,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				// 1. Получаем текстовое содержание (с учетом кэша, фото, видео)
 				string content = await ResolveMessageContentAsync(msg);
 
+				if (content is null)
+				{
+					_logger.LogInformation("Медиа еще обрабатываются, Snooze...");
+					// Ставим себя в очередь снова через 10 секунд
+					await context.SchedulePublish(TimeSpan.FromSeconds(10), context.Message);
+					return;
+				}
+
 				// 2. Определяем роль для AI (model - это бот, user - это пользователь)
-				string role = (msg.From.Id == businessAccountId) ? "model" : "user";
+				string role = msg.From.Id == businessAccountId ? "model" : "user";
 
 				// 3. Добавляем в историю в формате объектов
 				chatHistory.Add(new AiRequest
@@ -158,9 +166,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			try
 			{
+				// 4. Отправляем в ИИ (через твой gRPC сервис)
+				// Берем системный промпт из настроек
+				var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
 
-				string userContextInfo = await GetUserContextForAiAsync(senderId, accessInstaToken);
-				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n" 
+				string userContextInfo = await _instaService.GetUserContextForAiAsync(senderId, accessInstaToken);
+				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
 					+ userContextInfo;
 
 				//_logger.LogInformation($"Системный промпт {systemPrompt}");
@@ -191,96 +202,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			throw;
 		}
 	}
-
-	public static ConcurrentDictionary<string, string> ContextCache = new();
-
-	public async Task<string> GetUserContextForAiAsync(string userId, string accessToken)
-	{
-		// 1. Проверка КЭША
-		if (ContextCache.TryGetValue(userId, out string cachedContext))
-		{
-			_logger.LogInformation($"Взяли текст для userId: {userId} из кеша: {cachedContext}");
-			return cachedContext;
-		}
-
-		try
-		{
-			// 2. Запрос к API Instagram
-			var userProfile = await _instaService.GetInstagramUserProfileAsync(userId, accessToken);
-			if (userProfile == null) return "";
-
-			// 3. Анализ внешности (Vision)
-			string appearanceDescription = "The profile photo is missing.";
-			if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl))
-			{
-				try
-				{
-					// Скачиваем фото в байты/base64 (используем ваш существующий метод)
-					var base64Image = await DownloadImageAsBase64(userProfile.ProfilePicUrl);
-					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", null);
-				}
-				catch (Exception ex)
-				{
-					_logger.LogInformation($"[Profile Vision Error]: {ex.Message}");
-					appearanceDescription = "Failed to upload profile photo.";
-				}
-			}
-
-			// 4. Формирование текста контекста
-			var sb = new StringBuilder();
-			sb.AppendLine("INFORMATION ABOUT THE INTERLOCUTOR:");
-			sb.AppendLine($"Name: {userProfile.Name ?? "Not specified"}");
-			sb.AppendLine($"Nickname: @{userProfile.Username}");
-			sb.AppendLine($"Subscribers: {userProfile.FollowerCount}");
-			sb.AppendLine($"Subscribed to you: {(userProfile.IsFollowingMe ? "Yes" : "No")}");
-			sb.AppendLine($"Are you subscribed to it: {(userProfile.IsFollowingYou ? "Yes" : "No")}");
-			sb.AppendLine($"Verification check mark: {(userProfile.IsVerified ? "Yes" : "No")}");
-			sb.AppendLine($"Appearance (based on profile photo): {appearanceDescription}");
-
-			string finalContext = sb.ToString();
-
-			// 5. Сохранение в кэш
-			ContextCache.TryAdd(userId, finalContext);
-
-			_logger.LogInformation($"[User Profile] Сформирован контекст для {userProfile.Username}");
-			return finalContext;
-		}
-		catch (Exception ex)
-		{
-			_logger.LogError($"Ошибка получения профиля: {ex.Message}");
-			return "";
-		}
-	}
-
-	private async Task<string> AnalyzeImageAsync(string base64Image, string type, string aiToken)
-	{
-		_logger.LogInformation($"Starting {type} analysis");
-
-		var prompt = $"Analyze what is depicted on this {type} and give a description 2-3 sentences. " +
-					"Response format: only the response text, no quotes or formatting.";
-
-		_logger.LogInformation($"Calling Gemini with base64 {type} (length: {base64Image?.Length ?? 0})");
-
-		string responseText = "";
-		try
-		{
-			if (type == "video")
-			{
-				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, aiToken);
-			}
-			else
-			{
-				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, aiToken);
-			}
-			_logger.LogInformation($"Gemini response received: {responseText?.Substring(0, Math.Min(50, responseText.Length))}...");
-		}
-		catch (Exception geminiEx)
-		{
-			_logger.LogError(geminiEx, $"Gemini API error");
-		}
-
-		return responseText ?? "";
-	}
+	
 
 	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
 	{
@@ -363,7 +285,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			foreach (var sentence in sentences)
 			{
 				// Если текущий кусок + новое предложение влезают в лимит — склеиваем
-				if ((currentChunk.Length + sentence.Length) <= maxChunkLength)
+				if (currentChunk.Length + sentence.Length <= maxChunkLength)
 				{
 					currentChunk += (currentChunk.Length > 0 ? " " : "") + sentence;
 				}
@@ -384,37 +306,22 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 	private async Task<string> ResolveMessageContentAsync(MessageItem msg)
 	{
-		if (!string.IsNullOrEmpty(msg.Text))
+		// 1. Если это текст, сразу возвращаем
+		if (!string.IsNullOrEmpty(msg.Text)) return msg.Text;
+
+		// 2. Если есть медиа, лезем в кэш
+		string messageId = msg.Id;
+		if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList) && mediaList.Any())
 		{
-			return msg.Text;
+			var media = mediaList.First();
+			if (media.IsProcessed) return media.AiResult;
+
+			// Если мы дошли сюда, значит MediaWorker еще не закончил.
+			// Возвращаем временную заглушку.
+			return null;
+			//return $"[Медиа: {media.MediaType} - в обработке...]";
 		}
 
 		return "[Empty message]";
-	}
-
-	private async Task<string> DownloadImageAsBase64(string imageUrl)
-	{
-		try
-		{
-			using var httpClient = new HttpClient();
-
-			// Добавляем User-Agent чтобы избежать блокировки
-			httpClient.DefaultRequestHeaders.Add("User-Agent",
-				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-			var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
-			var base64String = Convert.ToBase64String(imageBytes);
-
-			// ВОТ ИСПРАВЛЕНИЕ: возвращаем ЧИСТЫЙ base64 без data URL префикса
-			return base64String; // ← Убрал создание data URL
-
-			// Если хочешь сохранить информацию о типе, можно вернуть так:
-			// return $"data:image/jpeg;base64,{base64String}"; // Но тогда нужно парсить в Gemini
-		}
-		catch (Exception ex)
-		{
-			_logger.LogError(ex, $"Error downloading image from {imageUrl}");
-			return null;
-		}
 	}
 }

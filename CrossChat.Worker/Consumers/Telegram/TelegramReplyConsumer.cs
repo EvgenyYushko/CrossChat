@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
-namespace CrossChat.Worker.Consumers;
+namespace CrossChat.Worker.Consumers.Telegram;
 
 public class TelegramReplyConsumer : IConsumer<TelegramProcessReply>
 {
