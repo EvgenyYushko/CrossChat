@@ -105,7 +105,7 @@ namespace CrossChat.Controllers
 										RecipientId = messaging.Recipient.Id, // владелец аккаунта
 										MessageId = messaging.Message.MessageId,
 										ReceivedAt = DateTime.UtcNow,
-										HasAttachments = true
+										AttachmentCount = messaging.Message.Attachments?.Count ?? 0
 									});
 								}
 							}

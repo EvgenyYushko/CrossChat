@@ -3,8 +3,6 @@ using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
-using Telegram.Bot.Types;
 using static CrossChat.Worker.Consumers.Instagram.ReplyConsumer;
 
 namespace CrossChat.Worker.Consumers.Instagram.MediaCashe;
@@ -23,18 +21,22 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 
 	public async Task Consume(ConsumeContext<ProcessMediaCommand> context)
 	{
-		// 2. Распознавание
-		var mediaEntry = new MediaDataEntry { Url = context.Message.Url, MediaType = context.Message.MediaType };
+		await Task.Delay(2000); 
 
-		// 3. Сохраняем в твой кэш
-		MediaMessageStorage.Storage.TryAdd(context.Message.MessageId, new List<MediaDataEntry> { mediaEntry });
+		var messageId = context.Message.MessageId;
+		var newMedia = new MediaDataEntry { Url = context.Message.Url, MediaType = context.Message.MediaType };
 
-		// 1. ПРИНУДИТЕЛЬНАЯ ЗАДЕРЖКА (Throttling)
-		// Чтобы не долбить Gemini чаще, чем разрешено (даже если 100 фото пришло)
-		await Task.Delay(5000); // Например, 5 секунд между обработками одного файла
+		// 1. ПОТОКОБЕЗОПАСНОЕ добавление в кэш
+		// GetOrAdd позволяет нам либо получить существующий список, либо создать новый
+		var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
 
-		// Используем твой готовый метод
-		string result = await _instaService.ProcessAndCacheMediaAsync(mediaEntry, context.Message.MessageId);
+		lock (mediaList) // Блокируем список, чтобы не было конфликтов при одновременном добавлении
+		{
+			mediaList.Add(newMedia);
+		}
+
+		// 2. Обработка (только этого конкретного медиа)
+		await _instaService.ProcessAndCacheMediaAsync(newMedia, messageId);
 
 		_logger.LogInformation($"[MediaWorker] Обработано: {context.Message.MessageId}");
 	}

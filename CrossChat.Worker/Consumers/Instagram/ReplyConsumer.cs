@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
@@ -202,7 +201,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			throw;
 		}
 	}
-	
+
 
 	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
 	{
@@ -306,20 +305,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 	private async Task<string> ResolveMessageContentAsync(MessageItem msg)
 	{
-		// 1. Если это текст, сразу возвращаем
 		if (!string.IsNullOrEmpty(msg.Text)) return msg.Text;
 
-		// 2. Если есть медиа, лезем в кэш
-		string messageId = msg.Id;
-		if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList) && mediaList.Any())
+		if (msg.Attachments?.Data != null && msg.Attachments.Data.Any())
 		{
-			var media = mediaList.First();
-			if (media.IsProcessed) return media.AiResult;
+			string messageId = msg.Id;
 
-			// Если мы дошли сюда, значит MediaWorker еще не закончил.
-			// Возвращаем временную заглушку.
-			return null;
-			//return $"[Медиа: {media.MediaType} - в обработке...]";
+			if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList))
+			{
+				lock (mediaList)
+				{
+					// Если хоть одно медиа еще не обработано - возвращаем null (сигнал для Snooze)
+					if (mediaList.Any(m => !m.IsProcessed)) return null;
+
+					// Если все обработаны - собираем все AiResult через пробел
+					return string.Join(" ", mediaList.Select(m => m.AiResult));
+				}
+			}
+			return null; // В кэше пусто, значит MediaWorker еще даже не начал
 		}
 
 		return "[Empty message]";

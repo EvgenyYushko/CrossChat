@@ -8,6 +8,6 @@ public record InstagramMessageReceived
 	public string MessageId { get; set; } = string.Empty;
 	public DateTime ReceivedAt { get; set; }
 
-	public bool HasAttachments { get; set; }
+	public int AttachmentCount  { get; set; }
 }
 
