@@ -175,6 +175,11 @@ public class InstagramService : IInstagramService
 
 	public async Task SendReactionAsync(string recipientId, string messageId, string accessToken)
 	{
+		var reactions = new[]{"💯","🔥","😘","😂","👍","😋","🥰","💋","💕","💝"};
+
+		var random = new Random();
+		var randomReaction = reactions[random.Next(reactions.Length)];
+
 		var url = $"{ApiVersion}/me/messages?access_token={accessToken}";
 
 		var payload = new
@@ -184,7 +189,7 @@ public class InstagramService : IInstagramService
 			payload = new
 			{
 				message_id = messageId,
-				reaction = "love"
+				reaction = randomReaction
 			}
 		};
 
