@@ -249,7 +249,7 @@ public class InstagramService : IInstagramService
 		// 1. Проверка КЭША
 		if (ContextCache.TryGetValue(userId, out string cachedContext))
 		{
-			_logger.LogInformation($"Взяли текст для userId: {userId} из кеша: {cachedContext}");
+			_logger.LogInformation($"Взяли текст для userId: {userId} из кеша");
 			return cachedContext;
 		}
 
@@ -371,6 +371,7 @@ public class InstagramService : IInstagramService
 					}
 					break;
 				case "video":
+				case "ig_reel":
 					{
 						var base64 = await DownloadImageAsBase64(media.Url);
 						resultText = $"[Video]: {await AnalyzeImageAsync(base64, "video", null)}";

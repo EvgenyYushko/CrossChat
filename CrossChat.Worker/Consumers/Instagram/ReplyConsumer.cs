@@ -328,9 +328,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	{
 		if (!string.IsNullOrEmpty(msg.Text)) return msg.Text;
 
-		string messageId = msg.Id;
-
-		if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList))
+		if (MediaMessageStorage.Storage.TryGetValue(msg.Id, out var mediaList))
 		{
 			lock (mediaList)
 			{
@@ -340,6 +338,11 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				// Если все обработаны - собираем все AiResult через пробел
 				return string.Join(" ", mediaList.Select(m => m.AiResult));
 			}
+		}
+
+		if (msg.IsUnsupported)
+		{
+			return "[The user sent a sticker]";
 		}
 
 		return "[Empty message]";

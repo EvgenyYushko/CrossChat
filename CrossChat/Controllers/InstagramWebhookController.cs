@@ -72,7 +72,7 @@ namespace CrossChat.Controllers
 									_logger.LogInformation($"Логика ответа на сторис {messaging.Message.ReplyTo}");
 								}
 								// Обычный текст
-								else if (!string.IsNullOrEmpty(messaging.Message.Text))
+								else if (!string.IsNullOrEmpty(messaging.Message.Text) || messaging.Message.IsUnsupported)
 								{
 									await _publishEndpoint.Publish(new InstagramMessageReceived
 									{
@@ -118,7 +118,7 @@ namespace CrossChat.Controllers
 							else if (messaging.Message != null && messaging.Message.IsDeleted)
 							{
 								_logger.LogInformation("Пользователь удалил сообщение");
-							}
+							}							
 						}
 					}
 
