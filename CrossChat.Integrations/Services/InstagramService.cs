@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using Grpc.Core;
 using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Integrations.Services;
@@ -175,7 +176,7 @@ public class InstagramService : IInstagramService
 
 	public async Task SendReactionAsync(string recipientId, string messageId, string accessToken)
 	{
-		var reactions = new[]{"💯","🔥","😘","😂","👍","😋","🥰","💋","💕","💝"};
+		var reactions = new[] { "💯", "🔥", "😘", "😂", "👍", "😋", "🥰", "💋", "💕", "💝" };
 
 		var random = new Random();
 		var randomReaction = reactions[random.Next(reactions.Length)];
@@ -202,7 +203,7 @@ public class InstagramService : IInstagramService
 
 			if (response.IsSuccessStatusCode)
 			{
-				Console.WriteLine($"[Reaction] Отправлена реакция \"love\" на сообщение {messageId}");
+				Console.WriteLine($"[Reaction] Отправлена реакция {randomReaction} на сообщение {messageId}");
 			}
 			else
 			{
@@ -328,6 +329,19 @@ public class InstagramService : IInstagramService
 				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, aiToken);
 			}
 			_logger.LogInformation($"Gemini response received: {responseText?.Substring(0, Math.Min(50, responseText.Length))}...");
+		}
+		catch (RpcException ex)
+		{
+			// Проверяем, заблокировал ли Google контент
+			if (ex.Status.Detail.Contains("blocked"))
+			{
+				_logger.LogWarning($"[Safety Filter] Gemini заблокировал контент: {ex.Status.Detail}");
+				return "NSFW content";
+			}
+
+			// Если это другая ошибка gRPC
+			_logger.LogError(ex, "gRPC ошибка при анализе медиа");
+			return "";
 		}
 		catch (Exception geminiEx)
 		{
