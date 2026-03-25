@@ -131,7 +131,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				// 1. Получаем текстовое содержание (с учетом кэша, фото, видео)
 				string content = await ResolveMessageContentAsync(msg);
-
+				_logger.LogInformation($"[CHAT MSG] {content}");
 				if (content is null)
 				{
 					_logger.LogInformation("Медиа еще обрабатываются, Snooze...");

@@ -23,7 +23,7 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 		var lockKey = $"debounce:{senderId}:{recipientId}";
 
 		// ВАЖНО: Проверяем, пришло ли медиа
-		int extensionTime = context.Message.AttachmentCount * 15;
+		int extensionTime = (context.Message.AttachmentCount * 15) + 5;
 
 		// Пытаемся взять текущий TTL ключа
 		var ttl = await _redis.KeyTimeToLiveAsync(lockKey);
