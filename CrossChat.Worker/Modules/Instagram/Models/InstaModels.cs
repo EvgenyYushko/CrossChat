@@ -90,6 +90,15 @@ public class InstagramMessage
 // 5. Ответ на сторис (Reply To)
 public class InstagramReplyTo
 {
+	[JsonPropertyName("mid")]
+	public string Id { get; set; }
+
+	[JsonPropertyName("is_self_reply")]
+	public bool IsSelfReply { get; set; }
+
+	[JsonPropertyName("text")]
+	public string Text { get; set; }
+
 	[JsonPropertyName("story")]
 	public InstagramStory? Story { get; set; }
 }

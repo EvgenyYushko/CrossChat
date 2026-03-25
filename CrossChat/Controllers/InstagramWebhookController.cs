@@ -67,23 +67,18 @@ namespace CrossChat.Controllers
 							if (messaging.Message != null && !messaging.Message.IsEcho)
 							{
 								// Проверка на ответ на сторис
-								if (messaging.Message.ReplyTo != null)
+								if (messaging.Message.ReplyTo != null && !messaging.Message.ReplyTo.IsSelfReply)
 								{
-									_logger.LogInformation($"Логика ответа на сторис {messaging.Message.ReplyTo}");
+									_logger.LogInformation($"Логика ответа на реплей");
+									await PublishMessage(messaging);
 								}
 								// Обычный текст
 								else if (!string.IsNullOrEmpty(messaging.Message.Text) || messaging.Message.IsUnsupported)
 								{
-									await _publishEndpoint.Publish(new InstagramMessageReceived
-									{
-										SenderId = messaging.Sender.Id,
-										RecipientId = messaging.Recipient.Id, // владелец аккаунта
-										MessageId = messaging.Message.MessageId,
-										ReceivedAt = DateTime.UtcNow
-									});
+									await PublishMessage(messaging);
 								}
 								// Картинка/Видео
-								else if (messaging.Message.Attachments?.Count > 0)
+								else if (messaging.Message.Attachments?.Count > 0 && !messaging.Message.Attachments.Any(t => t.Type == "template"))
 								{
 									foreach (var attach in messaging.Message.Attachments)
 									{
@@ -99,14 +94,7 @@ namespace CrossChat.Controllers
 										});
 									}
 
-									await _publishEndpoint.Publish(new InstagramMessageReceived
-									{
-										SenderId = messaging.Sender.Id,
-										RecipientId = messaging.Recipient.Id, // владелец аккаунта
-										MessageId = messaging.Message.MessageId,
-										ReceivedAt = DateTime.UtcNow,
-										AttachmentCount = messaging.Message.Attachments?.Count ?? 0
-									});
+									await PublishMessage(messaging);
 								}
 							}
 							// Это реакция?
@@ -162,6 +150,18 @@ namespace CrossChat.Controllers
 				_logger.LogError(ex, "Error processing Instagram webhook");
 				return StatusCode(500);
 			}
+		}
+
+		private async Task PublishMessage(InstagramMessaging messaging)
+		{
+			await _publishEndpoint.Publish(new InstagramMessageReceived
+			{
+				SenderId = messaging.Sender.Id,
+				RecipientId = messaging.Recipient.Id, // владелец аккаунта
+				MessageId = messaging.Message.MessageId,
+				ReceivedAt = DateTime.UtcNow,
+				AttachmentCount = messaging.Message.Attachments?.Count ?? 0
+			});
 		}
 	}
 }
