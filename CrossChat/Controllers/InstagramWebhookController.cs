@@ -49,7 +49,7 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 
-				//_logger.LogInformation(body);
+				_logger.LogInformation(body);
 
 				// Десериализуем
 				var payload = JsonSerializer.Deserialize<InstagramWebhookPayload>(body);

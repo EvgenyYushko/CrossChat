@@ -86,7 +86,7 @@ public class InstagramService : IInstagramService
 	// =================================================================
 	// 2. ПОЛУЧЕНИЕ ИСТОРИИ (Сборный метод)
 	// =================================================================
-	public async Task<List<MessageItem>> GetHistoryAsync(string userId, string accessToken, int limit = 10)
+	public async Task<List<MessageItem>> GetHistoryAsync(string userId, string accessToken, int limit = 20)
 	{
 		// Шаг А: Узнаем ID диалога (Conversation ID) по ID пользователя
 		var conversationId = await GetConversationIdByUserAsync(userId, accessToken);

@@ -50,12 +50,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
 	{
 		var messageId = context.Message.ReplyId; // Передай сюда уникальный ID сообщения
-		var lockKey = $"processed:{messageId}";
+		var processingKey = $"processed:{messageId}";
 
-		// Если мы это сообщение УЖЕ обработали — выходим
-		if (!await _redis.StringSetAsync(lockKey, "done", TimeSpan.FromMinutes(5), When.NotExists))
+		// 1. Проверяем, не было ли сообщение уже обработано УСПЕШНО ранее
+		if (await _redis.KeyExistsAsync(processingKey))
 		{
-			_logger.LogInformation("Сообщение уже обработано, игнорируем дубль.");
+			_logger.LogInformation("Сообщение уже обработано успешно, игнорируем дубль.");
 			return;
 		}
 
@@ -110,7 +110,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		try
 		{
 			// 3. Получаем историю переписки (используя токен юзера)
-			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken);
+			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 20);
 
 			if (messages == null || messages.Count == 0) return;
 
@@ -180,7 +180,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			try
 			{
 				// 4. Отправляем в ИИ (через твой gRPC сервис)
-				// Берем системный промпт из настроек
 				var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
 
 				string userContextInfo = await _instaService.GetUserContextForAiAsync(senderId, accessInstaToken);
@@ -198,6 +197,11 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				// 5. Отправляем ответ в Инстаграм
 				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
+
+				// Если мы это сообщение УЖЕ обработали — выходим
+				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+
+				_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 			}
 			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
 			{
@@ -210,8 +214,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				_logger.LogError(ex, "Техническая ошибка. RabbitMQ сделает Retry.");
 				throw; // Вот здесь мы кидаем throw, чтобы сработал твой UseMessageRetry
 			}
-
-			_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 		}
 		catch (Exception ex)
 		{
@@ -221,7 +223,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			throw;
 		}
 	}
-
 
 	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
 	{
