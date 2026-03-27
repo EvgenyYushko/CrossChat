@@ -1,4 +1,6 @@
 using System.Text.Json;
+using CrossChat.Integrations.Models;
+using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
@@ -80,15 +82,30 @@ namespace CrossChat.Controllers
 								// Картинка/Видео
 								else if (messaging.Message.Attachments?.Count > 0 && !messaging.Message.Attachments.Any(t => t.Type == "template"))
 								{
+									var messageId = messaging.Message.MessageId;
+									var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
+
 									foreach (var attach in messaging.Message.Attachments)
 									{
 										var type = attach.Type;
 										var url = attach.Payload?.Url;
 
+										var emptyMedia = new MediaDataEntry
+										{
+											Url = url,
+											MediaType = type,
+											IsProcessed = false // ОЧЕНЬ ВАЖНО
+										};
+
+										lock (mediaList)
+										{
+											mediaList.Add(emptyMedia);
+										}
+
 										// КИДАЕМ В ОЧЕРЕДЬ
 										await _publishEndpoint.Publish(new ProcessMediaCommand
 										{
-											MessageId = messaging.Message.MessageId,
+											MessageId = messageId,
 											Url = url,
 											MediaType = type
 										});
@@ -106,7 +123,7 @@ namespace CrossChat.Controllers
 							else if (messaging.Message != null && messaging.Message.IsDeleted)
 							{
 								_logger.LogInformation("Пользователь удалил сообщение");
-							}							
+							}
 						}
 					}
 

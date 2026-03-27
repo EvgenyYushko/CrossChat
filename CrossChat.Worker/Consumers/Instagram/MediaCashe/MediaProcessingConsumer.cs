@@ -3,7 +3,6 @@ using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Logging;
-using static CrossChat.Worker.Consumers.Instagram.ReplyConsumer;
 
 namespace CrossChat.Worker.Consumers.Instagram.MediaCashe;
 
@@ -21,23 +20,33 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 
 	public async Task Consume(ConsumeContext<ProcessMediaCommand> context)
 	{
-		await Task.Delay(2000); 
-
 		var messageId = context.Message.MessageId;
-		var newMedia = new MediaDataEntry { Url = context.Message.Url, MediaType = context.Message.MediaType };
+		var mediaUrl = context.Message.Url;
 
-		// 1. ПОТОКОБЕЗОПАСНОЕ добавление в кэш
-		// GetOrAdd позволяет нам либо получить существующий список, либо создать новый
-		var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
-
-		lock (mediaList) // Блокируем список, чтобы не было конфликтов при одновременном добавлении
+		// 1. Пытаемся найти запись, которую мы создали при получении вебхука
+		if (MediaMessageStorage.Storage.TryGetValue(messageId, out var mediaList))
 		{
-			mediaList.Add(newMedia);
+			MediaDataEntry targetMedia;
+			lock (mediaList)
+			{
+				// Находим ту самую "пустышку" по URL (или можно по ID, если есть)
+				targetMedia = mediaList.FirstOrDefault(m => m.Url == mediaUrl && !m.IsProcessed);
+			}
+
+			if (targetMedia != null)
+			{
+				// 2. Обработка (скачиваем и отправляем в Gemini)
+				await _instaService.ProcessAndCacheMediaAsync(targetMedia, messageId);
+
+				// Внутри ProcessAndCacheMediaAsync ВЫ ДОЛЖНЫ установить targetMedia.IsProcessed = true;
+				// и записать результат в targetMedia.AiResult.
+
+				_logger.LogInformation($"[MediaWorker] Обработано: {messageId}");
+			}
 		}
-
-		// 2. Обработка (только этого конкретного медиа)
-		await _instaService.ProcessAndCacheMediaAsync(newMedia, messageId);
-
-		_logger.LogInformation($"[MediaWorker] Обработано: {context.Message.MessageId}");
+		else
+		{
+			_logger.LogWarning($"[MediaWorker] Запись для {messageId} не найдена в кэше!");
+		}
 	}
 }

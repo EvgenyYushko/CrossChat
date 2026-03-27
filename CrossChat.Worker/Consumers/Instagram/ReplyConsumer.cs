@@ -12,13 +12,13 @@ using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.Instagram;
 
+public static class MediaMessageStorage
+{
+	public static ConcurrentDictionary<string, List<MediaDataEntry>> Storage = new();
+}
+
 public class ReplyConsumer : IConsumer<ProcessDialogReply>
 {
-	public static class MediaMessageStorage
-	{
-		public static ConcurrentDictionary<string, List<MediaDataEntry>> Storage = new();
-	}
-
 	private readonly ILogger<ReplyConsumer> _logger;
 	private readonly AppDbContext _db;
 	private readonly IInstagramService _instaService;
@@ -110,13 +110,17 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		try
 		{
 			// 3. Получаем историю переписки (используя токен юзера)
-			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 20);
+			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 10);
 
 			if (messages == null || messages.Count == 0) return;
 
 			var lastMsg = messages[0];
 			string lastSenderId = lastMsg.From.Id;
-			if (lastSenderId == businessAccountId) return;
+			if (lastSenderId == businessAccountId)
+			{
+				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+				return;
+			}
 
 			int unreadCount = 0;
 			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
@@ -136,7 +140,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				{
 					_logger.LogInformation("Медиа еще обрабатываются, Snooze...");
 					// Ставим себя в очередь снова через 10 секунд
-					await context.SchedulePublish(TimeSpan.FromSeconds(10), context.Message);
+					await context.SchedulePublish(TimeSpan.FromSeconds(60), context.Message);
 					return;
 				}
 
@@ -192,6 +196,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				if (string.IsNullOrWhiteSpace(aiResponse))
 				{
 					_logger.LogError("[Reply] ИИ вернул пустой ответ.");
+
+					string retryKey = $"retry_ai_{messageId}"; // ID вашего сообщения
+					long retryCount = await _redis.StringIncrementAsync(retryKey);
+
+					if (retryCount == 1)
+					{
+						// Устанавливаем время жизни ключа, чтобы он не висел вечно
+						await _redis.KeyExpireAsync(retryKey, TimeSpan.FromMinutes(10));
+					}
+
+					// 2. Лимит попыток (например, 3 раза)
+					if (retryCount <= 3)
+					{
+						_logger.LogInformation($"[Reply] Попытка {retryCount}/3. Отправим запрос в очередь через {60*retryCount}сек...");
+						await context.SchedulePublish(TimeSpan.FromSeconds(60*retryCount), context.Message);
+						return; // Выходим
+					}
+
 					return;
 				}
 
