@@ -130,6 +130,8 @@ namespace CrossChat.Controllers
 					// 2. Обработка Комментариев (Changes)
 					if (entry.Changes != null)
 					{
+						_logger.LogInformation(body);
+
 						foreach (var change in entry.Changes)
 						{
 							if (change.Field == "comments")
