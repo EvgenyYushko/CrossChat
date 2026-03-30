@@ -133,12 +133,12 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(bool isDirectEnabled, 
+		public async Task<IActionResult> UpdateSettings(bool isDirectEnabled,
 			bool isCommentsEnabled,
-			bool processPhotos, 
+			bool processPhotos,
 			bool processVideos,
 			bool processAudios,
-			string systemPrompt, 
+			string systemPrompt,
 			string commentPrompt)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
@@ -149,16 +149,30 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// Если статус меняется (был выкл -> стал вкл, или наоборот)
-				settings.IsActive = isDirectEnabled || isCommentsEnabled;
+				// 1. Вычисляем новый общий статус (будет ли бот активен)
+				bool newIsActiveStatus = isDirectEnabled || isCommentsEnabled;
 
-				// Вызываем метод управления вебхуками
-				bool success = await ManageWebhooksAsync(settings.AccessToken, settings.IsActive);
+				// 2. ПРОВЕРКА: Изменился ли статус по сравнению с тем, что УЖЕ сохранено в БД?
+				if (settings.IsActive != newIsActiveStatus)
+				{
+					_logger.LogInformation($"Изменение статуса вебхуков для {userId}: {settings.IsActive} -> {newIsActiveStatus}");
+
+					bool success = await ManageWebhooksAsync(settings.AccessToken, newIsActiveStatus);
+					if (!success)
+					{
+						_logger.LogWarning($"[Meta API] Не удалось обновить подписку на вебхуки для пользователя {userId}");
+						// Опционально: можно вернуть TempData["Error"] на UI, чтобы юзер знал, что вебхук не подключился
+					}
+				}
+
+				// 3. Обновляем модель для БД
+				settings.IsActive = newIsActiveStatus; // присваиваем новый вычисленный статус
+				settings.IsDirectEnabled = isDirectEnabled;
+				settings.IsCommentsEnabled = isCommentsEnabled;
 
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.CommentPrompt = commentPrompt ?? "";
-				settings.IsDirectEnabled = isDirectEnabled;
-				settings.IsCommentsEnabled = isCommentsEnabled;
+
 				settings.ProcessPhotos = processPhotos;
 				settings.ProcessVideos = processVideos;
 				settings.ProcessAudios = processAudios;

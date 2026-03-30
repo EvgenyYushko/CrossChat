@@ -458,19 +458,19 @@
                     <!-- Переключатели обработки медиа -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">Обработка медиа ИИ (влияет на лимиты)</h4>
                     <div class="switch-container">
-                        <label>Анализировать фотографии (Image)</label>
+                        <label>Анализировать фото</label>
                         <input type="checkbox" name="processPhotos" value="true" @(Model.ProcessPhotos ? "checked" : "")>
                         <input type="hidden" name="processPhotos" value="false">
                     </div>
 
                     <div class="switch-container">
-                        <label>Анализировать видео (Video)</label>
+                        <label>Анализировать видео</label>
                         <input type="checkbox" name="processVideos" value="true" @(Model.ProcessVideos ? "checked" : "")>
                         <input type="hidden" name="processVideos" value="false">
                     </div>
 
                     <div class="switch-container">
-                        <label>Слушать голосовые сообщения (Audio)</label>
+                        <label>Слушать аудио</label>
                         <input type="checkbox" name="processAudios" value="true" @(Model.ProcessAudios ? "checked" : "")>
                         <input type="hidden" name="processAudios" value="false">
                     </div>
