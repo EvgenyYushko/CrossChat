@@ -38,9 +38,6 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 				// 2. Обработка (скачиваем и отправляем в Gemini)
 				await _instaService.ProcessAndCacheMediaAsync(targetMedia, messageId);
 
-				// Внутри ProcessAndCacheMediaAsync ВЫ ДОЛЖНЫ установить targetMedia.IsProcessed = true;
-				// и записать результат в targetMedia.AiResult.
-
 				_logger.LogInformation($"[MediaWorker] Обработано: {messageId}");
 			}
 		}

@@ -130,8 +130,6 @@ namespace CrossChat.Controllers
 					// 2. Обработка Комментариев (Changes)
 					if (entry.Changes != null)
 					{
-						_logger.LogInformation(body);
-
 						foreach (var change in entry.Changes)
 						{
 							if (change.Field == "comments")
@@ -145,6 +143,12 @@ namespace CrossChat.Controllers
 								if (value.From?.Id == entry.Id)
 								{
 									_logger.LogInformation($"Ignoring comment from self (bot)");
+									return Ok();
+								}
+
+								if(value.ParentId is not null)
+								{
+									_logger.LogInformation($"Ignoring comment from Parent");
 									return Ok();
 								}
 
