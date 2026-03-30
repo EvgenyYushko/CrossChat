@@ -133,7 +133,13 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(string systemPrompt, string commentPrompt, bool isDirectEnabled, bool isCommentsEnabled)
+		public async Task<IActionResult> UpdateSettings(bool isDirectEnabled, 
+			bool isCommentsEnabled,
+			bool processPhotos, 
+			bool processVideos,
+			bool processAudios,
+			string systemPrompt, 
+			string commentPrompt)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
@@ -153,6 +159,9 @@ namespace CrossChat.Controllers
 				settings.CommentPrompt = commentPrompt ?? "";
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
+				settings.ProcessPhotos = processPhotos;
+				settings.ProcessVideos = processVideos;
+				settings.ProcessAudios = processAudios;
 
 				await _db.SaveChangesAsync();
 			}

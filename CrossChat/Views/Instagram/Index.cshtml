@@ -441,18 +441,42 @@
             <div class="form-section">
                 <form action="/instagram/update-settings" method="post">
 
-                    <!-- Переключатели -->
+                    <!-- Общие переключатели -->
+                    <h4 style="margin-bottom: 15px;">Основные настройки</h4>
                     <div class="switch-container">
                         <label>Автоответы в Direct</label>
                         <input type="checkbox" name="isDirectEnabled" value="true" @(Model.IsDirectEnabled ? "checked" : "")>
+                        <input type="hidden" name="isDirectEnabled" value="false"> <!-- Обязательно для ASP.NET -->
                     </div>
 
                     <div class="switch-container">
                         <label>Автоответы в Комментариях</label>
                         <input type="checkbox" name="isCommentsEnabled" value="true" @(Model.IsCommentsEnabled ? "checked" : "")>
+                        <input type="hidden" name="isCommentsEnabled" value="false"> <!-- Обязательно для ASP.NET -->
+                    </div>
+
+                    <!-- Переключатели обработки медиа -->
+                    <h4 style="margin-top: 30px; margin-bottom: 15px;">Обработка медиа ИИ (влияет на лимиты)</h4>
+                    <div class="switch-container">
+                        <label>Анализировать фотографии (Image)</label>
+                        <input type="checkbox" name="processPhotos" value="true" @(Model.ProcessPhotos ? "checked" : "")>
+                        <input type="hidden" name="processPhotos" value="false">
+                    </div>
+
+                    <div class="switch-container">
+                        <label>Анализировать видео (Video)</label>
+                        <input type="checkbox" name="processVideos" value="true" @(Model.ProcessVideos ? "checked" : "")>
+                        <input type="hidden" name="processVideos" value="false">
+                    </div>
+
+                    <div class="switch-container">
+                        <label>Слушать голосовые сообщения (Audio)</label>
+                        <input type="checkbox" name="processAudios" value="true" @(Model.ProcessAudios ? "checked" : "")>
+                        <input type="hidden" name="processAudios" value="false">
                     </div>
 
                     <!-- Промпты -->
+                    <h4 style="margin-top: 30px; margin-bottom: 15px;">Текстовые инструкции (Промпты)</h4>
                     <div class="form-group">
                         <label>Промпт для Direct (сообщения)</label>
                         <textarea name="systemPrompt" rows="3">@Model.SystemPrompt</textarea>
@@ -463,12 +487,12 @@
                         <textarea name="commentPrompt" rows="3">@Model.CommentPrompt</textarea>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
                 </form>
             </div>
 
             <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
-                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
+                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Отключить аккаунт</button>
             </form>
         }
         else

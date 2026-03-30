@@ -1,10 +1,12 @@
 using System.Text.Json;
+using CrossChat.Data;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CrossChat.Controllers
 {
@@ -13,12 +15,14 @@ namespace CrossChat.Controllers
 	public class InstagramWebhookController : ControllerBase
 	{
 		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly AppDbContext _db;
 		private readonly ILogger<InstagramWebhookController> _logger;
 		private const string VerifyToken = "test"; // Задайте свой токен
 
-		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint)
+		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint, AppDbContext db)
 		{
 			_publishEndpoint = publishEndpoint;
+			_db = db;
 			_logger = logger;
 		}
 
@@ -84,11 +88,42 @@ namespace CrossChat.Controllers
 								{
 									var messageId = messaging.Message.MessageId;
 									var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
+									var InstagramBusinessId = entry.Id;
+
+									var settings = await _db.InstagramSettings
+										.AsNoTracking()
+										.FirstOrDefaultAsync(s => s.InstagramBusinessId == InstagramBusinessId);
 
 									foreach (var attach in messaging.Message.Attachments)
 									{
 										var type = attach.Type;
 										var url = attach.Payload?.Url;
+
+										bool isAllowedToProcess = type switch
+										{
+											"image" => settings.ProcessPhotos,
+											"video" => settings.ProcessVideos,
+											"audio" => settings.ProcessAudios,
+											_ => false
+										};
+
+										if (!isAllowedToProcess)
+										{
+											lock (mediaList)
+											{
+												mediaList.Add(new MediaDataEntry
+												{
+													Url = url,
+													MediaType = type,
+													IsProcessed = true, // ВАЖНО: Ставим TRUE, чтобы таймер диалога НЕ ЖДАЛ!
+																		// Формируем текст-заглушку для ИИ
+													AiResult = $"[{type}]"
+												});
+											}
+
+											// ПРОПУСКАЕМ RabbitMQ! Мы сэкономили время, трафик и деньги.
+											continue;
+										}
 
 										var emptyMedia = new MediaDataEntry
 										{
@@ -134,19 +169,20 @@ namespace CrossChat.Controllers
 						{
 							if (change.Field == "comments")
 							{
+								var InstagramBusinessId = entry.Id;
 								var value = change.Value; // Это InstagramChangeValue (из твоей модели)
 
 								// Защита: не отвечаем самим себе (если бот написал коммент, не надо на него отвечать)
 								// (В идеале нужно проверить, не совпадает ли value.From.Id с entry.Id)
 								_logger.LogInformation($"[Webhook] Новый коммент от {value.From.Username}: {value.Text}");
 
-								if (value.From?.Id == entry.Id)
+								if (value.From?.Id == InstagramBusinessId)
 								{
 									_logger.LogInformation($"Ignoring comment from self (bot)");
 									return Ok();
 								}
 
-								if(value.ParentId is not null)
+								if (value.ParentId is not null)
 								{
 									_logger.LogInformation($"Ignoring comment from Parent");
 									return Ok();
@@ -155,7 +191,7 @@ namespace CrossChat.Controllers
 								// Отправляем в RabbitMQ!
 								await _publishEndpoint.Publish(new InstagramCommentReceived
 								{
-									BusinessAccountId = entry.Id, // ID страницы, куда прилетел коммент
+									BusinessAccountId = InstagramBusinessId, // ID страницы, куда прилетел коммент
 									CommentId = value.Id,
 									Text = value.Text,
 									Username = value.From?.Username ?? "user",

@@ -27,4 +27,8 @@ public class InstagramSettings
     public bool IsActive { get; set; } = false; // Включен ли бот
     public bool IsDirectEnabled { get; set; } = true;
     public bool IsCommentsEnabled { get; set; } = true;
+
+    public bool ProcessPhotos { get; set; } = false;  // Фото обычно дешевые
+    public bool ProcessVideos { get; set; } = false; // Видео дорогие, по умолчанию false
+    public bool ProcessAudios { get; set; } = false; // Войсы тоже можно выключать
 }
