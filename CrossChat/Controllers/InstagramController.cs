@@ -46,16 +46,15 @@ namespace CrossChat.Controllers
 		// 1. ГЛАВНАЯ СТРАНИЦА НАСТРОЕК (/instagram)
 		// ==========================================================
 		[HttpGet]
-		public async Task<IActionResult> Index()
+		public async Task<IActionResult> Index(int botId)
 		{
 			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
 			// Загружаем настройки, чтобы передать их во View
-			var user = await _db.Users
-				.Include(u => u.InstagramSettings)
-				.FirstOrDefaultAsync(u => u.Id == userId);
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			// Генерируем ссылки для кнопок (они нужны, если user.InstagramSettings == null)
 			var instaScopes = string.Join(",",
@@ -89,8 +88,7 @@ namespace CrossChat.Controllers
 							  $"auth_type=reauthenticate&" +
 							  $"scope={fbScopes}";
 
-			// Передаем модель настроек (может быть null)
-			return View(user?.InstagramSettings);
+			return View(settings);
 		}
 
 		// ==========================================================
@@ -98,10 +96,11 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("disconnect")]
 		[Authorize]
-		public async Task<IActionResult> Disconnect()
+		public async Task<IActionResult> Disconnect(int botId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
 			{
@@ -115,17 +114,10 @@ namespace CrossChat.Controllers
 					_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
 				}
 
-				// Стираем данные
-				settings.AccessToken = null;
-				settings.InstagramBusinessId = null;
-				settings.Username = null;
-				settings.ProfilePictureUrl = null;
-				settings.IsActive = false; // Важно сбросить
-
-				await _db.SaveChangesAsync();
+				await DisconnectInstagramUser(settings.InstagramBusinessId, fullDataDelete: true);
 			}
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Profile", "Auth");
 		}
 
 		// ==========================================================
@@ -133,7 +125,7 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(bool isDirectEnabled,
+		public async Task<IActionResult> UpdateSettings(int botId, bool isDirectEnabled,
 			bool isCommentsEnabled,
 			bool processPhotos,
 			bool processVideos,
@@ -142,31 +134,33 @@ namespace CrossChat.Controllers
 			string commentPrompt)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.InstagramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+
+			// Ищем настройки бота по его Id И проверяем, что он принадлежит текущему юзеру
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
 				return RedirectToAction("Index");
 
 			try
 			{
-				// 1. Вычисляем новый общий статус (будет ли бот активен)
+				// 1. Вычисляем новый общий статус активности
 				bool newIsActiveStatus = isDirectEnabled || isCommentsEnabled;
 
-				// 2. ПРОВЕРКА: Изменился ли статус по сравнению с тем, что УЖЕ сохранено в БД?
+				// 2. Управление вебхуками (если статус изменился)
 				if (settings.IsActive != newIsActiveStatus)
 				{
-					_logger.LogInformation($"Изменение статуса вебхуков для {userId}: {settings.IsActive} -> {newIsActiveStatus}");
+					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {newIsActiveStatus}");
 
 					bool success = await ManageWebhooksAsync(settings.AccessToken, newIsActiveStatus);
 					if (!success)
 					{
-						_logger.LogWarning($"[Meta API] Не удалось обновить подписку на вебхуки для пользователя {userId}");
-						// Опционально: можно вернуть TempData["Error"] на UI, чтобы юзер знал, что вебхук не подключился
+						_logger.LogWarning($"[Meta API] Не удалось обновить подписку на вебхуки для бота {botId}");
 					}
 				}
 
-				// 3. Обновляем модель для БД
-				settings.IsActive = newIsActiveStatus; // присваиваем новый вычисленный статус
+				// 3. Обновляем модель
+				settings.IsActive = newIsActiveStatus;
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
 
@@ -178,13 +172,14 @@ namespace CrossChat.Controllers
 				settings.ProcessAudios = processAudios;
 
 				await _db.SaveChangesAsync();
+				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Error updating settings");
+				_logger.LogError(ex, $"Ошибка при обновлении настроек бота {botId}");
 			}
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Index", new { botId = botId });
 		}
 
 		// ==========================================================
@@ -310,9 +305,9 @@ namespace CrossChat.Controllers
 				}
 
 				// 4. Сохраняем в БД
-				await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
+				var instaSettings = await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
 
-				return RedirectToAction("Index");
+				return RedirectToAction("Index", new { botId = instaSettings?.Id ?? 0});
 			}
 			catch (Exception ex)
 			{
@@ -335,13 +330,13 @@ namespace CrossChat.Controllers
 			{
 				if (string.IsNullOrEmpty(signed_request)) return Ok();
 
-				var userId = ParseSignedRequest(signed_request);
-				if (!string.IsNullOrEmpty(userId))
+				var instagramUserId = ParseSignedRequest(signed_request);
+				if (!string.IsNullOrEmpty(instagramUserId))
 				{
-					_logger.LogInformation($"User {userId} deauthorized app. Cleaning up token...");
+					_logger.LogInformation($"User {instagramUserId} deauthorized app. Cleaning up token...");
 
 					// Вызываем наш метод очистки (false = не удалять всё, только токен)
-					await DisconnectInstagramUser(userId, fullDataDelete: false);
+					await DisconnectInstagramUser(instagramUserId, fullDataDelete: true);
 				}
 
 				return Ok();
@@ -549,7 +544,7 @@ namespace CrossChat.Controllers
 					$"shortAccessToken = {shortAccessToken}");
 
 				// D. Сохраняем
-				await SaveTokenToDatabase(longAccessToken, fbId, expireDate, null, null);
+				var instaSettings = await SaveTokenToDatabase(longAccessToken, fbId, expireDate, null, null);
 
 				return RedirectToAction("Index");
 			}
@@ -563,7 +558,7 @@ namespace CrossChat.Controllers
 		// =========================================================
 		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
 		// =========================================================
-		private async Task SaveTokenToDatabase(
+		private async Task<InstagramSettings> SaveTokenToDatabase(
 			string accessToken,
 			string instagramUserId,
 			DateTime expiresIn,
@@ -571,46 +566,47 @@ namespace CrossChat.Controllers
 			string? username)
 		{
 			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-			if (string.IsNullOrEmpty(userIdStr)) return;
+			if (string.IsNullOrEmpty(userIdStr)) return null;
 
 			var userId = int.Parse(userIdStr);
 
-			var user = await _db.Users
-				.Include(u => u.InstagramSettings)
-				.FirstOrDefaultAsync(u => u.Id == userId);
+			// 1. Ищем, нет ли у этого пользователя уже настроек для этого конкретного Instagram-аккаунта
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.UserId == userId && s.InstagramBusinessId == instagramUserId);
 
-			if (user == null) return;
-
-			if (user.InstagramSettings == null)
+			// 2. Если такого бота еще нет в базе — создаем нового
+			if (settings == null)
 			{
-				user.InstagramSettings = new InstagramSettings { UserId = userId };
+				settings = new InstagramSettings
+				{
+					UserId = userId,
+					InstagramBusinessId = instagramUserId,
+					IsActive = false // По умолчанию бот выключен
+				};
+				_db.InstagramSettings.Add(settings);
 			}
 
-			// 1. Скачиваем картинку в Base64 (если ссылка есть)
+			// 3. Скачиваем картинку в Base64
 			string? base64Icon = null;
 			if (!string.IsNullOrEmpty(profilePicUrl))
 			{
 				base64Icon = await DownloadImageAsBase64(profilePicUrl);
 			}
 
-			// 2. Обновляем поля
-			user.InstagramSettings.AccessToken = accessToken;
-			user.InstagramSettings.InstagramBusinessId = instagramUserId;
-			user.InstagramSettings.TokenExpiresAt = expiresIn;
-			user.InstagramSettings.IsActive = false; // По умолчанию выкл
+			// 4. Обновляем данные бота
+			settings.AccessToken = accessToken;
+			settings.TokenExpiresAt = expiresIn;
+			settings.Username = username;
 
-			// Если скачали новую иконку - сохраняем её. 
-			// Если не скачали (ошибка), но старая была - можно оставить старую или затереть.
-			// Сейчас логика: если есть новая - пишем новую.
 			if (base64Icon != null)
 			{
-				user.InstagramSettings.ProfilePictureUrl = base64Icon;
+				settings.ProfilePictureUrl = base64Icon;
 			}
 
-			user.InstagramSettings.Username = username;
-
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"Token and Base64 Avatar saved for User {userId}");
+			_logger.LogInformation($"Token and settings saved for Bot {instagramUserId}, User {userId}");
+
+			return settings;
 		}
 
 		private async Task<bool> DisconnectInstagramUser(string instagramUserId, bool fullDataDelete)
@@ -645,13 +641,7 @@ namespace CrossChat.Controllers
 			if (fullDataDelete)
 			{
 				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
-				settings.AccessToken = null;
-				settings.IsActive = false;
-				settings.TokenExpiresAt = null;
-				settings.InstagramBusinessId = null;
-				settings.ProfilePictureUrl = null;
-				settings.Username = null;
-
+				_db.InstagramSettings.Remove(settings);
 				_logger.LogInformation($"Instagram settings deleted for BusinessId: {instagramUserId}");
 			}
 			else
@@ -662,7 +652,6 @@ namespace CrossChat.Controllers
 				settings.TokenExpiresAt = null;
 				settings.ProfilePictureUrl = null;
 				settings.Username = null;
-
 				_logger.LogInformation($"Access Token cleared for BusinessId: {instagramUserId}");
 			}
 

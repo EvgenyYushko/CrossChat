@@ -439,8 +439,7 @@
             </div>
 
             <div class="form-section">
-                <form action="/instagram/update-settings" method="post">
-
+                <form action="/instagram/update-settings" method="post">                  
                     <!-- Общие переключатели -->
                     <h4 style="margin-bottom: 15px;">Основные настройки</h4>
                     <div class="switch-container">
@@ -491,7 +490,7 @@
                 </form>
             </div>
 
-            <form action="/instagram/disconnect" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
+            <form action="/instagram/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
                 <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Отключить аккаунт</button>
             </form>
         }

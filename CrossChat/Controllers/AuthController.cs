@@ -77,7 +77,7 @@ public class AuthController : Controller
 				AvatarUrl = base64Avatar ?? avatarUrl,
 				CreatedAt = DateTime.UtcNow,
 				// Сразу создаем пустые настройки инсты
-				InstagramSettings = new InstagramSettings()
+				InstagramSettingsList = new List<InstagramSettings>()
 			};
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
@@ -141,7 +141,7 @@ public class AuthController : Controller
 		}
 
 		var user = await _db.Users
-			.Include(u => u.InstagramSettings)
+			.Include(u => u.InstagramSettingsList)
 			.Include(u => u.TelegramSettings)
 			.FirstOrDefaultAsync(u => u.Id == userId);
 
@@ -153,34 +153,6 @@ public class AuthController : Controller
 		}
 
 		return View(user);
-	}
-
-	[HttpPost("update-settings")]
-	[Authorize]
-	public async Task<IActionResult> UpdateSettings(string systemPrompt, bool isActive)
-	{
-		var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-
-		// Загружаем юзера вместе с настройками
-		var user = await _db.Users
-			.Include(u => u.InstagramSettings)
-			.FirstOrDefaultAsync(u => u.Id == userId);
-
-		if (user == null) return RedirectToAction("Index", "Home");
-
-		// Если настроек еще нет (вдруг) - создаем
-		if (user.InstagramSettings == null)
-		{
-			user.InstagramSettings = new InstagramSettings { UserId = user.Id };
-		}
-
-		// Обновляем поля
-		user.InstagramSettings.SystemPrompt = systemPrompt;
-		user.InstagramSettings.IsActive = isActive;
-
-		await _db.SaveChangesAsync();
-
-		return RedirectToAction("Profile");
 	}
 
 	private async Task<string?> DownloadImageAsBase64(string imageUrl)

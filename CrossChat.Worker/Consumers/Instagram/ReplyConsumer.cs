@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.RateLimiting;
 using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
@@ -109,6 +110,40 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 		try
 		{
+			var customer = await _db.InstagramBotCustomers
+				.FirstOrDefaultAsync(c => c.InstagramSettingsId == settings.Id && c.InstagramSenderId == senderId);
+
+			if (customer == null)
+			{
+				// Пользователь пишет нам впервые - создаем его карточку
+				customer = new InstagramBotCustomer
+				{
+					InstagramSettingsId = settings.Id,
+					InstagramSenderId = senderId,
+					// Можете позже вытащить его Username через InstagramService
+				};
+				_db.InstagramBotCustomers.Add(customer);
+				await _db.SaveChangesAsync(); // Сохраняем, чтобы получить ID
+			}
+
+			// А) Проверяем галочку "Игнорировать"
+			if (customer.IsIgnored)
+			{
+				_logger.LogInformation($"[Ignore] Пользователь {senderId} в игнор-листе. Пропускаем диалог.");
+				return; // Сразу выходим! Никаких запросов в ИИ, никаких скачиваний.
+			}
+
+			// Б) Проверяем лимит (например, 100 ответов в сутки)
+			var today = DateTime.UtcNow.AddDays(-1);
+			var recentResponsesCount = await _db.BotResponseLogs
+				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= today);
+
+			if (recentResponsesCount >= 100)
+			{
+				_logger.LogWarning($"[Limit] Пользователь {senderId} превысил лимит (100 ответов). Пропускаем.");
+				return; // Сразу выходим!
+			}
+
 			// 3. Получаем историю переписки (используя токен юзера)
 			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 10);
 
@@ -209,8 +244,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					// 2. Лимит попыток (например, 3 раза)
 					if (retryCount <= 3)
 					{
-						_logger.LogInformation($"[Reply] Попытка {retryCount}/3. Отправим запрос в очередь через {60*retryCount}сек...");
-						await context.SchedulePublish(TimeSpan.FromSeconds(60*retryCount), context.Message);
+						_logger.LogInformation($"[Reply] Попытка {retryCount}/3. Отправим запрос в очередь через {60 * retryCount}сек...");
+						await context.SchedulePublish(TimeSpan.FromSeconds(60 * retryCount), context.Message);
 						return; // Выходим
 					}
 
@@ -222,6 +257,23 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				// Если мы это сообщение УЖЕ обработали — выходим
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+
+				try
+				{
+					var responseLog = new BotResponseLog
+					{
+						CustomerId = customer.Id,
+						MessageId = context.Message.ReplyId, // ID последнего сообщения Инсты
+						TokensSpent = 0, // Пока 0
+						RespondedAt = DateTime.UtcNow
+					};
+					_db.BotResponseLogs.Add(responseLog);
+					await _db.SaveChangesAsync();
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Ошибка сохранения инфы ответе пользователю");
+				}
 
 				_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 			}

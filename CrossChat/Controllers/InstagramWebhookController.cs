@@ -1,12 +1,10 @@
 using System.Text.Json;
-using CrossChat.Data;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CrossChat.Controllers
 {
@@ -15,14 +13,12 @@ namespace CrossChat.Controllers
 	public class InstagramWebhookController : ControllerBase
 	{
 		private readonly IPublishEndpoint _publishEndpoint;
-		private readonly AppDbContext _db;
 		private readonly ILogger<InstagramWebhookController> _logger;
 		private const string VerifyToken = "test"; // Задайте свой токен
 
-		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint, AppDbContext db)
+		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint)
 		{
 			_publishEndpoint = publishEndpoint;
-			_db = db;
 			_logger = logger;
 		}
 
@@ -90,40 +86,11 @@ namespace CrossChat.Controllers
 									var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
 									var InstagramBusinessId = entry.Id;
 
-									var settings = await _db.InstagramSettings
-										.AsNoTracking()
-										.FirstOrDefaultAsync(s => s.InstagramBusinessId == InstagramBusinessId);
-
 									foreach (var attach in messaging.Message.Attachments)
 									{
 										var type = attach.Type;
 										var url = attach.Payload?.Url;
-
-										bool isAllowedToProcess = type switch
-										{
-											"image" => settings.ProcessPhotos,
-											"video" => settings.ProcessVideos,
-											"audio" => settings.ProcessAudios,
-											_ => false
-										};
-
-										if (!isAllowedToProcess)
-										{
-											lock (mediaList)
-											{
-												mediaList.Add(new MediaDataEntry
-												{
-													Url = url,
-													MediaType = type,
-													IsProcessed = true, // ВАЖНО: Ставим TRUE, чтобы таймер диалога НЕ ЖДАЛ!
-																		// Формируем текст-заглушку для ИИ
-													AiResult = $"[{type}]"
-												});
-											}
-
-											// ПРОПУСКАЕМ RabbitMQ! Мы сэкономили время, трафик и деньги.
-											continue;
-										}
+										if (string.IsNullOrEmpty(url)) continue;
 
 										var emptyMedia = new MediaDataEntry
 										{
@@ -142,7 +109,9 @@ namespace CrossChat.Controllers
 										{
 											MessageId = messageId,
 											Url = url,
-											MediaType = type
+											MediaType = type,
+											SenderId = messaging.Sender.Id,        // Передаем ID отправителя
+											RecipientId = messaging.Recipient.Id   // Передаем ID бизнес-аккаунта
 										});
 									}
 

@@ -18,6 +18,7 @@ public class User
 	public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
 	// Связь 1 к 1 с настройками Инстаграма
-	public InstagramSettings? InstagramSettings { get; set; }
+	public ICollection<InstagramSettings> InstagramSettingsList { get; set; } = new List<InstagramSettings>();
+
 	public TelegramSettings? TelegramSettings { get; set; }
 }

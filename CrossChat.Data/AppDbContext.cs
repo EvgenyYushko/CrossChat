@@ -10,6 +10,8 @@ namespace CrossChat.Data
 		public DbSet<User> Users { get; set; }
 		public DbSet<InstagramSettings> InstagramSettings { get; set; }
 		public DbSet<TelegramSettings> TelegramSettings { get; set; }
+		public DbSet<InstagramBotCustomer> InstagramBotCustomers { get; set; }
+		public DbSet<BotResponseLog> BotResponseLogs { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
