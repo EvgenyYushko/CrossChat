@@ -439,8 +439,9 @@
             </div>
 
             <div class="form-section">
-                <form action="/instagram/update-settings" method="post">                  
+                <form action="/instagram/update-settings" method="post">
                     <!-- Общие переключатели -->
+                    <input type="hidden" name="botId" value="@Model.Id">
                     <h4 style="margin-bottom: 15px;">Основные настройки</h4>
                     <div class="switch-container">
                         <label>Автоответы в Direct</label>
