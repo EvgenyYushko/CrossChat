@@ -12,7 +12,6 @@ public class InstagramSettings
 	public int UserId { get; set; }
 	public User User { get; set; } = null!;
 
-
 	// Данные от Facebook, когда он подключит аккаунт
 	public string? InstagramBusinessId { get; set; } // ID бизнес-аккаунта
 	public string? ProfilePictureUrl { get; set; }
@@ -25,8 +24,8 @@ public class InstagramSettings
 	public string CommentPrompt { get; set; } = "Ты вежливый SMM-менеджер. Отвечай кратко на комментарии.";
 
 	public bool IsActive { get; set; } = false; // Включен ли бот
-	public bool IsDirectEnabled { get; set; } = true;
-	public bool IsCommentsEnabled { get; set; } = true;
+	public bool IsDirectEnabled { get; set; } = false;
+	public bool IsCommentsEnabled { get; set; } = false;
 
 	public bool ProcessPhotos { get; set; } = false;  // Фото обычно дешевые
 	public bool ProcessVideos { get; set; } = false; // Видео дорогие, по умолчанию false

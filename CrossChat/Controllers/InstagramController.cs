@@ -581,7 +581,6 @@ namespace CrossChat.Controllers
 				{
 					UserId = userId,
 					InstagramBusinessId = instagramUserId,
-					IsActive = false // По умолчанию бот выключен
 				};
 				_db.InstagramSettings.Add(settings);
 			}
