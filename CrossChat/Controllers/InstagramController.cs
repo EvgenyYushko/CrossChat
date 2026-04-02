@@ -173,13 +173,13 @@ namespace CrossChat.Controllers
 				settings.ProcessVideos = processVideos;
 				settings.ProcessAudios = processAudios;
 
-				var reactionList = allowedReactions.EnumerateRunes()
+				var reactionList = allowedReactions?.EnumerateRunes()
                     .Select(r => r.ToString())
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .ToList();
 
 				settings.IsReactionsEnabled = isReactionsEnabled;
-				settings.AllowedReactions = string.Join(",", reactionList);
+				settings.AllowedReactions = reactionList is not null ? string.Join(",", reactionList) : "";
 
 				await _db.SaveChangesAsync();
 				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");

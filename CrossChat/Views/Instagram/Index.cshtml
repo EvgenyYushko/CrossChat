@@ -395,6 +395,15 @@
             color: var(--text-main);
             background: var(--input-bg);
         }
+
+        /* .custom-disabled {
+            background-color: #f0f0f0 !important;
+            color: #888 !important;
+            cursor: not-allowed !important;
+            border-color: #ddd !important;
+            pointer-events: none; /* Запрещает клики и фокус */
+        } */
+
     </style>
 
 }
@@ -500,7 +509,7 @@
                         <input type="text" inputmode="text" id="reactionsInput" name="allowedReactions" class="form-control reactions-input"
                                value="@Model.AllowedReactions.Replace(",", "")"
                                oninput="filterEmojis(this)"
-                               @(Model.IsReactionsEnabled ? "" : "disabled")>
+                               @(Model.IsReactionsEnabled ? "" : "readonly")>
                         <small class="text-muted">Просто вставьте любимые эмодзи в поле выше.</small>
                     </div>
 
@@ -520,7 +529,13 @@
                         function toggleReactionInput() {
                             const toggle = document.getElementById('reactionsToggle');
                             const input = document.getElementById('reactionsInput');
-                            input.disabled = !toggle.checked;
+                            if (toggle.checked) {
+                                input.readOnly = false;
+                                input.classList.remove('custom-disabled');
+                            } else {
+                                input.readOnly = true;
+                                input.classList.add('custom-disabled');
+                            }
                         }
 
                         function filterEmojis(input) {
