@@ -384,6 +384,17 @@
                 font-size: 0.9rem;
             }
         }
+
+        .reactions-input {
+            width: 100%;
+            min-height: 50px;
+            font-size: 1.2rem;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            background: var(--input-bg);
+        }
     </style>
 
 }
@@ -458,21 +469,39 @@
                     <!-- Переключатели обработки медиа -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">Обработка медиа ИИ (влияет на лимиты)</h4>
                     <div class="switch-container">
-                        <label>Анализировать фото</label>
+                        <label>Фото анализ</label>
                         <input type="checkbox" name="processPhotos" value="true" @(Model.ProcessPhotos ? "checked" : "")>
                         <input type="hidden" name="processPhotos" value="false">
                     </div>
 
                     <div class="switch-container">
-                        <label>Анализировать видео</label>
+                        <label>Видео анализ</label>
                         <input type="checkbox" name="processVideos" value="true" @(Model.ProcessVideos ? "checked" : "")>
                         <input type="hidden" name="processVideos" value="false">
                     </div>
 
                     <div class="switch-container">
-                        <label>Слушать аудио</label>
+                        <label>Аудио анализ</label>
                         <input type="checkbox" name="processAudios" value="true" @(Model.ProcessAudios ? "checked" : "")>
                         <input type="hidden" name="processAudios" value="false">
+                    </div>
+
+                    <h4 style="margin-top: 30px; margin-bottom: 15px;">Настройки реакций</h4>
+                    <div class="switch-container">
+                        <label>Ставить реакции на сообщения</label>
+                        <input type="checkbox" id="reactionsToggle" name="isReactionsEnabled" value="true"
+                               @(Model.IsReactionsEnabled ? "checked" : "")
+                               onchange="toggleReactionInput()">
+                        <input type="hidden" name="isReactionsEnabled" value="false">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>Список реакций (только эмодзи)</label>
+                        <input type="text" inputmode="text" id="reactionsInput" name="allowedReactions" class="form-control reactions-input"
+                               value="@Model.AllowedReactions.Replace(",", "")"
+                               oninput="filterEmojis(this)"
+                               @(Model.IsReactionsEnabled ? "" : "disabled")>
+                        <small class="text-muted">Просто вставьте любимые эмодзи в поле выше.</small>
                     </div>
 
                     <!-- Промпты -->
@@ -486,6 +515,34 @@
                         <label>Промпт для Комментариев</label>
                         <textarea name="commentPrompt" rows="3">@Model.CommentPrompt</textarea>
                     </div>
+
+                    <script>
+                        function toggleReactionInput() {
+                            const toggle = document.getElementById('reactionsToggle');
+                            const input = document.getElementById('reactionsInput');
+                            input.disabled = !toggle.checked;
+                        }
+
+                        function filterEmojis(input) {
+                            // Регулярное выражение для поиска эмодзи
+                            // Оно охватывает большинство стандартных диапазонов эмодзи в Unicode
+                            const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+
+                            const value = input.value;
+                            const matches = value.match(emojiRegex);
+
+                            // Если введено что-то кроме эмодзи, оставляем только найденные эмодзи
+                            if (matches) 
+                            {
+                                input.value = matches.join('');
+                            } 
+                            else 
+                            {
+                                // Если вообще нет эмодзи - очищаем поле
+                                input.value = '';
+                            }
+                        }
+                    </script>
 
                     <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
                 </form>

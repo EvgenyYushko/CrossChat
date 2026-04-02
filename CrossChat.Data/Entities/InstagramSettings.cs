@@ -27,9 +27,12 @@ public class InstagramSettings
 	public bool IsDirectEnabled { get; set; } = false;
 	public bool IsCommentsEnabled { get; set; } = false;
 
-	public bool ProcessPhotos { get; set; } = false;  // Фото обычно дешевые
-	public bool ProcessVideos { get; set; } = false; // Видео дорогие, по умолчанию false
-	public bool ProcessAudios { get; set; } = false; // Войсы тоже можно выключать
+	public bool ProcessPhotos { get; set; } = false;
+	public bool ProcessVideos { get; set; } = false;
+	public bool ProcessAudios { get; set; } = false;
+
+	public bool IsReactionsEnabled { get; set; } = false;
+	public string AllowedReactions { get; set; } = "💯🔥😘😂👍😋🥰💋💕💝";
 
 	// Связь: у одного бота много клиентов (тех, кто ему пишет)
 	public ICollection<InstagramBotCustomer> Customers { get; set; } = new List<InstagramBotCustomer>();

@@ -175,13 +175,19 @@ public class InstagramService : IInstagramService
 		}
 	}
 
-	public async Task SendReactionAsync(string recipientId, string messageId, string accessToken)
+	public string GetRandomReaction(string allowedReactions)
 	{
-		var reactions = new[] { "💯", "🔥", "😘", "😂", "👍", "😋", "🥰", "💋", "💕", "💝" };
+		if (string.IsNullOrWhiteSpace(allowedReactions))
+			return "👍";
+		
+		var reactions = allowedReactions.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
 		var random = new Random();
-		var randomReaction = reactions[random.Next(reactions.Length)];
+		return reactions[random.Next(reactions.Length)];
+	}
 
+	public async Task SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken)
+	{
 		var url = $"{ApiVersion}/me/messages?access_token={accessToken}";
 
 		var payload = new
@@ -191,7 +197,7 @@ public class InstagramService : IInstagramService
 			payload = new
 			{
 				message_id = messageId,
-				reaction = randomReaction
+				reaction = reaction
 			}
 		};
 
@@ -204,7 +210,7 @@ public class InstagramService : IInstagramService
 
 			if (response.IsSuccessStatusCode)
 			{
-				Console.WriteLine($"[Reaction] Отправлена реакция {randomReaction} на сообщение {messageId}");
+				Console.WriteLine($"[Reaction] Отправлена реакция {reaction} на сообщение {messageId}");
 			}
 			else
 			{

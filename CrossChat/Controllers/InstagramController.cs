@@ -131,7 +131,9 @@ namespace CrossChat.Controllers
 			bool processVideos,
 			bool processAudios,
 			string systemPrompt,
-			string commentPrompt)
+			string commentPrompt,
+			bool isReactionsEnabled,
+			string allowedReactions)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -170,6 +172,14 @@ namespace CrossChat.Controllers
 				settings.ProcessPhotos = processPhotos;
 				settings.ProcessVideos = processVideos;
 				settings.ProcessAudios = processAudios;
+
+				var reactionList = allowedReactions.EnumerateRunes()
+                    .Select(r => r.ToString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+
+				settings.IsReactionsEnabled = isReactionsEnabled;
+				settings.AllowedReactions = string.Join(",", reactionList);
 
 				await _db.SaveChangesAsync();
 				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");

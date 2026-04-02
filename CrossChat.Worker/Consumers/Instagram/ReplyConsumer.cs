@@ -202,16 +202,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			var random = new Random();
 
 			// Если есть непрочитанные сообщения от юзера и выпал шанс (например > 50 из 100)
-			if (unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
+			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
 			{
-				// Выбираем случайное сообщение из списка непрочитанных
-				string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
+				try
+				{
+					// Выбираем случайное сообщение из списка непрочитанных
+					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
 
-				// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
-				await _instaService.SendReactionAsync(senderId, targetMessageId, accessInstaToken); // Например "love" или рандом
+					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+					// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
+					await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
 
-				// Небольшая пауза для реалистичности перед тем как "печатать"
-				await Task.Delay(1500);
+					// Небольшая пауза для реалистичности перед тем как "печатать"
+					await Task.Delay(1500);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError($"[Send reaction error] {ex.ToString()}");
+				}
 			}
 
 			await _instaService.SetTypingStatusAsync(senderId, accessInstaToken);
