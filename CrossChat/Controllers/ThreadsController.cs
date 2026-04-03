@@ -11,7 +11,6 @@ using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
 {
-	[Authorize]
 	[Route("threads")]
 	public class ThreadsController : Controller
 	{
@@ -85,8 +84,20 @@ namespace CrossChat.Controllers
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			// Формируем ссылку на авторизацию Threads
-			var scopes = "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights";
-			ViewBag.LoginUrl = $"https://www.threads.net/oauth/authorize?client_id={ThreadsAppId}&redirect_uri={RedirectUri}&scope={scopes}&response_type=code";
+			var scopes = string.Join(",", 
+				"threads_basic",            // Профиль
+				"threads_content_publish",  // Постить новые треды
+				"threads_manage_replies",   // Отвечать на реплаи
+				"threads_read_replies",     // ЧИТАТЬ реплаи пользователей (ВАЖНО!)
+				"threads_manage_mentions",  // Видеть упоминания (ВАЖНО!)
+				"threads_manage_insights"   // Статистика
+			);
+
+			ViewBag.LoginUrl = $"https://www.threads.net/oauth/authorize?" +
+							   $"client_id={ThreadsAppId}&" +
+							   $"redirect_uri={RedirectUri}&" +
+							   $"scope={scopes}&" +
+							   $"response_type=code";
 
 			return View(settings);
 		}
