@@ -133,7 +133,9 @@ namespace CrossChat.Controllers
 			string systemPrompt,
 			string commentPrompt,
 			bool isReactionsEnabled,
-			string allowedReactions)
+			string allowedReactions,
+			int maxAnswerMessagesCount,
+			int maxAnswersTokensCount)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -173,10 +175,13 @@ namespace CrossChat.Controllers
 				settings.ProcessVideos = processVideos;
 				settings.ProcessAudios = processAudios;
 
+				settings.MaxAnswerMessagesCount = maxAnswerMessagesCount;
+				settings.MaxAnswersTokensCount = maxAnswersTokensCount;
+
 				var reactionList = allowedReactions?.EnumerateRunes()
-                    .Select(r => r.ToString())
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .ToList();
+					.Select(r => r.ToString())
+					.Where(s => !string.IsNullOrWhiteSpace(s))
+					.ToList();
 
 				settings.IsReactionsEnabled = isReactionsEnabled;
 				settings.AllowedReactions = reactionList is not null ? string.Join(",", reactionList) : "";
@@ -317,7 +322,7 @@ namespace CrossChat.Controllers
 				// 4. Сохраняем в БД
 				var instaSettings = await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
 
-				return RedirectToAction("Index", new { botId = instaSettings?.Id ?? 0});
+				return RedirectToAction("Index", new { botId = instaSettings?.Id ?? 0 });
 			}
 			catch (Exception ex)
 			{

@@ -134,14 +134,29 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			// Б) Проверяем лимит (например, 100 ответов в сутки)
-			var today = DateTime.UtcNow.AddDays(-1);
-			var recentResponsesCount = await _db.BotResponseLogs
-				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= today);
+			// 1. Проверка по количеству сообщений
+			var startOfPeriod = DateTime.UtcNow.AddDays(-1); // Сутки
+			var messageCount = await _db.BotResponseLogs
+				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
-			if (recentResponsesCount >= 100)
+			if (messageCount >= settings.MaxAnswerMessagesCount)
 			{
-				_logger.LogWarning($"[Limit] Пользователь {senderId} превысил лимит (100 ответов). Пропускаем.");
-				return; // Сразу выходим!
+				_logger.LogWarning($"[Limit] Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
+				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
+				//await _instaService.SendMessageAsync(senderId, "Ваш лимит на сегодня исчерпан. Пожалуйста, оформите подписку или дождитесь обновления лимита.", accessInstaToken);
+				return;
+			}
+
+			// 2. Проверка по токенам (если ты пишешь их в логи)
+			// Допустим, при каждой отправке ответа ты записываешь `TokensUsed` в `BotResponseLogs`
+			var tokensUsed = await _db.BotResponseLogs
+				.Where(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod)
+				.SumAsync(log => log.TokensSpent);
+
+			if (tokensUsed >= settings.MaxAnswersTokensCount)
+			{
+				_logger.LogWarning($"[Limit] Аккаунт {senderId} превысил лимит токенов!");
+				return;
 			}
 
 			// 3. Получаем историю переписки (используя токен юзера)
@@ -206,10 +221,10 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			{
 				try
 				{
+					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+
 					// Выбираем случайное сообщение из списка непрочитанных
 					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
-
-					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
 					// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
 					await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
 
@@ -338,7 +353,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// Если выпадает число от 1 до 3 (из 10), то отправляем стикер. Шанс 30%.
 			if (random.Next(1, 11) <= 3)
 			{
-				await _instaService.SetTypingStatusAsync(userId, token);
+				//await _instaService.SetTypingStatusAsync(userId, token);
 
 				// Небольшая задержка перед стикером, чтобы выглядело естественно (1-3 сек)
 				//await Task.Delay(random.Next(1000, 3000));

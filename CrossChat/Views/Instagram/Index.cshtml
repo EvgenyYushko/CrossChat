@@ -513,6 +513,17 @@
                         <small class="text-muted">Просто вставьте любимые эмодзи в поле выше.</small>
                     </div>
 
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; ">
+                        <div class="form-group">
+                            <label>Лимит ответов</label>
+                            <input type="number" name="maxAnswerMessagesCount" value="@Model.MaxAnswerMessagesCount" class="text-input" style="margin:0;">
+                        </div>
+                        <div class="form-group">
+                            <label>Лимит токенов</label>
+                            <input type="number" name="maxAnswersTokensCount" value="@Model.MaxAnswersTokensCount" class="text-input" style="margin:0;">
+                        </div>
+                    </div>
+
                     <!-- Промпты -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">Текстовые инструкции (Промпты)</h4>
                     <div class="form-group">
