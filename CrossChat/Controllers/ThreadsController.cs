@@ -48,7 +48,7 @@ namespace CrossChat.Controllers
 				_logger.LogInformation("Webhook verified successfully");
 
 				// 2. Возвращаем именно Content, чтобы это была чистая строка без HTML-оберток
-				return Content(challenge);
+				return Ok(challenge);
 			}
 
 			return Forbid();
