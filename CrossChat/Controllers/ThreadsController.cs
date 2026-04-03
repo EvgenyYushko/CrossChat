@@ -34,27 +34,27 @@ namespace CrossChat.Controllers
 			_httpClient = new HttpClient();
 		}
 
+		[AllowAnonymous]
 		[HttpGet("webhook")]
 		public IActionResult VerifyWebhook(
 			[FromQuery(Name = "hub.mode")] string mode,
 			[FromQuery(Name = "hub.verify_token")] string token,
 			[FromQuery(Name = "hub.challenge")] string challenge)
 		{
-			_logger.LogInformation($"Webhook verification: mode={mode}, token={token}");
+			_logger.LogInformation($"Threads Webhook verification: mode={mode}, token={token}");
 
-			// Проверяем токен верификации
 			if (mode == "subscribe" && token == VerifyToken)
 			{
 				_logger.LogInformation("Webhook verified successfully");
-				return Ok(challenge);
+
+				// 2. Возвращаем именно Content, чтобы это была чистая строка без HTML-оберток
+				return Content(challenge);
 			}
-			else
-			{
-				_logger.LogWarning("Webhook verification failed");
-				return Forbid();
-			}
+
+			return Forbid();
 		}
 
+		[AllowAnonymous]
 		[HttpPost("webhook")]
 		public async Task<IActionResult> ReceiveWebhook()
 		{
@@ -75,18 +75,20 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpGet]
-		public async Task<IActionResult> Index()
+		public async Task<IActionResult> Index(int botId)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			//var settings = await _db.ThreadsSettings
-			//	.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			// Формируем ссылку на авторизацию Threads
 			var scopes = "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights";
 			ViewBag.LoginUrl = $"https://www.threads.net/oauth/authorize?client_id={ThreadsAppId}&redirect_uri={RedirectUri}&scope={scopes}&response_type=code";
 
-			return View();
+			return View(settings);
 		}
 
 		[HttpGet("auth/callback")]
@@ -171,6 +173,51 @@ namespace CrossChat.Controllers
 			else _db.ThreadsSettings.Add(settings);
 
 			await _db.SaveChangesAsync();
+		}
+
+		[HttpPost("update-settings")]
+		[Authorize]
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+			// Ищем настройки бота по его Id И проверяем, что он принадлежит текущему юзеру
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return RedirectToAction("Index");
+
+			try
+			{
+				// 1. Вычисляем новый общий статус активности
+				bool newIsActiveStatus = isActive;
+
+				// 2. Управление вебхуками (если статус изменился)
+				if (settings.IsActive != newIsActiveStatus)
+				{
+					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {newIsActiveStatus}");
+
+					//bool success = await ManageWebhooksAsync(settings.AccessToken, newIsActiveStatus);
+					//if (!success)
+					//{
+					//	_logger.LogWarning($"[Meta API] Не удалось обновить подписку на вебхуки для бота {botId}");
+					//}
+				}
+
+				// 3. Обновляем модель
+				settings.IsActive = newIsActiveStatus;
+				settings.SystemPrompt = systemPrompt ?? "";
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Ошибка при обновлении настроек бота {botId}");
+			}
+
+			return RedirectToAction("Index", new { botId = botId });
 		}
 	}
 }

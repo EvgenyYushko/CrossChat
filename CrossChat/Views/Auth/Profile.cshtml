@@ -272,6 +272,67 @@
 
      <br />
 
+    <!-- Карточка Threads -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <div style="display:flex; align-items:center;">
+                <!-- Иконка Threads (Черный фон, белая спираль) -->
+                <div class="service-icon" style="background: #000; box-shadow: 0 4px 12px rgba(255,255,255,0.1);">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm0-22c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
+                    </svg>
+                </div>
+                <h3 style="margin:0; font-size:1.2rem;">Threads</h3>
+            </div>
+
+            @if (Model.ThreadsSettingsList == null || !Model.ThreadsSettingsList.Any())
+            {
+                <span class="status-badge status-disconnected">Не подключено</span>
+            }
+        </div>
+
+        <!-- Кнопка подключения нового аккаунта -->
+        <a href="/threads" class="btn-instagram" style="background: #000; border: 1px solid #333;">+ Подключить Threads</a>
+
+        @if (Model.ThreadsSettingsList != null && Model.ThreadsSettingsList.Any())
+        {
+            <br />
+            @foreach (var bot in Model.ThreadsSettingsList)
+            {
+                <!-- Вложенная карточка конкретного аккаунта Threads -->
+                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
+                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                        {
+                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
+                        }
+                        else
+                        {
+                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">TH</div>
+                        }
+                        <div>
+                            <div style="font-weight:600;">@@@bot.Username</div>
+                            <div style="margin-top:2px;">
+                                @if (bot.IsActive)
+                                {
+                                    <span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>
+                                }
+                                else
+                                {
+                                    <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="/threads?botId=@bot.Id" class="btn-instagram" style="background: #222;">⚙️ Настроить бота</a>
+                </div>
+            }
+        }
+    </div>
+
+    <br/>
+
     <!-- Карточка Telegram -->
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">

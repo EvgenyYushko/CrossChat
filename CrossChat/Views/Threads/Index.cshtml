@@ -309,6 +309,7 @@
             </div>
 
             <form action="/threads/update-settings" method="post">
+                <input type="hidden" name="botId" value="@Model.Id">
                 <div class="switch-container">
                     <label style="margin:0;">Включить автоответы</label>
                     <label class="switch">
