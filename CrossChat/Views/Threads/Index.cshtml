@@ -1,0 +1,366 @@
+@model CrossChat.Data.Entities.ThreadsSettings
+@{
+    ViewData["Title"] = "Управление Threads";
+    bool isConnected = Model != null && !string.IsNullOrEmpty(Model.AccessToken);
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        /* HEADER ПОДКЛЮЧЕННОГО */
+        .connected-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid var(--text-main);
+            padding: 4px;
+            background: transparent;
+            margin-bottom: 1rem;
+        }
+
+        .username {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        /* ФОРМА */
+        .form-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            padding-top: 2rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            font-family: inherit;
+            resize: none;
+            min-height: 150px;
+        }
+
+            textarea:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
+
+        /* КНОПКИ */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+            width: 100%;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+            .btn svg {
+                width: 24px;
+                height: 24px;
+                fill: white;
+                flex-shrink: 0;
+            }
+
+        .btn-threads {
+            background: #000;
+            color: white;
+            border: 1px solid #333;
+        }
+
+        [data-theme="light"] .btn-threads {
+            background: #000;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            margin-top: 1rem;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            margin-top: 2rem;
+        }
+
+        /* СТАТУСЫ */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* ТОГГЛ */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            background: var(--glass-bg);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
+            }
+
+        /* ИНСТРУКЦИЯ */
+        .instruction-btn {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-bottom: 2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .instruction-content {
+            display: none;
+            text-align: left;
+            background: var(--glass-bg);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+        }
+
+        .step-title {
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        @@media (max-width: 600px) {
+            .container {
+                margin-top: 5rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .btn {
+                padding: 12px 10px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Назад в профиль</a>
+}
+
+<div class="container">
+    <div class="card">
+        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+            <!-- Лого Threads -->
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--text-main)">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.121 15.352c-.64.512-1.344.896-2.112 1.152-1.28.448-2.624.576-3.968.384-1.216-.192-2.368-.64-3.328-1.344-.96-.704-1.664-1.664-2.112-2.816-.448-1.152-.512-2.432-.192-3.648.32-1.216.96-2.24 1.856-3.008.896-.768 2.048-1.216 3.264-1.344 1.28-.128 2.56.064 3.712.576.768.32 1.472.768 2.048 1.344.576.576.96 1.28 1.216 2.048.256.768.32 1.536.256 2.304-.064.768-.256 1.472-.576 2.112-.32.64-.768 1.152-1.28 1.536-.512.384-1.088.64-1.728.768-.64.128-1.28.128-1.92 0-.64-.128-1.216-.384-1.664-.768s-.832-.896-1.024-1.536c-.192-.64-.256-1.28-.128-1.92.128-.64.384-1.216.768-1.664.384-.448.896-.832 1.536-1.024.64-.192 1.28-.256 1.92-.128.64.128 1.216.384 1.664.768.256.256.448.512.576.832.128.32.192.64.192.96 0 .32-.064.64-.192.96-.128.32-.32.576-.576.832-.448.448-1.024.64-1.664.64s-1.216-.192-1.664-.64c-.256-.256-.448-.512-.576-.832-.128-.32-.192-.64-.192-.96 0-.32.064-.64.192-.96.128-.32.32-.576.576-.832.256-.256.512-.448.832-.576.32-.128.64-.192.96-.192.32 0 .64.064.96.192.32.128.576.32.832.576.448.448.64 1.024.64 1.664s-.192 1.216-.64 1.664c-.256.256-.512.448-.832.576-.32.128-.64.192-.96.192-.32 0-.64-.064-.96-.192-.32-.128-.576-.32-.832-.576-.448-.448-.64-1.024-.64-1.664s.192-1.216.64-1.664c.256-.256.576-.448.896-.576.32-.128.704-.192 1.088-.192s.768.064 1.088.192c.32.128.64.32.896.576.448.448.64 1.024.64 1.664s-.192 1.216-.64 1.664z" />
+            </svg>
+        </div>
+        <h1>Threads Бот</h1>
+
+        @if (isConnected)
+        {
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">Настройки сохранены!</div>
+
+            <div class="connected-header">
+                @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                {
+                    <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
+                <div class="username">@@@(Model.Username ?? "threads_user")</div>
+
+                <div style="margin-top: 10px;">
+                    @if (Model.IsActive)
+                    {
+                        <span class="status-badge status-active"><span class="dot"></span> Бот активен</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused">⚠️ Отключен</span>
+                    }
+                </div>
+            </div>
+
+            <form action="/threads/update-settings" method="post">
+                <div class="switch-container">
+                    <label style="margin:0;">Включить автоответы</label>
+                    <label class="switch">
+                        <input type="hidden" name="isActive" value="false" />
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="form-group" style="text-align:left;">
+                    <label>Системный промпт (Инструкция)</label>
+                    <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+            </form>
+
+            <form action="/threads/disconnect" method="post" onsubmit="return confirm('Отключить Threads?');">
+                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
+            </form>
+        }
+        else
+        {
+            <button class="instruction-btn" onclick="toggleInstruction()">📖 Как подготовить Threads?</button>
+            <div id="instructionBlock" class="instruction-content">
+                <p>1. Убедитесь, что ваш аккаунт Threads является <strong>профессиональным</strong>.</p>
+                <p>2. В настройках конфиденциальности разрешите ответы (Replies) для всех.</p>
+                <p>3. Нажмите кнопку ниже и разрешите доступ приложению.</p>
+            </div>
+
+            <div class="login-buttons">
+                <a href="@ViewBag.LoginUrl" class="btn btn-threads">
+                    <svg viewBox="0 0 24 24"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm0-22c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" /></svg>
+                    <span>Войти через Threads</span>
+                </a>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function toggleInstruction() {
+            var block = document.getElementById('instructionBlock');
+            block.style.display = (block.style.display === 'block') ? 'none' : 'block';
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('saved')) {
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+    </script>
+}

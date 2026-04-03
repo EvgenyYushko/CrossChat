@@ -7,5 +7,9 @@ namespace CrossChat.Models
 
 		public string AppId { get; set; }
 		public string AppSecret { get; set; }
+
+
+		public string ThreadsAppId { get; set; }
+		public string ThreadsAppSecret { get; set; }
 	}
 }
