@@ -3,6 +3,8 @@ using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Models;
+using CrossChat.Worker.Contracts;
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,7 @@ namespace CrossChat.Controllers
 	{
 		private readonly ILogger<ThreadsController> _logger;
 		private readonly AppDbContext _db;
+		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly HttpClient _httpClient;
 		private readonly SocialMediaSettings _settings;
 		private const string VerifyToken = "test"; // Задайте свой токен
@@ -26,10 +29,12 @@ namespace CrossChat.Controllers
 		private string ThreadsAppSecret => _settings.ThreadsAppSecret;
 		private string RedirectUri => $"{APP_URL}/threads/auth/callback";
 
-		public ThreadsController(ILogger<ThreadsController> logger, AppDbContext db, IOptions<SocialMediaSettings> options)
+		public ThreadsController(ILogger<ThreadsController> logger, AppDbContext db
+			, IOptions<SocialMediaSettings> options, IPublishEndpoint publishEndpoint)
 		{
 			_logger = logger;
 			_db = db;
+			_publishEndpoint = publishEndpoint;
 			_settings = options.Value;
 			_httpClient = new HttpClient();
 		}
@@ -63,14 +68,66 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 
-				_logger.LogInformation(body);
+				// Логируем для отладки
+				_logger.LogInformation($"[Threads Webhook Raw]: {body}");
+
+				using var doc = JsonDocument.Parse(body);
+				var root = doc.RootElement;
+
+				// Проверяем, что это объект threads
+				if (!root.TryGetProperty("object", out var obj) || obj.GetString() != "threads")
+					return Ok();
+
+				var entries = root.GetProperty("entry");
+				foreach (var entry in entries.EnumerateArray())
+				{
+					var botThreadsId = entry.GetProperty("id").GetString();
+
+					if (entry.TryGetProperty("changes", out var changes))
+					{
+						foreach (var change in changes.EnumerateArray())
+						{
+							var field = change.GetProperty("field").GetString();
+							var value = change.GetProperty("value");
+
+							// 1. Обработка REPLIES (Ответы на посты бота) 
+							// 2. Обработка MENTIONS (Упоминание @бота)
+							if (field == "replies" || field == "mentions")
+							{
+								var text = value.GetProperty("text").GetString();
+								var username = value.GetProperty("username").GetString();
+								var mediaId = value.GetProperty("id").GetString(); // ID самого комментария/упоминания
+
+								_logger.LogInformation($"[Threads] New {field} from {username}: {text}");
+
+								await _publishEndpoint.Publish(new ThreadsEventReceived
+								{
+									BotThreadsId = botThreadsId!,
+									Type = field,
+									MediaId = mediaId!,
+									Text = text,
+									Username = username
+								});
+							}
+
+							// 3. Обработка PUBLISH (Подтверждение публикации самим ботом)
+							else if (field == "publish")
+							{
+								var mediaId = value.GetProperty("id").GetString();
+								_logger.LogInformation($"[Threads] Content successfully published. MediaId: {mediaId}");
+
+								// Здесь можно просто логировать или обновлять статус в БД
+							}
+						}
+					}
+				}
 
 				return Ok();
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Error processing Instagram webhook");
-				return StatusCode(500);
+				_logger.LogError(ex, "Error processing Threads webhook");
+				return Ok(); // Всегда возвращаем 200, чтобы Meta не зациклила ретраи
 			}
 		}
 

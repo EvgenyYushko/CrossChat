@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,28 @@ public class ThreadsService : IThreadsService
 	{
 		_logger = logger;
 		_httpClient = httpClient;
+	}
+
+	public async Task ReplyToThreadAsync(string targetMediaId, string text, string accessToken)
+	{
+		// Шаг А: Создаем контейнер текста с привязкой к сообщению пользователя
+		var createUrl = $"https://graph.threads.net/v1.0/me/threads";
+		var payload = new
+		{
+			media_type = "TEXT",
+			text = text,
+			reply_to_id = targetMediaId // Ссылка на то, на что отвечаем
+		};
+
+		var response = await _httpClient.PostAsJsonAsync($"{createUrl}?access_token={accessToken}", payload);
+		var content = await response.Content.ReadAsStringAsync();
+
+		using var doc = JsonDocument.Parse(content);
+		var creationId = doc.RootElement.GetProperty("id").GetString();
+
+		// Шаг Б: Публикуем этот контейнер
+		var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
+		await _httpClient.PostAsync(publishUrl, null);
 	}
 
 	public async Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken)
