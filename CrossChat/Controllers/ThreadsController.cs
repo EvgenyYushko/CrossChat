@@ -181,7 +181,7 @@ namespace CrossChat.Controllers
 			settings.ProfilePictureUrl = picUrl; // Можно также скачать в Base64 как для Инсты
 			settings.IsActive = true;
 
-			if (await _db.ThreadsSettings.AnyAsync(s => s.UserId == userId)) 
+			if (await _db.ThreadsSettings.AnyAsync(s => s.UserId == userId))
 				_db.ThreadsSettings.Update(settings);
 			else _db.ThreadsSettings.Add(settings);
 
@@ -326,46 +326,49 @@ namespace CrossChat.Controllers
 
 			if (settings == null)
 			{
-				_logger.LogWarning($"User with Instagram ID {threadUserId} not found in DB.");
+				_logger.LogInformation($"[Threads] Попытка удаления для {threadUserId}, но данных в базе уже нет. Всё ок.");
+				return true;
+			}
+
+			try
+			{
+				// Логика отписки (опционально)
+				if (!string.IsNullOrEmpty(settings.AccessToken))
+				{
+					_logger.LogInformation($"[Threads] Пытаемся отписать вебхуки для {threadUserId}...");
+					// Здесь будет твой вызов ManageWebhooksAsync, если он реализован
+				}
+
+				if (fullDataDelete)
+				{
+					_db.ThreadsSettings.Remove(settings);
+					_logger.LogInformation($"[Threads] Удаление записи полностью для: {threadUserId}");
+				}
+				else
+				{
+					settings.AccessToken = null;
+					settings.IsActive = false;
+					settings.TokenExpiresAt = null;
+					_logger.LogInformation($"[Threads] Очистка токена (Deauth) для: {threadUserId}");
+				}
+
+				// 2. Пытаемся сохранить изменения
+				await _db.SaveChangesAsync();
+				return true;
+			}
+			catch (DbUpdateConcurrencyException)
+			{
+				// 3. Если мы попали сюда, значит кто-то другой (параллельный запрос) 
+				// уже удалил или изменил эту запись. 
+				// В нашем случае это успех — данных больше нет.
+				_logger.LogWarning($"[Threads] Конфликт параллельного доступа при удалении {threadUserId}. Игнорируем, так как запись уже обработана.");
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"[Threads] Ошибка при отключении пользователя {threadUserId}");
 				return false;
 			}
-
-			if (!string.IsNullOrEmpty(settings.AccessToken))
-			{
-				try
-				{
-					// false = отписка (DELETE запрос)
-					// Мы не проверяем результат (true/false), потому что если юзер уже отозвал права,
-					// этот запрос вернет ошибку (Invalid Token), и это НОРМАЛЬНО.
-					//await ManageWebhooksAsync(settings.AccessToken, false);
-					_logger.LogInformation($"Unsubscribe request sent for {threadUserId}");
-				}
-				catch (Exception ex)
-				{
-					// Логируем, но не останавливаем удаление данных из БД
-					_logger.LogWarning($"Could not unsubscribe webhooks (token might be invalid): {ex.Message}");
-				}
-			}
-
-			if (fullDataDelete)
-			{
-				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
-				_db.ThreadsSettings.Remove(settings);
-				_logger.LogInformation($"Instagram settings deleted for BusinessId: {threadUserId}");
-			}
-			else
-			{
-				// ВАРИАНТ 2: Просто отзыв токена (Deauth)
-				settings.AccessToken = null;
-				settings.IsActive = false;
-				settings.TokenExpiresAt = null;
-				settings.ProfilePictureUrl = null;
-				settings.Username = null;
-				_logger.LogInformation($"Access Token cleared for BusinessId: {threadUserId}");
-			}
-
-			await _db.SaveChangesAsync();
-			return true;
 		}
 
 		[HttpPost("update-settings")]
