@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
@@ -84,7 +85,7 @@ namespace CrossChat.Controllers
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			// Формируем ссылку на авторизацию Threads
-			var scopes = string.Join(",", 
+			var scopes = string.Join(",",
 				"threads_basic",            // Профиль
 				"threads_content_publish",  // Постить новые треды
 				"threads_manage_replies",   // Отвечать на реплаи
@@ -152,13 +153,13 @@ namespace CrossChat.Controllers
 				_logger.LogInformation(meRoot.GetProperty("username").GetString());
 
 				// 4. Сохранение в БД
-				await SaveThreadsToken(longToken,
+				var settings = await SaveThreadsToken(longToken,
 									   meRoot.GetProperty("id").GetString(),
 									   meRoot.GetProperty("username").GetString(),
 									   meRoot.TryGetProperty("threads_profile_picture_url", out var p) ? p.GetString() : null,
 									   expiresIn);
 
-				return RedirectToAction("Index");
+				return RedirectToAction("Index", new { botId = settings?.Id ?? 0 });
 			}
 			catch (Exception ex)
 			{
@@ -167,7 +168,7 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		private async Task SaveThreadsToken(string token, string threadsId, string username, string? picUrl, int expiresIn)
+		private async Task<ThreadsSettings> SaveThreadsToken(string token, string threadsId, string username, string? picUrl, int expiresIn)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.ThreadsSettings.FirstOrDefaultAsync(s => s.UserId == userId)
@@ -180,10 +181,191 @@ namespace CrossChat.Controllers
 			settings.ProfilePictureUrl = picUrl; // Можно также скачать в Base64 как для Инсты
 			settings.IsActive = true;
 
-			if (await _db.ThreadsSettings.AnyAsync(s => s.UserId == userId)) _db.ThreadsSettings.Update(settings);
+			if (await _db.ThreadsSettings.AnyAsync(s => s.UserId == userId)) 
+				_db.ThreadsSettings.Update(settings);
 			else _db.ThreadsSettings.Add(settings);
 
 			await _db.SaveChangesAsync();
+
+			return settings;
+		}
+
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect(int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
+			{
+				// Сначала пытаемся честно отписаться от вебхуков
+				try
+				{
+					//await ManageWebhooksAsync(settings.AccessToken, false);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
+				}
+
+				await DisconnectThreadUser(settings.ThreadsUserId, fullDataDelete: true);
+			}
+
+			return RedirectToAction("Profile", "Auth");
+		}
+
+		[AllowAnonymous]
+		[HttpGet("deauth")]
+		[HttpPost("deauth")]
+		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null)
+		{
+			_logger.LogInformation($"=== Deauthorization callback received ===");
+			_logger.LogInformation(signed_request);
+
+			try
+			{
+				if (string.IsNullOrEmpty(signed_request)) return Ok();
+
+				var threadUserId = ParseSignedRequest(signed_request);
+				if (!string.IsNullOrEmpty(threadUserId))
+				{
+					_logger.LogInformation($"User {threadUserId} deauthorized app. Cleaning up token...");
+
+					// Вызываем наш метод очистки (false = не удалять всё, только токен)
+					await DisconnectThreadUser(threadUserId, fullDataDelete: true);
+				}
+
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error processing deauthorization");
+				return Ok();
+			}
+		}
+
+		[AllowAnonymous]
+		[HttpGet("data-deletion")]
+		[HttpPost("data-deletion")]
+		public async Task<IActionResult> DataDeletionCallback(
+			[FromForm] string signed_request = null)
+		{
+			_logger.LogInformation($"=== Data Deletion callback received ===");
+			_logger.LogInformation(signed_request);
+
+			try
+			{
+				string userId = null;
+				string confirmationCode = Guid.NewGuid().ToString("N");
+
+				if (!string.IsNullOrEmpty(signed_request))
+				{
+					userId = ParseSignedRequest(signed_request);
+				}
+
+				if (!string.IsNullOrEmpty(userId))
+				{
+					_logger.LogInformation($"Processing FULL DATA DELETION for user: {userId}");
+
+					// Удаляем данные полностью (true)
+					await DisconnectThreadUser(userId, fullDataDelete: true);
+				}
+
+				// Генерируем URL статуса (его нужно реализовать ниже)
+				var statusUrl = $"{APP_URL}/instagram/deletion-status/{confirmationCode}";
+
+				var response = new
+				{
+					url = statusUrl,
+					confirmation_code = confirmationCode,
+					status = "success" // Мы удалили данные синхронно, так что сразу success
+				};
+
+				return Ok(response);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error processing data deletion");
+				return Ok(new { url = $"{APP_URL}", confirmation_code = "error", status = "error" });
+			}
+		}
+
+		private string ParseSignedRequest(string signedRequest)
+		{
+			try
+			{
+				var parts = signedRequest.Split('.');
+				if (parts.Length != 2) return null;
+
+				var payload = parts[1].Replace('-', '+').Replace('_', '/');
+				switch (payload.Length % 4)
+				{
+					case 2: payload += "=="; break;
+					case 3: payload += "="; break;
+				}
+
+				var payloadBytes = Convert.FromBase64String(payload);
+				var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+
+				dynamic data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
+				return data.user_id?.ToString();
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		private async Task<bool> DisconnectThreadUser(string threadUserId, bool fullDataDelete)
+		{
+			// Ищем настройки, где BusinessId совпадает с ID из вебхука
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.ThreadsUserId == threadUserId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"User with Instagram ID {threadUserId} not found in DB.");
+				return false;
+			}
+
+			if (!string.IsNullOrEmpty(settings.AccessToken))
+			{
+				try
+				{
+					// false = отписка (DELETE запрос)
+					// Мы не проверяем результат (true/false), потому что если юзер уже отозвал права,
+					// этот запрос вернет ошибку (Invalid Token), и это НОРМАЛЬНО.
+					//await ManageWebhooksAsync(settings.AccessToken, false);
+					_logger.LogInformation($"Unsubscribe request sent for {threadUserId}");
+				}
+				catch (Exception ex)
+				{
+					// Логируем, но не останавливаем удаление данных из БД
+					_logger.LogWarning($"Could not unsubscribe webhooks (token might be invalid): {ex.Message}");
+				}
+			}
+
+			if (fullDataDelete)
+			{
+				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
+				_db.ThreadsSettings.Remove(settings);
+				_logger.LogInformation($"Instagram settings deleted for BusinessId: {threadUserId}");
+			}
+			else
+			{
+				// ВАРИАНТ 2: Просто отзыв токена (Deauth)
+				settings.AccessToken = null;
+				settings.IsActive = false;
+				settings.TokenExpiresAt = null;
+				settings.ProfilePictureUrl = null;
+				settings.Username = null;
+				_logger.LogInformation($"Access Token cleared for BusinessId: {threadUserId}");
+			}
+
+			await _db.SaveChangesAsync();
+			return true;
 		}
 
 		[HttpPost("update-settings")]

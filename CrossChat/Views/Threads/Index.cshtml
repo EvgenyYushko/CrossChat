@@ -327,7 +327,7 @@
                 <button type="submit" class="btn btn-primary">Сохранить изменения</button>
             </form>
 
-            <form action="/threads/disconnect" method="post" onsubmit="return confirm('Отключить Threads?');">
+            <form action="/threads/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить Threads?');">
                 <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
         }
