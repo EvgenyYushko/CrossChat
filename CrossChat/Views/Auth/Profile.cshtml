@@ -60,13 +60,20 @@
         .service-icon {
             width: 38px;
             height: 38px;
-            border-radius: 10px;
+            border-radius: 10px; /* Квадрат со скруглением как у ТГ */
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
             margin-right: 12px;
+            overflow: hidden; /* Чтобы картинка не вылезала */
         }
+
+            .service-icon img {
+                width: 24px;
+                height: 24px;
+                object-fit: contain;
+            }
 
             .service-icon svg {
                 width: 22px;
@@ -192,6 +199,21 @@
             color: #0f172a;
         }
 
+        .icon-threads {
+            background: #000000; /* Всегда черный фон */
+            border: 1px solid #333;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+        }
+
+        [data-theme="dark"] .icon-threads img {
+            filter: invert(1) brightness(2);
+        }
+
+        /* В светлой теме иконка Threads может быть просто черным квадратом с белым лого */
+        [data-theme="light"] .icon-threads {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
     </style>
 }
 
@@ -237,7 +259,6 @@
             @if (Model.InstagramSettingsList == null || !Model.InstagramSettingsList.Any())
             {
                 <span class="status-badge status-disconnected">Не подключено</span>
-
             }
         </div>
 
@@ -250,7 +271,6 @@
             {
                 <div class="card" style="margin-bottom: 20px;">
                     
-
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
                         @if (!string.IsNullOrEmpty(@bot.ProfilePictureUrl))
                         {
@@ -277,10 +297,8 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
             <div style="display:flex; align-items:center;">
                 <!-- Иконка Threads (Черный фон, белая спираль) -->
-                <div class="service-icon" style="background: #000; box-shadow: 0 4px 12px rgba(255,255,255,0.1);">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm0-22c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
-                    </svg>
+                <div class="service-icon icon-threads">
+                    <img src="/images/threads.png" alt="Threads" style="width: 50px; height: 50px; object-fit: contain;">
                 </div>
                 <h3 style="margin:0; font-size:1.2rem;">Threads</h3>
             </div>
@@ -292,7 +310,7 @@
         </div>
 
         <!-- Кнопка подключения нового аккаунта -->
-        <a href="/threads" class="btn-instagram" style="background: #000; border: 1px solid #333;">+ Подключить Threads</a>
+        <a href="/threads" class="btn-instagram" style="btn-instagram">+ Подключить Threads</a>
 
         @if (Model.ThreadsSettingsList != null && Model.ThreadsSettingsList.Any())
         {
@@ -325,7 +343,7 @@
                         </div>
                     </div>
 
-                    <a href="/threads?botId=@bot.Id" class="btn-instagram" style="background: #222;">⚙️ Настроить бота</a>
+                    <a href="/threads?botId=@bot.Id" class="btn-instagram" style="btn-instagram">⚙️ Настроить бота</a>
                 </div>
             }
         }
