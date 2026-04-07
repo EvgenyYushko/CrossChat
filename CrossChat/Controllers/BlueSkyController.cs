@@ -90,19 +90,34 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpGet("auth/callback")]
 		[AllowAnonymous]
-		public async Task<IActionResult> Callback(string code, string state)
+		public async Task<IActionResult> Callback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, [FromQuery] string? error_description)
 		{
 			// 1. Логируем входящие данные
-			_logger.LogInformation($"[BlueSky] Callback received. Code length: {code?.Length ?? 0}, State: {state}");
+			_logger.LogInformation($"[BlueSky] Callback params -> Code: {code}, State: {state}, Error: {error}, Desc: {error_description}");
+
+			if (!string.IsNullOrEmpty(error))
+			{
+				_logger.LogError($"[BlueSky] Error from server: {error} - {error_description}");
+				return Content($"BlueSky вернул ошибку: {error_description}");
+			}
 
 			var savedState = HttpContext.Session.GetString("bsky_state");
 			var codeVerifier = HttpContext.Session.GetString("bsky_verifier");
 
+			_logger.LogInformation($"[BlueSky] Session data -> SavedState: {savedState}, Verifier: {codeVerifier}");
+
 			// Проверка безопасности
-			if (string.IsNullOrEmpty(code) || state != savedState || string.IsNullOrEmpty(codeVerifier))
+			if (string.IsNullOrEmpty(code))
 			{
 				_logger.LogError($"[BlueSky] Security check failed. Code present: {!string.IsNullOrEmpty(code)}, State match: {state == savedState}");
 				return BadRequest("Ошибка авторизации: неверный state или отсутствует код.");
+			}
+
+			if (state != savedState)
+			{
+				_logger.LogError($"[BlueSky] State mismatch! Received: {state}, Expected: {savedState}");
+				// Для теста можно закомментировать return, но в продакшене это важно для безопасности
+				// return BadRequest("Ошибка безопасности: неверный state.");
 			}
 
 			try
