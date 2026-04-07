@@ -19,4 +19,6 @@ public class ThreadsSettings
 
 	public bool IsActive { get; set; } = false;
 	public string SystemPrompt { get; set; } = "Ты ассистент в Threads. Отвечай кратко.";
+
+	public DateTime? LastProcessedAt { get; set; }
 }

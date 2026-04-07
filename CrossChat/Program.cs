@@ -2,6 +2,7 @@ using CrossChat.BackgroundServices;
 using CrossChat.Data;
 using CrossChat.Helpers;
 using CrossChat.Models;
+using CrossChat.Worker.Jobs;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -59,13 +60,21 @@ builder.Services.AddQuartz(q =>
 	q.UseMicrosoftDependencyInjectionJobFactory();
 
 	var jobKey = new JobKey("TokenRefreshJob");
-    
-    q.AddJob<CrossChat.Worker.Jobs.TokenRefreshJob>(opts => opts.WithIdentity(jobKey));
+    q.AddJob<TokenRefreshJob>(opts => opts.WithIdentity(jobKey));
 
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
         .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
+
+	var jobKeyThreads = new JobKey("ThreadsAnswerJob");
+    q.AddJob<ThreadsAutoReplyJob>(opts => opts.WithIdentity(jobKeyThreads));
+
+	q.AddTrigger(opts => opts
+        .ForJob(jobKeyThreads)
+        .WithIdentity("ThreadsAnswerJob-Trigger")
+        .WithCronSchedule("0 0 * * * ?"));
+	
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

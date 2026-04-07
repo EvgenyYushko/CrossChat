@@ -100,14 +100,14 @@ namespace CrossChat.Controllers
 
 								_logger.LogInformation($"[Threads] New {field} from {username}: {text}");
 
-								await _publishEndpoint.Publish(new ThreadsEventReceived
-								{
-									BotThreadsId = botThreadsId!,
-									Type = field,
-									MediaId = mediaId!,
-									Text = text,
-									Username = username
-								});
+								//await _publishEndpoint.Publish(new ThreadsEventReceived
+								//{
+								//	BotThreadsId = botThreadsId!,
+								//	Type = field,
+								//	MediaId = mediaId!,
+								//	Text = text,
+								//	Username = username
+								//});
 							}
 
 							// 3. Обработка PUBLISH (Подтверждение публикации самим ботом)

@@ -1,6 +1,7 @@
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
 using CrossChat.Worker.Consumers.Instagram;
+using CrossChat.Worker.Consumers.Threads;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
 using MassTransit;
@@ -16,6 +17,7 @@ namespace CrossChat.Worker
 		{
 			// MassTransit просканирует сборку, где лежит WebhookConsumer, 
 			// и зарегистрирует все консьюмеры, которые найдет.
+			x.AddConsumer<ThreadsReplyConsumer>(typeof(ThreadsReplyDefinition)); // Явная регистрация
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 
