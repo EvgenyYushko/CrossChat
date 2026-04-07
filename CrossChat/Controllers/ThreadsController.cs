@@ -437,7 +437,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -450,13 +450,13 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Вычисляем новый общий статус активности
-				bool newIsActiveStatus = isActive;
+				var isActiveRaw = Request.Form["isActive"].ToString();
+				bool isActive = isActiveRaw.Contains("true");
 
 				// 2. Управление вебхуками (если статус изменился)
-				if (settings.IsActive != newIsActiveStatus)
+				if (settings.IsActive != isActive)
 				{
-					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {newIsActiveStatus}");
+					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {isActive}");
 
 					//bool success = await ManageWebhooksAsync(settings.AccessToken, newIsActiveStatus);
 					//if (!success)
@@ -466,7 +466,7 @@ namespace CrossChat.Controllers
 				}
 
 				// 3. Обновляем модель
-				settings.IsActive = newIsActiveStatus;
+				settings.IsActive = isActive;
 				settings.SystemPrompt = systemPrompt ?? "";
 
 				await _db.SaveChangesAsync();
