@@ -11,6 +11,7 @@ namespace CrossChat.Data
 		public DbSet<InstagramSettings> InstagramSettings { get; set; }
 		public DbSet<TelegramSettings> TelegramSettings { get; set; }
 		public DbSet<ThreadsSettings> ThreadsSettings { get; set; }
+		public DbSet<BlueSkySettings> BlueSkySettings { get; set; }
 		public DbSet<InstagramBotCustomer> InstagramBotCustomers { get; set; }
 		public DbSet<BotResponseLog> BotResponseLogs { get; set; }
 

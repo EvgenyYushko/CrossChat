@@ -66,15 +66,6 @@ builder.Services.AddQuartz(q =>
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
         .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
-
-	//var jobKeyThreads = new JobKey("ThreadsAnswerJob");
- //   q.AddJob<ThreadsAutoReplyJob>(opts => opts.WithIdentity(jobKeyThreads));
-
-	//q.AddTrigger(opts => opts
- //       .ForJob(jobKeyThreads)
- //       .WithIdentity("ThreadsAnswerJob-Trigger")
- //       .WithCronSchedule("0 0 * * * ?"));
-	
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
@@ -135,6 +126,14 @@ builder.Logging.ClearProviders(); // Удаляем стандартные пр�
 builder.Logging.AddConsole(options => options.FormatterName = "clean")
     .AddConsoleFormatter<CleanConsoleFormatter, ConsoleFormatterOptions>();
 
+builder.Services.AddDistributedMemoryCache(); // Нужно для сессий
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(10);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -178,6 +177,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 	ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
+app.UseSession();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication(); // Кто ты?

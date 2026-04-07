@@ -1,0 +1,57 @@
+@model CrossChat.Data.Entities.BlueSkySettings
+@{
+    ViewData["Title"] = "Управление BlueSky";
+    bool isConnected = !string.IsNullOrEmpty(Model?.AccessToken);
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+        }
+
+        .btn-bsky {
+            background: #0085ff;
+            color: white;
+        }
+        /* Используй те же стили для формы и переключателей, что и в Instagram */
+    </style>
+}
+
+<div class="container">
+    <div class="card">
+        <h1>BlueSky Бот</h1>
+
+        @if (!isConnected)
+        {
+            <p>Введите ваш Handle (например, username.bsky.social) для подключения</p>
+            <form action="/bluesky/connect" method="post">
+                <input type="text" name="handle" class="text-input" placeholder="username.bsky.social" required>
+                <button type="submit" class="btn btn-bsky">Авторизоваться</button>
+            </form>
+        }
+        else
+        {
+            <div class="connected-header">
+                <div class="username">@@@Model.Handle</div>
+                <span class="status-badge status-active">Подключено</span>
+            </div>
+
+            <form action="/bluesky/update" method="post" class="form-section">
+                <!-- Промпт и Тумблер как в других сетях -->
+                <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </form>
+        }
+    </div>
+</div>

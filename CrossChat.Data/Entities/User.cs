@@ -20,6 +20,7 @@ public class User
 	// Связь 1 к 1 с настройками Инстаграма
 	public ICollection<InstagramSettings> InstagramSettingsList { get; set; } = new List<InstagramSettings>();
 	public ICollection<ThreadsSettings> ThreadsSettingsList { get; set; } = new List<ThreadsSettings>();
+	public ICollection<BlueSkySettings> BlueSkySettingsList { get; set; } = new List<BlueSkySettings>();
 
 	public TelegramSettings? TelegramSettings { get; set; }
 }
