@@ -46,6 +46,26 @@ public class ThreadsService : IThreadsService
 		await _httpClient.PostAsync(url, null);
 	}
 
+	public async Task<string> GetContainerStatusAsync(string containerId, string accessToken)
+	{
+		var statusUrl = $"{containerId}?fields=id,status&access_token={accessToken}";
+		var response = await _httpClient.GetAsync(statusUrl);
+		var json = await response.Content.ReadAsStringAsync();
+
+		if (response.IsSuccessStatusCode)
+		{
+			using var doc = JsonDocument.Parse(json);
+
+			var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
+
+			Console.WriteLine($"Статус: {status}, Status Code: {status}");
+
+			return status;
+		}
+
+		return "";
+	}
+
 	public async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60)
 	{
 		Console.WriteLine($"Ожидаем готовности медиа {containerId}...");

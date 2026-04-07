@@ -67,13 +67,13 @@ builder.Services.AddQuartz(q =>
         .WithIdentity("TokenRefreshJob-Trigger")
         .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
 
-	var jobKeyThreads = new JobKey("ThreadsAnswerJob");
-    q.AddJob<ThreadsAutoReplyJob>(opts => opts.WithIdentity(jobKeyThreads));
+	//var jobKeyThreads = new JobKey("ThreadsAnswerJob");
+ //   q.AddJob<ThreadsAutoReplyJob>(opts => opts.WithIdentity(jobKeyThreads));
 
-	q.AddTrigger(opts => opts
-        .ForJob(jobKeyThreads)
-        .WithIdentity("ThreadsAnswerJob-Trigger")
-        .WithCronSchedule("0 0 * * * ?"));
+	//q.AddTrigger(opts => opts
+ //       .ForJob(jobKeyThreads)
+ //       .WithIdentity("ThreadsAnswerJob-Trigger")
+ //       .WithCronSchedule("0 0 * * * ?"));
 	
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

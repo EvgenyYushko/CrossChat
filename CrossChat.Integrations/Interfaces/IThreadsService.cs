@@ -14,4 +14,6 @@ public interface IThreadsService
     Task PublishReplyAsync(string creationId, string accessToken);
 
 	Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60);
+
+	Task<string> GetContainerStatusAsync(string containerId, string accessToken);
 }

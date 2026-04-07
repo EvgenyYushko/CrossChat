@@ -1,14 +1,14 @@
-using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.Threads;
 
-public class ThreadsReplyConsumer : IConsumer<ThreadsProcessReply>
+public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 {
 	private readonly ILogger<ThreadsReplyConsumer> _logger;
 	private readonly AppDbContext _db;
@@ -16,62 +16,58 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsProcessReply>
 	private readonly IAiService _aiService;
 	private readonly IDatabase _redis;
 
-	// ЛИМИТЕР: 1 ответ в 30 секунд (как ты просил)
-	private static readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
-	{
-		PermitLimit = 1,
-		Window = TimeSpan.FromSeconds(30),
-		QueueLimit = 100 // Очередь ожидания внутри памяти воркера
-	});
-
 	public ThreadsReplyConsumer(ILogger<ThreadsReplyConsumer> logger, AppDbContext db,
 		IThreadsService threadsService, IAiService aiService, IConnectionMultiplexer redis)
 	{
-		_logger = logger; _db = db;
-		_threadsService = threadsService;
-		_aiService = aiService;
-		_redis = redis.GetDatabase();
+		_logger = logger; _db = db; _threadsService = threadsService;
+		_aiService = aiService; _redis = redis.GetDatabase();
 	}
 
-	public async Task Consume(ConsumeContext<ThreadsProcessReply> context)
+	public async Task Consume(ConsumeContext<ThreadsEventReceived> context)
 	{
-		// 1. Ждем своей очереди (раз в 30 секунд)
-		using var lease = await _rateLimiter.AcquireAsync(1, context.CancellationToken);
-		if (!lease.IsAcquired) throw new Exception("Rate limit exceeded");
-
 		var msg = context.Message;
 
-		// 2. Достаем свежие настройки бота из БД
-		var settings = await _db.ThreadsSettings.FindAsync(msg.BotId);
+		// 1. ЗАЩИТА ОТ ДУБЛЕЙ (так как Meta прислала 2 вебхука в одну секунду)
+		var lockKey = $"processed_threads:{msg.MediaId}:{msg.BotThreadsId}";
+		if (!await _redis.StringSetAsync(lockKey, "processing", TimeSpan.FromMinutes(5), When.NotExists))
+		{
+			_logger.LogInformation($"[Threads] Сообщение {msg.MediaId} уже в обработке. Игнорируем дубль.");
+			return;
+		}
+
+		// 2. Ищем бота в БД по ThreadsUserId (target_id из вебхука)
+		var settings = await _db.ThreadsSettings.FirstOrDefaultAsync(s => s.ThreadsUserId == msg.BotThreadsId);
 		if (settings == null || !settings.IsActive) return;
 
 		try
 		{
-			// 3. Генерируем ответ
-			var prompt = $"{settings.SystemPrompt}\n\nПользователь @{msg.Username} написал комментарий: {msg.UserText}. Ответь ему.";
+			_logger.LogInformation($"[Threads] Генерируем ответ для @{msg.Username} на '{msg.Text}'");
+
+			// 3. Запрос к ИИ
+			var prompt = $"{settings.SystemPrompt}\n\nТы отвечаешь в Threads. Пользователь @{msg.Username} написал: {msg.Text}";
 			//var aiResponse = await _aiService.GetAnswerAsync(prompt, new List<AiRequest>(), null);
 			var aiResponse = "❤️";
 
 			if (string.IsNullOrWhiteSpace(aiResponse)) return;
 
-			// 4. Публикуем в Threads
-			var creationId = await _threadsService.CreateReplyContainerAsync(msg.TargetMediaId, aiResponse, settings.AccessToken);
-			var isReady = await _threadsService.WaitForMediaReadyAsync(creationId, settings.AccessToken);
-			if (!isReady)
+			// 4. Создаем контейнер ответа в Meta
+			var creationId = await _threadsService.CreateReplyContainerAsync(msg.MediaId, aiResponse, settings.AccessToken);
+
+			_logger.LogInformation($"[Threads] Контейнер {creationId} создан. Ждем 30с до публикации.");
+
+			// 5. ПЛАНИРУЕМ ПУБЛИКАЦИЮ ЧЕРЕЗ 30 СЕКУНД
+			// Мы не спим в потоке, а отдаем задачу в Quartz
+			await context.SchedulePublish(TimeSpan.FromSeconds(30), new PublishThreadsCommand
 			{
-				throw new Exception($"Медиа {creationId} не готово к публикации после ожидания");
-			}
-
-			await _threadsService.PublishReplyAsync(creationId, settings.AccessToken);
-
-			_logger.LogInformation($"[ThreadsWorker] Отправлен ответ для @{msg.Username} на коммент {msg.TargetMediaId}");
+				BotDbId = settings.Id, // используем UserId как ключ
+				CreationId = creationId,
+				TargetMediaId = msg.MediaId
+			});
 		}
 		catch (Exception ex)
 		{
-			// Если ошибка - удаляем метку из Redis, чтобы следующая джоба могла снова найти этот коммент
-			await _redis.KeyDeleteAsync($"threads_queued:{msg.TargetMediaId}");
-			_logger.LogError(ex, "Ошибка при ответе в Threads");
-			throw; // Делаем ретрай через MassTransit
+			await _redis.KeyDeleteAsync(lockKey); // Снимаем замок при ошибке
+			_logger.LogError(ex, "Ошибка при подготовке ответа Threads");
 		}
 	}
 }

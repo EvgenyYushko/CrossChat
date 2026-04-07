@@ -74,49 +74,56 @@ namespace CrossChat.Controllers
 				using var doc = JsonDocument.Parse(body);
 				var root = doc.RootElement;
 
-				// Проверяем, что это объект threads
-				if (!root.TryGetProperty("object", out var obj) || obj.GetString() != "threads")
-					return Ok();
-
-				var entries = root.GetProperty("entry");
-				foreach (var entry in entries.EnumerateArray())
+				// Проверяем поле "topic" (в Threads оно в корне)
+				if (root.TryGetProperty("topic", out var topic) &&
+				   (topic.GetString() == "moderate" || topic.GetString() == "interaction"))
 				{
-					var botThreadsId = entry.GetProperty("id").GetString();
-
-					if (entry.TryGetProperty("changes", out var changes))
+					if (root.TryGetProperty("values", out var values))
 					{
-						foreach (var change in changes.EnumerateArray())
+						foreach (var item in values.EnumerateArray())
 						{
-							var field = change.GetProperty("field").GetString();
-							var value = change.GetProperty("value");
+							var field = item.GetProperty("field").GetString();
+							var val = item.GetProperty("value");
 
-							// 1. Обработка REPLIES (Ответы на посты бота) 
-							// 2. Обработка MENTIONS (Упоминание @бота)
 							if (field == "replies" || field == "mentions")
 							{
-								var text = value.GetProperty("text").GetString();
-								var username = value.GetProperty("username").GetString();
-								var mediaId = value.GetProperty("id").GetString(); // ID самого комментария/упоминания
+								// 1. Получаем имя автора сообщения
+								var authorUsername = val.GetProperty("username").GetString();
 
-								_logger.LogInformation($"[Threads] New {field} from {username}: {text}");
+								// 2. Получаем имя бота (владельца)
+								string? botUsername = null;
+								string? botThreadsId = null;
 
-								//await _publishEndpoint.Publish(new ThreadsEventReceived
-								//{
-								//	BotThreadsId = botThreadsId!,
-								//	Type = field,
-								//	MediaId = mediaId!,
-								//	Text = text,
-								//	Username = username
-								//});
-							}
+								if (val.TryGetProperty("root_post", out var rootPost))
+								{
+									botUsername = rootPost.GetProperty("username").GetString();
+									botThreadsId = rootPost.GetProperty("owner_id").GetString();
+								}
 
-							// 3. Обработка PUBLISH (Подтверждение публикации самим ботом)
-							else if (field == "publish")
-							{
-								var mediaId = value.GetProperty("id").GetString();
-								_logger.LogInformation($"[Threads] Content successfully published. MediaId: {mediaId}");
+								// --- ЗАЩИТА ОТ САМОГО СЕБЯ ---
+								// Если автор сообщения и есть наш бот - игнорируем
+								if (!string.IsNullOrEmpty(authorUsername) &&
+									authorUsername.Equals(botUsername, StringComparison.OrdinalIgnoreCase))
+								{
+									_logger.LogInformation($"[Threads] Игнорируем эхо-сообщение от самого бота (@{authorUsername})");
+									continue;
+								}
 
-								// Здесь можно просто логировать или обновлять статус в БД
+								if (string.IsNullOrEmpty(botThreadsId)) continue;
+
+								var text = val.GetProperty("text").GetString();
+								var mediaId = val.GetProperty("id").GetString();
+
+								_logger.LogInformation($"[Threads] Пойман {field} от {authorUsername}: {text}");
+
+								await _publishEndpoint.Publish(new ThreadsEventReceived
+								{
+									BotThreadsId = botThreadsId,
+									Type = field,
+									MediaId = mediaId!,
+									Text = text ?? "",
+									Username = authorUsername ?? "user"
+								});
 							}
 						}
 					}
