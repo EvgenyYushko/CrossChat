@@ -92,46 +92,68 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string code, string state)
 		{
+			// 1. Логируем входящие данные
+			_logger.LogInformation($"[BlueSky] Callback received. Code length: {code?.Length ?? 0}, State: {state}");
+
 			var savedState = HttpContext.Session.GetString("bsky_state");
 			var codeVerifier = HttpContext.Session.GetString("bsky_verifier");
 
-			if (state != savedState || string.IsNullOrEmpty(codeVerifier))
+			// Проверка безопасности
+			if (string.IsNullOrEmpty(code) || state != savedState || string.IsNullOrEmpty(codeVerifier))
 			{
-				return BadRequest("Ошибка безопасности: неверный state");
+				_logger.LogError($"[BlueSky] Security check failed. Code present: {!string.IsNullOrEmpty(code)}, State match: {state == savedState}");
+				return BadRequest("Ошибка авторизации: неверный state или отсутствует код.");
 			}
 
 			try
 			{
-				// Обмен кода на токены
+				// 2. Формируем запрос на обмен токена
 				var tokenUrl = "https://bsky.social/oauth/token";
-				var formData = new Dictionary<string, string>
+
+				// ВАЖНО: Используем Dictionary для данных формы
+				var values = new Dictionary<string, string>
 				{
 					{ "grant_type", "authorization_code" },
 					{ "code", code },
+					{ "client_id", ClientId }, // Должен быть https://crosschat.ru/bluesky/client-metadata.json
 					{ "redirect_uri", RedirectUri },
-					{ "client_id", ClientId },
 					{ "code_verifier", codeVerifier }
 				};
 
-				var response = await _httpClient.PostAsync(tokenUrl, new FormUrlEncodedContent(formData));
-				var json = await response.Content.ReadAsStringAsync();
+				var requestContent = new FormUrlEncodedContent(values);
 
-				if (!response.IsSuccessStatusCode) throw new Exception($"Token exchange failed: {json}");
+				// 3. Отправляем запрос
+				_logger.LogInformation($"[BlueSky] Exchanging code for token at {tokenUrl}...");
+				var response = await _httpClient.PostAsync(tokenUrl, requestContent);
+				var responseBody = await response.Content.ReadAsStringAsync();
 
-				var data = JsonDocument.Parse(json).RootElement;
+				if (!response.IsSuccessStatusCode)
+				{
+					_logger.LogError($"[BlueSky] Token exchange FAILED: {responseBody}");
+					return Content($"Ошибка обмена токена: {responseBody}");
+				}
 
-				await SaveToken(
-					data.GetProperty("access_token").GetString(),
-					data.GetProperty("refresh_token").GetString(),
-					HttpContext.Session.GetString("bsky_handle"),
-					HttpContext.Session.GetString("bsky_did")
-				);
+				// 4. Парсим ответ
+				using var doc = JsonDocument.Parse(responseBody);
+				var root = doc.RootElement;
+
+				string accessToken = root.GetProperty("access_token").GetString()!;
+				string refreshToken = root.GetProperty("refresh_token").GetString()!;
+
+				// Достаем сохраненные данные из сессии
+				string handle = HttpContext.Session.GetString("bsky_handle") ?? "unknown";
+				string did = HttpContext.Session.GetString("bsky_did") ?? "unknown";
+
+				// 5. Сохраняем в БД
+				await SaveToken(accessToken, refreshToken, handle, did);
+
+				_logger.LogInformation($"[BlueSky] ✅ Аккаунт {handle} успешно подключен!");
 
 				return RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "BlueSky Callback Error");
+				_logger.LogError(ex, "[BlueSky] Critical error in Callback");
 				return RedirectToAction("Index");
 			}
 		}
