@@ -222,8 +222,11 @@ namespace CrossChat.Controllers
 				scope = "atproto transition:generic",
 				grant_types = new[] { "authorization_code", "refresh_token" },
 				response_types = new[] { "code" },
-				token_endpoint_auth_method = "none", // Для работы без Client Secret
-				application_type = "web"
+				application_type = "web",
+				token_endpoint_auth_method = "none",
+
+				// === ВАЖНОЕ ДОБАВЛЕНИЕ ===
+				dpop_bound_access_tokens = true
 			});
 		}
 	}
