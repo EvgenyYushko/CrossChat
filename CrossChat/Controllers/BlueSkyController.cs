@@ -8,6 +8,7 @@ using CrossChat.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.IdentityModel.Tokens;
 using static CrossChat.Constants.AppConstants;
 
@@ -22,12 +23,14 @@ namespace CrossChat.Controllers
 		private readonly HttpClient _httpClient;
 		private string ClientId => $"{APP_URL}/bluesky/client-metadata.json";
 		private string RedirectUri => $"{APP_URL}/bluesky/auth/callback";
+		private readonly IDistributedCache _cache;
 
-		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db)
+		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache)
 		{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
+			_cache = cache; // Используем кеш вместо сессии
 		}
 
 		[HttpGet]
@@ -42,33 +45,24 @@ namespace CrossChat.Controllers
 		public async Task<IActionResult> Connect(string handle)
 		{
 			handle = handle.Replace("@", "").Trim().ToLower();
-
 			try
 			{
-				// А. Разрешаем handle в DID (узнаем реальный ID пользователя)
 				var resolveUrl = $"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={handle}";
 				var resolveResp = await _httpClient.GetAsync(resolveUrl);
-				if (!resolveResp.IsSuccessStatusCode) return BadRequest("Неверный Handle");
-
 				var resolveJson = await resolveResp.Content.ReadFromJsonAsync<JsonElement>();
-				string did = resolveJson.GetProperty("did").GetString();
+				string did = resolveJson.GetProperty("did").GetString()!;
 
-				// Б. Генерируем PKCE (Code Verifier и Challenge)
 				var codeVerifier = GenerateRandomString(64);
 				var codeChallenge = GenerateCodeChallenge(codeVerifier);
 				var state = Guid.NewGuid().ToString("N");
 
-				// Сохраняем verifier и state в сессию (они понадобятся в Callback)
-				Response.Cookies.Append("bsky_verifier", codeVerifier, new CookieOptions { HttpOnly = true, Secure = true });
-				HttpContext.Session.SetString("bsky_state", state);
-				HttpContext.Session.SetString("bsky_handle", handle);
-				HttpContext.Session.SetString("bsky_did", did);
+				// === ВАЖНО: Сохраняем данные в REDIS на 15 минут, привязывая к state ===
+				var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) };
+				await _cache.SetStringAsync($"bsky_verifier:{state}", codeVerifier, cacheOptions);
+				await _cache.SetStringAsync($"bsky_handle:{state}", handle, cacheOptions);
+				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
 
-				// В. Формируем URL для редиректа на PDS пользователя
-				// Для простоты используем bsky.social, но по протоколу нужно искать сервер через DID
-				var authEndpoint = "https://bsky.social/oauth/authorize";
-
-				var url = $"{authEndpoint}?" +
+				var url = $"https://bsky.social/oauth/authorize?" +
 						  $"client_id={Uri.EscapeDataString(ClientId)}&" +
 						  $"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 						  $"response_type=code&" +
@@ -80,11 +74,7 @@ namespace CrossChat.Controllers
 
 				return Redirect(url);
 			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "BlueSky Connect Error");
-				return RedirectToAction("Index");
-			}
+			catch (Exception ex) { return RedirectToAction("Index"); }
 		}
 
 		// ==========================================================
@@ -94,61 +84,34 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, [FromQuery] string? error_description)
 		{
-			// 1. Логируем входящие данные
-			_logger.LogInformation($"[BlueSky] Callback params -> Code: {code}, State: {state}, Error: {error}, Desc: {error_description}");
+			_logger.LogInformation($"[BlueSky] Callback params -> Code: {code?.Length}, State: {state}");
 
-			if (!string.IsNullOrEmpty(error))
+			// Достаем данные из кэша по ключу state
+			var codeVerifier = await _cache.GetStringAsync($"bsky_verifier:{state}");
+			var handle = await _cache.GetStringAsync($"bsky_handle:{state}");
+			var did = await _cache.GetStringAsync($"bsky_did:{state}");
+
+			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(codeVerifier))
 			{
-				_logger.LogError($"[BlueSky] Error from server: {error} - {error_description}");
-				return Content($"BlueSky вернул ошибку: {error_description}");
-			}
-
-			var savedState = HttpContext.Session.GetString("bsky_state");
-			var codeVerifier = HttpContext.Session.GetString("bsky_verifier");
-
-			_logger.LogInformation($"[BlueSky] Session data -> SavedState: {savedState}, Verifier: {codeVerifier}");
-
-			// Проверка безопасности
-			if (string.IsNullOrEmpty(code))
-			{
-				_logger.LogError($"[BlueSky] Security check failed. Code present: {!string.IsNullOrEmpty(code)}, State match: {state == savedState}");
-				return BadRequest("Ошибка авторизации: неверный state или отсутствует код.");
-			}
-
-			if (state != savedState)
-			{
-				_logger.LogError($"[BlueSky] State mismatch! Received: {state}, Expected: {savedState}");
-				// Для теста можно закомментировать return, но в продакшене это важно для безопасности
-				// return BadRequest("Ошибка безопасности: неверный state.");
+				_logger.LogError("Security check failed or session expired");
+				return BadRequest("Сессия истекла или ошибка авторизации.");
 			}
 
 			try
 			{
-				// 2. Формируем запрос на обмен токена
 				var tokenUrl = "https://bsky.social/oauth/token";
-
-				// Генерируем DPoP доказательство для POST запроса
 				var (dpopProof, privateKey) = CreateDPoPProof("POST", tokenUrl);
 
-				// Сохраняем ключ — он нам понадобится для будущих запросов к API!
-				HttpContext.Session.SetString("bsky_private_key", privateKey);
+				var values = new Dictionary<string, string> {
+			{ "grant_type", "authorization_code" },
+			{ "code", code },
+			{ "redirect_uri", RedirectUri },
+			{ "client_id", ClientId },
+			{ "code_verifier", codeVerifier }
+		};
 
-				var formData = new Dictionary<string, string>
-				{
-					{ "grant_type", "authorization_code" },
-					{ "code", code },
-					{ "redirect_uri", RedirectUri },
-					{ "client_id", ClientId },
-					{ "code_verifier", codeVerifier }
-				};
-
-				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
-				{
-					Content = new FormUrlEncodedContent(formData)
-				};
-
-				// ДОБАВЛЯЕМ DPoP ЗАГОЛОВОК
-				request.Headers.Add("DPoP", dpopProof);
+				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
+				request.Headers.Add("DPoP", dpopProof); // Добавляем DPoP
 
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
@@ -159,29 +122,18 @@ namespace CrossChat.Controllers
 					return Content(json);
 				}
 
-				// 4. Парсим ответ
-				using var doc = JsonDocument.Parse(json);
-				var root = doc.RootElement;
+				var data = JsonDocument.Parse(json).RootElement;
 
-				string accessToken = root.GetProperty("access_token").GetString()!;
-				string refreshToken = root.GetProperty("refresh_token").GetString()!;
-
-				// Достаем сохраненные данные из сессии
-				string handle = HttpContext.Session.GetString("bsky_handle") ?? "unknown";
-				string did = HttpContext.Session.GetString("bsky_did") ?? "unknown";
-
-				// 5. Сохраняем в БД
-				await SaveToken(accessToken, refreshToken, handle, did);
-
-				_logger.LogInformation($"[BlueSky] ✅ Аккаунт {handle} успешно подключен!");
+				// Здесь ты должен сохранить в БД: access_token, refresh_token И privateKey!
+				// PrivateKey нужен, чтобы потом подписывать запросы от имени этого юзера
+				await SaveToken(data.GetProperty("access_token").GetString()!,
+								data.GetProperty("refresh_token").GetString()!,
+								handle!, did!);
+				_logger.LogInformation($"privateKey = {privateKey}");
 
 				return RedirectToAction("Index");
 			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "[BlueSky] Critical error in Callback");
-				return RedirectToAction("Index");
-			}
+			catch (Exception ex) { return RedirectToAction("Index"); }
 		}
 
 		// ==========================================================
@@ -222,46 +174,34 @@ namespace CrossChat.Controllers
 
 		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
 		{
-			// 1. Создаем или восстанавливаем ключ (на эллиптических кривых P-256)
 			ECDsaSecurityKey key;
 			if (string.IsNullOrEmpty(existingKeyJson))
 			{
-				var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-				key = new ECDsaSecurityKey(ecdsa);
+				key = new ECDsaSecurityKey(ECDsa.Create(ECCurve.NamedCurves.nistP256));
 			}
 			else
 			{
-				// Если ключ уже есть (например, из сессии) - восстанавливаем
 				var params_ = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
-				var ecdsa = ECDsa.Create(params_);
-				key = new ECDsaSecurityKey(ecdsa);
+				key = new ECDsaSecurityKey(ECDsa.Create(params_));
 			}
 
-			var handler = new JwtSecurityTokenHandler();
-
-			// 2. Формируем JWK (публичный ключ) для заголовка JWT
 			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(key);
 			jwk.Alg = "ES256";
 
-			// 3. Данные внутри DPoP (обязательны по спецификации)
-			var header = new JwtHeader(new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256)) {
-				{ "jwk", jwk },
-				{ "typ", "dpop+jwt" }
-			};
+			// ИСПРАВЛЕНИЕ: Используем индексер, чтобы избежать Duplicate Key
+			var header = new JwtHeader(new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256));
+			header["jwk"] = jwk;
+			header["typ"] = "dpop+jwt";
 
 			var payload = new JwtPayload {
-				{ "jti", Guid.NewGuid().ToString("N") }, // Уникальный ID запроса
-				{ "htm", method.ToUpper() },             // Метод (POST/GET)
-				{ "htu", url },                          // Куда шлем
-				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
-			};
+		{ "jti", Guid.NewGuid().ToString("N") },
+		{ "htm", method.ToUpper() },
+		{ "htu", url },
+		{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
+	};
 
-			var token = new JwtSecurityToken(header, payload);
-			var proof = handler.WriteToken(token);
-
-			// Экспортируем параметры ключа в JSON, чтобы сохранить в сессию
+			var proof = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(header, payload));
 			var privateKey = JsonSerializer.Serialize(key.ECDsa.ExportParameters(true));
-
 			return (proof, privateKey);
 		}
 
