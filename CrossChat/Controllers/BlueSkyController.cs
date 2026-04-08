@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,6 +8,7 @@ using CrossChat.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
@@ -57,7 +59,7 @@ namespace CrossChat.Controllers
 				var state = Guid.NewGuid().ToString("N");
 
 				// Сохраняем verifier и state в сессию (они понадобятся в Callback)
-				HttpContext.Session.SetString("bsky_verifier", codeVerifier);
+				Response.Cookies.Append("bsky_verifier", codeVerifier, new CookieOptions { HttpOnly = true, Secure = true });
 				HttpContext.Session.SetString("bsky_state", state);
 				HttpContext.Session.SetString("bsky_handle", handle);
 				HttpContext.Session.SetString("bsky_did", did);
@@ -125,31 +127,40 @@ namespace CrossChat.Controllers
 				// 2. Формируем запрос на обмен токена
 				var tokenUrl = "https://bsky.social/oauth/token";
 
-				// ВАЖНО: Используем Dictionary для данных формы
-				var values = new Dictionary<string, string>
+				// Генерируем DPoP доказательство для POST запроса
+				var (dpopProof, privateKey) = CreateDPoPProof("POST", tokenUrl);
+
+				// Сохраняем ключ — он нам понадобится для будущих запросов к API!
+				HttpContext.Session.SetString("bsky_private_key", privateKey);
+
+				var formData = new Dictionary<string, string>
 				{
 					{ "grant_type", "authorization_code" },
 					{ "code", code },
-					{ "client_id", ClientId }, // Должен быть https://crosschat.ru/bluesky/client-metadata.json
 					{ "redirect_uri", RedirectUri },
+					{ "client_id", ClientId },
 					{ "code_verifier", codeVerifier }
 				};
 
-				var requestContent = new FormUrlEncodedContent(values);
+				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
+				{
+					Content = new FormUrlEncodedContent(formData)
+				};
 
-				// 3. Отправляем запрос
-				_logger.LogInformation($"[BlueSky] Exchanging code for token at {tokenUrl}...");
-				var response = await _httpClient.PostAsync(tokenUrl, requestContent);
-				var responseBody = await response.Content.ReadAsStringAsync();
+				// ДОБАВЛЯЕМ DPoP ЗАГОЛОВОК
+				request.Headers.Add("DPoP", dpopProof);
+
+				var response = await _httpClient.SendAsync(request);
+				var json = await response.Content.ReadAsStringAsync();
 
 				if (!response.IsSuccessStatusCode)
 				{
-					_logger.LogError($"[BlueSky] Token exchange FAILED: {responseBody}");
-					return Content($"Ошибка обмена токена: {responseBody}");
+					_logger.LogError($"Token exchange failed: {json}");
+					return Content(json);
 				}
 
 				// 4. Парсим ответ
-				using var doc = JsonDocument.Parse(responseBody);
+				using var doc = JsonDocument.Parse(json);
 				var root = doc.RootElement;
 
 				string accessToken = root.GetProperty("access_token").GetString()!;
@@ -207,6 +218,51 @@ namespace CrossChat.Controllers
 				_db.BlueSkySettings.Update(settings);
 
 			await _db.SaveChangesAsync();
+		}
+
+		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
+		{
+			// 1. Создаем или восстанавливаем ключ (на эллиптических кривых P-256)
+			ECDsaSecurityKey key;
+			if (string.IsNullOrEmpty(existingKeyJson))
+			{
+				var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+				key = new ECDsaSecurityKey(ecdsa);
+			}
+			else
+			{
+				// Если ключ уже есть (например, из сессии) - восстанавливаем
+				var params_ = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
+				var ecdsa = ECDsa.Create(params_);
+				key = new ECDsaSecurityKey(ecdsa);
+			}
+
+			var handler = new JwtSecurityTokenHandler();
+
+			// 2. Формируем JWK (публичный ключ) для заголовка JWT
+			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(key);
+			jwk.Alg = "ES256";
+
+			// 3. Данные внутри DPoP (обязательны по спецификации)
+			var header = new JwtHeader(new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256)) {
+				{ "jwk", jwk },
+				{ "typ", "dpop+jwt" }
+			};
+
+			var payload = new JwtPayload {
+				{ "jti", Guid.NewGuid().ToString("N") }, // Уникальный ID запроса
+				{ "htm", method.ToUpper() },             // Метод (POST/GET)
+				{ "htu", url },                          // Куда шлем
+				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
+			};
+
+			var token = new JwtSecurityToken(header, payload);
+			var proof = handler.WriteToken(token);
+
+			// Экспортируем параметры ключа в JSON, чтобы сохранить в сессию
+			var privateKey = JsonSerializer.Serialize(key.ECDsa.ExportParameters(true));
+
+			return (proof, privateKey);
 		}
 
 		[AllowAnonymous]

@@ -7,6 +7,7 @@ using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
@@ -49,8 +50,20 @@ builder.Services.AddControllers();
 
 // 1. == НАСТРОЙКА REDIS ==
 // Теперь этот метод найдет значение, так как файл уже загружен выше
-var redisConn = GetConfigOrThrow("ExternalHostingsSettings:Redis");
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
+// 1. Получаем строку подключения из конфига
+
+
+// 2. Создаем подключение (Multiplexer)
+// Мы делаем это прямо здесь, чтобы использовать его для DataProtection
+
+var redisConnString = GetConfigOrThrow("ExternalHostingsSettings:Redis");
+var redisMultiplexer = ConnectionMultiplexer.Connect(redisConnString);
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToStackExchangeRedis(() => redisMultiplexer.GetDatabase(), "DataProtection-Keys")
+    .SetApplicationName("CrossChat");
 
 var rabbitMqUrl = GetConfigOrThrow("ExternalHostingsSettings:RabbitMq");
 
