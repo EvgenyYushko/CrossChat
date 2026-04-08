@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,13 +25,15 @@ namespace CrossChat.Controllers
 		private string ClientId => $"{APP_URL}/bluesky/client-metadata.json";
 		private string RedirectUri => $"{APP_URL}/bluesky/auth/callback";
 		private readonly IDistributedCache _cache;
+		private readonly IBlueSkyService _blueSkyService;
 
-		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache)
+		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache, IBlueSkyService blueSkyService)
 		{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
 			_cache = cache; // Используем кеш вместо сессии
+			_blueSkyService = blueSkyService;
 		}
 
 		[HttpGet]
@@ -50,27 +53,24 @@ namespace CrossChat.Controllers
 			if (settings == null || string.IsNullOrEmpty(settings.AccessToken) || string.IsNullOrEmpty(settings.PdsUrl))
 				return Content("Данные или PDS URL не найдены. Переподключите аккаунт.");
 
-			// ИСПОЛЬЗУЕМ СОХРАНЕННЫЙ PDS URL
+			// 1. Формируем URL и данные поста
 			var apiUrl = $"{settings.PdsUrl.TrimEnd('/')}/xrpc/com.atproto.repo.createRecord";
+			var payload = new
+			{
+				repo = settings.Did,
+				collection = "app.bsky.feed.post",
+				record = new
+				{
+					text = "Проверка связи! Бот CrossChat теперь умеет работать с DPoP Nonce 🛡️ #atproto",
+					createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				}
+			};
 
 			try
 			{
-				// Данные поста
-				var payload = new
-				{
-					repo = settings.Did,
-					collection = "app.bsky.feed.post",
-					record = new
-					{
-						text = "Теперь я шлю посты прямо на свой PDS! 🚀 #atproto #CrossChat",
-						createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-					}
-				};
+				// --- ПОПЫТКА №1 (без nonce) ---
+				var (dpopProof, _) = _blueSkyService.CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson, null, settings.AccessToken);
 
-				// 1. Генерируем DPoP для POST запроса
-				var (dpopProof, _) = CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson);
-
-				// 2. Формируем запрос
 				var request = new HttpRequestMessage(HttpMethod.Post, apiUrl)
 				{
 					Content = JsonContent.Create(payload)
@@ -78,25 +78,45 @@ namespace CrossChat.Controllers
 				request.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
 				request.Headers.Add("DPoP", dpopProof);
 
-				// 3. Отправляем
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
 
-				if (response.IsSuccessStatusCode)
+				// --- ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE ---
+				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
 				{
-					return Content($"УРА! Пост опубликован. Ответ API: {json}");
-				}
-				else if (json.Contains("use_dpop_nonce"))
-				{
-					// Если сервер требует Nonce, нужно повторить запрос (как мы делали в Callback)
-					// Для теста просто посмотри лог, но в Воркере это нужно будет реализовать
-					return Content("Сервер запросил Nonce. Нужно реализовать логику повтора.");
+					_logger.LogInformation("[BlueSky] PDS запросил Nonce. Повторяем запрос...");
+
+					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
+					{
+						var serverNonce = nonceValues.First();
+
+						// --- ПОПЫТКА №2 (с полученным nonce) ---
+						// Используем тот же ключ из настроек и метод POST
+						var (retryDpopProof, _) = _blueSkyService.CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson, serverNonce, settings.AccessToken);
+
+						// Создаем новый запрос (старый объект request использовать нельзя)
+						var retryRequest = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+						{
+							Content = JsonContent.Create(payload)
+						};
+						retryRequest.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
+						retryRequest.Headers.Add("DPoP", retryDpopProof);
+
+						response = await _httpClient.SendAsync(retryRequest);
+						json = await response.Content.ReadAsStringAsync();
+					}
 				}
 
-				return Content($"Ошибка: {response.StatusCode} - {json}");
+				if (response.IsSuccessStatusCode)
+				{
+					return Content($"УСПЕХ! Пост создан. Ответ: {json}");
+				}
+
+				return Content($"Ошибка после повтора: {response.StatusCode} - {json}");
 			}
 			catch (Exception ex)
 			{
+				_logger.LogError(ex, "Критическая ошибка в TestApi");
 				return Content($"Критическая ошибка: {ex.Message}");
 			}
 		}
@@ -158,6 +178,26 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect(int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+			// Ищем конкретного бота этого юзера
+			var settings = await _db.BlueSkySettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null)
+			{
+				_db.BlueSkySettings.Remove(settings);
+				await _db.SaveChangesAsync();
+				_logger.LogInformation($"[BlueSky] Аккаунт {settings.Handle} полностью удален из системы.");
+			}
+
+			return RedirectToAction("Index");
+		}
+
 		// ==========================================================
 		// 2. ОБРАБОТКА ОТВЕТА (CALLBACK)
 		// ==========================================================
@@ -185,7 +225,7 @@ namespace CrossChat.Controllers
 			try
 			{
 				var tokenUrl = "https://bsky.social/oauth/token";
-				var (dpopProof, privateKey) = CreateDPoPProof("POST", tokenUrl);
+				var (dpopProof, privateKey) = _blueSkyService.CreateDPoPProof("POST", tokenUrl);
 
 				var values = new Dictionary<string, string> {
 					{ "grant_type", "authorization_code" },
@@ -209,7 +249,7 @@ namespace CrossChat.Controllers
 						var serverNonce = nonceValues.First();
 
 						// Используем ТОТ ЖЕ ключ (privateKey), что получили в первой попытке выше
-						var (newDpopProof, _) = CreateDPoPProof("POST", tokenUrl, privateKey, serverNonce);
+						var (newDpopProof, _) = _blueSkyService.CreateDPoPProof("POST", tokenUrl, privateKey, serverNonce);
 
 						var retryRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
 						retryRequest.Headers.Add("DPoP", newDpopProof);
@@ -227,10 +267,13 @@ namespace CrossChat.Controllers
 
 				// 3. УСПЕХ! Парсим и сохраняем
 				var data = JsonDocument.Parse(json).RootElement;
+				int expiresIn = data.GetProperty("expires_in").GetInt32();
+				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
+
 				await SaveToken(internalUserId,
 								data.GetProperty("access_token").GetString()!,
 								data.GetProperty("refresh_token").GetString()!,
-								handle!, did!, privateKey, pds);
+								handle!, did!, privateKey, pds, expireDate);
 
 				return RedirectToAction("Index");
 			}
@@ -257,7 +300,7 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds)
+		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate)
 		{
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -268,6 +311,7 @@ namespace CrossChat.Controllers
 			}
 
 			settings.AccessToken = access;
+			settings.TokenExpiresAt = expireDate;
 			settings.RefreshToken = refresh;
 			settings.Handle = handle;
 			settings.Did = did;
@@ -278,71 +322,7 @@ namespace CrossChat.Controllers
 			await _db.SaveChangesAsync();
 		}
 
-		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null, string? nonce = null)
-		{
-			ECDsa ecdsa;
-
-			if (string.IsNullOrEmpty(existingKeyJson))
-			{
-				// Создаем новый ключ
-				ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-			}
-			else
-			{
-				// Восстанавливаем ключ из нашего DTO
-				var keyDto = JsonSerializer.Deserialize<BlueSkyKeyDto>(existingKeyJson);
-
-				// ВАЖНО: Координаты X и Y передаются через структуру ECPoint в поле Q
-				var params_ = new ECParameters
-				{
-					Curve = ECCurve.NamedCurves.nistP256,
-					D = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto!.D),
-					Q = new ECPoint
-					{
-						X = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto.X),
-						Y = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto.Y)
-					}
-				};
-				ecdsa = ECDsa.Create(params_);
-			}
-
-			var signingKey = new ECDsaSecurityKey(ecdsa);
-			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(signingKey);
-
-			// Публичная часть для заголовка (только X и Y)
-			var publicJwkDict = new Dictionary<string, object> {
-				{ "kty", "EC" }, { "crv", "P-256" }, { "x", jwk.X }, { "y", jwk.Y }, { "alg", "ES256" }
-			};
-
-			var handler = new JwtSecurityTokenHandler();
-			var header = new JwtHeader(new SigningCredentials(signingKey, SecurityAlgorithms.EcdsaSha256));
-			header["typ"] = "dpop+jwt";
-			header["jwk"] = publicJwkDict;
-
-			var payload = new JwtPayload {
-				{ "jti", Guid.NewGuid().ToString("N") },
-				{ "htm", method.ToUpper() },
-				{ "htu", url },
-				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
-			};
-
-			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
-
-			var token = new JwtSecurityToken(header, payload);
-			var proof = handler.WriteToken(token);
-
-			// Экспортируем параметры в наш DTO для сохранения
-			var p = ecdsa.ExportParameters(true);
-			var exportDto = new BlueSkyKeyDto
-			{
-				X = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.Q.X),
-				Y = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.Q.Y),
-				D = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.D)
-			};
-			var fullKeyJson = JsonSerializer.Serialize(exportDto);
-
-			return (proof, fullKeyJson);
-		}
+		
 
 		[AllowAnonymous]
 		[HttpGet("client-metadata.json")]
@@ -366,10 +346,5 @@ namespace CrossChat.Controllers
 		}
 	}
 
-	public class BlueSkyKeyDto
-	{
-		public string? X { get; set; }
-		public string? Y { get; set; }
-		public string? D { get; set; }
-	}
+	
 }

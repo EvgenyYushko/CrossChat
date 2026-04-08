@@ -35,6 +35,10 @@ namespace CrossChat.Worker
 				client.BaseAddress = new Uri("https://graph.threads.net/");
 			});
 
+			services.AddHttpClient<IBlueSkyService, BlueSkyService>(client =>
+			{
+			});
+
 			var channel = GrpcChannel.ForAddress("https://google-services-kdg8.onrender.com", new GrpcChannelOptions
 			{
 				HttpHandler = new GrpcWebHandler(GrpcWebMode.GrpcWeb, new HttpClientHandler())
