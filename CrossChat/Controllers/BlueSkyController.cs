@@ -28,7 +28,8 @@ namespace CrossChat.Controllers
 		private readonly IBlueSkyService _blueSkyService;
 
 		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache, IBlueSkyService blueSkyService)
-		{
+		
+			{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
