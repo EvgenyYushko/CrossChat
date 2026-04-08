@@ -111,36 +111,52 @@ namespace CrossChat.Controllers
 
 				var values = new Dictionary<string, string> {
 					{ "grant_type", "authorization_code" },
-					{ "code", code },
+					{ "code", code! },
 					{ "redirect_uri", RedirectUri },
 					{ "client_id", ClientId },
-					{ "code_verifier", codeVerifier }
+					{ "code_verifier", codeVerifier! }
 				};
 
 				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
-				request.Headers.Add("DPoP", dpopProof); // Добавляем DPoP
+				request.Headers.Add("DPoP", dpopProof);
 
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
 
+				// 2. ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE
+				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
+				{
+					_logger.LogInformation("[BlueSky] Сервер запросил Nonce. Повторяем запрос...");
+
+					// Извлекаем заголовок DPoP-Nonce из ответа сервера
+					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
+					{
+						var serverNonce = nonceValues.First();
+
+						// Генерируем НОВОЕ доказательство уже С НОНСОМ и тем же ключом
+						var (newDpopProof, _) = CreateDPoPProof("POST", tokenUrl, privateKey, serverNonce);
+
+						// Создаем новый запрос (старый использовать нельзя)
+						var retryRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
+						retryRequest.Headers.Add("DPoP", newDpopProof);
+
+						response = await _httpClient.SendAsync(retryRequest);
+						json = await response.Content.ReadAsStringAsync();
+					}
+				}
+
 				if (!response.IsSuccessStatusCode)
 				{
-					_logger.LogError($"Token exchange failed: {json}");
+					_logger.LogError($"[BlueSky] Ошибка обмена токена: {json}");
 					return Content(json);
 				}
 
+				// 3. УСПЕХ! Парсим и сохраняем
 				var data = JsonDocument.Parse(json).RootElement;
-
-				// Здесь ты должен сохранить в БД: access_token, refresh_token И privateKey!
-				// PrivateKey нужен, чтобы потом подписывать запросы от имени этого юзера
-				await SaveToken(
-						internalUserId,
-						data.GetProperty("access_token").GetString()!,
-						data.GetProperty("refresh_token").GetString()!,
-						handle!,
-						did!,
-						privateKey
-				 );
+				await SaveToken(internalUserId,
+								data.GetProperty("access_token").GetString()!,
+								data.GetProperty("refresh_token").GetString()!,
+								handle!, did!, privateKey);
 
 				return RedirectToAction("Index");
 			}
@@ -187,9 +203,8 @@ namespace CrossChat.Controllers
 			await _db.SaveChangesAsync();
 		}
 
-		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
+		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null, string? nonce = null)
 		{
-			// 1. Создаем или восстанавливаем ключ
 			ECDsaSecurityKey signingKey;
 			if (string.IsNullOrEmpty(existingKeyJson))
 			{
@@ -201,29 +216,16 @@ namespace CrossChat.Controllers
 				signingKey = new ECDsaSecurityKey(ECDsa.Create(@params));
 			}
 
-			// 2. Генерируем JWK и СТРОГО оставляем только публичные поля
-			// BlueSky отклоняет запрос, если видит приватные поля (например, "d") в заголовке
 			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(signingKey);
-
-			// Создаем "чистый" словарь для заголовка (только публичные данные)
 			var publicJwkDict = new Dictionary<string, object> {
-				{ "kty", jwk.Kty },
-				{ "crv", jwk.Crv },
-				{ "x", jwk.X },
-				{ "y", jwk.Y },
-				{ "alg", "ES256" }
+				{ "kty", jwk.Kty }, { "crv", jwk.Crv }, { "x", jwk.X }, { "y", jwk.Y }, { "alg", "ES256" }
 			};
 
 			var handler = new JwtSecurityTokenHandler();
-
-			// 3. Формируем заголовок JWT
-			// Используем приватный ключ (signingKey) для подписи, 
-			// но в само тело заголовка кладем только публичный словарь (publicJwkDict)
 			var header = new JwtHeader(new SigningCredentials(signingKey, SecurityAlgorithms.EcdsaSha256));
 			header["typ"] = "dpop+jwt";
 			header["jwk"] = publicJwkDict;
 
-			// 4. Полезная нагрузка (Payload)
 			var payload = new JwtPayload {
 				{ "jti", Guid.NewGuid().ToString("N") },
 				{ "htm", method.ToUpper() },
@@ -231,11 +233,14 @@ namespace CrossChat.Controllers
 				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
 			};
 
+			// === НОВОЕ: Добавляем nonce, если сервер его прислал ===
+			if (!string.IsNullOrEmpty(nonce))
+			{
+				payload["nonce"] = nonce;
+			}
+
 			var token = new JwtSecurityToken(header, payload);
 			var proof = handler.WriteToken(token);
-
-			// 5. Экспортируем ПОЛНЫЙ ключ (с приватной частью) для сохранения в БД
-			// Нам нужно true в ExportParameters, чтобы потом иметь возможность подписывать новые запросы
 			var fullKeyJson = JsonSerializer.Serialize(signingKey.ECDsa.ExportParameters(true));
 
 			return (proof, fullKeyJson);
