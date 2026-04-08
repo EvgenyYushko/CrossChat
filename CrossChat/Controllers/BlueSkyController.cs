@@ -138,9 +138,9 @@ namespace CrossChat.Controllers
 						data.GetProperty("access_token").GetString()!,
 						data.GetProperty("refresh_token").GetString()!,
 						handle!,
-						did!
+						did!,
+						privateKey
 				 );
-				_logger.LogInformation($"privateKey = {privateKey}");
 
 				return RedirectToAction("Index");
 			}
@@ -167,9 +167,8 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task SaveToken(int userId, string access, string refresh, string handle, string did)
+		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey)
 		{
-			// Ищем настройки по переданному ID
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
 			if (settings == null)
@@ -182,10 +181,10 @@ namespace CrossChat.Controllers
 			settings.RefreshToken = refresh;
 			settings.Handle = handle;
 			settings.Did = did;
+			settings.PrivateKeyJson = privateKey; // Сохраняем ключ!
 			settings.IsActive = true;
 
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"[BlueSky] Данные успешно сохранены для пользователя {userId}");
 		}
 
 		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
@@ -197,27 +196,38 @@ namespace CrossChat.Controllers
 			}
 			else
 			{
-				var params_ = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
-				key = new ECDsaSecurityKey(ECDsa.Create(params_));
+				var @params = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
+				key = new ECDsaSecurityKey(ECDsa.Create(@params));
 			}
 
+			// Создаем JWK
 			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(key);
 			jwk.Alg = "ES256";
 
-			// ИСПРАВЛЕНИЕ: Используем индексер, чтобы избежать Duplicate Key
+			// ФИКС ОШИБКИ IDX11025: 
+			// Превращаем JWK в простой словарь через сериализатор, чтобы JWT библиотека не ругалась
+			var jwkJson = JsonSerializer.Serialize(jwk);
+			var jwkDict = JsonSerializer.Deserialize<Dictionary<string, object>>(jwkJson);
+
+			var handler = new JwtSecurityTokenHandler();
 			var header = new JwtHeader(new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256));
-			header["jwk"] = jwk;
+
 			header["typ"] = "dpop+jwt";
+			header["jwk"] = jwkDict; // Теперь тут простой словарь, и всё сработает
 
 			var payload = new JwtPayload {
-		{ "jti", Guid.NewGuid().ToString("N") },
-		{ "htm", method.ToUpper() },
-		{ "htu", url },
-		{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
-	};
+				{ "jti", Guid.NewGuid().ToString("N") },
+				{ "htm", method.ToUpper() },
+				{ "htu", url },
+				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
+			};
 
-			var proof = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(header, payload));
+			var token = new JwtSecurityToken(header, payload);
+			var proof = handler.WriteToken(token);
+
+			// Экспортируем параметры для хранения в БД
 			var privateKey = JsonSerializer.Serialize(key.ECDsa.ExportParameters(true));
+
 			return (proof, privateKey);
 		}
 
