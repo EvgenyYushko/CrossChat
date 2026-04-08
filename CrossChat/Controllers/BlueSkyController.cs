@@ -126,17 +126,13 @@ namespace CrossChat.Controllers
 				// 2. ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE
 				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
 				{
-					_logger.LogInformation("[BlueSky] Сервер запросил Nonce. Повторяем запрос...");
-
-					// Извлекаем заголовок DPoP-Nonce из ответа сервера
 					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
 					{
 						var serverNonce = nonceValues.First();
 
-						// Генерируем НОВОЕ доказательство уже С НОНСОМ и тем же ключом
+						// Используем ТОТ ЖЕ ключ (privateKey), что получили в первой попытке выше
 						var (newDpopProof, _) = CreateDPoPProof("POST", tokenUrl, privateKey, serverNonce);
 
-						// Создаем новый запрос (старый использовать нельзя)
 						var retryRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
 						retryRequest.Headers.Add("DPoP", newDpopProof);
 
@@ -205,20 +201,38 @@ namespace CrossChat.Controllers
 
 		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null, string? nonce = null)
 		{
-			ECDsaSecurityKey signingKey;
+			ECDsa ecdsa;
+
 			if (string.IsNullOrEmpty(existingKeyJson))
 			{
-				signingKey = new ECDsaSecurityKey(ECDsa.Create(ECCurve.NamedCurves.nistP256));
+				// Создаем новый ключ
+				ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 			}
 			else
 			{
-				var @params = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
-				signingKey = new ECDsaSecurityKey(ECDsa.Create(@params));
+				// Восстанавливаем ключ из нашего DTO
+				var keyDto = JsonSerializer.Deserialize<BlueSkyKeyDto>(existingKeyJson);
+
+				// ВАЖНО: Координаты X и Y передаются через структуру ECPoint в поле Q
+				var params_ = new ECParameters
+				{
+					Curve = ECCurve.NamedCurves.nistP256,
+					D = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto!.D),
+					Q = new ECPoint
+					{
+						X = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto.X),
+						Y = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.DecodeBytes(keyDto.Y)
+					}
+				};
+				ecdsa = ECDsa.Create(params_);
 			}
 
+			var signingKey = new ECDsaSecurityKey(ecdsa);
 			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(signingKey);
+
+			// Публичная часть для заголовка (только X и Y)
 			var publicJwkDict = new Dictionary<string, object> {
-				{ "kty", jwk.Kty }, { "crv", jwk.Crv }, { "x", jwk.X }, { "y", jwk.Y }, { "alg", "ES256" }
+				{ "kty", "EC" }, { "crv", "P-256" }, { "x", jwk.X }, { "y", jwk.Y }, { "alg", "ES256" }
 			};
 
 			var handler = new JwtSecurityTokenHandler();
@@ -233,15 +247,20 @@ namespace CrossChat.Controllers
 				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
 			};
 
-			// === НОВОЕ: Добавляем nonce, если сервер его прислал ===
-			if (!string.IsNullOrEmpty(nonce))
-			{
-				payload["nonce"] = nonce;
-			}
+			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
 
 			var token = new JwtSecurityToken(header, payload);
 			var proof = handler.WriteToken(token);
-			var fullKeyJson = JsonSerializer.Serialize(signingKey.ECDsa.ExportParameters(true));
+
+			// Экспортируем параметры в наш DTO для сохранения
+			var p = ecdsa.ExportParameters(true);
+			var exportDto = new BlueSkyKeyDto
+			{
+				X = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.Q.X),
+				Y = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.Q.Y),
+				D = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(p.D)
+			};
+			var fullKeyJson = JsonSerializer.Serialize(exportDto);
 
 			return (proof, fullKeyJson);
 		}
@@ -266,5 +285,12 @@ namespace CrossChat.Controllers
 				dpop_bound_access_tokens = true
 			});
 		}
+	}
+
+	public class BlueSkyKeyDto
+	{
+		public string? X { get; set; }
+		public string? Y { get; set; }
+		public string? D { get; set; }
 	}
 }
