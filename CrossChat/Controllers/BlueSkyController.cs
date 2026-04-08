@@ -189,32 +189,41 @@ namespace CrossChat.Controllers
 
 		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
 		{
-			ECDsaSecurityKey key;
+			// 1. Создаем или восстанавливаем ключ
+			ECDsaSecurityKey signingKey;
 			if (string.IsNullOrEmpty(existingKeyJson))
 			{
-				key = new ECDsaSecurityKey(ECDsa.Create(ECCurve.NamedCurves.nistP256));
+				signingKey = new ECDsaSecurityKey(ECDsa.Create(ECCurve.NamedCurves.nistP256));
 			}
 			else
 			{
 				var @params = JsonSerializer.Deserialize<ECParameters>(existingKeyJson);
-				key = new ECDsaSecurityKey(ECDsa.Create(@params));
+				signingKey = new ECDsaSecurityKey(ECDsa.Create(@params));
 			}
 
-			// Создаем JWK
-			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(key);
-			jwk.Alg = "ES256";
+			// 2. Генерируем JWK и СТРОГО оставляем только публичные поля
+			// BlueSky отклоняет запрос, если видит приватные поля (например, "d") в заголовке
+			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(signingKey);
 
-			// ФИКС ОШИБКИ IDX11025: 
-			// Превращаем JWK в простой словарь через сериализатор, чтобы JWT библиотека не ругалась
-			var jwkJson = JsonSerializer.Serialize(jwk);
-			var jwkDict = JsonSerializer.Deserialize<Dictionary<string, object>>(jwkJson);
+			// Создаем "чистый" словарь для заголовка (только публичные данные)
+			var publicJwkDict = new Dictionary<string, object> {
+				{ "kty", jwk.Kty },
+				{ "crv", jwk.Crv },
+				{ "x", jwk.X },
+				{ "y", jwk.Y },
+				{ "alg", "ES256" }
+			};
 
 			var handler = new JwtSecurityTokenHandler();
-			var header = new JwtHeader(new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256));
 
+			// 3. Формируем заголовок JWT
+			// Используем приватный ключ (signingKey) для подписи, 
+			// но в само тело заголовка кладем только публичный словарь (publicJwkDict)
+			var header = new JwtHeader(new SigningCredentials(signingKey, SecurityAlgorithms.EcdsaSha256));
 			header["typ"] = "dpop+jwt";
-			header["jwk"] = jwkDict; // Теперь тут простой словарь, и всё сработает
+			header["jwk"] = publicJwkDict;
 
+			// 4. Полезная нагрузка (Payload)
 			var payload = new JwtPayload {
 				{ "jti", Guid.NewGuid().ToString("N") },
 				{ "htm", method.ToUpper() },
@@ -225,10 +234,11 @@ namespace CrossChat.Controllers
 			var token = new JwtSecurityToken(header, payload);
 			var proof = handler.WriteToken(token);
 
-			// Экспортируем параметры для хранения в БД
-			var privateKey = JsonSerializer.Serialize(key.ECDsa.ExportParameters(true));
+			// 5. Экспортируем ПОЛНЫЙ ключ (с приватной частью) для сохранения в БД
+			// Нам нужно true в ExportParameters, чтобы потом иметь возможность подписывать новые запросы
+			var fullKeyJson = JsonSerializer.Serialize(signingKey.ECDsa.ExportParameters(true));
 
-			return (proof, privateKey);
+			return (proof, fullKeyJson);
 		}
 
 		[AllowAnonymous]
