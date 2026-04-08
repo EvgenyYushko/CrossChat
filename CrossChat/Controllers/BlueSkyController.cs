@@ -44,6 +44,9 @@ namespace CrossChat.Controllers
 		[HttpPost("connect")]
 		public async Task<IActionResult> Connect(string handle)
 		{
+			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
 			handle = handle.Replace("@", "").Trim().ToLower();
 			try
 			{
@@ -58,6 +61,7 @@ namespace CrossChat.Controllers
 
 				// === ВАЖНО: Сохраняем данные в REDIS на 15 минут, привязывая к state ===
 				var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) };
+				await _cache.SetStringAsync($"bsky_userId:{state}", userId, cacheOptions);
 				await _cache.SetStringAsync($"bsky_verifier:{state}", codeVerifier, cacheOptions);
 				await _cache.SetStringAsync($"bsky_handle:{state}", handle, cacheOptions);
 				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
@@ -88,14 +92,17 @@ namespace CrossChat.Controllers
 
 			// Достаем данные из кэша по ключу state
 			var codeVerifier = await _cache.GetStringAsync($"bsky_verifier:{state}");
+			var internalUserIdStr = await _cache.GetStringAsync($"bsky_userId:{state}"); // Наш ID
 			var handle = await _cache.GetStringAsync($"bsky_handle:{state}");
 			var did = await _cache.GetStringAsync($"bsky_did:{state}");
 
-			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(codeVerifier))
+			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(internalUserIdStr))
 			{
-				_logger.LogError("Security check failed or session expired");
-				return BadRequest("Сессия истекла или ошибка авторизации.");
+				_logger.LogError("[BlueSky] Не удалось найти UserId в сессии/кеше. Возможно, прошло > 15 мин.");
+				return BadRequest("Ошибка: сессия истекла.");
 			}
+
+			int internalUserId = int.Parse(internalUserIdStr);
 
 			try
 			{
@@ -103,12 +110,12 @@ namespace CrossChat.Controllers
 				var (dpopProof, privateKey) = CreateDPoPProof("POST", tokenUrl);
 
 				var values = new Dictionary<string, string> {
-			{ "grant_type", "authorization_code" },
-			{ "code", code },
-			{ "redirect_uri", RedirectUri },
-			{ "client_id", ClientId },
-			{ "code_verifier", codeVerifier }
-		};
+					{ "grant_type", "authorization_code" },
+					{ "code", code },
+					{ "redirect_uri", RedirectUri },
+					{ "client_id", ClientId },
+					{ "code_verifier", codeVerifier }
+				};
 
 				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
 				request.Headers.Add("DPoP", dpopProof); // Добавляем DPoP
@@ -126,14 +133,22 @@ namespace CrossChat.Controllers
 
 				// Здесь ты должен сохранить в БД: access_token, refresh_token И privateKey!
 				// PrivateKey нужен, чтобы потом подписывать запросы от имени этого юзера
-				await SaveToken(data.GetProperty("access_token").GetString()!,
-								data.GetProperty("refresh_token").GetString()!,
-								handle!, did!);
+				await SaveToken(
+						internalUserId,
+						data.GetProperty("access_token").GetString()!,
+						data.GetProperty("refresh_token").GetString()!,
+						handle!,
+						did!
+				 );
 				_logger.LogInformation($"privateKey = {privateKey}");
 
 				return RedirectToAction("Index");
 			}
-			catch (Exception ex) { return RedirectToAction("Index"); }
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка в Callback");
+				return RedirectToAction("Index");
+			}
 		}
 
 		// ==========================================================
@@ -152,11 +167,16 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task SaveToken(string access, string refresh, string handle, string did)
+		private async Task SaveToken(int userId, string access, string refresh, string handle, string did)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId)
-						   ?? new BlueSkySettings { UserId = userId };
+			// Ищем настройки по переданному ID
+			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
+
+			if (settings == null)
+			{
+				settings = new BlueSkySettings { UserId = userId };
+				_db.BlueSkySettings.Add(settings);
+			}
 
 			settings.AccessToken = access;
 			settings.RefreshToken = refresh;
@@ -164,12 +184,8 @@ namespace CrossChat.Controllers
 			settings.Did = did;
 			settings.IsActive = true;
 
-			if (settings.UserId == 0 || !await _db.BlueSkySettings.AnyAsync(s => s.UserId == userId))
-				_db.BlueSkySettings.Add(settings);
-			else
-				_db.BlueSkySettings.Update(settings);
-
 			await _db.SaveChangesAsync();
+			_logger.LogInformation($"[BlueSky] Данные успешно сохранены для пользователя {userId}");
 		}
 
 		private (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null)
