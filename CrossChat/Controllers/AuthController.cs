@@ -144,6 +144,7 @@ public class AuthController : Controller
 			.Include(u => u.InstagramSettingsList)
 			.Include(u => u.ThreadsSettingsList)
 			.Include(u => u.TelegramSettings)
+			.Include(u => u.BlueSkySettingsList)
 			.FirstOrDefaultAsync(u => u.Id == userId);
 
 		// Если юзер был удален из базы, а кука осталась

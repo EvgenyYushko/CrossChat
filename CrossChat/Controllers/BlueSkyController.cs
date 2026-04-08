@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,7 +9,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
-using Microsoft.IdentityModel.Tokens;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Controllers
@@ -28,8 +26,8 @@ namespace CrossChat.Controllers
 		private readonly IBlueSkyService _blueSkyService;
 
 		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache, IBlueSkyService blueSkyService)
-		
-			{
+
+		{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
@@ -38,10 +36,13 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpGet]
-		public async Task<IActionResult> Index()
+		public async Task<IActionResult> Index(int botId)
 		{
+			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
+
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
+
+			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 			return View(settings);
 		}
 
@@ -181,11 +182,10 @@ namespace CrossChat.Controllers
 
 		[HttpPost("disconnect")]
 		[Authorize]
-		public async Task<IActionResult> Disconnect(int botId)
+		public async Task<IActionResult> Disconnect([FromForm] int botId) // Добавили FromForm для надежности
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-			// Ищем конкретного бота этого юзера
 			var settings = await _db.BlueSkySettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
@@ -193,10 +193,9 @@ namespace CrossChat.Controllers
 			{
 				_db.BlueSkySettings.Remove(settings);
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[BlueSky] Аккаунт {settings.Handle} полностью удален из системы.");
 			}
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Profile", "Auth");
 		}
 
 		// ==========================================================
@@ -323,7 +322,7 @@ namespace CrossChat.Controllers
 			await _db.SaveChangesAsync();
 		}
 
-		
+
 
 		[AllowAnonymous]
 		[HttpGet("client-metadata.json")]
@@ -347,5 +346,5 @@ namespace CrossChat.Controllers
 		}
 	}
 
-	
+
 }
