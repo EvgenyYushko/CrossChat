@@ -41,6 +41,66 @@ namespace CrossChat.Controllers
 			return View(settings);
 		}
 
+		[HttpGet("test-api")]
+		public async Task<IActionResult> TestApi()
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken) || string.IsNullOrEmpty(settings.PdsUrl))
+				return Content("Данные или PDS URL не найдены. Переподключите аккаунт.");
+
+			// ИСПОЛЬЗУЕМ СОХРАНЕННЫЙ PDS URL
+			var apiUrl = $"{settings.PdsUrl.TrimEnd('/')}/xrpc/com.atproto.repo.createRecord";
+
+			try
+			{
+				// Данные поста
+				var payload = new
+				{
+					repo = settings.Did,
+					collection = "app.bsky.feed.post",
+					record = new
+					{
+						text = "Теперь я шлю посты прямо на свой PDS! 🚀 #atproto #CrossChat",
+						createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+					}
+				};
+
+				// 1. Генерируем DPoP для POST запроса
+				var (dpopProof, _) = CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson);
+
+				// 2. Формируем запрос
+				var request = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+				{
+					Content = JsonContent.Create(payload)
+				};
+				request.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
+				request.Headers.Add("DPoP", dpopProof);
+
+				// 3. Отправляем
+				var response = await _httpClient.SendAsync(request);
+				var json = await response.Content.ReadAsStringAsync();
+
+				if (response.IsSuccessStatusCode)
+				{
+					return Content($"УРА! Пост опубликован. Ответ API: {json}");
+				}
+				else if (json.Contains("use_dpop_nonce"))
+				{
+					// Если сервер требует Nonce, нужно повторить запрос (как мы делали в Callback)
+					// Для теста просто посмотри лог, но в Воркере это нужно будет реализовать
+					return Content("Сервер запросил Nonce. Нужно реализовать логику повтора.");
+				}
+
+				return Content($"Ошибка: {response.StatusCode} - {json}");
+			}
+			catch (Exception ex)
+			{
+				return Content($"Критическая ошибка: {ex.Message}");
+			}
+		}
+
 		[HttpPost("connect")]
 		public async Task<IActionResult> Connect(string handle)
 		{
@@ -55,6 +115,18 @@ namespace CrossChat.Controllers
 				var resolveJson = await resolveResp.Content.ReadFromJsonAsync<JsonElement>();
 				string did = resolveJson.GetProperty("did").GetString()!;
 
+				// 2. Узнаем PDS (Где реально лежат данные)
+				// Запрашиваем документ DID
+				var didDocResp = await _httpClient.GetAsync($"https://plc.directory/{did}");
+				var didDoc = await didDocResp.Content.ReadFromJsonAsync<JsonElement>();
+
+				string pdsUrl = didDoc.GetProperty("service")
+					.EnumerateArray()
+					.First(s => s.GetProperty("type").GetString() == "AtprotoPersonalDataServer")
+					.GetProperty("serviceEndpoint").GetString()!;
+
+				_logger.LogInformation($"[BlueSky] Пользователь {handle} живет на сервере: {pdsUrl}");
+
 				var codeVerifier = GenerateRandomString(64);
 				var codeChallenge = GenerateCodeChallenge(codeVerifier);
 				var state = Guid.NewGuid().ToString("N");
@@ -65,6 +137,7 @@ namespace CrossChat.Controllers
 				await _cache.SetStringAsync($"bsky_verifier:{state}", codeVerifier, cacheOptions);
 				await _cache.SetStringAsync($"bsky_handle:{state}", handle, cacheOptions);
 				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
+				await _cache.SetStringAsync($"bsky_pds:{state}", pdsUrl, cacheOptions);
 
 				var url = $"https://bsky.social/oauth/authorize?" +
 						  $"client_id={Uri.EscapeDataString(ClientId)}&" +
@@ -78,7 +151,11 @@ namespace CrossChat.Controllers
 
 				return Redirect(url);
 			}
-			catch (Exception ex) { return RedirectToAction("Index"); }
+			catch (Exception ex)
+			{
+				_logger.LogError(ex.ToString());
+				return RedirectToAction("Index");
+			}
 		}
 
 		// ==========================================================
@@ -95,6 +172,7 @@ namespace CrossChat.Controllers
 			var internalUserIdStr = await _cache.GetStringAsync($"bsky_userId:{state}"); // Наш ID
 			var handle = await _cache.GetStringAsync($"bsky_handle:{state}");
 			var did = await _cache.GetStringAsync($"bsky_did:{state}");
+			var pds = await _cache.GetStringAsync($"bsky_pds:{state}");
 
 			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(internalUserIdStr))
 			{
@@ -152,7 +230,7 @@ namespace CrossChat.Controllers
 				await SaveToken(internalUserId,
 								data.GetProperty("access_token").GetString()!,
 								data.GetProperty("refresh_token").GetString()!,
-								handle!, did!, privateKey);
+								handle!, did!, privateKey, pds);
 
 				return RedirectToAction("Index");
 			}
@@ -179,7 +257,7 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey)
+		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds)
 		{
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -193,6 +271,7 @@ namespace CrossChat.Controllers
 			settings.RefreshToken = refresh;
 			settings.Handle = handle;
 			settings.Did = did;
+			settings.PdsUrl = pds;
 			settings.PrivateKeyJson = privateKey; // Сохраняем ключ!
 			settings.IsActive = true;
 
