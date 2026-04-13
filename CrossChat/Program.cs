@@ -79,6 +79,15 @@ builder.Services.AddQuartz(q =>
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
         .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
+
+	var joBlueSkybKey = new JobKey("TokenRefreshBluesSkyJob");
+    q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));
+
+	 q.AddTrigger(opts => opts
+        .ForJob(joBlueSkybKey)
+        .WithIdentity("TokenRefreshBluesSkyJob-Trigger")
+        .WithCronSchedule("0 0 2 * * ?"));
+
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

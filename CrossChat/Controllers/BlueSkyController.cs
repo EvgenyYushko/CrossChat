@@ -42,6 +42,8 @@ namespace CrossChat.Controllers
 
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
+			_logger.LogInformation($"botId = {botId}, userId = {userId}");
+
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 			return View(settings);
 		}
@@ -161,11 +163,13 @@ namespace CrossChat.Controllers
 				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
 				await _cache.SetStringAsync($"bsky_pds:{state}", pdsUrl, cacheOptions);
 
+				var scope = Uri.EscapeDataString("atproto transition:generic transition:chat.bsky");
+
 				var url = $"https://bsky.social/oauth/authorize?" +
 						  $"client_id={Uri.EscapeDataString(ClientId)}&" +
 						  $"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 						  $"response_type=code&" +
-						  $"scope=atproto%20transition:generic&" +
+						  $"scope={scope}&" + // Теперь тут есть чат
 						  $"state={state}&" +
 						  $"code_challenge={codeChallenge}&" +
 						  $"code_challenge_method=S256&" +
@@ -270,12 +274,14 @@ namespace CrossChat.Controllers
 				int expiresIn = data.GetProperty("expires_in").GetInt32();
 				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
-				await SaveToken(internalUserId,
+				var settings = await SaveToken(internalUserId,
 								data.GetProperty("access_token").GetString()!,
 								data.GetProperty("refresh_token").GetString()!,
 								handle!, did!, privateKey, pds, expireDate);
 
-				return RedirectToAction("Index");
+				_logger.LogInformation($"botId = {settings.Id}");
+
+				return RedirectToAction("Index", new { botId = settings.Id });
 			}
 			catch (Exception ex)
 			{
@@ -300,7 +306,7 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate)
+		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate)
 		{
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -320,9 +326,9 @@ namespace CrossChat.Controllers
 			settings.IsActive = true;
 
 			await _db.SaveChangesAsync();
+
+			return settings;
 		}
-
-
 
 		[AllowAnonymous]
 		[HttpGet("client-metadata.json")]
@@ -334,7 +340,7 @@ namespace CrossChat.Controllers
 				client_name = "CrossChat AI Bot",
 				client_uri = APP_URL,
 				redirect_uris = new[] { $"{APP_URL}/bluesky/auth/callback" },
-				scope = "atproto transition:generic",
+				scope = "atproto transition:generic transition:chat.bsky",
 				grant_types = new[] { "authorization_code", "refresh_token" },
 				response_types = new[] { "code" },
 				application_type = "web",
