@@ -95,7 +95,7 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		public (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null, string? nonce = null, string? accessToken = null)
+		public (string proof, string privateKeyJson) CreateDPoPProof(string method, string url, string? existingKeyJson = null, string? nonce = null, string? accessToken = null, string? aud = null)
 		{
 			ECDsa ecdsa;
 
@@ -145,6 +145,11 @@ namespace CrossChat.Integrations.Services
 
 			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
 
+			if (!string.IsNullOrEmpty(aud))
+			{
+				payload["aud"] = aud;
+			}
+
 			if (!string.IsNullOrEmpty(accessToken))
 			{
 				using var sha256 = SHA256.Create();
@@ -172,14 +177,15 @@ namespace CrossChat.Integrations.Services
 
 		private async Task<HttpResponseMessage> SendWithDPoPAsync(HttpMethod method, string url, BlueSkyModel settings, object? body)
 		{
+			var chatServiceDid = "did:web:api.bsky.chat";
 			// Функция для создания запроса
 			async Task<HttpRequestMessage> CreateRequest(string? nonce = null)
 			{
-				var (proof, _) = CreateDPoPProof(method.Method, url, settings.PrivateKeyJson, nonce, settings.AccessToken);
+				var (proof, _) = CreateDPoPProof(method.Method, url, settings.PrivateKeyJson, nonce, settings.AccessToken, null);
 				var req = new HttpRequestMessage(method, url);
 				req.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
 				req.Headers.Add("DPoP", proof);
-				req.Headers.Add("atproto-proxy", "bsky_chat");  // ВАЖНО для чатов //bsky_chat
+				req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
 
 				if (body != null)
 					req.Content = JsonContent.Create(body);
@@ -240,7 +246,7 @@ namespace CrossChat.Integrations.Services
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.listConvos";
 
-			var accessToken = settings.AccessToken;
+			//var accessToken = settings.AccessToken;
 
 			try
 			{
