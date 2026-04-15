@@ -9,6 +9,7 @@ public interface IBlueSkyService
 
 	Task<string> GetValidTokenAsync(BlueSkyModel settings);
 
+	Task<List<MessageBlueSky>> GetMessagesAsync(BlueSkyModel settings, string convoId, int limit = 15);
 	Task<List<Convo>> GetUnreadConversationsAsync(BlueSkyModel settings);
 	Task<bool> SendChatMessageAsync(BlueSkyModel settings, string convoId, string text);
 

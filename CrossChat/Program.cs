@@ -86,7 +86,7 @@ builder.Services.AddQuartz(q =>
 	 q.AddTrigger(opts => opts
         .ForJob(joBlueSkybKey)
         .WithIdentity("TokenRefreshBluesSkyJob-Trigger")
-        .WithCronSchedule("0 0 * * * ?"));
+        .WithCronSchedule("0 15,45 * * * ?"));
 
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

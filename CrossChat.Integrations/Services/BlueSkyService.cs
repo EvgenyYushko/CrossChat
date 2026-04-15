@@ -274,12 +274,61 @@ namespace CrossChat.Integrations.Services
 			return new List<Convo>();
 		}
 
+
+		public async Task<List<MessageBlueSky>> GetMessagesAsync(BlueSkyModel settings, string convoId, int limit = 15)
+		{
+			// 1. Формируем URL. Важно: шлем на PDS.
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.getMessages?convoId={convoId}&limit={limit}";
+
+			// 2. Используем наш универсальный метод с DPoP и прокси-заголовком
+			var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				var json = await response.Content.ReadAsStringAsync();
+
+				// В BlueSky этот метод возвращает объект { "messages": [...], "cursor": "..." }
+				using var doc = JsonDocument.Parse(json);
+				if (doc.RootElement.TryGetProperty("messages", out var messagesArray))
+				{
+					var messages = JsonSerializer.Deserialize<List<MessageBlueSky>>(messagesArray.GetRawText());
+
+					// ВАЖНО: API отдает сообщения от новых к старым.
+					// Для ИИ нам нужно перевернуть их, чтобы диалог шел по порядку.
+					if (messages != null)
+					{
+						messages.Reverse();
+						return messages;
+					}
+				}
+			}
+			else
+			{
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogError($"[BlueSky] Ошибка получения сообщений чата {convoId}: {err}");
+			}
+
+			return new List<MessageBlueSky>();
+		}
+
+
 		public async Task<bool> SendChatMessageAsync(BlueSkyModel settings, string convoId, string text)
 		{
-			var url = "https://api.bsky.chat/xrpc/chat.bsky.convo.sendMessage";
-			var payload = new { convoId = convoId, message = new { text = text } };
+			// 1. ПРАВИЛЬНЫЙ URL: запрос идет на твой PDS (как и в получении списка чатов)
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.sendMessage";
 
-			var response = await SendWithDPoPAsync(HttpMethod.Post, url, settings, payload);
+			var payload = new
+			{
+				convoId = convoId,
+				message = new { text = text }
+			};
+
+			// 2. Вызываем наш универсальный метод
+			// Убедись, что внутри SendWithDPoPAsync РАСКОММЕНТИРОВАН заголовок:
+			// req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
+			var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
 
 			if (response.IsSuccessStatusCode)
 			{
@@ -297,12 +346,21 @@ namespace CrossChat.Integrations.Services
 		// =================================================================
 		public async Task MarkConvoAsReadAsync(BlueSkyModel settings, string convoId, string lastMessageId)
 		{
-			var url = "https://api.bsky.chat/xrpc/chat.bsky.convo.updateRead";
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.updateRead";
+
 			var payload = new { convoId = convoId, messageId = lastMessageId };
 
-			await SendWithDPoPAsync(HttpMethod.Post, url, settings, payload);
-		}
+			var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
+			if (response.IsSuccessStatusCode)
+			{
+				_logger.LogInformation($"[BlueSky] ✅ Сообщение помечено как прочитанное {convoId}");
+				return;
+			}
 
+			var err = await response.Content.ReadAsStringAsync();
+			_logger.LogError($"[BlueSky] ❌ Ошибка пеметки сообщеня как прочитанное: {err}");
+		}
 	}
 
 	#region Models

@@ -87,6 +87,10 @@ namespace CrossChat.Worker.Jobs
 
 					foreach (var convo in unreadConvos)
 					{
+						var messages = await _bskyService.GetMessagesAsync(botModel, convo.Id, 15);
+
+						if (messages == null || !messages.Any()) continue;
+
 						// Если последнее сообщение от нас — просто читаем и уходим
 						if (convo.LastMessage?.Sender.Did == botModel.Did)
 						{
@@ -94,22 +98,28 @@ namespace CrossChat.Worker.Jobs
 							continue;
 						}
 
-						// 4. Формируем историю для ИИ
-						// Для простоты берем только последнее сообщение, 
-						// но можно дописать метод GetMessagesAsync для полноценного контекста.
-						var chatHistory = new List<AiRequest> {
-							new AiRequest { Role = "user", Text = convo.LastMessage?.Text ?? "" }
-						};
+						var chatHistory = messages.Select(m => new AiRequest
+						{
+							// Если DID отправителя совпадает с DID нашего бота - роль "model", иначе "user"
+							Role = m.Sender.Did == bot.Did ? "model" : "user",
+							Text = m.Text ?? "[Сообщение без текста]"
+						}).ToList();
 
 						// 5. Запрос к ИИ
 						//var aiResponse = await _aiService.GetAnswerAsync(botModel.SystemPrompt, chatHistory, null);
 						var aiResponse = "hi";
 
-						// 6. Отправка и отметка о прочтении
-						bool sent = await _bskyService.SendChatMessageAsync(botModel, convo.Id, aiResponse);
-						if (sent && convo.LastMessage != null)
+						if (!string.IsNullOrWhiteSpace(aiResponse))
 						{
-							await _bskyService.MarkConvoAsReadAsync(botModel, convo.Id, convo.LastMessage.Id);
+							// 6. Отправляем ответ
+							bool sent = await _bskyService.SendChatMessageAsync(botModel, convo.Id, aiResponse);
+
+							if (sent)
+							{
+								// 7. Помечаем последнее сообщение как прочитанное
+								await _bskyService.MarkConvoAsReadAsync(botModel, convo.Id, messages.Last().Id);
+								_logger.LogInformation($"[BlueSky] Ответили @{bot.Handle} в чат {convo.Id}");
+							}
 						}
 					}
 				}
