@@ -42,7 +42,7 @@ public class TokenRefreshJob : IJob
 		await RefreshThreadsTokens(thresholdDate);
 
 		// --- БЛОК 3: BLUESKY ---
-		await RefreshBlueSkyTokens(DateTime.UtcNow.AddHours(1));
+		//await RefreshBlueSkyTokens(DateTime.UtcNow.AddHours(1));
 
 		// Сохраняем все изменения в БД одним махом
 		await _db.SaveChangesAsync();
