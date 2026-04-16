@@ -11,5 +11,8 @@ namespace CrossChat.Models
 
 		public string ThreadsAppId { get; set; }
 		public string ThreadsAppSecret { get; set; }
+
+		public string XClientId { get; set; }
+		public string XClientSecret { get; set; }
 	}
 }

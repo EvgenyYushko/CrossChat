@@ -1,0 +1,62 @@
+@model CrossChat.Data.Entities.XSettings
+@{
+    ViewData["Title"] = "Управление X (Twitter)";
+    bool isConnected = Model != null && !string.IsNullOrEmpty(Model.AccessToken);
+}
+
+@section Styles {
+    <style>
+        .container { max-width: 800px; margin: 6rem auto 3rem; padding: 0 1rem; }
+        .card { background: var(--card-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 2.5rem; text-align: center; }
+        .btn-x { background: #000; color: white; border: 1px solid #333; }
+
+        .big-avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #1DA1F2; margin-bottom: 1rem; }
+        textarea { width: 100%; min-height: 150px; background: var(--input-bg); border: 1px solid var(--glass-border); color: var(--text-main); padding: 1rem; border-radius: 12px; resize: none; }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none;">← В профиль</a>
+}
+
+<div class="container">
+    <div class="card">
+        <h1>X (Twitter) Бот</h1>
+
+        @if (!isConnected)
+        {
+            <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите ваш аккаунт X для автоматической публикации постов.</p>
+            <form action="/x/connect" method="post">
+                <button type="submit" class="btn btn-x">
+                    <!-- Иконка X -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="margin-right:10px;">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                    Авторизоваться в X
+                </button>
+            </form>
+        }
+        else
+        {
+            <div class="connected-header">
+                <img src="@Model.ProfilePictureUrl" class="big-avatar" onerror="this.src='/images/default-avatar.png'">
+                <div style="font-size:1.5rem; font-weight:bold;">@@@Model.ScreenName</div>
+                <span class="status-badge status-active" style="margin-top:10px;">Подключено</span>
+            </div>
+
+            <form action="/x/update-settings" method="post" class="form-section" style="text-align:left; margin-top:2rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+
+                <label>Системный промпт (Для генерации постов)</label>
+                <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
+
+                <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1rem;">Сохранить настройки</button>
+            </form>
+
+            <form action="/x/disconnect" method="post" onsubmit="return confirm('Отключить X?');" style="margin-top:1rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+                <button type="submit" class="btn btn-danger" style="width:100%;">Удалить аккаунт</button>
+            </form>
+        }
+    </div>
+</div>
