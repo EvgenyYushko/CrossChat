@@ -1,10 +1,12 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Services;
+using CrossChat.Worker.Contracts;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using StackExchange.Redis;
 
 namespace CrossChat.Worker.Jobs
 {
@@ -13,14 +15,18 @@ namespace CrossChat.Worker.Jobs
 		private readonly AppDbContext _db;
 		private readonly ILogger<BluesSkyAnswerJob> _logger;
 		private readonly IBlueSkyService _bskyService;
+		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IDatabase _redis;
 
 		public BluesSkyAnswerJob(AppDbContext db
 			, ILogger<BluesSkyAnswerJob> logger
-			, IBlueSkyService blueSkyService)
+			, IBlueSkyService blueSkyService, IPublishEndpoint publishEndpoint, IConnectionMultiplexer redis)
 		{
 			_db = db;
 			_logger = logger;
 			_bskyService = blueSkyService;
+			_redis = redis.GetDatabase();
+			_publishEndpoint = publishEndpoint;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -60,7 +66,7 @@ namespace CrossChat.Worker.Jobs
 
 						if (result == null)
 						{
-							throw new Exception();
+							throw new Exception("Ошибка при попытке обновить токен");
 						}
 
 						// 3. ОБЯЗАТЕЛЬНО обновляем объект в памяти
@@ -87,39 +93,22 @@ namespace CrossChat.Worker.Jobs
 
 					foreach (var convo in unreadConvos)
 					{
-						var messages = await _bskyService.GetMessagesAsync(botModel, convo.Id, 15);
-
-						if (messages == null || !messages.Any()) continue;
-
 						// Если последнее сообщение от нас — просто читаем и уходим
 						if (convo.LastMessage?.Sender.Did == botModel.Did)
 						{
-							await _bskyService.MarkConvoAsReadAsync(botModel, convo.Id, convo.LastMessage.Id);
 							continue;
 						}
 
-						var chatHistory = messages.Select(m => new AiRequest
+						var queueLockKey = $"lock:bsky_queued:{convo.Id}";
+						if (await _redis.StringSetAsync(queueLockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
 						{
-							// Если DID отправителя совпадает с DID нашего бота - роль "model", иначе "user"
-							Role = m.Sender.Did == bot.Did ? "model" : "user",
-							Text = m.Text ?? "[Сообщение без текста]"
-						}).ToList();
-
-						// 5. Запрос к ИИ
-						//var aiResponse = await _aiService.GetAnswerAsync(botModel.SystemPrompt, chatHistory, null);
-						var aiResponse = "hi";
-
-						if (!string.IsNullOrWhiteSpace(aiResponse))
-						{
-							// 6. Отправляем ответ
-							bool sent = await _bskyService.SendChatMessageAsync(botModel, convo.Id, aiResponse);
-
-							if (sent)
+							await _publishEndpoint.Publish(new BlueSkyProcessReply
 							{
-								// 7. Помечаем последнее сообщение как прочитанное
-								await _bskyService.MarkConvoAsReadAsync(botModel, convo.Id, messages.Last().Id);
-								_logger.LogInformation($"[BlueSky] Ответили @{bot.Handle} в чат {convo.Id}");
-							}
+								BotDbId = bot.Id,
+								ConvoId = convo.Id
+							});
+
+							_logger.LogInformation($"[BlueSkyScanner] Чат {convo.Id} для @{bot.Handle} отправлен в очередь.");
 						}
 					}
 				}

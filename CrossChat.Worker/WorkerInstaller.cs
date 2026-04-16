@@ -1,5 +1,6 @@
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
+using CrossChat.Worker.Consumers.BlueSky;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
 using Grpc.Net.Client;
@@ -19,6 +20,7 @@ namespace CrossChat.Worker
 			// и зарегистрирует все консьюмеры, которые найдет.
 			x.AddConsumer<ThreadsReplyConsumer>(typeof(ThreadsReplyDefinition)); // Явная регистрация
 			x.AddConsumer<ThreadsPublishConsumer>();
+			x.AddConsumer<BlueSkyReplyConsumer>(typeof(BlueSkyReplyDefinition));
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 

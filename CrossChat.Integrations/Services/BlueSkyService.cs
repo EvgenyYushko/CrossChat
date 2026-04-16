@@ -373,7 +373,7 @@ namespace CrossChat.Integrations.Services
 		public string? RefreshToken { get; set; }
 		public string Did { get; set; }
 		public string PdsUrl { get; set; }
-
+		public string SystemPrompt {get;set; }
 	}
 
 	public class BlueSkyKeyDto
