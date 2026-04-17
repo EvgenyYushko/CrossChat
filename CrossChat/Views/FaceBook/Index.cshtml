@@ -1,0 +1,212 @@
+@model IEnumerable<CrossChat.Data.Entities.FacebookSettings>
+@{
+    ViewData["Title"] = "Facebook Pages";
+}
+
+@section Styles {
+    <style>
+        /* 1. Глобальный контейнер — поднимаем его на передний план */
+        .container {
+            max-width: 800px;
+            margin: 7rem auto 3rem; /* Увеличил отступ сверху */
+            padding: 0 1rem;
+            position: relative;
+            z-index: 50; /* Поднимаем выше фоновых эффектов */
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            position: relative;
+            z-index: 51;
+        }
+
+        h1 {
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Секция кнопок — гарантируем кликабельность */
+        .login-buttons {
+            position: relative;
+            z-index: 100;
+            margin-top: 1.5rem;
+        }
+
+        /* Кнопка Facebook */
+        .btn-fb {
+            background: #1877F2;
+            color: white !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            width: 100%;
+            box-sizing: border-box;
+            /* ГАРАНТИЯ КЛИКА */
+            cursor: pointer !important;
+            pointer-events: auto !important;
+            border: none;
+        }
+
+            .btn-fb:hover {
+                opacity: 0.95;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(24, 119, 242, 0.4);
+            }
+
+            .btn-fb svg {
+                width: 20px;
+                height: 20px;
+                fill: white;
+                pointer-events: none; /* Чтобы иконка не мешала клику по ссылке */
+            }
+
+        /* Список страниц */
+        .page-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(128, 128, 128, 0.05);
+            padding: 1.2rem;
+            border-radius: 15px;
+            border: 1px solid var(--glass-border);
+            margin-top: 1rem;
+            text-align: left;
+        }
+
+        .page-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .page-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid #1877F2;
+            object-fit: cover;
+        }
+
+        .page-name {
+            font-weight: bold;
+            color: var(--text-main);
+            font-size: 1.1rem;
+        }
+
+        .btn-settings {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text-main);
+            text-decoration: none;
+            cursor: pointer !important;
+            z-index: 101;
+        }
+
+        .separator {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-secondary);
+            margin: 2rem 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+            .separator::before, .separator::after {
+                content: '';
+                flex: 1;
+                border-bottom: 1px solid var(--glass-border);
+            }
+
+            .separator::before {
+                margin-right: 15px;
+            }
+
+            .separator::after {
+                margin-left: 15px;
+            }
+
+        @@media (max-width: 600px) {
+            .container {
+                margin-top: 5rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .btn-fb {
+                font-size: 0.95rem;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Назад в профиль</a>
+}
+
+<div class="container">
+    <div class="card">
+        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="#1877F2">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+        </div>
+
+        <h1>Facebook Pages</h1>
+        <p style="color:var(--text-secondary);">Подключите страницы для автоответов в Messenger.</p>
+
+        <div class="login-buttons">
+            @* Проверь, что ViewBag.LoginUrl не пустой *@
+            <a href="@(ViewBag.FbLoginUrl ?? "#")" class="btn btn-fb">
+                <svg viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+                <span>Войти через Facebook</span>
+            </a>
+        </div>
+
+        @if (Model != null && Model.Any())
+        {
+            <div class="separator">Ваши подключенные страницы</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                @foreach (var mod in Model)
+                {
+                    <div class="page-card">
+                        <div class="page-info">
+                            <img src="@mod.ProfilePictureUrl" class="page-avatar" onerror="this.src='/images/favicon.png'">
+                            <div>
+                                <div class="page-name">@mod.PageName</div>
+                                <div style="font-size: 0.8rem; color: @(mod.IsActive ? "#10b981" : "#fbbf24")">
+                                    @(mod.IsActive ? "● Активен" : "⚠️ Выключен")
+                                </div>
+                            </div>
+                        </div>
+                        <a href="/facebook/settings?id=@mod.Id" class="btn-settings" title="Настроить">
+                            <span>⚙️</span>
+                        </a>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

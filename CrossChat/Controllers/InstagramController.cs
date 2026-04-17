@@ -25,11 +25,8 @@ namespace CrossChat.Controllers
 		private const string GraphApiVersion = "v21.0";
 		private string InstagramAppId => _settings.InstagramAppId;
 		private string InstagramAppSecret => _settings.InstagramAppSecret;
-		private string AppId => _settings.AppId;
-		private string AppSecret => _settings.AppSecret;
 
 		private string RedirectUri => $"{APP_URL}/instagram/auth/callback";
-		private string FaceBookRedirectUri => $"{APP_URL}/instagram/facebook/auth/callback";
 
 		public InstagramController(
 			ILogger<InstagramController> logger,
@@ -70,23 +67,6 @@ namespace CrossChat.Controllers
 						   $"response_type=code&" +
 						   $"force_reauth=true&" +
 						   $"scope={instaScopes}";
-
-			var fbScopes = string.Join(",",
-				"instagram_basic",
-				"instagram_manage_messages",
-				"instagram_manage_comments",
-				"instagram_manage_insights",
-				"pages_show_list",
-				"pages_manage_metadata",
-				"pages_read_engagement",
-				"business_management"
-			);
-			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?" +
-							  $"client_id={AppId}&" + // Здесь ID Facebook приложения
-							  $"redirect_uri={FaceBookRedirectUri}&" +
-							  $"response_type=code&" +
-							  $"auth_type=reauthenticate&" +
-							  $"scope={fbScopes}";
 
 			return View(settings);
 		}
@@ -454,121 +434,7 @@ namespace CrossChat.Controllers
 			return Content(html, "text/html");
 		}
 
-		[HttpGet("facebook/auth/callback")]
-		public async Task<IActionResult> FaceBookOAuthCallback(
-			[FromQuery] string code,
-			[FromQuery] string state = null,
-			[FromQuery] string error = null,
-			[FromQuery] string error_reason = null,
-			[FromQuery] string error_description = null)
-		{
-			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
-				return RedirectToAction("Profile", "Auth");
-
-			try
-			{
-				_logger.LogInformation("=== Facebook Callback Started ===");
-
-				// -----------------------------------------------------------------------
-				// 2. ПАРСИНГ STATE (Получаем ID пользователя из вашей системы)
-				// -----------------------------------------------------------------------
-				string internalUserId = "unknown";
-				if (!string.IsNullOrEmpty(state))
-				{
-					try
-					{
-						// Иногда state приходит дважды закодированным или с экранированием
-						var cleanState = state.Replace("\\\"", "\"");
-						// Если у вас свой класс InstagramAuthState, используйте его
-						dynamic stateData = JsonConvert.DeserializeObject(cleanState);
-						internalUserId = stateData?.UserId ?? "unknown";
-					}
-					catch (Exception ex)
-					{
-						_logger.LogError(ex, "Ошибка парсинга State");
-					}
-				}
-
-				// -----------------------------------------------------------------------
-				// 3. STEP A: Получение Short-Lived User Token (Живет 1-2 часа)
-				// -----------------------------------------------------------------------
-				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
-									$"client_id={AppId}&" +
-									$"redirect_uri={FaceBookRedirectUri}&" +
-									$"client_secret={AppSecret}&" +
-									$"code={code}";
-
-				var shortResponse = await _httpClient.GetAsync(shortTokenUrl);
-				var shortJsonStr = await shortResponse.Content.ReadAsStringAsync();
-
-				if (!shortResponse.IsSuccessStatusCode)
-				{
-					_logger.LogError("Не удалось обменять код на токен.");
-					return RedirectToAction("Index");
-				}
-
-				using var shortDoc = JsonDocument.Parse(shortJsonStr);
-				var shortAccessToken = shortDoc.RootElement.GetProperty("access_token").GetString();
-
-				// -----------------------------------------------------------------------
-				// 4. STEP B: Обмен на Long-Lived User Token (Живет 60 дней)
-				// -----------------------------------------------------------------------
-				var longTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
-								   $"grant_type=fb_exchange_token&" +
-								   $"client_id={AppId}&" +
-								   $"client_secret={AppSecret}&" +
-								   $"fb_exchange_token={shortAccessToken}";
-
-				var longResponse = await _httpClient.GetAsync(longTokenUrl);
-				var longJsonStr = await longResponse.Content.ReadAsStringAsync();
-
-				if (!longResponse.IsSuccessStatusCode)
-				{
-					_logger.LogError($"Короткий токен получен, но обмен на длинный не удался.Short Token: {shortAccessToken} Error: {longJsonStr}");
-					return RedirectToAction("Index");
-				}
-
-				using var longDoc = JsonDocument.Parse(longJsonStr);
-				var longRoot = longDoc.RootElement;
-				var longAccessToken = longRoot.GetProperty("access_token").GetString();
-
-				// Facebook иногда возвращает expires_in, иногда нет (для вечных токенов). 
-				// Если нет - ставим 60 дней по умолчанию.
-				var expiresInSeconds = longRoot.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 5184000;
-				var expireDate = DateTime.UtcNow.AddSeconds(expiresInSeconds);
-
-				// -----------------------------------------------------------------------
-				// 5. STEP C: Получение данных профиля (Имя и ID)
-				// -----------------------------------------------------------------------
-				var meUrl = $"https://graph.facebook.com/me?fields=id,name,email&access_token={longAccessToken}";
-				var meResponse = await _httpClient.GetAsync(meUrl);
-				var meJsonStr = await meResponse.Content.ReadAsStringAsync();
-
-				var fbName = "Unknown";
-				var fbId = "Unknown";
-
-				if (meResponse.IsSuccessStatusCode)
-				{
-					using var meDoc = JsonDocument.Parse(meJsonStr);
-					if (meDoc.RootElement.TryGetProperty("name", out var n)) fbName = n.GetString();
-					if (meDoc.RootElement.TryGetProperty("id", out var i)) fbId = i.GetString();
-				}
-
-				_logger.LogInformation($"longAccessToken = {longAccessToken} " +
-					$"fbId ={fbId} internalUserId ={internalUserId} fbName = {fbName} expireDate = {expireDate:dd.MM.yyyy HH:mm}" +
-					$"shortAccessToken = {shortAccessToken}");
-
-				// D. Сохраняем
-				var instaSettings = await SaveTokenToDatabase(longAccessToken, fbId, expireDate, null, null);
-
-				return RedirectToAction("Index");
-			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "Facebook Auth Error");
-				return RedirectToAction("Index");
-			}
-		}
+		
 
 		// =========================================================
 		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
