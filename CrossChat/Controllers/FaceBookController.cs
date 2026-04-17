@@ -58,7 +58,7 @@ namespace CrossChat.Controllers
 				return View(new List<FacebookSettings>());
 			}
 
-			return View(settings);
+			return View(new List<FacebookSettings>(){settings});
 		}
 
 		[HttpGet("auth/callback")]

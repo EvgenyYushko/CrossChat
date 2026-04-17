@@ -142,6 +142,7 @@ public class AuthController : Controller
 
 		var user = await _db.Users
 			.Include(u => u.InstagramSettingsList)
+			.Include(u => u.FacebookSettingsList) 
 			.Include(u => u.ThreadsSettingsList)
 			.Include(u => u.TelegramSettings)
 			.Include(u => u.BlueSkySettingsList)
