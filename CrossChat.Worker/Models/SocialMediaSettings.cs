@@ -1,4 +1,4 @@
-namespace CrossChat.Models
+namespace CrossChat.Worker.Models
 {
 	public class SocialMediaSettings
 	{

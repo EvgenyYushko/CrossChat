@@ -3,6 +3,7 @@ using CrossChat.Data;
 using CrossChat.Helpers;
 using CrossChat.Models;
 using CrossChat.Worker.Jobs;
+using CrossChat.Worker.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -78,7 +79,7 @@ builder.Services.AddQuartz(q =>
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
-        .WithCronSchedule("0 0 3 * * ?")); // Запуск каждый день в 03:00 ночи по UTC
+        .WithCronSchedule("0 5 */4 * * ?"));
 
 	var joBlueSkybKey = new JobKey("TokenRefreshBluesSkyJob");
     q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));

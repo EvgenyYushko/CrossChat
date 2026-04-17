@@ -1,7 +1,9 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Worker.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Quartz;
 
 namespace CrossChat.Worker.Jobs;
@@ -13,21 +15,27 @@ public class TokenRefreshJob : IJob
 	private readonly IInstagramService _instagramService;
 	private readonly IThreadsService _threadsService;
 	private readonly IBlueSkyService _blueSkyService;
+	private readonly IXService _xService;
 	private readonly ILogger<TokenRefreshJob> _logger;
+	private readonly SocialMediaSettings _settings;
 
 	public TokenRefreshJob(
 		AppDbContext db,
 		ILogger<TokenRefreshJob> logger,
 		IInstagramService instagramService,
 		IThreadsService threadsService,
-		IBlueSkyService blueSkyService
+		IBlueSkyService blueSkyService,
+		IXService xService,
+		IOptions<SocialMediaSettings> options
 		)
 	{
 		_db = db;
 		_instagramService = instagramService;
 		_threadsService = threadsService;
 		_blueSkyService = blueSkyService;
+		_xService = xService;
 		_logger = logger;
+		_settings = options.Value;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
@@ -43,6 +51,8 @@ public class TokenRefreshJob : IJob
 
 		// --- БЛОК 3: BLUESKY ---
 		//await RefreshBlueSkyTokens(DateTime.UtcNow.AddHours(1));
+
+		await RefreshXTokens(DateTime.UtcNow.AddMinutes(20));
 
 		// Сохраняем все изменения в БД одним махом
 		await _db.SaveChangesAsync();
@@ -132,6 +142,44 @@ public class TokenRefreshJob : IJob
 				}
 			}
 			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка BlueSky Refresh для {bot.Handle}"); }
+		}
+	}
+
+	private async Task RefreshXTokens(DateTime thresholdDate)
+	{
+		// Ищем токены X, которые скоро истекают
+		var xBots = await _db.XSettings
+			.Where(s => s.AccessToken != null && s.TokenExpiresAt < thresholdDate)
+			.ToListAsync();
+
+		if (!xBots.Any()) return;
+
+		_logger.LogInformation($"[TokenRefreshJob] X: найдено {xBots.Count} токенов для обновления.");
+
+		foreach (var bot in xBots)
+		{
+			try
+			{
+				var result = await _xService.RefreshTokenAsync(bot.RefreshToken!, _settings.XClientId, _settings.XClientSecret);
+
+				if (result != null)
+				{
+					bot.AccessToken = result.Value.AccessToken;
+					bot.RefreshToken = result.Value.RefreshToken; // ОБЯЗАТЕЛЬНО сохраняем новый рефреш-токен
+					bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+
+					_logger.LogInformation($"✅ X токен обновлен для @{bot.ScreenName}");
+				}
+				else
+				{
+					_logger.LogWarning($"⚠️ Не удалось обновить X для @{bot.ScreenName}. Возможно, доступ отозван.");
+					// bot.IsActive = false; // Опционально: выключаем бота при ошибке
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"❌ Ошибка X Refresh для {bot.ScreenName}");
+			}
 		}
 	}
 }

@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
-using CrossChat.Models;
+using CrossChat.Worker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
