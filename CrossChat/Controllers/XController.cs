@@ -69,7 +69,7 @@ namespace CrossChat.Controllers
 			// offline.access - ЧТОБЫ ПОЛУЧИТЬ REFRESH TOKEN (Обязательно!)
 			var scopes = "tweet.read tweet.write users.read offline.access";
 
-			var url = $"https://twitter.com/i/oauth2/authorize?" +
+			var url = $"https://x.com/i/oauth2/authorize?" +
 					  $"response_type=code&" +
 					  $"client_id={ClientId}&" + // Твой ID со скрина
 					  $"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
@@ -99,12 +99,12 @@ namespace CrossChat.Controllers
 			request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authHeader);
 
 			var formData = new Dictionary<string, string> {
-		{ "code", code },
-		{ "grant_type", "authorization_code" },
-		{ "client_id", ClientId },
-		{ "redirect_uri", RedirectUri },
-		{ "code_verifier", verifier }
-	};
+				{ "code", code },
+				{ "grant_type", "authorization_code" },
+				{ "client_id", ClientId },
+				{ "redirect_uri", RedirectUri },
+				{ "code_verifier", verifier }
+			};
 			request.Content = new FormUrlEncodedContent(formData);
 
 			// 3. Получаем токены
@@ -116,12 +116,56 @@ namespace CrossChat.Controllers
 			var data = JsonDocument.Parse(json).RootElement;
 
 			// 4. Сохраняем в БД (AccessToken, RefreshToken, ExpiresIn)
-			await SaveXTokenToDb(int.Parse(internalUserId), data);
+			var settings = await SaveXTokenToDb(int.Parse(internalUserId), data);
+
+			return RedirectToAction("Index", new { botId = settings?.Id ?? 0 });
+		}
+
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
+		{
+			// 1. Получаем ID текущего пользователя
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			// 2. Ищем конкретную настройку X, принадлежащую этому пользователю
+			var settings = await _db.XSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null)
+			{
+				// 3. Удаляем запись из базы
+				_db.XSettings.Remove(settings);
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation($"[X] Пользователь {userId} отключил аккаунт @{settings.ScreenName}");
+			}
 
 			return RedirectToAction("Index");
 		}
 
-		private async Task SaveXTokenToDb(int userId, JsonElement data)
+		[HttpPost("update-settings")]
+		[Authorize]
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.XSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null)
+			{
+				settings.SystemPrompt = systemPrompt;
+				settings.IsActive = isActive;
+				// Можно добавить сохранение лимитов, если ты их ввел в БД
+
+				await _db.SaveChangesAsync();
+			}
+
+			return RedirectToAction("Index", new { botId = botId, saved = "true" });
+		}
+
+		private async Task<XSettings> SaveXTokenToDb(int userId, JsonElement data)
 		{
 			// 1. Извлекаем данные о токенах из ответа X
 			var accessToken = data.GetProperty("access_token").GetString();
@@ -187,6 +231,8 @@ namespace CrossChat.Controllers
 
 			await _db.SaveChangesAsync();
 			_logger.LogInformation($"[X] Аккаунт @{screenName} успешно привязан к пользователю {userId}");
+
+			return settings;
 		}
 
 		// Вспомогательный метод для PKCE (такой же как в BlueSky)

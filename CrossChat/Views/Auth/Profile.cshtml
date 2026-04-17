@@ -214,6 +214,18 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
+        /* Стиль для X (Twitter) */
+        .icon-x {
+            background: #000000; /* Черный фон */
+            border: 1px solid #333;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+        }
+
+        /* Если логотип X черный на прозрачном фоне, инвертируем его для темной темы */
+        [data-theme="dark"] .icon-x img {
+            filter: invert(1) brightness(2);
+        }
+
     </style>
 }
 
@@ -400,7 +412,7 @@
 
     <br/>
 
-    <!-- Карточка Instagram -->
+    <!-- Карточка bluesky -->
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
 
@@ -444,4 +456,64 @@
             }
         }
     </div>
+
+    <br/>
+
+    <!-- Карточка X (Twitter) -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <div style="display:flex; align-items:center;">
+                <div class="service-icon icon-x">
+                    <!-- Предполагается, что иконка лежит тут -->
+                    <img src="/images/x-logo.png" alt="X" style="width: 20px; height: 20px; object-fit: contain;">
+                </div>
+                <h3 style="margin:0; font-size:1.2rem;">X (Twitter)</h3>
+            </div>
+
+            @if (Model.XSettingsList == null || !Model.XSettingsList.Any())
+            {
+                <span class="status-badge status-disconnected">Не подключено</span>
+            }
+        </div>
+
+        <!-- Кнопка подключения нового аккаунта -->
+        <a href="/x" class="btn-instagram" style="background: #000; border: 1px solid #333;">+ Подключить X</a>
+
+        @if (Model.XSettingsList != null && Model.XSettingsList.Any())
+        {
+            <br />
+            @foreach (var bot in Model.XSettingsList)
+            {
+                <!-- Вложенная карточка конкретного аккаунта X -->
+                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
+                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                        {
+                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
+                        }
+                        else
+                        {
+                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">X</div>
+                        }
+                        <div>
+                            <div style="font-weight:600;">@@@bot.ScreenName</div>
+                            <div style="margin-top:2px;">
+                                @if (bot.IsActive)
+                                {
+                                    <span style='color:#10b981; font-size: 0.85rem;'>● Бот активен</span>
+                                }
+                                else
+                                {
+                                    <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Отключен</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="/x?botId=@bot.Id" class="btn-instagram" style="background: #222;">⚙️ Настроить посты</a>
+                </div>
+            }
+        }
+    </div>
+
 </div>

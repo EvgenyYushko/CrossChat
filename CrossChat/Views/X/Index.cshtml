@@ -23,20 +23,7 @@
     <div class="card">
         <h1>X (Twitter) Бот</h1>
 
-        @if (!isConnected)
-        {
-            <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите ваш аккаунт X для автоматической публикации постов.</p>
-            <form action="/x/connect" method="post">
-                <button type="submit" class="btn btn-x">
-                    <!-- Иконка X -->
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="margin-right:10px;">
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                    </svg>
-                    Авторизоваться в X
-                </button>
-            </form>
-        }
-        else
+        @if (isConnected)
         {
             <div class="connected-header">
                 <img src="@Model.ProfilePictureUrl" class="big-avatar" onerror="this.src='/images/default-avatar.png'">
@@ -53,9 +40,23 @@
                 <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1rem;">Сохранить настройки</button>
             </form>
 
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ -->
             <form action="/x/disconnect" method="post" onsubmit="return confirm('Отключить X?');" style="margin-top:1rem;">
                 <input type="hidden" name="botId" value="@Model.Id">
                 <button type="submit" class="btn btn-danger" style="width:100%;">Удалить аккаунт</button>
+            </form>
+        }
+        else
+        {
+            <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите ваш аккаунт X для автоматической публикации постов.</p>
+            <form action="/x/connect" method="post">
+                <button type="submit" class="btn btn-x">
+                    <!-- Иконка X -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="margin-right:10px;">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                    Авторизоваться в X
+                </button>
             </form>
         }
     </div>

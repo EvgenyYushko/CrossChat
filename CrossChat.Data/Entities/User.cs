@@ -21,6 +21,7 @@ public class User
 	public ICollection<InstagramSettings> InstagramSettingsList { get; set; } = new List<InstagramSettings>();
 	public ICollection<ThreadsSettings> ThreadsSettingsList { get; set; } = new List<ThreadsSettings>();
 	public ICollection<BlueSkySettings> BlueSkySettingsList { get; set; } = new List<BlueSkySettings>();
+	public ICollection<XSettings> XSettingsList { get; set; } = new List<XSettings>();
 
 	public TelegramSettings? TelegramSettings { get; set; }
 }
