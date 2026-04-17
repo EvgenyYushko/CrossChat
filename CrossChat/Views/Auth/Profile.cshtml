@@ -328,7 +328,7 @@
 
         <!-- Кнопка перехода к управлению страницами -->
         <a href="/facebook" class="btn-instagram" style="background: #1877F2; border: none;">
-            @(Model.FacebookSettingsList?.Any() == true ? "⚙️ Управлять страницами" : "+ Подключить Facebook")
+            @("+ Подключить Facebook")
         </a>
 
         @if (Model.FacebookSettingsList != null && Model.FacebookSettingsList.Any())

@@ -35,30 +35,25 @@ namespace CrossChat.Controllers
 		private string AppSecret => _settings.AppSecret;
 
 		[HttpGet]
-		public async Task<IActionResult> Index(int botId)
+		public async Task<IActionResult> Index(int? botId)
 		{
 			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// Загружаем настройки, чтобы передать их во View
-			var settings = await _db.FacebookSettings
-				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
-
-			var fbScopes = "pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
-			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?" +
-							  $"client_id={AppId}&" + // Здесь ID Facebook приложения
-							  $"redirect_uri={RedirectUri}&" +
-							  $"response_type=code&" +
-							  $"auth_type=reauthenticate&" +
-							  $"scope={fbScopes}";
-
-			if(settings is null)
+			// Если botId передан, загружаем конкретную страницу
+			FacebookSettings? settings = null;
+			if (botId.HasValue)
 			{
-				return View(new List<FacebookSettings>());
+				settings = await _db.FacebookSettings
+					.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 			}
 
-			return View(new List<FacebookSettings>(){settings});
+			// Ссылка на авторизацию (если нужно подключить новую страницу)
+			var fbScopes = "pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
+			ViewBag.FbLoginUrl = $"https://www.facebook.com/v21.0/dialog/oauth?client_id={_settings.AppId}&redirect_uri={Url.Action("Callback", "Facebook", null, Request.Scheme)}&scope={fbScopes}&response_type=code";
+
+			return View(settings);
 		}
 
 		[HttpGet("auth/callback")]
@@ -117,6 +112,52 @@ namespace CrossChat.Controllers
 				_logger.LogError(ex, "Facebook Auth Process Error");
 				return RedirectToAction("Index");
 			}
+		}
+
+		[HttpPost("update-settings")]
+		[Authorize]
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt)
+		{
+			// 1. Получаем ID текущего пользователя
+			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+			var userId = int.Parse(userIdClaim);
+
+			// 2. Корректно считываем чекбокс isActive из формы
+			// (учитываем хак с hidden полем: при вкл придет "false,true", при выкл - "false")
+			var isActiveRaw = Request.Form["isActive"].ToString();
+			bool isActive = isActiveRaw.Contains("true");
+
+			// 3. Ищем настройки конкретной страницы в БД, проверяя владельца
+			var settings = await _db.FacebookSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"[Facebook] Настройки бота {botId} не найдены для пользователя {userId}");
+				return RedirectToAction("Index");
+			}
+
+			try
+			{
+				// 4. Обновляем данные
+				settings.SystemPrompt = systemPrompt;
+				settings.IsActive = isActive;
+
+				// ВАЖНО: В Facebook Pages вебхуки обычно настраиваются один раз на всё приложение
+				// в панели разработчика. Поэтому здесь мы просто меняем флаг IsActive в нашей БД.
+				// Наш WebhookController будет просто игнорировать запросы, если IsActive == false.
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation($"[Facebook] Настройки страницы '{settings.PageName}' обновлены. Активен: {isActive}");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"[Facebook] Ошибка при сохранении настроек для бота {botId}");
+			}
+
+			// Возвращаемся на ту же страницу настроек с параметром botId и уведомлением
+			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 
 		private async Task SaveFacebookPage(int userId, JsonElement pageData)

@@ -1,17 +1,15 @@
-@model IEnumerable<CrossChat.Data.Entities.FacebookSettings>
+@model CrossChat.Data.Entities.FacebookSettings
 @{
-    ViewData["Title"] = "Facebook Pages";
+    ViewData["Title"] = "Управление Facebook Page";
+    bool isConnected = Model != null && !string.IsNullOrEmpty(Model.PageAccessToken);
 }
 
 @section Styles {
     <style>
-        /* 1. Глобальный контейнер — поднимаем его на передний план */
         .container {
             max-width: 800px;
-            margin: 7rem auto 3rem; /* Увеличил отступ сверху */
+            margin: 6rem auto 3rem;
             padding: 0 1rem;
-            position: relative;
-            z-index: 50; /* Поднимаем выше фоновых эффектов */
         }
 
         .card {
@@ -20,128 +18,174 @@
             border-radius: 20px;
             padding: 2.5rem;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            position: relative;
-            z-index: 51;
         }
 
-        h1 {
-            color: var(--text-main);
+        /* HEADER */
+        .connected-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #1877F2;
+            padding: 4px;
+            background: transparent;
+            margin-bottom: 1rem;
+        }
+
+        .username {
+            font-size: 1.5rem;
+            font-weight: 700;
             margin-bottom: 0.5rem;
+            color: var(--text-main);
         }
 
-        /* Секция кнопок — гарантируем кликабельность */
-        .login-buttons {
-            position: relative;
-            z-index: 100;
-            margin-top: 1.5rem;
+        /* ФОРМА */
+        .form-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            padding-top: 2rem;
+            text-align: left;
         }
 
-        /* Кнопка Facebook */
-        .btn-fb {
-            background: #1877F2;
-            color: white !important;
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            font-family: inherit;
+            resize: none;
+            min-height: 150px;
+        }
+
+        /* КНОПКИ */
+        .btn {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
             padding: 14px 24px;
             border-radius: 12px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            width: 100%;
-            box-sizing: border-box;
-            /* ГАРАНТИЯ КЛИКА */
-            cursor: pointer !important;
-            pointer-events: auto !important;
             border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.2s;
+            width: 100%;
+            font-size: 1rem;
+            box-sizing: border-box;
         }
 
-            .btn-fb:hover {
-                opacity: 0.95;
-                transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(24, 119, 242, 0.4);
-            }
+        .btn-fb {
+            background: #1877F2;
+            color: white;
+        }
 
-            .btn-fb svg {
-                width: 20px;
-                height: 20px;
-                fill: white;
-                pointer-events: none; /* Чтобы иконка не мешала клику по ссылке */
-            }
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            margin-top: 1rem;
+        }
 
-        /* Список страниц */
-        .page-card {
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            margin-top: 2rem;
+        }
+
+        /* СТАТУСЫ */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+        }
+
+        /* ТОГГЛ */
+        .switch-container {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(128, 128, 128, 0.05);
-            padding: 1.2rem;
-            border-radius: 15px;
+            margin-bottom: 1.5rem;
+            background: var(--glass-bg);
+            padding: 15px;
+            border-radius: 12px;
             border: 1px solid var(--glass-border);
-            margin-top: 1rem;
-            text-align: left;
         }
 
-        .page-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
         }
 
-        .page-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 2px solid #1877F2;
-            object-fit: cover;
-        }
-
-        .page-name {
-            font-weight: bold;
-            color: var(--text-main);
-            font-size: 1.1rem;
-        }
-
-        .btn-settings {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 42px;
-            height: 42px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid var(--glass-border);
-            border-radius: 10px;
-            color: var(--text-main);
-            text-decoration: none;
-            cursor: pointer !important;
-            z-index: 101;
-        }
-
-        .separator {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            color: var(--text-secondary);
-            margin: 2rem 0;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-            .separator::before, .separator::after {
-                content: '';
-                flex: 1;
-                border-bottom: 1px solid var(--glass-border);
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
             }
 
-            .separator::before {
-                margin-right: 15px;
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
             }
 
-            .separator::after {
-                margin-left: 15px;
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
             }
 
         @@media (max-width: 600px) {
@@ -151,10 +195,6 @@
 
             .card {
                 padding: 1.5rem;
-            }
-
-            .btn-fb {
-                font-size: 0.95rem;
             }
         }
     </style>
@@ -166,47 +206,72 @@
 
 <div class="container">
     <div class="card">
-        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="#1877F2">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
-        </div>
+        @if (isConnected)
+        {
+            /* === РЕЖИМ НАСТРОЕК СТРАНИЦЫ === */
+            <div class="connected-header">
+                @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                {
+                    <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
+                <div class="username">@Model.PageName</div>
 
-        <h1>Facebook Pages</h1>
-        <p style="color:var(--text-secondary);">Подключите страницы для автоответов в Messenger.</p>
+                <div style="margin-top: 10px;">
+                    @if (Model.IsActive)
+                    {
+                        <span class="status-badge status-active">● Бот работает</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused">⚠️ Отключен</span>
+                    }
+                </div>
+            </div>
 
-        <div class="login-buttons">
-            @* Проверь, что ViewBag.LoginUrl не пустой *@
-            <a href="@(ViewBag.FbLoginUrl ?? "#")" class="btn btn-fb">
-                <svg viewBox="0 0 24 24">
+            <div class="form-section">
+                <form action="/facebook/update-settings" method="post">
+                    <input type="hidden" name="botId" value="@Model.Id" />
+
+                    <div class="switch-container">
+                        <div>
+                            <label style="margin:0; font-size: 1.1rem; color: var(--text-main);">Включить автоответы</label>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Отвечать в Messenger</div>
+                        </div>
+                        <label class="switch">
+                            <input type="hidden" name="isActive" value="false" />
+                            <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Системный промпт (Инструкция)</label>
+                        <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                </form>
+            </div>
+
+            <form action="/facebook/disconnect" method="post" onsubmit="return confirm('Отключить эту страницу?');">
+                <input type="hidden" name="botId" value="@Model.Id" />
+                <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
+            </form>
+        }
+        else
+        {
+            /* === РЕЖИМ ПОДКЛЮЧЕНИЯ === */
+            <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="#1877F2">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                 </svg>
+            </div>
+            <h1>Facebook Pages</h1>
+            <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите страницы Facebook для автоответов в Messenger.</p>
+
+            <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
                 <span>Войти через Facebook</span>
             </a>
-        </div>
-
-        @if (Model != null && Model.Any())
-        {
-            <div class="separator">Ваши подключенные страницы</div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                @foreach (var mod in Model)
-                {
-                    <div class="page-card">
-                        <div class="page-info">
-                            <img src="@mod.ProfilePictureUrl" class="page-avatar" onerror="this.src='/images/favicon.png'">
-                            <div>
-                                <div class="page-name">@mod.PageName</div>
-                                <div style="font-size: 0.8rem; color: @(mod.IsActive ? "#10b981" : "#fbbf24")">
-                                    @(mod.IsActive ? "● Активен" : "⚠️ Выключен")
-                                </div>
-                            </div>
-                        </div>
-                        <a href="/facebook/settings?id=@mod.Id" class="btn-settings" title="Настроить">
-                            <span>⚙️</span>
-                        </a>
-                    </div>
-                }
-            </div>
         }
     </div>
 </div>
