@@ -174,7 +174,6 @@ namespace CrossChat.Controllers
 			var tokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
 
 			// 2. Получаем данные профиля пользователя из X API v2
-			// Нам нужны id, username (никнейм) и profile_image_url
 			string? xUserId = null;
 			string? screenName = null;
 			string? profilePicUrl = null;
@@ -200,37 +199,43 @@ namespace CrossChat.Controllers
 				_logger.LogError(ex, "[X] Не удалось получить данные профиля после авторизации");
 			}
 
-			// 3. Ищем существующие настройки в БД или создаем новые
-			var settings = await _db.XSettings.FirstOrDefaultAsync(s => s.UserId == userId);
-			bool isNew = false;
+			// --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Поиск по паре UserId + XUserId ---
+			// Это позволит одному пользователю иметь несколько аккаунтов X в системе
+			var settings = await _db.XSettings
+				.FirstOrDefaultAsync(s => s.UserId == userId && s.XUserId == xUserId);
 
+			bool isNew = false;
 			if (settings == null)
 			{
-				settings = new XSettings { UserId = userId };
+				settings = new XSettings { UserId = userId, XUserId = xUserId };
+				_db.XSettings.Add(settings);
 				isNew = true;
+			}
+
+			// 3. Скачиваем аватарку в Base64 (как и в других соцсетях)
+			if (!string.IsNullOrEmpty(profilePicUrl))
+			{
+				// Twitter часто присылает маленькие картинки _normal. 
+				// Если хочешь побольше, можно заменить: profilePicUrl = profilePicUrl.Replace("_normal", "_400x400");
+				var base64Avatar = await DownloadImageAsBase64(profilePicUrl);
+				if (base64Avatar != null)
+				{
+					settings.ProfilePictureUrl = base64Avatar;
+				}
 			}
 
 			// 4. Обновляем поля
 			settings.AccessToken = accessToken;
 			settings.RefreshToken = refreshToken;
 			settings.TokenExpiresAt = tokenExpiresAt;
-			settings.XUserId = xUserId;
 			settings.ScreenName = screenName;
-			settings.ProfilePictureUrl = profilePicUrl;
-			settings.IsActive = true; // Сразу включаем после успешного входа
-
-			// 5. Сохраняем в базу
-			if (isNew)
-			{
-				_db.XSettings.Add(settings);
-			}
-			else
-			{
-				_db.XSettings.Update(settings);
-			}
+			settings.IsActive = false;
 
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"[X] Аккаунт @{screenName} успешно привязан к пользователю {userId}");
+
+			_logger.LogInformation(isNew
+				? $"[X] Добавлен новый аккаунт @{screenName} для пользователя {userId}"
+				: $"[X] Обновлен токен для существующего аккаунта @{screenName}");
 
 			return settings;
 		}
@@ -241,6 +246,32 @@ namespace CrossChat.Controllers
 			using var sha256 = SHA256.Create();
 			var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(verifier));
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
+		}
+
+		private async Task<string?> DownloadImageAsBase64(string imageUrl)
+		{
+			if (string.IsNullOrEmpty(imageUrl)) return null;
+
+			try
+			{
+				// Используем _httpClient, который уже есть в контроллере, или создаем новый для чистых заголовков
+				using var client = new HttpClient();
+
+				// Притворяемся браузером, чтобы CDN не блочил
+				client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+				var imageBytes = await client.GetByteArrayAsync(imageUrl);
+				var base64String = Convert.ToBase64String(imageBytes);
+
+				// ВАЖНО: Возвращаем сразу готовый для HTML формат!
+				// Тогда во View ничего менять не придется.
+				return $"data:image/jpeg;base64,{base64String}";
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Error downloading profile image from {imageUrl}");
+				return null; // Если не вышло скачать - будет без аватарки
+			}
 		}
 	}
 }

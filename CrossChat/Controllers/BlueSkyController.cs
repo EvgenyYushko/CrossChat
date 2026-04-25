@@ -280,21 +280,37 @@ namespace CrossChat.Controllers
 				string? avatarUrl = null;
 				try
 				{
-					// Нам нужно подписать GET запрос к профилю, используя новый токен
-					var profileUrl = $"{pds}/xrpc/app.bsky.actor.getProfile?actor={did}";
+					// 1. Запрос шлем на СВОЙ PDS (переменная pds из кеша)
+					var profileUrl = $"{pds.TrimEnd('/')}/xrpc/app.bsky.actor.getProfile?actor={did}";
+
+					// 2. Генерируем DPoP подпись. 
+					// ВАЖНО: передаем accessToken, чтобы внутри создался правильный 'ath' хэш
 					var (dpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, null, accessToken);
 
 					var profileRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
+
+					// 3. Используем схему DPoP вместо Bearer
 					profileRequest.Headers.Add("Authorization", $"DPoP {accessToken}");
 					profileRequest.Headers.Add("DPoP", dpopProof);
 
 					var profileResp = await _httpClient.SendAsync(profileRequest);
+
 					if (profileResp.IsSuccessStatusCode)
 					{
 						var profileJson = await profileResp.Content.ReadAsStringAsync();
 						using var profileDoc = JsonDocument.Parse(profileJson);
+
+						// В JSON ответе поле называется "avatar"
 						if (profileDoc.RootElement.TryGetProperty("avatar", out var av))
+						{
 							avatarUrl = av.GetString();
+							_logger.LogInformation($"[BlueSky] Аватар найден: {avatarUrl}");
+						}
+					}
+					else
+					{
+						var err = await profileResp.Content.ReadAsStringAsync();
+						_logger.LogWarning($"[BlueSky] Ошибка профиля: {profileResp.StatusCode} - {err}");
 					}
 				}
 				catch (Exception ex) { _logger.LogWarning($"Не удалось подгрузить аватарку BlueSky: {ex.Message}"); }
@@ -365,7 +381,7 @@ namespace CrossChat.Controllers
 			settings.Handle = handle;
 			settings.PdsUrl = pds;
 			settings.PrivateKeyJson = privateKey;
-			settings.IsActive = true;
+			settings.IsActive = false;
 
 			if (base64Avatar != null)
 			{
