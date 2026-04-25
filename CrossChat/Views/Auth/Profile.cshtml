@@ -499,10 +499,14 @@
                 <div class="card" style="margin-bottom: 20px;">
 
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                       @*  @if (!string.IsNullOrEmpty(@bot.Handle))
+                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
                         {
-                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%;">
-                        } *@
+                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
+                        }
+                        else
+                        {
+                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">TH</div>
+                        }
                         <div>
                             <div style="font-weight:600;">@bot.Handle</div>
                             <div style="margin-top:2px;">

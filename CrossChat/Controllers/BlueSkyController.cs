@@ -229,7 +229,7 @@ namespace CrossChat.Controllers
 			try
 			{
 				var tokenUrl = "https://bsky.social/oauth/token";
-				var (dpopProof, privateKey) = _blueSkyService.CreateDPoPProof("POST", tokenUrl);
+				var (dpopProof1, privateKey) = _blueSkyService.CreateDPoPProof("POST", tokenUrl);
 
 				var values = new Dictionary<string, string> {
 					{ "grant_type", "authorization_code" },
@@ -240,7 +240,7 @@ namespace CrossChat.Controllers
 				};
 
 				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
-				request.Headers.Add("DPoP", dpopProof);
+				request.Headers.Add("DPoP", dpopProof1);
 
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
@@ -271,15 +271,45 @@ namespace CrossChat.Controllers
 
 				// 3. УСПЕХ! Парсим и сохраняем
 				var data = JsonDocument.Parse(json).RootElement;
+				var accessToken = data.GetProperty("access_token").GetString()!;
+				var refreshToken = data.GetProperty("refresh_token").GetString()!;
 				int expiresIn = data.GetProperty("expires_in").GetInt32();
 				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
-				var settings = await SaveToken(internalUserId,
-								data.GetProperty("access_token").GetString()!,
-								data.GetProperty("refresh_token").GetString()!,
-								handle!, did!, privateKey, pds, expireDate);
+				// --- НОВОЕ: Получаем данные профиля (аватарку) ---
+				string? avatarUrl = null;
+				try
+				{
+					// Нам нужно подписать GET запрос к профилю, используя новый токен
+					var profileUrl = $"{pds}/xrpc/app.bsky.actor.getProfile?actor={did}";
+					var (dpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, null, accessToken);
 
-				_logger.LogInformation($"botId = {settings.Id}");
+					var profileRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
+					profileRequest.Headers.Add("Authorization", $"DPoP {accessToken}");
+					profileRequest.Headers.Add("DPoP", dpopProof);
+
+					var profileResp = await _httpClient.SendAsync(profileRequest);
+					if (profileResp.IsSuccessStatusCode)
+					{
+						var profileJson = await profileResp.Content.ReadAsStringAsync();
+						using var profileDoc = JsonDocument.Parse(profileJson);
+						if (profileDoc.RootElement.TryGetProperty("avatar", out var av))
+							avatarUrl = av.GetString();
+					}
+				}
+				catch (Exception ex) { _logger.LogWarning($"Не удалось подгрузить аватарку BlueSky: {ex.Message}"); }
+
+				// --- СОХРАНЯЕМ ---
+				var settings = await SaveToken(
+					internalUserId,
+					accessToken,
+					refreshToken,
+					handle!,
+					did!,
+					privateKey,
+					pds!,
+					expireDate,
+					avatarUrl); // Передаем URL аватарки
 
 				return RedirectToAction("Index", new { botId = settings.Id });
 			}
@@ -306,26 +336,47 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate)
+		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate, string? profilePicUrl)
 		{
-			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
+			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО BlueSky аккаунта (по DID)
+			var settings = await _db.BlueSkySettings
+				.FirstOrDefaultAsync(s => s.UserId == userId && s.Did == did);
 
+			bool isNew = false;
 			if (settings == null)
 			{
-				settings = new BlueSkySettings { UserId = userId };
+				// 2. Если такого аккаунта еще нет — создаем
+				settings = new BlueSkySettings { UserId = userId, Did = did };
 				_db.BlueSkySettings.Add(settings);
+				isNew = true;
 			}
 
+			// 3. Скачиваем аватарку в Base64 (чтобы не протухла ссылка)
+			string? base64Avatar = null;
+			if (!string.IsNullOrEmpty(profilePicUrl))
+			{
+				base64Avatar = await DownloadImageAsBase64(profilePicUrl);
+			}
+
+			// 4. Обновляем данные
 			settings.AccessToken = access;
-			settings.TokenExpiresAt = expireDate;
 			settings.RefreshToken = refresh;
+			settings.TokenExpiresAt = expireDate;
 			settings.Handle = handle;
-			settings.Did = did;
 			settings.PdsUrl = pds;
-			settings.PrivateKeyJson = privateKey; // Сохраняем ключ!
+			settings.PrivateKeyJson = privateKey;
 			settings.IsActive = true;
 
+			if (base64Avatar != null)
+			{
+				settings.ProfilePictureUrl = base64Avatar;
+			}
+
 			await _db.SaveChangesAsync();
+
+			_logger.LogInformation(isNew
+				? $"[BlueSky] Добавлен новый аккаунт @{handle}"
+				: $"[BlueSky] Обновлен токен для @{handle}");
 
 			return settings;
 		}
@@ -349,6 +400,32 @@ namespace CrossChat.Controllers
 				// === ВАЖНОЕ ДОБАВЛЕНИЕ ===
 				dpop_bound_access_tokens = true
 			});
+		}
+
+		private async Task<string?> DownloadImageAsBase64(string imageUrl)
+		{
+			if (string.IsNullOrEmpty(imageUrl)) return null;
+
+			try
+			{
+				// Используем _httpClient, который уже есть в контроллере, или создаем новый для чистых заголовков
+				using var client = new HttpClient();
+
+				// Притворяемся браузером, чтобы CDN не блочил
+				client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+				var imageBytes = await client.GetByteArrayAsync(imageUrl);
+				var base64String = Convert.ToBase64String(imageBytes);
+
+				// ВАЖНО: Возвращаем сразу готовый для HTML формат!
+				// Тогда во View ничего менять не придется.
+				return $"data:image/jpeg;base64,{base64String}";
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Error downloading profile image from {imageUrl}");
+				return null; // Если не вышло скачать - будет без аватарки
+			}
 		}
 	}
 

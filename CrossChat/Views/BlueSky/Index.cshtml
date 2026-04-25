@@ -43,6 +43,10 @@
         else
         {
             <div class="connected-header">
+                @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                {
+                    <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
                 <div class="username">@@@Model.Handle</div>
                 <span class="status-badge status-active">Подключено</span>
             </div>

@@ -19,6 +19,7 @@ namespace CrossChat.Data.Entities
 		public string? RefreshToken { get; set; }
 		public string? PdsUrl { get; set; }     // URL сервера пользователя
 		public string? PrivateKeyJson { get; set; }
+		public string? ProfilePictureUrl { get; set; }
 
 		public bool IsActive { get; set; } = false;
 		public string SystemPrompt { get; set; } = "Ты ассистент в BlueSky. Отвечай лаконично.";
