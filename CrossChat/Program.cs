@@ -79,14 +79,14 @@ builder.Services.AddQuartz(q =>
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
-        .WithCronSchedule("0 5 */4 * * ?"));
+        .WithCronSchedule("0 30 * * * ?"));
 
-	var joBlueSkybKey = new JobKey("TokenRefreshBluesSkyJob");
+	var joBlueSkybKey = new JobKey("BluesSkyAnswerJob");
     q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));
 
 	 q.AddTrigger(opts => opts
         .ForJob(joBlueSkybKey)
-        .WithIdentity("TokenRefreshBluesSkyJob-Trigger")
+        .WithIdentity("BluesSkyAnswerJob-Trigger")
         .WithCronSchedule("0 15,45 * * * ?"));
 
 });

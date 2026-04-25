@@ -217,7 +217,7 @@ namespace CrossChat.Controllers
 				_logger.LogInformation(meRoot.GetProperty("username").GetString());
 
 				// 4. Сохранение в БД
-				var settings = await SaveThreadsToken(longToken,
+				var settings = await AddUserToDb(longToken,
 									   meRoot.GetProperty("id").GetString(),
 									   meRoot.GetProperty("username").GetString(),
 									   meRoot.TryGetProperty("threads_profile_picture_url", out var p) ? p.GetString() : null,
@@ -232,24 +232,47 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		private async Task<ThreadsSettings> SaveThreadsToken(string token, string threadsId, string username, string? picUrl, int expiresIn)
+		private async Task<ThreadsSettings> AddUserToDb(string token, string threadsId, string username, string? picUrl, int expiresIn)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.ThreadsSettings.FirstOrDefaultAsync(s => s.UserId == userId)
-						   ?? new ThreadsSettings { UserId = userId };
 
+			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО Threads-аккаунта
+			// Ищем по ThreadsUserId, а не просто по UserId
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.UserId == userId && s.ThreadsUserId == threadsId);
+
+			bool isNew = false;
+			if (settings == null)
+			{
+				// 2. Если такого аккаунта еще нет у юзера — создаем новый объект
+				settings = new ThreadsSettings
+				{
+					UserId = userId,
+					ThreadsUserId = threadsId
+				};
+				_db.ThreadsSettings.Add(settings);
+				isNew = true;
+			}
+
+			// 3. Обновляем данные (и для новых, и для существующих)
 			settings.AccessToken = token;
-			settings.ThreadsUserId = threadsId;
 			settings.Username = username;
 			settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
-			settings.ProfilePictureUrl = picUrl; // Можно также скачать в Base64 как для Инсты
 			settings.IsActive = true;
 
-			if (await _db.ThreadsSettings.AnyAsync(s => s.UserId == userId))
-				_db.ThreadsSettings.Update(settings);
-			else _db.ThreadsSettings.Add(settings);
+			// Рекомендую здесь тоже использовать скачивание в Base64, как мы делали для Инсты
+			// Чтобы аватарка не пропадала через неделю
+			if (!string.IsNullOrEmpty(picUrl))
+			{
+				settings.ProfilePictureUrl = await DownloadImageAsBase64(picUrl);
+			}
 
+			// 4. Сохраняем изменения
 			await _db.SaveChangesAsync();
+
+			_logger.LogInformation(isNew
+				? $"[Threads] Добавлен новый аккаунт @{username}"
+				: $"[Threads] Обновлен токен для существующего аккаунта @{username}");
 
 			return settings;
 		}
@@ -478,6 +501,32 @@ namespace CrossChat.Controllers
 			}
 
 			return RedirectToAction("Index", new { botId = botId });
+		}
+
+		private async Task<string?> DownloadImageAsBase64(string imageUrl)
+		{
+			if (string.IsNullOrEmpty(imageUrl)) return null;
+
+			try
+			{
+				// Используем _httpClient, который уже есть в контроллере, или создаем новый для чистых заголовков
+				using var client = new HttpClient();
+
+				// Притворяемся браузером, чтобы CDN не блочил
+				client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+				var imageBytes = await client.GetByteArrayAsync(imageUrl);
+				var base64String = Convert.ToBase64String(imageBytes);
+
+				// ВАЖНО: Возвращаем сразу готовый для HTML формат!
+				// Тогда во View ничего менять не придется.
+				return $"data:image/jpeg;base64,{base64String}";
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Error downloading profile image from {imageUrl}");
+				return null; // Если не вышло скачать - будет без аватарки
+			}
 		}
 	}
 }
