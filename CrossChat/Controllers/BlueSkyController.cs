@@ -280,37 +280,35 @@ namespace CrossChat.Controllers
 				string? avatarUrl = null;
 				try
 				{
-					// 1. Запрос шлем на СВОЙ PDS (переменная pds из кеша)
+					// Запрос шлем на твой PDS
 					var profileUrl = $"{pds.TrimEnd('/')}/xrpc/app.bsky.actor.getProfile?actor={did}";
 
-					// 2. Генерируем DPoP подпись. 
-					// ВАЖНО: передаем accessToken, чтобы внутри создался правильный 'ath' хэш
+					// Генерируем DPoP подпись. 
+					// ВАЖНО: передаем accessToken пятым параметром, чтобы создался хэш 'ath'
 					var (dpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, null, accessToken);
 
 					var profileRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
-
-					// 3. Используем схему DPoP вместо Bearer
 					profileRequest.Headers.Add("Authorization", $"DPoP {accessToken}");
 					profileRequest.Headers.Add("DPoP", dpopProof);
 
 					var profileResp = await _httpClient.SendAsync(profileRequest);
-
 					if (profileResp.IsSuccessStatusCode)
 					{
 						var profileJson = await profileResp.Content.ReadAsStringAsync();
-						using var profileDoc = JsonDocument.Parse(profileJson);
+						_logger.LogInformation($"[BlueSky] Профиль получен: {profileJson}");
 
-						// В JSON ответе поле называется "avatar"
+						using var profileDoc = JsonDocument.Parse(profileJson);
+						// Согласно твоей схеме, поле "avatar" в корне
 						if (profileDoc.RootElement.TryGetProperty("avatar", out var av))
 						{
 							avatarUrl = av.GetString();
-							_logger.LogInformation($"[BlueSky] Аватар найден: {avatarUrl}");
+							_logger.LogInformation($"[BlueSky] Найдена ссылка на фото: {avatarUrl}");
 						}
 					}
 					else
 					{
 						var err = await profileResp.Content.ReadAsStringAsync();
-						_logger.LogWarning($"[BlueSky] Ошибка профиля: {profileResp.StatusCode} - {err}");
+						_logger.LogWarning($"[BlueSky] Не удалось получить профиль. Код: {profileResp.StatusCode}, Ответ: {err}");
 					}
 				}
 				catch (Exception ex) { _logger.LogWarning($"Не удалось подгрузить аватарку BlueSky: {ex.Message}"); }
