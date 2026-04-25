@@ -280,11 +280,10 @@ namespace CrossChat.Controllers
 				string? avatarUrl = null;
 				try
 				{
-					// Запрос шлем на твой PDS
 					var profileUrl = $"{pds.TrimEnd('/')}/xrpc/app.bsky.actor.getProfile?actor={did}";
+					_logger.LogInformation($"[BlueSky] Запрос профиля: {profileUrl}");
 
-					// Генерируем DPoP подпись. 
-					// ВАЖНО: передаем accessToken пятым параметром, чтобы создался хэш 'ath'
+					// 1. ПЕРВАЯ ПОПЫТКА (без nonce)
 					var (dpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, null, accessToken);
 
 					var profileRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
@@ -292,23 +291,42 @@ namespace CrossChat.Controllers
 					profileRequest.Headers.Add("DPoP", dpopProof);
 
 					var profileResp = await _httpClient.SendAsync(profileRequest);
+					var profileJson = await profileResp.Content.ReadAsStringAsync();
+
+					// 2. ПРОВЕРКА НА NONCE (Рукопожатие)
+					if (!profileResp.IsSuccessStatusCode && profileJson.Contains("use_dpop_nonce"))
+					{
+						_logger.LogInformation("[BlueSky] Профиль запросил Nonce. Повторяем запрос...");
+
+						if (profileResp.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
+						{
+							var serverNonce = nonceValues.First();
+
+							// ВТОРАЯ ПОПЫТКА (с нонсом)
+							var (retryDpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, serverNonce, accessToken);
+
+							var retryRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
+							retryRequest.Headers.Add("Authorization", $"DPoP {accessToken}");
+							retryRequest.Headers.Add("DPoP", retryDpopProof);
+
+							profileResp = await _httpClient.SendAsync(retryRequest);
+							profileJson = await profileResp.Content.ReadAsStringAsync();
+						}
+					}
+
+					// 3. ОБРАБОТКА РЕЗУЛЬТАТА
 					if (profileResp.IsSuccessStatusCode)
 					{
-						var profileJson = await profileResp.Content.ReadAsStringAsync();
-						_logger.LogInformation($"[BlueSky] Профиль получен: {profileJson}");
-
 						using var profileDoc = JsonDocument.Parse(profileJson);
-						// Согласно твоей схеме, поле "avatar" в корне
 						if (profileDoc.RootElement.TryGetProperty("avatar", out var av))
 						{
 							avatarUrl = av.GetString();
-							_logger.LogInformation($"[BlueSky] Найдена ссылка на фото: {avatarUrl}");
+							_logger.LogInformation($"[BlueSky] Аватар успешно получен после рукопожатия!");
 						}
 					}
 					else
 					{
-						var err = await profileResp.Content.ReadAsStringAsync();
-						_logger.LogWarning($"[BlueSky] Не удалось получить профиль. Код: {profileResp.StatusCode}, Ответ: {err}");
+						_logger.LogWarning($"[BlueSky] Не удалось получить профиль даже после повтора. Код: {profileResp.StatusCode}");
 					}
 				}
 				catch (Exception ex) { _logger.LogWarning($"Не удалось подгрузить аватарку BlueSky: {ex.Message}"); }
