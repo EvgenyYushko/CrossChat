@@ -29,6 +29,39 @@ namespace CrossChat.Integrations.Services
 			return response.IsSuccessStatusCode;
 		}
 
+		public async Task<XUserProfile?> GetXUserProfileAsync(string accessToken)
+		{
+			try
+			{
+				using var profileRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.twitter.com/2/users/me?user.fields=profile_image_url");
+				profileRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+				using var client = new HttpClient();
+
+				var profileResponse = await client.SendAsync(profileRequest);
+				if (!profileResponse.IsSuccessStatusCode)
+				{
+					var error = await profileResponse.Content.ReadAsStringAsync();
+					_logger.LogError($"[X API Error] Не удалось получить профиль: {error}");
+					return null;
+				}
+
+				var userJson = await profileResponse.Content.ReadAsStringAsync();
+				var userData = JsonDocument.Parse(userJson).RootElement.GetProperty("data");
+
+				return new XUserProfile(
+					Id: userData.GetProperty("id").GetString() ?? "",
+					Username: userData.GetProperty("username").GetString() ?? "unknown",
+					ProfilePictureUrl: userData.TryGetProperty("profile_image_url", out var p) ? p.GetString() : null
+				);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[X] Ошибка при запросе профиля через HttpClient");
+				return null;
+			}
+		}
+
 		public async Task<(string AccessToken, string RefreshToken, int ExpiresIn)?> RefreshTokenAsync(string refreshToken, string xClientId, string xClientSecret)
 		{
 			var tokenUrl = "https://api.twitter.com/2/oauth2/token";

@@ -179,7 +179,7 @@ public class InstagramService : IInstagramService
 	{
 		if (string.IsNullOrWhiteSpace(allowedReactions))
 			return "👍";
-		
+
 		var reactions = allowedReactions.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
 		var random = new Random();
@@ -222,6 +222,28 @@ public class InstagramService : IInstagramService
 		{
 			Console.WriteLine($"[Reaction Error] Ошибка: {ex.Message}");
 		}
+	}
+
+	public async Task<(string? username, string? instagramScopedUserId, string? profilePicUrl)> GetMeInfo(string? accessToken)
+	{
+		var userUrl = $"https://graph.instagram.com/me?fields=id,user_id,username,profile_picture_url&access_token={accessToken}";
+		var userResponse = await _httpClient.GetAsync(userUrl);
+
+		var username = "Unknown";
+		var instagramScopedUserId = ""; // Это user_id (для Deauth)
+		var profilePicUrl = "";         // Ссылка на фото
+
+		if (userResponse.IsSuccessStatusCode)
+		{
+			using var userDoc = JsonDocument.Parse(await userResponse.Content.ReadAsStringAsync());
+			var root = userDoc.RootElement;
+
+			if (root.TryGetProperty("username", out var u)) username = u.GetString();
+			if (root.TryGetProperty("profile_picture_url", out var p)) profilePicUrl = p.GetString();
+			if (root.TryGetProperty("user_id", out var i)) instagramScopedUserId = i.GetString();
+		}
+
+		return (username, instagramScopedUserId, profilePicUrl);
 	}
 
 	public async Task<InstagramUserProfile> GetInstagramUserProfileAsync(string userId, string accessToken)

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
+using static CrossChat.Worker.Helpers.HttpHelper;
 
 namespace CrossChat.Worker.Jobs;
 
@@ -79,6 +80,14 @@ public class TokenRefreshJob : IJob
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 					_logger.LogInformation($"✅ Instagram токен обновлен для User {settings.UserId}");
+
+					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
+					string? base64Icon = null;
+					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))
+					{
+						base64Icon = await DownloadImageAsBase64(userInfo.profilePicUrl);
+					}
+					settings.ProfilePictureUrl = base64Icon;
 				}
 			}
 			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка Instagram User {settings.UserId}"); }
@@ -106,6 +115,14 @@ public class TokenRefreshJob : IJob
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 					_logger.LogInformation($"✅ Threads токен обновлен для User {settings.UserId}");
+
+					var profile = await _threadsService.GetThreadsUserProfileAsync(result.Value.NewToken);
+					string? base64Icon = null;
+					if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
+					{
+						base64Icon = await DownloadImageAsBase64(profile.ProfilePictureUrl);
+					}
+					settings.ProfilePictureUrl = base64Icon;
 				}
 				else
 				{
@@ -169,6 +186,14 @@ public class TokenRefreshJob : IJob
 					bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
 					_logger.LogInformation($"✅ X токен обновлен для @{bot.ScreenName}");
+
+					var profile = await _xService.GetXUserProfileAsync(result.Value.AccessToken);
+					string? base64Icon = null;
+					if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
+					{
+						base64Icon = await DownloadImageAsBase64(profile.ProfilePictureUrl);
+					}
+					bot.ProfilePictureUrl = base64Icon;
 				}
 				else
 				{

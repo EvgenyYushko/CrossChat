@@ -3,6 +3,7 @@ using CrossChat.Integrations.Models;
 namespace CrossChat.Integrations.Interfaces;
 public interface IThreadsService
 {
+	Task<ThreadsUserProfile?> GetThreadsUserProfileAsync(string accessToken);
 	Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken);
 
 	Task ReplyToThreadAsync(string targetMediaId, string text, string accessToken);
@@ -17,3 +18,6 @@ public interface IThreadsService
 
 	Task<string> GetContainerStatusAsync(string containerId, string accessToken);
 }
+
+public record ThreadsUserProfile(string Id, string Username, string? ProfilePictureUrl);
+

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
 using MassTransit;
@@ -20,6 +21,7 @@ namespace CrossChat.Controllers
 		private readonly ILogger<ThreadsController> _logger;
 		private readonly AppDbContext _db;
 		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IThreadsService _threadsService;
 		private readonly HttpClient _httpClient;
 		private readonly SocialMediaSettings _settings;
 		private const string VerifyToken = "test"; // Задайте свой токен
@@ -30,11 +32,12 @@ namespace CrossChat.Controllers
 		private string RedirectUri => $"{APP_URL}/threads/auth/callback";
 
 		public ThreadsController(ILogger<ThreadsController> logger, AppDbContext db
-			, IOptions<SocialMediaSettings> options, IPublishEndpoint publishEndpoint)
+			, IOptions<SocialMediaSettings> options, IPublishEndpoint publishEndpoint, IThreadsService threadsService)
 		{
 			_logger = logger;
 			_db = db;
 			_publishEndpoint = publishEndpoint;
+			_threadsService = threadsService;
 			_settings = options.Value;
 			_httpClient = new HttpClient();
 		}
@@ -208,20 +211,20 @@ namespace CrossChat.Controllers
 				var expiresIn = longDoc.RootElement.GetProperty("expires_in").GetInt32();
 
 				// 3. Получение данных профиля
-				var meUrl = $"https://graph.threads.net/me?fields=id,username,threads_profile_picture_url&access_token={longToken}";
-				var meResp = await _httpClient.GetAsync(meUrl);
-				using var meDoc = JsonDocument.Parse(await meResp.Content.ReadAsStringAsync());
-				var meRoot = meDoc.RootElement;
-
-				_logger.LogInformation(meRoot.GetProperty("id").GetString());
-				_logger.LogInformation(meRoot.GetProperty("username").GetString());
+				var profile = await _threadsService.GetThreadsUserProfileAsync(longToken);
+				if (profile == null)
+				{
+					// Если не смогли получить профиль, нет смысла идти дальше
+					return RedirectToAction("Index", new { error = "failed_to_get_profile" });
+				}
 
 				// 4. Сохранение в БД
-				var settings = await AddUserToDb(longToken,
-									   meRoot.GetProperty("id").GetString(),
-									   meRoot.GetProperty("username").GetString(),
-									   meRoot.TryGetProperty("threads_profile_picture_url", out var p) ? p.GetString() : null,
-									   expiresIn);
+				var settings = await AddUserToDb(
+					longToken,
+					profile.Id,
+					profile.Username,
+					profile.ProfilePictureUrl,
+					expiresIn);
 
 				return RedirectToAction("Index", new { botId = settings?.Id ?? 0 });
 			}

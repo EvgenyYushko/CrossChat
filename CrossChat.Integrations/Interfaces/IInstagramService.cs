@@ -55,6 +55,8 @@ namespace CrossChat.Integrations.Interfaces
 		/// <param name="currentToken">текущий ещё дивой токен</param>
 		Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken);
 
+		Task<(string? username, string? instagramScopedUserId, string? profilePicUrl)> GetMeInfo(string? accessToken);
+
 		Task ReplyToCommentAsync(string commentId, string text, string accessToken);
 
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);

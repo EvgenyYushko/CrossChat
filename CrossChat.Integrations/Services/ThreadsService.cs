@@ -17,6 +17,40 @@ public class ThreadsService : IThreadsService
 		_httpClient = httpClient;
 	}
 
+	public async Task<ThreadsUserProfile?> GetThreadsUserProfileAsync(string accessToken)
+	{
+		var url = $"https://graph.threads.net/me?fields=id,username,threads_profile_picture_url&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				var errorContent = await response.Content.ReadAsStringAsync();
+				_logger.LogError($"[Threads API Error] Не удалось получить профиль: {errorContent}");
+				return null;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			var profile = new ThreadsUserProfile(
+				Id: root.GetProperty("id").GetString() ?? "",
+				Username: root.GetProperty("username").GetString() ?? "unknown",
+				ProfilePictureUrl: root.TryGetProperty("threads_profile_picture_url", out var p) ? p.GetString() : null
+			);
+
+			_logger.LogInformation($"[Threads] Получен профиль: {profile.Username} (ID: {profile.Id})");
+			return profile;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Threads] Ошибка при запросе профиля пользователя");
+			return null;
+		}
+	}
+
 	public async Task<List<ThreadsItem>> GetUserThreadsAsync(string accessToken)
 	{
 		var url = $"me/threads?fields=id,has_replies&access_token={accessToken}";
