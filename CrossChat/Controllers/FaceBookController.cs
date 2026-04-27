@@ -2,7 +2,11 @@ using System.Security.Claims;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Models;
+using CrossChat.Worker.Consumers.Instagram;
+using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
+using CrossChat.Worker.Modules.Instagram.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +37,48 @@ namespace CrossChat.Controllers
 
 		private string AppId => _settings.AppId;
 		private string AppSecret => _settings.AppSecret;
+
+		[AllowAnonymous]
+		[HttpGet("webhook")]
+		public IActionResult VerifyWebhook(
+			[FromQuery(Name = "hub.mode")] string mode,
+			[FromQuery(Name = "hub.verify_token")] string token,
+			[FromQuery(Name = "hub.challenge")] string challenge)
+		{
+			_logger.LogInformation($"Webhook verification: mode={mode}, token={token}");
+
+			// Проверяем токен верификации
+			if (mode == "subscribe" && token == "Test")
+			{
+				_logger.LogInformation("Webhook verified successfully");
+				return Ok(challenge);
+			}
+			else
+			{
+				_logger.LogWarning("Webhook verification failed");
+				return Forbid();
+			}
+		}
+
+		[AllowAnonymous]
+		[HttpPost("webhook")]
+		public async Task<IActionResult> ReceiveWebhook()
+		{
+			try
+			{
+				using var reader = new StreamReader(Request.Body);
+				var body = await reader.ReadToEndAsync();
+
+				_logger.LogInformation(body);
+
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error processing Instagram webhook");
+				return StatusCode(500);
+			}
+		}
 
 		[HttpGet]
 		public async Task<IActionResult> Index(int? botId)
