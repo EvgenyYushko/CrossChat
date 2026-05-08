@@ -43,7 +43,7 @@ namespace CrossChat.BackgroundServices
 					var content = await response.Content.ReadAsStringAsync(stoppingToken);
 					if (content is not null)
 					{
-						Log(url + " - is OK");
+						//Log(url + " - is OK");
 						return;
 					}
 

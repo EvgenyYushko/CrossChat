@@ -81,6 +81,7 @@ builder.Services.AddQuartz(q =>
         .WithIdentity("TokenRefreshJob-Trigger")
         .WithCronSchedule("0 30 * * * ?"));
 
+	// 2
 	var joBlueSkybKey = new JobKey("BluesSkyAnswerJob");
     q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));
 
@@ -88,6 +89,15 @@ builder.Services.AddQuartz(q =>
         .ForJob(joBlueSkybKey)
         .WithIdentity("BluesSkyAnswerJob-Trigger")
         .WithCronSchedule("0 15,45 * * * ?"));
+
+	// 3
+	var jobFaceBookbKey = new JobKey("FaceBookAnswerJob");
+    q.AddJob<FaceBookAnswerJob>(opts => opts.WithIdentity(jobFaceBookbKey));
+
+	 q.AddTrigger(opts => opts
+        .ForJob(jobFaceBookbKey)
+        .WithIdentity("FaceBookAnswerJob-Trigger")
+        .WithCronSchedule("0 10,40 * * * ?"));
 
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

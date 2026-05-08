@@ -17,17 +17,19 @@ public class TokenRefreshJob : IJob
 	private readonly IThreadsService _threadsService;
 	private readonly IBlueSkyService _blueSkyService;
 	private readonly IXService _xService;
+	private readonly IFaceBookService _faceBookService;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly SocialMediaSettings _settings;
 
 	public TokenRefreshJob(
 		AppDbContext db,
+		IOptions<SocialMediaSettings> options,
 		ILogger<TokenRefreshJob> logger,
 		IInstagramService instagramService,
 		IThreadsService threadsService,
 		IBlueSkyService blueSkyService,
 		IXService xService,
-		IOptions<SocialMediaSettings> options
+		IFaceBookService faceBookService
 		)
 	{
 		_db = db;
@@ -35,6 +37,7 @@ public class TokenRefreshJob : IJob
 		_threadsService = threadsService;
 		_blueSkyService = blueSkyService;
 		_xService = xService;
+		_faceBookService = faceBookService;
 		_logger = logger;
 		_settings = options.Value;
 	}
@@ -54,6 +57,8 @@ public class TokenRefreshJob : IJob
 		//await RefreshBlueSkyTokens(DateTime.UtcNow.AddHours(1));
 
 		await RefreshXTokens(DateTime.UtcNow.AddMinutes(20));
+
+		await RefreshFaceBookData();
 
 		// Сохраняем все изменения в БД одним махом
 		await _db.SaveChangesAsync();
@@ -91,6 +96,38 @@ public class TokenRefreshJob : IJob
 				}
 			}
 			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка Instagram User {settings.UserId}"); }
+		}
+	}
+
+	private async Task RefreshFaceBookData()
+	{
+		var users = await _db.FacebookSettings
+			.Where(s => s.IsActive)
+			.ToListAsync();
+
+		if (!users.Any()) return;
+
+		_logger.LogInformation($"[TokenRefreshJob] FaceBook: найдено {users.Count} токенов.");
+
+		foreach (var settings in users)
+		{
+			try
+			{
+				var userInfo = await _faceBookService.GetMeAsync(settings.PageAccessToken);
+				if (userInfo != null)
+				{
+					_logger.LogInformation($"✅ FaceBook данные обновлены для User {settings.UserId}");
+
+					string? base64Icon = null;
+					if (!string.IsNullOrEmpty(userInfo.ProfilePicUrl))
+					{
+						base64Icon = await DownloadImageAsBase64(userInfo.ProfilePicUrl);
+					}
+					settings.ProfilePictureUrl = base64Icon;
+					settings.PageName = userInfo.Name;
+				}
+			}
+			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка FaceBook User {settings.UserId}"); }
 		}
 	}
 
