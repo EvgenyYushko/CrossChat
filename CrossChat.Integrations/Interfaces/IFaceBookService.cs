@@ -3,8 +3,9 @@ namespace CrossChat.Integrations.Interfaces
 	public interface IFaceBookService
 	{
 		Task<FbUser> GetMeAsync(string token);
-		Task<List<FbMessage>> GetUnreadMessagesAsync(string token, string pageId);
+		Task<List<FbConversation>> GetUnreadDialogsAsync(string token, string pageId);
 		Task<bool> SendReplyAsync(string recipientId, string text, string token);
+		Task<FbConversation> GetDialogByIdAsync(string token, string dlgId);
 	}
 
 	public class FbUser

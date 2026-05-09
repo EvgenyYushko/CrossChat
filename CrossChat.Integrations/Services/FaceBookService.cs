@@ -49,16 +49,16 @@ namespace CrossChat.Integrations.Services
 		/// <summary>
 		/// Получает последние сообщения от пользователей, на которые мы еще не ответили
 		/// </summary>
-		public async Task<List<FbMessage>> GetUnreadMessagesAsync(string token, string pageId)
+		public async Task<List<FbConversation>> GetUnreadDialogsAsync(string token, string pageId)
 		{
 			// 2. Формируем запрос
 			// Мы просим список диалогов, где unread_count > 0
 			// И берем последнее сообщение из каждого диалога, чтобы понять, кто писал последним
 			string url = $"https://graph.facebook.com/v24.0/me/conversations" +
-						 $"?fields=unread_count,messages.limit(10){{from,message}}" +
+						 $"?fields=id,unread_count,messages.limit(1){{from,message}}" +
 						 $"&access_token={token}";
 
-			var unreadMessages = new List<FbMessage>();
+			var unreadConversation = new List<FbConversation>();
 
 			using (var httpClient = new HttpClient())
 			{
@@ -67,15 +67,15 @@ namespace CrossChat.Integrations.Services
 				{
 					string error = await response.Content.ReadAsStringAsync();
 					Console.WriteLine($"Ошибка получения диалогов FB: {error}");
-					return unreadMessages;
+					return unreadConversation;
 				}
 
 				var json = await response.Content.ReadAsStringAsync();
 				var conversationData = JsonSerializer.Deserialize<FbConversationResponse>(json);
 
-				if (conversationData?.data == null) return unreadMessages;
+				if (conversationData?.data == null) return unreadConversation;
 
-				foreach (var convo in conversationData.data)
+				foreach (var convo in conversationData.data/*.Where(c => c.unread_count > 0)*/)
 				{
 					// Нас интересуют диалоги, где есть непрочитанные сообщения
 					// ИЛИ (для надежности) где последнее сообщение написано НЕ нами (НЕ страницей)
@@ -89,12 +89,37 @@ namespace CrossChat.Integrations.Services
 					// (Иначе бот будет бесконечно отвечать сам себе)
 					if (lastMsg.from.id != pageId)
 					{
-						unreadMessages.Add(lastMsg);
+						unreadConversation.Add(convo);
 					}
 				}
 			}
 
-			return unreadMessages;
+			return unreadConversation;
+		}
+
+		public async Task<FbConversation> GetDialogByIdAsync(string token, string dlgId)
+		{
+			string url = $"https://graph.facebook.com/v24.0/{dlgId}" +
+						 $"?fields=id,unread_count,messages.limit(10){{from,message}}" +
+						 $"&access_token={token}";
+
+			var conversationData = new FbConversation();
+
+			using (var httpClient = new HttpClient())
+			{
+				var response = await httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode)
+				{
+					string error = await response.Content.ReadAsStringAsync();
+					Console.WriteLine($"Ошибка получения диалога FB: {error}");
+					return conversationData;
+				}
+
+				var json = await response.Content.ReadAsStringAsync();
+				conversationData = JsonSerializer.Deserialize<FbConversation>(json);
+			}
+
+			return conversationData;
 		}
 
 		/// <summary>

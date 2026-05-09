@@ -1,8 +1,11 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Worker.Contracts;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using StackExchange.Redis;
 
 namespace CrossChat.Worker.Jobs
 {
@@ -12,12 +15,17 @@ namespace CrossChat.Worker.Jobs
 		private IFaceBookService _fbService;
 		private ILogger<FaceBookAnswerJob> _logger;
 		private readonly AppDbContext _db;
+		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IDatabase _redis;
 
-		public FaceBookAnswerJob(IFaceBookService fbService, ILogger<FaceBookAnswerJob> logger, AppDbContext db)
+		public FaceBookAnswerJob(IFaceBookService fbService, ILogger<FaceBookAnswerJob> logger, AppDbContext db
+			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint)
 		{
 			_fbService = fbService;
 			_logger = logger;
 			_db = db;
+			_publishEndpoint = publishEndpoint;
+			_redis = redis.GetDatabase();
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -32,24 +40,25 @@ namespace CrossChat.Worker.Jobs
 				{
 					_logger.LogInformation($"[FaceBookAnswerJob] Проверка аккаунта @{bot.PageName}");
 
-					// 1. Получаем сообщения, на которые нужно ответить
-					var incomingMessages = await _fbService.GetUnreadMessagesAsync(bot.PageAccessToken, bot.PageId);
+					// 1. Получаем диалоги, на которые нужно ответить
+					var incomingDialogs = await _fbService.GetUnreadDialogsAsync(bot.PageAccessToken, bot.PageId);
 
-					if (incomingMessages == null || !incomingMessages.Any()) return;
+					if (incomingDialogs == null || !incomingDialogs.Any()) return;
 
-					foreach (var msg in incomingMessages)
+					foreach (var dlg in incomingDialogs)
 					{
-						_logger.LogInformation($"Входящее FB сообщение от {msg.from.name}: {msg.message}");
 
-						// 2. Генерируем ответ (Gemini)
-						//string prompt = GetPrompt(msg.message);
+						var queueLockKey = $"lock:fsbk_queued:{dlg.id}";
+						if (await _redis.StringSetAsync(queueLockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
+						{
+							await _publishEndpoint.Publish(new FaceBookProcessReply
+							{
+								BotDbId = bot.Id,
+								DialogId = dlg.id
+							});
 
-						string replyText = "Привет)";//await _aiModel.GeminiRequest(prompt);
-
-						await Task.Delay(TimeSpan.FromSeconds(15));
-						// 3. Отправляем
-						// Важно: msg.from.id - это ID пользователя (Recipient ID)
-						await _fbService.SendReplyAsync(msg.from.id, replyText, bot.PageAccessToken);
+							_logger.LogInformation($"[FaceBookScanner] Чат {dlg.id} для @{bot.PageName} отправлен в очередь.");
+						}
 					}
 				}
 			}

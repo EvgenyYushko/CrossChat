@@ -97,7 +97,7 @@ builder.Services.AddQuartz(q =>
 	 q.AddTrigger(opts => opts
         .ForJob(jobFaceBookbKey)
         .WithIdentity("FaceBookAnswerJob-Trigger")
-        .WithCronSchedule("0 10,40 * * * ?"));
+        .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
 
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

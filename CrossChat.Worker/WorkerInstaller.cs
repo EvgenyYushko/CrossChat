@@ -1,6 +1,7 @@
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
 using CrossChat.Worker.Consumers.BlueSky;
+using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
 using Grpc.Net.Client;
@@ -21,6 +22,7 @@ namespace CrossChat.Worker
 			x.AddConsumer<ThreadsReplyConsumer>(typeof(ThreadsReplyDefinition)); // Явная регистрация
 			x.AddConsumer<ThreadsPublishConsumer>();
 			x.AddConsumer<BlueSkyReplyConsumer>(typeof(BlueSkyReplyDefinition));
+			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 
