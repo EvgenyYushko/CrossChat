@@ -5,6 +5,7 @@ using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
+using CrossChat.Worker.Exceptions;
 using Grpc.Core;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -32,8 +33,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	{
 		PermitLimit = 20,                     // Сколько разрешаем (20 шт)
 		Window = TimeSpan.FromMinutes(1),     // За какое время (1 мин)
-		QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-		QueueLimit = 0
+		QueueProcessingOrder = QueueProcessingOrder.OldestFirst, // Кто первый встал, тот первый получит разрешение, когда оно освободится
+		QueueLimit = 0 
 	});
 
 	IDatabase _redis;
@@ -66,7 +67,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		if (!lease.IsAcquired)
 		{
 			// Лимит исчерпан -> бросаем исключение, чтобы сработал Redelivery (повтор через минуту)
-			throw new Exception("Rate limit exceeded (Gemini). Triggering Redelivery.");
+			throw new RateLimitExceededException("Rate limit exceeded (Gemini). Triggering Redelivery.");
 		}
 
 		var senderId = context.Message.SenderId;       // Клиент (кто написал)
