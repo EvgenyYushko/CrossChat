@@ -23,6 +23,7 @@ public class User
 	public ICollection<ThreadsSettings> ThreadsSettingsList { get; set; } = new List<ThreadsSettings>();
 	public ICollection<BlueSkySettings> BlueSkySettingsList { get; set; } = new List<BlueSkySettings>();
 	public ICollection<XSettings> XSettingsList { get; set; } = new List<XSettings>();
+	public ICollection<TelegramUserBotSettings> TelegramUserBotSettingsList { get; set; } = new List<TelegramUserBotSettings>();
 
 	public TelegramSettings? TelegramSettings { get; set; }
 }

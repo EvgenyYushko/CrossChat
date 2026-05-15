@@ -1,0 +1,287 @@
+@model CrossChat.Data.Entities.TelegramUserBotSettings
+@{
+    ViewData["Title"] = "Telegram UserBot";
+    bool isConnected = Model != null && !string.IsNullOrEmpty(Model.AuthKey);
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--text-main);
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
+        }
+
+        h3 {
+            color: var(--text-main);
+            text-align: left;
+            margin: 1.5rem 0 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .form-section {
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 1rem;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            resize: vertical;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 1rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.2);
+            }
+
+        /* Переключатель */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(128,128,128,0.1);
+            padding: 1.2rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 45px;
+            height: 24px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(21px);
+            }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Назад в профиль</a>
+}
+
+<div class="container">
+    <div class="card">
+        <h1>Telegram User Бот</h1>
+
+        @if (isConnected)
+        {
+            <span class="status-badge @(Model.IsActive ? "status-active" : "status-paused")">
+                @(Model.IsActive ? "● В сети" : "⚠️ Отключен")
+            </span>
+
+            <form action="/telegram-user/update" method="post" class="form-section">
+                <input type="hidden" name="botId" value="@Model.Id" />
+
+                <!-- Глобальный тумблер -->
+                <div class="switch-container">
+                    <div>
+                        <label style="margin:0; font-size: 1.1rem; color: white;">Активность</label>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Запустить прослушивание сообщений</div>
+                    </div>
+                    <label class="switch">
+                        <input type="hidden" name="isActive" value="false" />
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <h3>Данные сессии (Read-only)</h3>
+                <label>User ID</label>
+                <input type="text" value="@Model.TgUserId" class="text-input" readonly style="opacity: 0.6;">
+
+                <h3>Настройки ИИ</h3>
+                <label>Системный промпт</label>
+                <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
+
+                <h3>Обновить Прокси</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Host</label>
+                        <input type="text" name="ProxyHost" value="@Model.ProxyHost" class="text-input" placeholder="IP">
+                    </div>
+                    <div>
+                        <label>Port</label>
+                        <input type="number" name="ProxyPort" value="@Model.ProxyPort" class="text-input" placeholder="Port">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>User</label>
+                        <input type="text" name="ProxyUser" value="@Model.ProxyUser" class="text-input" placeholder="Login">
+                    </div>
+                    <div>
+                        <label>Password</label>
+                        <input type="password" name="ProxyPass" value="@Model.ProxyPass" class="text-input" placeholder="Password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+            </form>
+
+            <form action="/telegram-user/disconnect" method="post" onsubmit="return confirm('Полностью удалить сессию и данные бота?');">
+                <input type="hidden" name="botId" value="@Model.Id" />
+                <button type="submit" class="btn btn-danger">Удалить аккаунт</button>
+            </form>
+        }
+        else
+        {
+            <p style="color:var(--text-secondary); margin-bottom:2rem;">Введите данные для ручного внедрения сессии (Inject).</p>
+
+            <form action="/telegram-user/connect" method="post" class="form-section">
+                <h3>Данные аккаунта</h3>
+                <label>DC ID</label>
+                <input type="number" name="DcId" placeholder="1-5" class="text-input" required>
+
+                <label>Auth Key (HEX)</label>
+                <input type="text" name="AuthKey" placeholder="Длинный HEX ключ..." class="text-input" required>
+
+                <label>Telegram User ID</label>
+                <input type="number" name="TgUserId" placeholder="Например: 12345678" class="text-input" required>
+
+                <h3>Прокси (Обязательно для Render)</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="text" name="ProxyHost" placeholder="IP" class="text-input">
+                    <input type="number" name="ProxyPort" placeholder="Port" class="text-input">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="text" name="ProxyUser" placeholder="Login" class="text-input">
+                    <input type="password" name="ProxyPass" placeholder="Password" class="text-input">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Подключить UserBot</button>
+            </form>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Показ тоста при сохранении
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('saved')) {
+            alert('Настройки успешно обновлены!');
+        }
+    </script>
+}

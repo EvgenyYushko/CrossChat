@@ -1,6 +1,7 @@
 using CrossChat.BackgroundServices;
 using CrossChat.Data;
 using CrossChat.Helpers;
+using CrossChat.Integrations.Services;
 using CrossChat.Models;
 using CrossChat.Worker.Jobs;
 using CrossChat.Worker.Models;
@@ -14,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using Quartz;
 using StackExchange.Redis;
+using static CrossChat.Constants.AppConstants;
 using static CrossChat.Worker.WorkerInstaller;
 
 string GEMINI_API_KEY = "GEMINI_API_KEY";
@@ -61,6 +63,7 @@ var redisConnString = GetConfigOrThrow("ExternalHostingsSettings:Redis");
 var redisMultiplexer = ConnectionMultiplexer.Connect(redisConnString);
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
+builder.Services.AddSingleton<TelegramUserBotRegistry>();
 
 builder.Services.AddDataProtection()
     .PersistKeysToStackExchangeRedis(() => redisMultiplexer.GetDatabase(), "DataProtection-Keys")
@@ -98,7 +101,6 @@ builder.Services.AddQuartz(q =>
         .ForJob(jobFaceBookbKey)
         .WithIdentity("FaceBookAnswerJob-Trigger")
         .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
-
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
@@ -136,6 +138,8 @@ builder.Services.AddMassTransit(x =>
 {
 	x.AddWorkerConsumers();
 	var geminiToken = GetConfigOrThrow(GEMINI_API_KEY);
+	GetConfigOrThrow(TELEGRAM_API_ID);
+	GetConfigOrThrow(TELEGRAM_API_HASH);
 	x.AddWorkerServices(geminiToken);
 	x.AddQuartzConsumers();
 	x.AddPublishMessageScheduler();
@@ -151,6 +155,7 @@ builder.Services.AddMassTransit(x =>
 builder.Services.AddLogging();
 builder.Services.AddRazorPages();
 builder.Services.AddHostedService<HealthCheckBackgroundService>();
+builder.Services.AddHostedService<TelegramBackgroundService>();
 builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 

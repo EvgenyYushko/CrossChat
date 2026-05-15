@@ -3,6 +3,7 @@ using System;
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CrossChat.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260513100210_TelegramUserBot")]
+    partial class TelegramUserBot
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -311,10 +314,6 @@ namespace CrossChat.Data.Migrations
                     b.Property<long>("TgUserId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("TgUserName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
@@ -517,7 +516,7 @@ namespace CrossChat.Data.Migrations
             modelBuilder.Entity("CrossChat.Data.Entities.TelegramUserBotSettings", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.User", "User")
-                        .WithMany("TelegramUserBotSettingsList")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -566,8 +565,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("InstagramSettingsList");
 
                     b.Navigation("TelegramSettings");
-
-                    b.Navigation("TelegramUserBotSettingsList");
 
                     b.Navigation("ThreadsSettingsList");
 

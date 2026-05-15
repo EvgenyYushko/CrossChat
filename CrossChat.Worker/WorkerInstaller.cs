@@ -42,6 +42,7 @@ namespace CrossChat.Worker
 			services.AddSingleton<IBlueSkyService, BlueSkyService>();
 			services.AddSingleton<IXService, XService>();
 			services.AddSingleton<IFaceBookService, FaceBookService>();
+			services.AddSingleton<ITelegramUserBotService, TelegramUserBotService>();
 
 			var channel = GrpcChannel.ForAddress("https://google-services-kdg8.onrender.com", new GrpcChannelOptions
 			{
