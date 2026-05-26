@@ -148,5 +148,26 @@
             statusText.textContent = "Ошибка запуска";
             console.error(err);
         });
+
+        async function loadHistory() {
+            const response = await fetch(`/auth/console/history?provider=${provider}&botId=${botId}`);
+            const history = await response.json();
+
+            history.forEach(logLine => {
+                // Мы сохранили готовую строку, просто выводим её
+                const div = document.createElement('div');
+                div.className = 'log-line';
+                div.style.color = '#e2e8f0';
+                div.textContent = logLine;
+                terminal.appendChild(div);
+            });
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // Запускаем
+        loadHistory().then(() => {
+            connection.start(); // Подключаемся к сокету только ПОСЛЕ загрузки истории
+        });
     </script>
+
 }
