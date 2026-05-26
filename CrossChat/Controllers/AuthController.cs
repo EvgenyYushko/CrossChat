@@ -22,6 +22,16 @@ public class AuthController : Controller
 		_logger = logger;
 	}
 
+	[HttpGet("console")]
+	[Authorize]
+	public IActionResult ConsolePage([FromQuery] string provider, [FromQuery] int botId)
+	{
+		// Передаем параметры во вьюху через ViewBag
+		ViewBag.Provider = provider;
+		ViewBag.BotId = botId;
+		return View("Console");
+	}
+
 	// 1. Нажатие на кнопку "Войти через Google"
 	[HttpGet("login")]
 	public async Task<IActionResult> Login()

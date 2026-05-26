@@ -16,17 +16,22 @@ namespace CrossChat.Worker.Jobs
 		private readonly ILogger<BluesSkyAnswerJob> _logger;
 		private readonly IBlueSkyService _bskyService;
 		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IUserConsoleService _consoleService;
 		private readonly IDatabase _redis;
 
 		public BluesSkyAnswerJob(AppDbContext db
 			, ILogger<BluesSkyAnswerJob> logger
-			, IBlueSkyService blueSkyService, IPublishEndpoint publishEndpoint, IConnectionMultiplexer redis)
+			, IBlueSkyService blueSkyService
+			, IPublishEndpoint publishEndpoint
+			, IConnectionMultiplexer redis
+			, IUserConsoleService userConsoleService)
 		{
 			_db = db;
 			_logger = logger;
 			_bskyService = blueSkyService;
 			_redis = redis.GetDatabase();
 			_publishEndpoint = publishEndpoint;
+			_consoleService = userConsoleService;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -37,6 +42,7 @@ namespace CrossChat.Worker.Jobs
 
 			foreach (var bot in activeBots)
 			{
+				await _consoleService.WriteLogAsync(bot.UserId, "bluesky", bot.Id, $"[BluesJob] Проверка аккаунта @{bot.Handle}", "bluesky");
 				_logger.LogInformation($"[BluesJob] Проверка аккаунта @{bot.Handle}");
 
 				try

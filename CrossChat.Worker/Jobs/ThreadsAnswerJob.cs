@@ -21,11 +21,13 @@ public class ThreadsAutoReplyJob : IJob
 	private readonly ILogger<ThreadsAutoReplyJob> _logger;
 	private readonly IDatabase _redis;
 	private readonly IPublishEndpoint _publishEndpoint;
+	private readonly IUserConsoleService _consoleService;
 
 	public ThreadsAutoReplyJob(AppDbContext db, IThreadsService threadsService, IAiService aiService
 		, ILogger<ThreadsAutoReplyJob> logger
-		,  IConnectionMultiplexer redis
-		,  IPublishEndpoint publishEndpoint)
+		, IConnectionMultiplexer redis
+		, IPublishEndpoint publishEndpoint
+		, IUserConsoleService consoleService)
 	{
 		_db = db; 
 		_threadsService = threadsService; 
@@ -33,6 +35,7 @@ public class ThreadsAutoReplyJob : IJob
 		_logger = logger;
 		_redis = redis.GetDatabase();
 		_publishEndpoint = publishEndpoint;
+		_consoleService = consoleService;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
@@ -54,6 +57,8 @@ public class ThreadsAutoReplyJob : IJob
 
 			foreach (var thread in myThreads)
 			{
+				await _consoleService.WriteLogAsync(int.Parse(thread.Id), "threads", int.Parse(thread.Id), $"[ThreadsJob] Проверка аккаунта @{bot.Username}", "threads");
+
 				// 3. Получаем дерево комментариев для этого поста
 				var conversation = await _threadsService.GetConversationAsync(thread.Id, bot.AccessToken);
 

@@ -1,0 +1,152 @@
+@{
+    ViewData["Title"] = "Консоль управления";
+}
+
+@section Styles {
+    <style>
+        .container { max-width: 900px; margin: 6rem auto 3rem; padding: 0 1rem; }
+
+        .terminal-card {
+            background: #020202;
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        /* Сам терминал */
+        .terminal {
+            background: #000000;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            height: 450px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            text-align: left;
+            line-height: 1.5;
+        }
+
+        /* Стили для разных типов логов */
+        .log-line { margin-bottom: 6px; word-break: break-word; }
+        .log-time { color: #64748b; margin-right: 8px; }
+
+        .log-type-INFO { color: #38bdf8; }       /* Голубой */
+        .log-type-GEMINI { color: #a855f7; }     /* Фиолетовый ИИ */
+        .log-type-INSTAGRAM { color: #ec4899; }  /* Розовый Инста */
+        .log-type-TELEGRAM { color: #0ea5e9; }   /* Синий Телега */
+        .log-type-ERROR { color: #f43f5e; font-weight: bold; } /* Красный */
+        .log-type-FACEBOOK {
+            color: #1877f2;
+            font-weight: bold;
+        }
+        .log-type-BLUESKY {
+            color: #0085ff;
+            font-weight: bold;
+        }
+        .log-type-THREADS {
+            color: #ffffff;
+        }
+        .log-type-X {
+            color: #ffffff;
+        }
+        [data-theme="light"] .log-type-THREADS {
+            color: #000000;
+        }
+        /* Черный Threads для светлой темы */
+        .terminal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.85rem;
+        }
+
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block; margin-right: 6px; }
+        .status-connected { background: #10b981; animation: pulse 2s infinite; }
+
+        @@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/auth/profile" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← В кабинет</a>
+}
+
+<div class="container">
+    <div class="terminal-card">
+        <div class="terminal-header">
+            <div>
+                <span id="statusDot" class="status-dot"></span>
+                <span id="statusText">Подключение...</span>
+            </div>
+            <div>Режим реального времени</div>
+        </div>
+
+        <!-- Терминал -->
+        <div id="terminal" class="terminal">
+            <div class="log-line"><span class="log-time">[@DateTime.Now.ToString("HH:mm:ss")]</span> <span style="color:#64748b;">[SYSTEM] Инициализация консоли...</span></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script>
+        const terminal = document.getElementById('terminal');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // 1. Получаем параметры из ViewBag C#
+        const provider = "@ViewBag.Provider";
+        const botId = "@ViewBag.BotId";
+
+        // 2. Передаем их в URL подключения!
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(`/loghub?provider=${provider}&botId=${botId}`)
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("ReceiveLog", function (timestamp, type, message) {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = `[${timestamp}] `;
+            line.appendChild(timeSpan);
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = `log-type-${type}`;
+            typeSpan.textContent = `[${type}] `;
+            line.appendChild(typeSpan);
+
+            const textSpan = document.createElement('span');
+            textSpan.style.color = '#e2e8f0';
+            textSpan.textContent = message;
+            line.appendChild(textSpan);
+
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        });
+
+        connection.onclose(() => {
+            statusDot.className = "status-dot";
+            statusText.textContent = "Соединение потеряно";
+            statusText.style.color = "#ef4444";
+        });
+
+        connection.onreconnecting(() => {
+            statusDot.className = "status-dot";
+            statusText.textContent = "Переподключение...";
+            statusText.style.color = "#fbbf24";
+        });
+
+        connection.start().then(() => {
+            statusDot.className = "status-dot status-connected";
+            statusText.textContent = `Консоль активна [${provider.toUpperCase()} #${botId}]`;
+            statusText.style.color = "#10b981";
+        }).catch(err => {
+            statusText.textContent = "Ошибка запуска";
+            console.error(err);
+        });
+    </script>
+}

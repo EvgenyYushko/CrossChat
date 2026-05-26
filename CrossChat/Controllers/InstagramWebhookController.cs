@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Contracts;
@@ -13,12 +14,14 @@ namespace CrossChat.Controllers
 	public class InstagramWebhookController : ControllerBase
 	{
 		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IUserConsoleService _consoleService;
 		private readonly ILogger<InstagramWebhookController> _logger;
 		private const string VerifyToken = "test"; // Задайте свой токен
 
-		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint)
+		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint, IUserConsoleService consoleService)
 		{
 			_publishEndpoint = publishEndpoint;
+			_consoleService = consoleService;
 			_logger = logger;
 		}
 

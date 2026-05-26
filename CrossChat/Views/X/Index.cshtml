@@ -424,6 +424,10 @@
                 <input type="hidden" name="botId" value="@Model.Id">
                 <button type="submit" class="btn btn-danger" style="width:100%;">Удалить аккаунт</button>
             </form>
+
+            <a href="/auth/console?provider=x&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
         }
         else
         {

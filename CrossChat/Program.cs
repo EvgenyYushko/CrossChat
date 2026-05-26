@@ -1,8 +1,11 @@
 using CrossChat.BackgroundServices;
 using CrossChat.Data;
 using CrossChat.Helpers;
+using CrossChat.Hubs;
+using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
 using CrossChat.Models;
+using CrossChat.Services;
 using CrossChat.Worker.Jobs;
 using CrossChat.Worker.Models;
 using MassTransit;
@@ -82,7 +85,7 @@ builder.Services.AddQuartz(q =>
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("TokenRefreshJob-Trigger")
-        .WithCronSchedule("0 30 * * * ?"));
+        .WithCronSchedule("0 32 * * * ?"));
 
 	// 2
 	var joBlueSkybKey = new JobKey("BluesSkyAnswerJob");
@@ -172,6 +175,13 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
+// Добавляем SignalR в систему
+builder.Services.AddSignalR();
+
+// Регистрируем наш сервис логирования как Singleton
+builder.Services.AddSingleton<IUserConsoleService, UserConsoleService>();
+builder.Services.AddSingleton<IInstagramConsoleService, InstagramConsoleService>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -222,6 +232,7 @@ app.UseAuthentication(); // Кто ты?
 app.UseAuthorization();  // Можно ли тебе сюда?
 app.MapRazorPages();
 app.MapControllers();
+app.MapHub<LogHub>("/loghub");
 
 app.Run();
 

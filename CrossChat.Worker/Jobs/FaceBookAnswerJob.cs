@@ -16,15 +16,17 @@ namespace CrossChat.Worker.Jobs
 		private ILogger<FaceBookAnswerJob> _logger;
 		private readonly AppDbContext _db;
 		private readonly IPublishEndpoint _publishEndpoint;
+		private readonly IUserConsoleService _console;
 		private readonly IDatabase _redis;
 
 		public FaceBookAnswerJob(IFaceBookService fbService, ILogger<FaceBookAnswerJob> logger, AppDbContext db
-			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint)
+			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint, IUserConsoleService console)
 		{
 			_fbService = fbService;
 			_logger = logger;
 			_db = db;
 			_publishEndpoint = publishEndpoint;
+			_console = console;
 			_redis = redis.GetDatabase();
 		}
 
@@ -38,6 +40,7 @@ namespace CrossChat.Worker.Jobs
 
 				foreach (var bot in activeBots)
 				{
+					await _console.WriteLogAsync(bot.UserId, "facebook", bot.Id, $"[FaceBookAnswerJob] Проверка аккаунта @{bot.PageName}", "facebook");
 					_logger.LogInformation($"[FaceBookAnswerJob] Проверка аккаунта @{bot.PageName}");
 
 					// 1. Получаем диалоги, на которые нужно ответить

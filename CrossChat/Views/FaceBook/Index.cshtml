@@ -257,6 +257,10 @@
                 <input type="hidden" name="botId" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
             </form>
+
+            <a href="/auth/console?provider=facebook&botId=@Model.Id" class="btn" style="background:#1877f2; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
         }
         else
         {

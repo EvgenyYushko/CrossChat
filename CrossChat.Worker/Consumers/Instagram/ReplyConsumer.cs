@@ -25,6 +25,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly AppDbContext _db;
 	private readonly IInstagramService _instaService;
 	private readonly IAiService _aiService;
+	private readonly IInstagramConsoleService _consoleService;
 
 	// Статический лимитер (один на всё приложение)
 	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
@@ -40,12 +41,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	IDatabase _redis;
 	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
 	public ReplyConsumer(ILogger<ReplyConsumer> logger, AppDbContext db, IInstagramService instaService,
-		IAiService aiService, IConnectionMultiplexer redisMux)
+		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsoleService consoleService)
 	{
 		_logger = logger;
 		_db = db;
 		_instaService = instaService;
 		_aiService = aiService;
+		_consoleService = consoleService;
 		_redis = redisMux.GetDatabase();
 	}
 
@@ -98,6 +100,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		if (!settings.IsDirectEnabled)
 		{
 			_logger.LogInformation($"[Reply] ⏸ У бота выключены ответы на сообщения. Пропускаем.");
+			await _consoleService.WriteError(settings.UserId, settings.Id, $"[Reply] ⏸ У бота выключены ответы на сообщения. Пропускаем.");
+
 			return;
 		}
 
@@ -143,6 +147,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			if (messageCount >= settings.MaxAnswerMessagesCount)
 			{
 				_logger.LogWarning($"[Limit] Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
+				await _consoleService.WriteInfo(settings.UserId, settings.Id, $"[Limit] Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
+
 				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
 				//await _instaService.SendMessageAsync(senderId, "Ваш лимит на сегодня исчерпан. Пожалуйста, оформите подписку или дождитесь обновления лимита.", accessInstaToken);
 				return;
@@ -299,6 +305,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					_logger.LogError(ex, "Ошибка сохранения инфы ответе пользователю");
 				}
 
+				await _consoleService.WriteInfo(settings.UserId, settings.Id, $"✅ Ответ успешно отправлен пользователю {senderId}");
 				_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
 			}
 			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))

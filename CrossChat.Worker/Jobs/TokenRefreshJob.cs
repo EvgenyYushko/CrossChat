@@ -18,6 +18,7 @@ public class TokenRefreshJob : IJob
 	private readonly IBlueSkyService _blueSkyService;
 	private readonly IXService _xService;
 	private readonly IFaceBookService _faceBookService;
+	private readonly IUserConsoleService _consoleService;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly SocialMediaSettings _settings;
 
@@ -29,7 +30,8 @@ public class TokenRefreshJob : IJob
 		IThreadsService threadsService,
 		IBlueSkyService blueSkyService,
 		IXService xService,
-		IFaceBookService faceBookService
+		IFaceBookService faceBookService,
+		IUserConsoleService userConsoleService
 		)
 	{
 		_db = db;
@@ -38,6 +40,7 @@ public class TokenRefreshJob : IJob
 		_blueSkyService = blueSkyService;
 		_xService = xService;
 		_faceBookService = faceBookService;
+		_consoleService = userConsoleService;
 		_logger = logger;
 		_settings = options.Value;
 	}
@@ -85,7 +88,7 @@ public class TokenRefreshJob : IJob
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 					_logger.LogInformation($"✅ Instagram токен обновлен для User {settings.UserId}");
-
+					await _consoleService.WriteLogAsync(settings.UserId, "instagram", settings.Id, $"✅ Instagram токен обновлен для User {settings.UserId}", "instagram");
 					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))

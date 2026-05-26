@@ -244,6 +244,10 @@
                 <input type="hidden" name="botId" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Удалить аккаунт</button>
             </form>
+
+            <a href="/auth/console?provider=telegram&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333;">
+                💻 Открыть консоль бота
+            </a>
         }
         else
         {
