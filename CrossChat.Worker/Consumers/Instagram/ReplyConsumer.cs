@@ -35,7 +35,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		PermitLimit = 20,                     // Сколько разрешаем (20 шт)
 		Window = TimeSpan.FromMinutes(1),     // За какое время (1 мин)
 		QueueProcessingOrder = QueueProcessingOrder.OldestFirst, // Кто первый встал, тот первый получит разрешение, когда оно освободится
-		QueueLimit = 0 
+		QueueLimit = 0
 	});
 
 	IDatabase _redis;
@@ -144,12 +144,17 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			var messageCount = await _db.BotResponseLogs
 				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
-			if (messageCount >= settings.MaxAnswerMessagesCount)
+			if (messageCount == settings.MaxAnswerMessagesCount)
 			{
-				await _console.LogWarning( $"Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
-
 				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
-				//await _instaService.SendMessageAsync(senderId, "Ваш лимит на сегодня исчерпан. Пожалуйста, оформите подписку или дождитесь обновления лимита.", accessInstaToken);
+				await _instaService.SendMessageAsync(senderId, "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡", accessInstaToken);
+				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {senderId}");
+				return;
+			}
+
+			if (messageCount > settings.MaxAnswerMessagesCount)
+			{
+				await _console.LogWarning($"Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} сообщение проигнорировано");
 				return;
 			}
 
@@ -232,10 +237,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					// Выбираем случайное сообщение из списка непрочитанных
 					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
 					// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
-					await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
-
-					// Небольшая пауза для реалистичности перед тем как "печатать"
-					await Task.Delay(1500);
+					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
+					if (isSuccess)
+					{
+						await _console.LogError($"Отправлена реакция {reaction} пользователю {senderId} на сообщение {messageId}");
+						await Task.Delay(1500);
+					}
 				}
 				catch (Exception ex)
 				{

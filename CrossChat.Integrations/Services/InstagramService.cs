@@ -186,7 +186,7 @@ public class InstagramService : IInstagramService
 		return reactions[random.Next(reactions.Length)];
 	}
 
-	public async Task SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken)
+	public async Task<bool> SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken)
 	{
 		var url = $"{ApiVersion}/me/messages?access_token={accessToken}";
 
@@ -210,17 +210,17 @@ public class InstagramService : IInstagramService
 
 			if (response.IsSuccessStatusCode)
 			{
-				Console.WriteLine($"[Reaction] Отправлена реакция {reaction} на сообщение {messageId}");
+				return true;
 			}
-			else
-			{
-				var error = await response.Content.ReadAsStringAsync();
-				Console.WriteLine($"[Reaction Error] Не удалось отправить реакцию: {error}");
-			}
+
+			var error = await response.Content.ReadAsStringAsync();
+			Console.WriteLine($"[Reaction Error] Не удалось отправить реакцию: {error}");
+			return false;
 		}
 		catch (Exception ex)
 		{
 			Console.WriteLine($"[Reaction Error] Ошибка: {ex.Message}");
+			return false;
 		}
 	}
 

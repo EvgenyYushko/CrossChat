@@ -33,8 +33,8 @@ namespace CrossChat.Integrations.Interfaces
 		/// </summary>
 		/// <param name="recipientId">Кому ставим</param>
 		/// <param name="messageId">id сообщения</param>
-		/// <returns></returns>
-		Task SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken);
+		/// <returns>result - True/ False</returns>
+		Task<bool> SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken);
 
 		/// <summary>
 		/// Получить рандомную реакцию
