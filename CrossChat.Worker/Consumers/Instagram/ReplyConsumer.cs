@@ -25,7 +25,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly AppDbContext _db;
 	private readonly IInstagramService _instaService;
 	private readonly IAiService _aiService;
-	private readonly IInstagramConsoleService _consoleService;
+	private readonly IInstagramConsole _console;
 
 	// Статический лимитер (один на всё приложение)
 	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
@@ -41,13 +41,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	IDatabase _redis;
 	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
 	public ReplyConsumer(ILogger<ReplyConsumer> logger, AppDbContext db, IInstagramService instaService,
-		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsoleService consoleService)
+		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsole console)
 	{
 		_logger = logger;
 		_db = db;
 		_instaService = instaService;
 		_aiService = aiService;
-		_consoleService = consoleService;
+		_console = console;
 		_redis = redisMux.GetDatabase();
 	}
 
@@ -91,17 +91,17 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
+		_console.Init(settings.UserId, settings.Id);
+
 		if (!settings.IsActive)
 		{
-			_logger.LogInformation($"[Reply] ⏸ Бот выключен пользователем. Пропускаем.");
+			await _console.Log($"⏸ У бота выключены ответы на сообщения. Пропускаем.");
 			return;
 		}
 
 		if (!settings.IsDirectEnabled)
 		{
-			_logger.LogInformation($"[Reply] ⏸ У бота выключены ответы на сообщения. Пропускаем.");
-			await _consoleService.WriteError(settings.UserId, settings.Id, $"[Reply] ⏸ У бота выключены ответы на сообщения. Пропускаем.");
-
+			await _console.LogError($"⏸ У бота выключены ответы на сообщения. Пропускаем.");
 			return;
 		}
 
@@ -109,7 +109,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 		if (string.IsNullOrEmpty(accessInstaToken))
 		{
-			_logger.LogError($"[Reply] ❌ Токен отсутствует для BusinessID {businessAccountId}.");
+			await _console.LogError($"❌ Токен отсутствует для BusinessID {businessAccountId}.");
 			return;
 		}
 
@@ -134,7 +134,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// А) Проверяем галочку "Игнорировать"
 			if (customer.IsIgnored)
 			{
-				_logger.LogInformation($"[Ignore] Пользователь {senderId} в игнор-листе. Пропускаем диалог.");
+				await _console.LogInfo($"Пользователь {senderId} в игнор-листе. Пропускаем диалог.");
 				return; // Сразу выходим! Никаких запросов в ИИ, никаких скачиваний.
 			}
 
@@ -146,8 +146,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (messageCount >= settings.MaxAnswerMessagesCount)
 			{
-				_logger.LogWarning($"[Limit] Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
-				await _consoleService.WriteInfo(settings.UserId, settings.Id, $"[Limit] Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
+				await _console.LogWarning( $"Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
 
 				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
 				//await _instaService.SendMessageAsync(senderId, "Ваш лимит на сегодня исчерпан. Пожалуйста, оформите подписку или дождитесь обновления лимита.", accessInstaToken);
@@ -162,7 +161,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (tokensUsed >= settings.MaxAnswersTokensCount)
 			{
-				_logger.LogWarning($"[Limit] Аккаунт {senderId} превысил лимит токенов!");
+				await _console.LogWarning($"Аккаунт {senderId} превысил лимит токенов!");
 				return;
 			}
 
@@ -195,7 +194,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				//_logger.LogInformation($"[CHAT MSG] {content}");
 				if (content is null)
 				{
-					_logger.LogInformation("Медиа еще обрабатываются, Snooze...");
+					await _console.LogInfo("Медиа еще обрабатываются, Snooze...");
 					// Ставим себя в очередь снова через 10 секунд
 					await context.SchedulePublish(TimeSpan.FromSeconds(60), context.Message);
 					return;
@@ -240,7 +239,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 				catch (Exception ex)
 				{
-					_logger.LogError($"[Send reaction error] {ex.ToString()}");
+					await _console.LogError($"[Send reaction error] {ex.ToString()}");
 				}
 			}
 
@@ -260,7 +259,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				if (string.IsNullOrWhiteSpace(aiResponse))
 				{
-					_logger.LogError("[Reply] ИИ вернул пустой ответ.");
+					await _console.LogError("ИИ вернул пустой ответ.");
 
 					string retryKey = $"retry_ai_{messageId}"; // ID вашего сообщения
 					long retryCount = await _redis.StringIncrementAsync(retryKey);
@@ -274,7 +273,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					// 2. Лимит попыток (например, 3 раза)
 					if (retryCount <= 3)
 					{
-						_logger.LogInformation($"[Reply] Попытка {retryCount}/3. Отправим запрос в очередь через {60 * retryCount}сек...");
+						await _console.Log($"Попытка {retryCount}/3. Отправим запрос в очередь через {60 * retryCount}сек...");
+
 						await context.SchedulePublish(TimeSpan.FromSeconds(60 * retryCount), context.Message);
 						return; // Выходим
 					}
@@ -302,27 +302,26 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 				catch (Exception ex)
 				{
-					_logger.LogError(ex, "Ошибка сохранения инфы ответе пользователю");
+					await _console.LogError($"Ошибка сохранения инфы ответе пользователю {ex.ToString()}");
 				}
 
-				await _consoleService.WriteInfo(settings.UserId, settings.Id, $"✅ Ответ успешно отправлен пользователю {senderId}");
-				_logger.LogInformation($"[Reply] ✅ Ответ успешно отправлен пользователю {senderId}");
+				await _console.Log($"✅ Ответ успешно отправлен пользователю {senderId}");
 			}
 			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
 			{
 				// ОШИБКА БЕЗОПАСНОСТИ (Google Policy) - ПОВТОР НЕ ПОМОЖЕТ
-				_logger.LogWarning("Gemini заблокировал контент. Прекращаем обработку.");
+				await _console.LogWarning("Gemini заблокировал контент. Прекращаем обработку.");
 			}
 			catch (Exception ex)
 			{
 				// ТЕХНИЧЕСКАЯ ОШИБКА (Сеть, API упало) - ПОВТОР ПОМОЖЕТ
-				_logger.LogError(ex, "Техническая ошибка. RabbitMQ сделает Retry.");
+				await _console.LogError($"Техническая ошибка. RabbitMQ сделает Retry. {ex.ToString()}");
 				throw; // Вот здесь мы кидаем throw, чтобы сработал твой UseMessageRetry
 			}
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, $"[Reply] 💥 Ошибка при обработке диалога {senderId}");
+			await _console.LogError($"💥 Ошибка при обработке диалога {senderId}. {ex.ToString()}");
 			// Здесь можно решить: бросать исключение (чтобы повторить попытку) или нет.
 			// Если ошибка в логике (например, ИИ упал) - лучше повторить.
 			throw;

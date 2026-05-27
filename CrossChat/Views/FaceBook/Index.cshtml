@@ -228,6 +228,10 @@
                 </div>
             </div>
 
+            <a href="/auth/console?provider=facebook&botId=@Model.Id" class="btn" style="background:#1877f2; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
+
             <div class="form-section">
                 <form action="/facebook/update-settings" method="post">
                     <input type="hidden" name="botId" value="@Model.Id" />
@@ -256,11 +260,7 @@
             <form action="/facebook/disconnect" method="post" onsubmit="return confirm('Отключить эту страницу?');">
                 <input type="hidden" name="botId" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
-            </form>
-
-            <a href="/auth/console?provider=facebook&botId=@Model.Id" class="btn" style="background:#1877f2; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
+            </form>            
         }
         else
         {

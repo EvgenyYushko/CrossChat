@@ -4,7 +4,6 @@ using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Services;
 using CrossChat.Worker.Contracts;
 using MassTransit;
-using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.BlueSky
@@ -15,13 +14,14 @@ namespace CrossChat.Worker.Consumers.BlueSky
 		private readonly IBlueSkyService _bskyService;
 		private readonly IAiService _aiService;
 		private readonly IDatabase _redis;
-		private readonly ILogger<BlueSkyReplyConsumer> _logger;
+		private readonly IBlueSkyConsole _console;
 
-		public BlueSkyReplyConsumer(AppDbContext db, IBlueSkyService bskyService, IAiService aiService, 
-			IConnectionMultiplexer redis, ILogger<BlueSkyReplyConsumer> logger)
+		public BlueSkyReplyConsumer(AppDbContext db, IBlueSkyService bskyService, IAiService aiService,
+			IConnectionMultiplexer redis, IBlueSkyConsole console)
 		{
 			_db = db; _bskyService = bskyService; _aiService = aiService;
-			_redis = redis.GetDatabase(); _logger = logger;
+			_redis = redis.GetDatabase();
+			_console = console;
 		}
 
 		public async Task Consume(ConsumeContext<BlueSkyProcessReply> context)
@@ -72,7 +72,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 					{
 						// 6. Помечаем прочитанным
 						await _bskyService.MarkConvoAsReadAsync(botModel, msg.ConvoId, messages.Last().Id);
-						_logger.LogInformation($"[BlueSkyWorker] ✅ Ответили в чат {msg.ConvoId}");
+						await _console.Log($"✅ Ответили в чат {msg.ConvoId}", bot.UserId, bot.Id);
 					}
 				}
 			}

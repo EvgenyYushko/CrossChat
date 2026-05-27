@@ -190,7 +190,7 @@
             <span class="status-badge @(Model.IsActive ? "status-active" : "status-paused")">
                 @(Model.IsActive ? "● В сети" : "⚠️ Отключен")
             </span>
-
+            
             <form action="/telegram-user/update" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id" />
 
@@ -206,6 +206,10 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+
+                <a href="/auth/console?provider=telegram&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333;">
+                    💻 Открыть консоль бота
+                </a>
 
                 <h3>Данные сессии (Read-only)</h3>
                 <label>User ID</label>
@@ -244,10 +248,6 @@
                 <input type="hidden" name="botId" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Удалить аккаунт</button>
             </form>
-
-            <a href="/auth/console?provider=telegram&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333;">
-                💻 Открыть консоль бота
-            </a>
         }
         else
         {

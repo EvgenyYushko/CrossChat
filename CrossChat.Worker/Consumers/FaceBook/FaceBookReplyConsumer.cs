@@ -3,7 +3,6 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
 using MassTransit;
-using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.FaceBook
@@ -12,14 +11,15 @@ namespace CrossChat.Worker.Consumers.FaceBook
 	{
 		private readonly AppDbContext _db;
 		private readonly IFaceBookService _faceBookService;
-		private readonly ILogger<FaceBookReplyConsumer> _logger;
+		private readonly IFaceBookConsole _console;
 		private readonly IDatabase _redis;
 
-		public FaceBookReplyConsumer(AppDbContext db, IFaceBookService faceBookService, ILogger<FaceBookReplyConsumer> logger, IConnectionMultiplexer redis)
+		public FaceBookReplyConsumer(AppDbContext db, IFaceBookService faceBookService,
+			IConnectionMultiplexer redis, IFaceBookConsole console)
 		{
 			_db = db;
 			_faceBookService = faceBookService;
-			_logger = logger;
+			_console = console;
 			_redis = redis.GetDatabase();
 		}
 
@@ -52,7 +52,7 @@ namespace CrossChat.Worker.Consumers.FaceBook
 					var sended = await _faceBookService.SendReplyAsync(recepientId, aiResponse, bot.PageAccessToken);
 					if (sended)
 					{
-						_logger.LogInformation($"[FaceBookWorker] ✅ Ответили в чат {msg.DialogId}");
+						await _console.Log($"✅ Ответили в чат {msg.DialogId}", bot.UserId, bot.Id);
 					}
 				}
 			}

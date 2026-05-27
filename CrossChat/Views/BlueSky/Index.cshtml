@@ -418,7 +418,9 @@
                 <div class="username">@@@Model.Handle</div>
                 <span class="status-badge status-active">Подключено</span>
             </div>
-
+            <a href="/auth/console?provider=bluesky&botId=@Model.Id" class="btn" style="background:#0085ff; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
             <form action="/bluesky/update" method="post" class="form-section">
                 <!-- Промпт и Тумблер как в других сетях -->
                 <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
@@ -430,10 +432,6 @@
                 <input type="hidden" name="botId" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
-
-            <a href="/auth/console?provider=bluesky&botId=@Model.Id" class="btn" style="background:#0085ff; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
         }
     </div>
 </div>

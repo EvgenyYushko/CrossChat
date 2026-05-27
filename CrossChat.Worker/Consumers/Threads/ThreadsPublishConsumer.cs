@@ -12,10 +12,13 @@ public class ThreadsPublishConsumer : IConsumer<PublishThreadsCommand>
 	private readonly IThreadsService _threadsService;
 	private readonly AppDbContext _db;
 	private readonly ILogger<ThreadsPublishConsumer> _logger;
+	private readonly IThreadsConsole _console;
 
-	public ThreadsPublishConsumer(IThreadsService threadsService, AppDbContext db, ILogger<ThreadsPublishConsumer> logger)
+	public ThreadsPublishConsumer(IThreadsService threadsService, AppDbContext db
+		, ILogger<ThreadsPublishConsumer> logger, IThreadsConsole console)
 	{
 		_threadsService = threadsService; _db = db; _logger = logger;
+		_console = console;
 	}
 
 	public async Task Consume(ConsumeContext<PublishThreadsCommand> context)
@@ -31,7 +34,7 @@ public class ThreadsPublishConsumer : IConsumer<PublishThreadsCommand>
 		{
 			// 2. Публикуем!
 			await _threadsService.PublishReplyAsync(msg.CreationId, settings.AccessToken);
-			_logger.LogInformation($"[Threads] ✅ Ответ на {msg.TargetMediaId} опубликован!");
+			await _console.Log($"✅ Ответ на {msg.TargetMediaId} опубликован!", settings.UserId, settings.Id);
 		}
 		else if (status == "IN_PROGRESS")
 		{

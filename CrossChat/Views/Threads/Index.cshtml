@@ -299,7 +299,9 @@
                     }
                 </div>
             </div>
-
+            <a href="/auth/console?provider=threads&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
             <form action="/threads/update-settings" method="post">
                 <input type="hidden" name="botId" value="@Model.Id">
                 <div class="switch-container">
@@ -322,10 +324,6 @@
             <form action="/threads/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить Threads?');">
                 <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
-
-            <a href="/auth/console?provider=threads&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
         }
         else
         {

@@ -5,12 +5,12 @@ using StackExchange.Redis;
 
 namespace CrossChat.Services
 {
-	public class UserConsoleService : IUserConsoleService
+	public class UserConsole : IUserConsoleService
 	{
 		private readonly IHubContext<LogHub> _hubContext;
 		IDatabase _redis;
 
-		public UserConsoleService(IHubContext<LogHub> hubContext, IConnectionMultiplexer redisMux)
+		public UserConsole(IHubContext<LogHub> hubContext, IConnectionMultiplexer redisMux)
 		{
 			_hubContext = hubContext;
 			_redis = redisMux.GetDatabase();

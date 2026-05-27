@@ -179,8 +179,12 @@ builder.Services.AddSession(options =>
 builder.Services.AddSignalR();
 
 // Регистрируем наш сервис логирования как Singleton
-builder.Services.AddSingleton<IUserConsoleService, UserConsoleService>();
-builder.Services.AddSingleton<IInstagramConsoleService, InstagramConsoleService>();
+builder.Services.AddSingleton<IUserConsoleService, UserConsole>();
+builder.Services.AddSingleton<IInstagramConsole, InstagramConsole>();
+builder.Services.AddSingleton<IFaceBookConsole, FaceBookConsole>();
+builder.Services.AddSingleton<IThreadsConsole, ThreadsConsole>();
+builder.Services.AddSingleton<IXConsole, XConsole>();
+builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
 
 var app = builder.Build();
 

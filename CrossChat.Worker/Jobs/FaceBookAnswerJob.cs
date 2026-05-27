@@ -13,17 +13,15 @@ namespace CrossChat.Worker.Jobs
 	public class FaceBookAnswerJob : IJob
 	{
 		private IFaceBookService _fbService;
-		private ILogger<FaceBookAnswerJob> _logger;
 		private readonly AppDbContext _db;
 		private readonly IPublishEndpoint _publishEndpoint;
-		private readonly IUserConsoleService _console;
+		private readonly IFaceBookConsole _console;
 		private readonly IDatabase _redis;
 
-		public FaceBookAnswerJob(IFaceBookService fbService, ILogger<FaceBookAnswerJob> logger, AppDbContext db
-			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint, IUserConsoleService console)
+		public FaceBookAnswerJob(IFaceBookService fbService, AppDbContext db
+			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint, IFaceBookConsole console)
 		{
 			_fbService = fbService;
-			_logger = logger;
 			_db = db;
 			_publishEndpoint = publishEndpoint;
 			_console = console;
@@ -40,8 +38,7 @@ namespace CrossChat.Worker.Jobs
 
 				foreach (var bot in activeBots)
 				{
-					await _console.WriteLogAsync(bot.UserId, "facebook", bot.Id, $"[FaceBookAnswerJob] Проверка аккаунта @{bot.PageName}", "facebook");
-					_logger.LogInformation($"[FaceBookAnswerJob] Проверка аккаунта @{bot.PageName}");
+					await _console.Log($"Проверка аккаунта @{bot.PageName}", bot.UserId, bot.Id);
 
 					// 1. Получаем диалоги, на которые нужно ответить
 					var incomingDialogs = await _fbService.GetUnreadDialogsAsync(bot.PageAccessToken, bot.PageId);
@@ -50,7 +47,6 @@ namespace CrossChat.Worker.Jobs
 
 					foreach (var dlg in incomingDialogs)
 					{
-
 						var queueLockKey = $"lock:fsbk_queued:{dlg.id}";
 						if (await _redis.StringSetAsync(queueLockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
 						{
@@ -60,14 +56,14 @@ namespace CrossChat.Worker.Jobs
 								DialogId = dlg.id
 							});
 
-							_logger.LogInformation($"[FaceBookScanner] Чат {dlg.id} для @{bot.PageName} отправлен в очередь.");
+							await _console.Log($"Чат {dlg.id} для @{bot.PageName} отправлен в очередь.");
 						}
 					}
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError($"Ошибка в FaceBookDmJob: {ex.Message}");
+				await _console.LogError($"Ошибка в FaceBookDmJob: {ex.Message}");
 			}
 		}
 	}

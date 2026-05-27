@@ -18,7 +18,10 @@ public class TokenRefreshJob : IJob
 	private readonly IBlueSkyService _blueSkyService;
 	private readonly IXService _xService;
 	private readonly IFaceBookService _faceBookService;
-	private readonly IUserConsoleService _consoleService;
+	private readonly IInstagramConsole _instagramConsole;
+	private readonly IFaceBookConsole _faceBookConsole;
+	private readonly IThreadsConsole _threadsConsole;
+	private readonly IXConsole _xConsole;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly SocialMediaSettings _settings;
 
@@ -31,7 +34,10 @@ public class TokenRefreshJob : IJob
 		IBlueSkyService blueSkyService,
 		IXService xService,
 		IFaceBookService faceBookService,
-		IUserConsoleService userConsoleService
+		IInstagramConsole instagramConsole,
+		IFaceBookConsole faceBookConsole,
+		IThreadsConsole threadsConsole,
+		IXConsole xConsole
 		)
 	{
 		_db = db;
@@ -40,7 +46,10 @@ public class TokenRefreshJob : IJob
 		_blueSkyService = blueSkyService;
 		_xService = xService;
 		_faceBookService = faceBookService;
-		_consoleService = userConsoleService;
+		_instagramConsole = instagramConsole;
+		_faceBookConsole = faceBookConsole;
+		_threadsConsole = threadsConsole;
+		_xConsole = xConsole;
 		_logger = logger;
 		_settings = options.Value;
 	}
@@ -87,8 +96,7 @@ public class TokenRefreshJob : IJob
 				{
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
-					_logger.LogInformation($"✅ Instagram токен обновлен для User {settings.UserId}");
-					await _consoleService.WriteLogAsync(settings.UserId, "instagram", settings.Id, $"✅ Instagram токен обновлен для User {settings.UserId}", "instagram");
+					await _instagramConsole.Log($"✅ Instagram токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
 					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))
@@ -98,7 +106,10 @@ public class TokenRefreshJob : IJob
 					settings.ProfilePictureUrl = base64Icon;
 				}
 			}
-			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка Instagram User {settings.UserId}"); }
+			catch (Exception ex)
+			{
+				await _instagramConsole.LogError($"❌ Ошибка Instagram User {settings.UserId}, {ex}", settings.UserId, settings.Id);
+			}
 		}
 	}
 
@@ -119,7 +130,7 @@ public class TokenRefreshJob : IJob
 				var userInfo = await _faceBookService.GetMeAsync(settings.PageAccessToken);
 				if (userInfo != null)
 				{
-					_logger.LogInformation($"✅ FaceBook данные обновлены для User {settings.UserId}");
+					await _faceBookConsole.Log($"✅ FaceBook данные обновлены для User {settings.UserId}", settings.UserId, settings.Id);
 
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.ProfilePicUrl))
@@ -130,7 +141,10 @@ public class TokenRefreshJob : IJob
 					settings.PageName = userInfo.Name;
 				}
 			}
-			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка FaceBook User {settings.UserId}"); }
+			catch (Exception ex)
+			{
+				await _faceBookConsole.LogError($"❌ Ошибка FaceBook User {settings.UserId}, {ex}", settings.UserId, settings.Id);
+			}
 		}
 	}
 
@@ -154,7 +168,7 @@ public class TokenRefreshJob : IJob
 				{
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
-					_logger.LogInformation($"✅ Threads токен обновлен для User {settings.UserId}");
+					await _threadsConsole.Log($"✅ Threads токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
 
 					var profile = await _threadsService.GetThreadsUserProfileAsync(result.Value.NewToken);
 					string? base64Icon = null;
@@ -166,10 +180,13 @@ public class TokenRefreshJob : IJob
 				}
 				else
 				{
-					_logger.LogWarning($"⚠️ Не удалось обновить Threads токен для User {settings.UserId}");
+					await _threadsConsole.LogWarning($"⚠️ Не удалось обновить Threads токен для User {settings.UserId}", settings.UserId, settings.Id);
 				}
 			}
-			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка Threads User {settings.UserId}"); }
+			catch (Exception ex)
+			{
+				await _threadsConsole.LogError($"❌ Ошибка Threads User {settings.UserId}, {ex}", settings.UserId, settings.Id);
+			}
 		}
 	}
 
@@ -225,7 +242,7 @@ public class TokenRefreshJob : IJob
 					bot.RefreshToken = result.Value.RefreshToken; // ОБЯЗАТЕЛЬНО сохраняем новый рефреш-токен
 					bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
-					_logger.LogInformation($"✅ X токен обновлен для @{bot.ScreenName}");
+					await _xConsole.Log($"✅ X токен обновлен для @{bot.ScreenName}", bot.UserId, bot.Id);
 
 					var profile = await _xService.GetXUserProfileAsync(result.Value.AccessToken);
 					string? base64Icon = null;
@@ -237,13 +254,13 @@ public class TokenRefreshJob : IJob
 				}
 				else
 				{
-					_logger.LogWarning($"⚠️ Не удалось обновить X для @{bot.ScreenName}. Возможно, доступ отозван.");
+					await _xConsole.LogWarning($"⚠️ Не удалось обновить X для @{bot.ScreenName}. Возможно, доступ отозван.", bot.UserId, bot.Id);
 					// bot.IsActive = false; // Опционально: выключаем бота при ошибке
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, $"❌ Ошибка X Refresh для {bot.ScreenName}");
+				await _xConsole.LogError($"❌ Ошибка X Refresh для {bot.ScreenName}, {ex}", bot.UserId, bot.Id);
 			}
 		}
 	}

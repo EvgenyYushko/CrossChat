@@ -409,7 +409,9 @@
                 <div style="font-size:1.5rem; font-weight:bold;">@@@Model.ScreenName</div>
                 <span class="status-badge status-active" style="margin-top:10px;">Подключено</span>
             </div>
-
+            <a href="/auth/console?provider=x&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
+                💻 Открыть консоль
+            </a>
             <form action="/x/update-settings" method="post" class="form-section" style="text-align:left; margin-top:2rem;">
                 <input type="hidden" name="botId" value="@Model.Id">
 
@@ -424,10 +426,6 @@
                 <input type="hidden" name="botId" value="@Model.Id">
                 <button type="submit" class="btn btn-danger" style="width:100%;">Удалить аккаунт</button>
             </form>
-
-            <a href="/auth/console?provider=x&botId=@Model.Id" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
         }
         else
         {

@@ -4,7 +4,6 @@ using CrossChat.Integrations.Services;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Quartz;
 using StackExchange.Redis;
 
@@ -13,25 +12,22 @@ namespace CrossChat.Worker.Jobs
 	public class BluesSkyAnswerJob : IJob
 	{
 		private readonly AppDbContext _db;
-		private readonly ILogger<BluesSkyAnswerJob> _logger;
 		private readonly IBlueSkyService _bskyService;
 		private readonly IPublishEndpoint _publishEndpoint;
-		private readonly IUserConsoleService _consoleService;
+		private readonly IBlueSkyConsole _console;
 		private readonly IDatabase _redis;
 
 		public BluesSkyAnswerJob(AppDbContext db
-			, ILogger<BluesSkyAnswerJob> logger
 			, IBlueSkyService blueSkyService
 			, IPublishEndpoint publishEndpoint
 			, IConnectionMultiplexer redis
-			, IUserConsoleService userConsoleService)
+			, IBlueSkyConsole consoleService)
 		{
 			_db = db;
-			_logger = logger;
 			_bskyService = blueSkyService;
 			_redis = redis.GetDatabase();
 			_publishEndpoint = publishEndpoint;
-			_consoleService = userConsoleService;
+			_console = consoleService;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -42,8 +38,7 @@ namespace CrossChat.Worker.Jobs
 
 			foreach (var bot in activeBots)
 			{
-				await _consoleService.WriteLogAsync(bot.UserId, "bluesky", bot.Id, $"[BluesJob] Проверка аккаунта @{bot.Handle}", "bluesky");
-				_logger.LogInformation($"[BluesJob] Проверка аккаунта @{bot.Handle}");
+				await _console.Log($"Проверка аккаунта @{bot.Handle}", bot.UserId, bot.Id);
 
 				try
 				{
@@ -64,7 +59,7 @@ namespace CrossChat.Worker.Jobs
 						token = botModel.AccessToken!;
 					}
 
-					_logger.LogInformation($"[BlueSky] Токен для @{botModel.Handle} истек. Обновляем...");
+					await _console.Log($"Токен для @{botModel.Handle} истек. Обновляем...", bot.UserId, bot.Id);
 
 					if (string.IsNullOrEmpty(token))
 					{
@@ -82,7 +77,7 @@ namespace CrossChat.Worker.Jobs
 
 						// 4. Сохраняем в БД (нужно будет вызвать _db.SaveChangesAsync() в вызывающем коде)
 						// Но лучше передать сюда callback или сделать метод сохранения
-						_logger.LogInformation($"[BlueSky] Токен успешно обновлен. Новый срок: {bot.TokenExpiresAt}");
+						await _console.Log($"Токен успешно обновлен. Новый срок: {bot.TokenExpiresAt}", bot.UserId, bot.Id);
 
 						token = bot.AccessToken;
 					}
@@ -114,13 +109,13 @@ namespace CrossChat.Worker.Jobs
 								ConvoId = convo.Id
 							});
 
-							_logger.LogInformation($"[BlueSkyScanner] Чат {convo.Id} для @{bot.Handle} отправлен в очередь.");
+							await _console.Log($"Чат {convo.Id} для @{bot.Handle} отправлен в очередь.", bot.UserId, bot.Id);
 						}
 					}
 				}
 				catch (Exception ex)
 				{
-					_logger.LogError(ex, $"Ошибка обработки бота {bot.Handle}");
+					await _console.LogError($"Ошибка обработки бота {bot.Handle}, {ex}", bot.UserId, bot.Id);
 				}
 			}
 		}

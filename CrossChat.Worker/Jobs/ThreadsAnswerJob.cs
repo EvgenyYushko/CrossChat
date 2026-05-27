@@ -1,14 +1,11 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
 using MassTransit;
-using MassTransit.Transports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using StackExchange.Redis;
-using static MassTransit.Logging.DiagnosticHeaders;
 
 namespace CrossChat.Worker.Jobs;
 
@@ -21,21 +18,21 @@ public class ThreadsAutoReplyJob : IJob
 	private readonly ILogger<ThreadsAutoReplyJob> _logger;
 	private readonly IDatabase _redis;
 	private readonly IPublishEndpoint _publishEndpoint;
-	private readonly IUserConsoleService _consoleService;
+	private readonly IThreadsConsole _console;
 
 	public ThreadsAutoReplyJob(AppDbContext db, IThreadsService threadsService, IAiService aiService
 		, ILogger<ThreadsAutoReplyJob> logger
 		, IConnectionMultiplexer redis
 		, IPublishEndpoint publishEndpoint
-		, IUserConsoleService consoleService)
+		, IThreadsConsole console)
 	{
-		_db = db; 
-		_threadsService = threadsService; 
-		_aiService = aiService; 
+		_db = db;
+		_threadsService = threadsService;
+		_aiService = aiService;
 		_logger = logger;
 		_redis = redis.GetDatabase();
 		_publishEndpoint = publishEndpoint;
-		_consoleService = consoleService;
+		_console = console;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
@@ -57,7 +54,7 @@ public class ThreadsAutoReplyJob : IJob
 
 			foreach (var thread in myThreads)
 			{
-				await _consoleService.WriteLogAsync(int.Parse(thread.Id), "threads", int.Parse(thread.Id), $"[ThreadsJob] Проверка аккаунта @{bot.Username}", "threads");
+				await _console.Log($"Проверка аккаунта @{bot.Username}", int.Parse(thread.Id), int.Parse(thread.Id));
 
 				// 3. Получаем дерево комментариев для этого поста
 				var conversation = await _threadsService.GetConversationAsync(thread.Id, bot.AccessToken);
@@ -89,7 +86,7 @@ public class ThreadsAutoReplyJob : IJob
 						Username = comment.Username ?? "user"
 					});
 
-					_logger.LogInformation($"[ThreadsJob] Задание на ответ для @{comment.Username} отправлено в очередь.");
+					await _console.Log($"Задание на ответ для @{comment.Username} отправлено в очередь.");
 
 					//var aiResponse = await _aiService.GetAnswerAsync(bot.SystemPrompt, new List<AiRequest>
 					//{
@@ -111,7 +108,7 @@ public class ThreadsAutoReplyJob : IJob
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, $"[ThreadsJob] Ошибка обработки бота @{bot.Username}");
+			await _console.Log($"Ошибка обработки бота @{bot.Username}, {ex}");
 		}
 		finally
 		{

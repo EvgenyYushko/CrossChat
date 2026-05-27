@@ -14,6 +14,7 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 	private readonly AppDbContext _db;
 	private readonly IInstagramService _instaService;
 	private readonly IAiService _aiService;
+	private readonly IInstagramConsole _console;
 
 	// Свой лимитер для комментов (чтобы не спамить)
 	private static readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
@@ -23,12 +24,14 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 		QueueLimit = 0
 	});
 
-	public CommentConsumer(ILogger<CommentConsumer> logger, AppDbContext db, IInstagramService instaService, IAiService aiService)
+	public CommentConsumer(ILogger<CommentConsumer> logger, AppDbContext db, IInstagramService instaService, IAiService aiService
+		, IInstagramConsole console)
 	{
 		_logger = logger; 
 		_db = db;
 		_instaService = instaService; 
 		_aiService = aiService;
+		_console = console;
 	}
 
 	public async Task Consume(ConsumeContext<InstagramCommentReceived> context)
@@ -68,7 +71,7 @@ public class CommentConsumer : IConsumer<InstagramCommentReceived>
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, $"[Comment] Ошибка при ответе на коммент {msg.CommentId}");
+			await _console.LogError($"Ошибка при ответе на коммент {msg.CommentId}", settings.UserId, settings.Id);
 			throw; // Бросаем, чтобы MassTransit повторил
 		}
 	}

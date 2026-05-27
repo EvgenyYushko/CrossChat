@@ -37,23 +37,11 @@
         .log-type-INSTAGRAM { color: #ec4899; }  /* Розовый Инста */
         .log-type-TELEGRAM { color: #0ea5e9; }   /* Синий Телега */
         .log-type-ERROR { color: #f43f5e; font-weight: bold; } /* Красный */
-        .log-type-FACEBOOK {
-            color: #1877f2;
-            font-weight: bold;
-        }
-        .log-type-BLUESKY {
-            color: #0085ff;
-            font-weight: bold;
-        }
-        .log-type-THREADS {
-            color: #ffffff;
-        }
-        .log-type-X {
-            color: #ffffff;
-        }
-        [data-theme="light"] .log-type-THREADS {
-            color: #000000;
-        }
+        .log-type-FACEBOOK {color: #1877f2;font-weight: bold;}
+        .log-type-BLUESKY {color: #0085ff;font-weight: bold;}
+        .log-type-THREADS {color: #ffffff;}
+        .log-type-X {color: #ffffff;}
+        [data-theme="light"] .log-type-THREADS {color: #000000;}
         /* Черный Threads для светлой темы */
         .terminal-header {
             display: flex; justify-content: space-between; align-items: center;
@@ -94,80 +82,83 @@
         const terminal = document.getElementById('terminal');
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
-
-        // 1. Получаем параметры из ViewBag C#
         const provider = "@ViewBag.Provider";
         const botId = "@ViewBag.BotId";
 
-        // 2. Передаем их в URL подключения!
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl(`/loghub?provider=${provider}&botId=${botId}`)
-            .withAutomaticReconnect()
-            .build();
-
-        connection.on("ReceiveLog", function (timestamp, type, message) {
+        // --- ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ ---
+        function appendLogLine(timestamp, type, message) {
             const line = document.createElement('div');
             line.className = 'log-line';
 
+            // 1. Время (серое)
             const timeSpan = document.createElement('span');
             timeSpan.className = 'log-time';
             timeSpan.textContent = `[${timestamp}] `;
             line.appendChild(timeSpan);
 
-            const typeSpan = document.createElement('span');
-            typeSpan.className = `log-type-${type}`;
-            typeSpan.textContent = `[${type}] `;
-            line.appendChild(typeSpan);
-
+            // 2. Текст сообщения (Цвет зависит от типа, но сам ТИП не пишем)
             const textSpan = document.createElement('span');
-            textSpan.style.color = '#e2e8f0';
+            // Применяем класс раскраски прямо к тексту сообщения
+            textSpan.className = `log-type-${type.toUpperCase()}`;
             textSpan.textContent = message;
             line.appendChild(textSpan);
 
             terminal.appendChild(line);
             terminal.scrollTop = terminal.scrollHeight;
-        });
+        }
 
-        connection.onclose(() => {
-            statusDot.className = "status-dot";
-            statusText.textContent = "Соединение потеряно";
-            statusText.style.color = "#ef4444";
-        });
+        // --- ПАРСИНГ СТРОКИ ИЗ REDIS ---
+        function parseAndAppendHistoryLine(rawLine) {
+            try {
+                // Регулярка для формата: "[12:00:00] [TYPE] Message"
+                const regex = /^\[(.*?)\]\s\[(.*?)\]\s(.*)$/;
+                const match = rawLine.match(regex);
 
-        connection.onreconnecting(() => {
-            statusDot.className = "status-dot";
-            statusText.textContent = "Переподключение...";
-            statusText.style.color = "#fbbf24";
-        });
+                if (match) {
+                    const [_, timestamp, type, message] = match;
+                    appendLogLine(timestamp, type, message);
+                } else {
+                    // Fallback если формат другой
+                    const div = document.createElement('div');
+                    div.className = 'log-line';
+                    div.style.color = '#888';
+                    div.textContent = rawLine;
+                    terminal.appendChild(div);
+                }
+            } catch (e) {
+                console.error("Ошибка истории:", e);
+            }
+        }
 
-        connection.start().then(() => {
-            statusDot.className = "status-dot status-connected";
-            statusText.textContent = `Консоль активна [${provider.toUpperCase()} #${botId}]`;
-            statusText.style.color = "#10b981";
-        }).catch(err => {
-            statusText.textContent = "Ошибка запуска";
-            console.error(err);
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(`/loghub?provider=${provider}&botId=${botId}`)
+            .withAutomaticReconnect()
+            .build();
+
+        // Прием живых логов через SignalR
+        connection.on("ReceiveLog", function (timestamp, type, message) {
+            appendLogLine(timestamp, type, message);
         });
 
         async function loadHistory() {
-            const response = await fetch(`/auth/console/history?provider=${provider}&botId=${botId}`);
-            const history = await response.json();
-
-            history.forEach(logLine => {
-                // Мы сохранили готовую строку, просто выводим её
-                const div = document.createElement('div');
-                div.className = 'log-line';
-                div.style.color = '#e2e8f0';
-                div.textContent = logLine;
-                terminal.appendChild(div);
-            });
-            terminal.scrollTop = terminal.scrollHeight;
+            try {
+                const response = await fetch(`/auth/console/history?provider=${provider}&botId=${botId}`);
+                if (!response.ok) return;
+                const history = await response.json();
+                history.forEach(line => parseAndAppendHistoryLine(line));
+            } catch (err) {
+                console.error("Ошибка загрузки истории:", err);
+            }
         }
 
-        // Запускаем
+        connection.onclose(() => { statusDot.className = "status-dot"; statusText.textContent = "Offline"; });
+
         loadHistory().then(() => {
-            connection.start(); // Подключаемся к сокету только ПОСЛЕ загрузки истории
+            connection.start().then(() => {
+                statusDot.className = "status-dot status-connected";
+                statusText.textContent = `Live: ${provider.toUpperCase()} #${botId}`;
+                statusText.style.color = "#10b981";
+            });
         });
     </script>
-
 }
