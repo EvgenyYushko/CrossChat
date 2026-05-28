@@ -279,7 +279,7 @@ public class InstagramService : IInstagramService
 
 	public static ConcurrentDictionary<string, string> ContextCache = new();
 
-	public async Task<string> GetUserContextForAiAsync(string userId, string accessToken)
+	public async Task<string> GetUserContextForAiAsync(string userId, string accessToken, InstagramUserProfile customerInfo = null)
 	{
 		// 1. Проверка КЭША
 		if (ContextCache.TryGetValue(userId, out string cachedContext))
@@ -291,7 +291,7 @@ public class InstagramService : IInstagramService
 		try
 		{
 			// 2. Запрос к API Instagram
-			var userProfile = await GetInstagramUserProfileAsync(userId, accessToken);
+			var userProfile = customerInfo ?? await GetInstagramUserProfileAsync(userId, accessToken);
 			if (userProfile == null) return "";
 
 			// 3. Анализ внешности (Vision)
