@@ -157,7 +157,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			{
 				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
 				await _instaService.SendMessageAsync(senderId, "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡", accessInstaToken);
-				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {senderId}");
+				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {customer.Username}");
+				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 				return;
 			}
 
@@ -297,23 +298,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				// Если мы это сообщение УЖЕ обработали — выходим
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
-
-				try
-				{
-					var responseLog = new BotResponseLog
-					{
-						CustomerId = customer.Id,
-						MessageId = context.Message.ReplyId, // ID последнего сообщения Инсты
-						TokensSpent = 0, // Пока 0
-						RespondedAt = DateTime.UtcNow
-					};
-					_db.BotResponseLogs.Add(responseLog);
-					await _db.SaveChangesAsync();
-				}
-				catch (Exception ex)
-				{
-					await _console.LogError($"Ошибка сохранения инфы ответе пользователю {ex.ToString()}");
-				}
+				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 
 				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
 			}
@@ -335,6 +320,26 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// Здесь можно решить: бросать исключение (чтобы повторить попытку) или нет.
 			// Если ошибка в логике (например, ИИ упал) - лучше повторить.
 			throw;
+		}
+	}
+
+	private async Task SaveCustomerLog(string replyId, int id)
+	{
+		try
+		{
+			var responseLog = new BotResponseLog
+			{
+				CustomerId = id,
+				MessageId = replyId, // ID последнего сообщения Инсты
+				TokensSpent = 0, // Пока 0
+				RespondedAt = DateTime.UtcNow
+			};
+			_db.BotResponseLogs.Add(responseLog);
+			await _db.SaveChangesAsync();
+		}
+		catch (Exception ex)
+		{
+			await _console.LogError($"Ошибка сохранения инфы ответе пользователю {ex.ToString()}");
 		}
 	}
 
