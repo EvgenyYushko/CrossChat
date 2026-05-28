@@ -115,21 +115,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 		try
 		{
-			_logger.LogInformation($"settings.Id = {settings.Id}, senderId = {senderId}");
-
 			var customer = await _db.InstagramBotCustomers
 				.FirstOrDefaultAsync(c => c.InstagramSettingsId == settings.Id && c.InstagramSenderId == senderId);
 
-			if(customer != null)
-			{
-				_logger.LogInformation($"customer.Id = {customer.Id}");
-			}
-
-			InstagramUserProfile customerInfo = null;
-
 			if (customer == null)
 			{
-				customerInfo = await _instaService.GetInstagramUserProfileAsync(senderId, accessInstaToken);
+				var customerInfo = await _instaService.GetInstagramUserProfileAsync(senderId, accessInstaToken);
 				// Пользователь пишет нам впервые - создаем его карточку
 				customer = new InstagramBotCustomer
 				{
@@ -157,7 +148,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (messageCount > settings.MaxAnswerMessagesCount)
 			{
-				await _console.LogWarning($"Аккаунт {senderId} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} сообщение проигнорировано");
+				//{senderId}
+				await _console.LogWarning($"Аккаунт {customer.Username}  превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} сообщение проигнорировано");
 				return;
 			}
 
@@ -177,7 +169,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (tokensUsed >= settings.MaxAnswersTokensCount)
 			{
-				await _console.LogWarning($"Аккаунт {senderId} превысил лимит токенов!");
+				await _console.LogWarning($"Аккаунт {customer.Username} превысил лимит токенов!");
 				return;
 			}
 
@@ -251,7 +243,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
 					if (isSuccess)
 					{
-						await _console.Log($"Отправлена реакция {reaction} пользователю {senderId} на сообщение");
+						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
 						await Task.Delay(1500);
 					}
 				}
@@ -268,7 +260,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				// 4. Отправляем в ИИ (через твой gRPC сервис)
 				var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
 
-				string userContextInfo = await _instaService.GetUserContextForAiAsync(senderId, accessInstaToken, customerInfo);
+				string userContextInfo = await _instaService.GetUserContextForAiAsync(senderId, accessInstaToken);
 				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
 					+ userContextInfo;
 
@@ -323,7 +315,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					await _console.LogError($"Ошибка сохранения инфы ответе пользователю {ex.ToString()}");
 				}
 
-				await _console.Log($"Ответ успешно отправлен пользователю {senderId}");
+				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
 			}
 			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
 			{

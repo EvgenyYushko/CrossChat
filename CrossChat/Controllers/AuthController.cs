@@ -27,11 +27,12 @@ public class AuthController : Controller
 
 	[HttpGet("console")]
 	[Authorize]
-	public IActionResult ConsolePage([FromQuery] string provider, [FromQuery] int botId)
+	public IActionResult ConsolePage([FromQuery] string provider, [FromQuery] int botId, [FromQuery] string username)
 	{
 		// Передаем параметры во вьюху через ViewBag
 		ViewBag.Provider = provider;
 		ViewBag.BotId = botId;
+		ViewBag.UserName = username;
 		return View("Console");
 	}
 

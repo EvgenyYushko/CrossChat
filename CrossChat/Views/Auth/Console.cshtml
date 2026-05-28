@@ -66,7 +66,6 @@
                 <span id="statusDot" class="status-dot"></span>
                 <span id="statusText">Подключение...</span>
             </div>
-            <div>Режим реального времени</div>
         </div>
 
         <!-- Терминал -->
@@ -84,6 +83,7 @@
         const statusText = document.getElementById('statusText');
         const provider = "@ViewBag.Provider";
         const botId = "@ViewBag.BotId";
+        const userName = "@ViewBag.UserName";
 
         // --- ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ ---
         function appendLogLine(timestamp, type, message) {
@@ -156,7 +156,7 @@
         loadHistory().then(() => {
             connection.start().then(() => {
                 statusDot.className = "status-dot status-connected";
-                statusText.textContent = `Live: ${provider.toUpperCase()} #${botId}`;
+                statusText.textContent = `Live: ${provider.toUpperCase()} ${userName}`;
                 statusText.style.color = "#10b981";
             });
         });

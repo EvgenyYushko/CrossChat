@@ -61,6 +61,6 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
 
-		Task<string> GetUserContextForAiAsync(string userId, string accessToken, InstagramUserProfile customerInfo = null);
+		Task<string> GetUserContextForAiAsync(string userId, string accessToken);
 	}
 }

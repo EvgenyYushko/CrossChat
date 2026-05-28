@@ -418,7 +418,7 @@
                 <div class="username">@@@Model.Handle</div>
                 <span class="status-badge status-active">Подключено</span>
             </div>
-            <a href="/auth/console?provider=bluesky&botId=@Model.Id" class="btn" style="background:#0085ff; margin-top: 1rem;">
+            <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn" style="background:#0085ff; margin-top: 1rem;">
                 💻 Открыть консоль
             </a>
             <form action="/bluesky/update" method="post" class="form-section">
