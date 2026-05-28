@@ -2,8 +2,9 @@ using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
+using static CrossChat.Helpers.TimeZoneHelper;
 
-namespace CrossChat.Services
+namespace CrossChat.Services.Base
 {
 	public class UserConsole : IUserConsoleService
 	{
@@ -18,7 +19,7 @@ namespace CrossChat.Services
 
 		public async Task WriteLogAsync(int userId, string provider, int botId, string message, string type = "info")
 		{
-			var timestamp = DateTime.Now.ToString("HH:mm:ss");
+			var timestamp = DateTimeNow.ToString("HH:mm:ss");
 			var groupName = $"bot_room_{provider.ToLower()}_{botId}";
 			var logEntry = $"[{timestamp}] [{type.ToUpper()}] {message}";
 

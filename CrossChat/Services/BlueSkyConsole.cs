@@ -3,11 +3,11 @@ using CrossChat.Services.Base;
 
 namespace CrossChat.Services
 {
-	public class BlueSkyConsole: ConsoleService, IBlueSkyConsole
+	public class BlueSkyConsole: ConsoleServiceBase, IBlueSkyConsole
 	{
 		private const string PROVIDER = "bluesky";
 
-		public BlueSkyConsole(IUserConsoleService consoleService, ILogger<ConsoleService> logger)
+		public BlueSkyConsole(IUserConsoleService consoleService, ILogger<ConsoleServiceBase> logger)
 			: base(consoleService, logger, PROVIDER)
 		{
 		}

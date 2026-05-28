@@ -2,15 +2,15 @@ using CrossChat.Integrations.Interfaces;
 
 namespace CrossChat.Services.Base
 {
-	public class ConsoleService
+	public class ConsoleServiceBase
 	{
 		private int? _userId = null;
 		private int? _botId = null;
 		private string _prodider;
 		private readonly IUserConsoleService _consoleService;
-		private readonly ILogger<ConsoleService> _logger;
+		private readonly ILogger<ConsoleServiceBase> _logger;
 
-		public ConsoleService(IUserConsoleService consoleService, ILogger<ConsoleService> logger, string provider)
+		public ConsoleServiceBase(IUserConsoleService consoleService, ILogger<ConsoleServiceBase> logger, string provider)
 		{
 			_consoleService = consoleService;
 			_logger = logger;
@@ -27,7 +27,7 @@ namespace CrossChat.Services.Base
 		{
 			var user = userId ?? _userId;
 			var bot = botId ?? _botId;
-			_logger.LogTrace($"[{_prodider}] {message}");
+			_logger.LogInformation($"[{_prodider}] {message}");
 			return _consoleService.WriteLogAsync(user.Value, _prodider, bot.Value, message, _prodider);
 		}
 

@@ -396,6 +396,22 @@
     </style>
 }
 
+@section Scripts {
+    <script>
+        // Показ уведомления "Сохранено"
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('saved')) {
+            const toast = document.getElementById('toast');
+            if(toast) {
+                toast.style.display = 'block';
+                setTimeout(() => toast.style.display = 'none', 3000);
+            }
+        }
+
+        function toggleInstruction() { /* ... твоя логика ... */ }
+    </script>
+}
+
 <div class="container">
     <div class="card">
         <h1>BlueSky Бот</h1>
@@ -410,27 +426,68 @@
         }
         else
         {
+            /* === РЕЖИМ НАСТРОЕК === */
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">
+                Настройки сохранены!
+            </div>
+
             <div class="connected-header">
                 @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
                 {
                     <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
                 }
+                else
+                {
+                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">BS</div>
+                }
                 <div class="username">@@@Model.Handle</div>
-                <span class="status-badge status-active">Подключено</span>
+
+                <div style="margin-top: 10px;">
+                    @if (Model.IsActive)
+                    {
+                        <span class="status-badge status-active"><span class="dot"></span> Бот в сети</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused">⚠️ Отключен</span>
+                    }
+                </div>
             </div>
-            <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn" style="background:#0085ff; margin-top: 1rem;">
-                💻 Открыть консоль
+
+            <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn" style="background:#0085ff; margin-bottom: 1.5rem;">
+                💻 Открыть консоль BlueSky
             </a>
+
             <form action="/bluesky/update" method="post" class="form-section">
-                <!-- Промпт и Тумблер как в других сетях -->
-                <textarea name="systemPrompt">@Model.SystemPrompt</textarea>
-                <button type="submit" class="btn btn-primary">Сохранить</button>
+                <input type="hidden" name="botId" value="@Model.Id" />
+
+                <!-- Переключатель активности -->
+                <div class="switch-container">
+                    <div>
+                        <label style="margin:0; font-size: 1.1rem; color: white;">Автоответы</label>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Обрабатывать упоминания и реплаи</div>
+                    </div>
+                    <label class="switch">
+                        <input type="hidden" name="isActive" value="false" />
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Системный промпт для ИИ</label>
+                    <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@Model.SystemPrompt</textarea>
+                    <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.5rem;">
+                        Инструкция, которой будет следовать Gemini при ответах в BlueSky.
+                    </p>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
             </form>
 
-            <form action="/bluesky/disconnect" method="post" onsubmit="return confirm('Удалить этот аккаунт?');">
-                <!-- Передаем ID через скрытое поле или прямо в Action URL -->
+            <form action="/bluesky/disconnect" method="post" onsubmit="return confirm('Отключить аккаунт BlueSky?');" style="margin-top: 1rem;">
                 <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
+                <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
             </form>
         }
     </div>

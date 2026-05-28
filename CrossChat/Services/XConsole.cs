@@ -3,11 +3,11 @@ using CrossChat.Services.Base;
 
 namespace CrossChat.Services
 {
-	public class XConsole: ConsoleService, IXConsole
+	public class XConsole: ConsoleServiceBase, IXConsole
 	{
 		private const string PROVIDER = "x";
 
-		public XConsole(IUserConsoleService consoleService, ILogger<ConsoleService> logger)
+		public XConsole(IUserConsoleService consoleService, ILogger<ConsoleServiceBase> logger)
 			: base(consoleService, logger, PROVIDER)
 		{
 		}

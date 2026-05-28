@@ -26,7 +26,6 @@ namespace CrossChat.Controllers
 		private readonly IBlueSkyService _blueSkyService;
 
 		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache, IBlueSkyService blueSkyService)
-
 		{
 			_logger = logger;
 			_db = db;
@@ -42,7 +41,7 @@ namespace CrossChat.Controllers
 
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-			_logger.LogInformation($"botId = {botId}, userId = {userId}");
+			//_logger.LogInformation($"botId = {botId}, userId = {userId}");
 
 			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 			return View(settings);
@@ -432,6 +431,34 @@ namespace CrossChat.Controllers
 				// === ВАЖНОЕ ДОБАВЛЕНИЕ ===
 				dpop_bound_access_tokens = true
 			});
+		}
+
+		[HttpPost("update")]
+		[Authorize]
+		public async Task<IActionResult> Update(int botId, string systemPrompt)
+		{
+			// 1. Получаем ID текущего пользователя
+			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+
+			// 2. Обработка чекбокса (наш хак со скрытым полем)
+			var isActiveRaw = Request.Form["isActive"].ToString();
+			bool isActive = isActiveRaw.Contains("true");
+
+			// 3. Ищем настройки конкретного бота
+			var settings = await _db.BlueSkySettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null)
+			{
+				settings.SystemPrompt = systemPrompt;
+				settings.IsActive = isActive;
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}. Активен: {isActive}");
+			}
+
+			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 
 		private async Task<string?> DownloadImageAsBase64(string imageUrl)

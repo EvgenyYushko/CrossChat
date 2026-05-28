@@ -6,6 +6,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
 using CrossChat.Models;
 using CrossChat.Services;
+using CrossChat.Services.Base;
 using CrossChat.Worker.Jobs;
 using CrossChat.Worker.Models;
 using MassTransit;

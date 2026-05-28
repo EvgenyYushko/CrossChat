@@ -1,57 +1,165 @@
+@model CrossChat.Data.Entities.User
 @{
     ViewData["Title"] = "Консоль управления";
 }
 
 @section Styles {
     <style>
-        .container { max-width: 900px; margin: 6rem auto 3rem; padding: 0 1rem; }
+        /* 1. ГЛОБАЛЬНЫЙ КОНТЕЙНЕР */
+        .container {
+            max-width: 900px;
+            margin: 6rem auto 2rem;
+            padding: 0 1rem;
+        }
 
         .terminal-card {
             background: #020202;
             border: 1px solid var(--glass-border);
             border-radius: 16px;
-            padding: 1.5rem;
+            padding: 1rem; /* Уменьшили паддинг */
             box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
         }
 
-        /* Сам терминал */
+        /* 2. ТЕРМИНАЛ (АДАПТИВНЫЙ) */
         .terminal {
             background: #000000;
             border: 1px solid #1e293b;
             border-radius: 8px;
-            padding: 1.5rem;
-            height: 450px;
+            padding: 1rem;
+            height: 500px; /* Дефолт для десктопа */
             overflow-y: auto;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.95rem;
+            /* Используем современный моноширинный шрифт */
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 0.9rem;
             text-align: left;
-            line-height: 1.5;
+            line-height: 1.4;
         }
 
-        /* Стили для разных типов логов */
-        .log-line { margin-bottom: 6px; word-break: break-word; }
-        .log-time { color: #64748b; margin-right: 8px; }
+        /* 3. СТРОКА ЛОГА (FLEX ДЛЯ ПРАВИЛЬНОГО ПЕРЕНОСА) */
+        .log-line {
+            display: flex;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
 
-        .log-type-INFO { color: #38bdf8; }       /* Голубой */
-        .log-type-GEMINI { color: #a855f7; }     /* Фиолетовый ИИ */
-        .log-type-INSTAGRAM { color: #ec4899; }  /* Розовый Инста */
-        .log-type-TELEGRAM { color: #0ea5e9; }   /* Синий Телега */
-        .log-type-ERROR { color: #f43f5e; font-weight: bold; } /* Красный */
-        .log-type-FACEBOOK {color: #1877f2;font-weight: bold;}
-        .log-type-BLUESKY {color: #0085ff;font-weight: bold;}
-        .log-type-THREADS {color: #ffffff;}
-        .log-type-X {color: #ffffff;}
-        [data-theme="light"] .log-type-THREADS {color: #000000;}
-        /* Черный Threads для светлой темы */
+        .log-time {
+            color: #64748b;
+            margin-right: 10px;
+            white-space: nowrap; /* Время всегда в одну строку */
+            flex-shrink: 0; /* Время не сжимается */
+        }
+
+        /* ЦВЕТА ТИПОВ */
+        .log-type-INFO {
+            color: #38bdf8;
+        }
+
+        .log-type-GEMINI {
+            color: #a855f7;
+        }
+
+        .log-type-INSTAGRAM {
+            color: #ec4899;
+        }
+
+        .log-type-TELEGRAM {
+            color: #0ea5e9;
+        }
+
+        .log-type-FACEBOOK {
+            color: #1877f2;
+            font-weight: bold;
+        }
+
+        .log-type-BLUESKY {
+            color: #0085ff;
+            font-weight: bold;
+        }
+
+        .log-type-THREADS {
+            color: #ffffff;
+        }
+
+        .log-type-X {
+            color: #ffffff;
+        }
+
+        .log-type-ERROR {
+            color: #f43f5e;
+            font-weight: bold;
+        }
+
+        [data-theme="light"] .log-type-THREADS,
+        [data-theme="light"] .log-type-X {
+            color: #000000;
+        }
+
         .terminal-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
         }
 
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block; margin-right: 6px; }
-        .status-connected { background: #10b981; animation: pulse 2s infinite; }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            display: inline-block;
+            margin-right: 6px;
+        }
 
-        @@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        .status-connected {
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @@keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* 4. МОБИЛЬНАЯ АДАПТАЦИЯ (Медиа-запрос) */
+        @@media (max-width: 600px) {
+            .container {
+                margin-top: 5rem; /* Меньше отступ сверху на мобилках */
+                padding: 0 0.5rem;
+            }
+
+            .terminal-card {
+                padding: 0.75rem;
+                border-radius: 12px;
+            }
+
+            .terminal {
+                height: 65vh; /* Высота — 65% от высоты экрана телефона */
+                font-size: 0.75rem; /* Уменьшили шрифт для мобилки */
+                padding: 0.75rem;
+            }
+
+            .log-time {
+                margin-right: 6px;
+                font-size: 0.7rem; /* Время еще чуть меньше */
+            }
+
+            .terminal-header {
+                font-size: 0.75rem;
+            }
+        }
     </style>
 }
 
@@ -66,11 +174,14 @@
                 <span id="statusDot" class="status-dot"></span>
                 <span id="statusText">Подключение...</span>
             </div>
+            <div class="mobile-hide">Real-time Debug</div>
         </div>
 
-        <!-- Терминал -->
         <div id="terminal" class="terminal">
-            <div class="log-line"><span class="log-time">[@DateTime.Now.ToString("HH:mm:ss")]</span> <span style="color:#64748b;">[SYSTEM] Инициализация консоли...</span></div>
+            <div class="log-line">
+                <span class="log-time">[@DateTime.Now.ToString("HH:mm:ss")]</span>
+                <span style="color:#64748b;">[SYSTEM] Консоль готова к работе...</span>
+            </div>
         </div>
     </div>
 </div>
@@ -85,48 +196,49 @@
         const botId = "@ViewBag.BotId";
         const userName = "@ViewBag.UserName";
 
-        // --- ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ ---
         function appendLogLine(timestamp, type, message) {
             const line = document.createElement('div');
             line.className = 'log-line';
 
-            // 1. Время (серое)
+            // Время
             const timeSpan = document.createElement('span');
             timeSpan.className = 'log-time';
-            timeSpan.textContent = `[${timestamp}] `;
+            timeSpan.textContent = `[${timestamp}]`;
             line.appendChild(timeSpan);
 
-            // 2. Текст сообщения (Цвет зависит от типа, но сам ТИП не пишем)
+            // Текст сообщения
             const textSpan = document.createElement('span');
-            // Применяем класс раскраски прямо к тексту сообщения
             textSpan.className = `log-type-${type.toUpperCase()}`;
             textSpan.textContent = message;
             line.appendChild(textSpan);
 
             terminal.appendChild(line);
-            terminal.scrollTop = terminal.scrollHeight;
+
+            // Плавный скролл вниз
+            terminal.scrollTo({
+                top: terminal.scrollHeight,
+                behavior: 'smooth'
+            });
         }
 
-        // --- ПАРСИНГ СТРОКИ ИЗ REDIS ---
         function parseAndAppendHistoryLine(rawLine) {
             try {
-                // Регулярка для формата: "[12:00:00] [TYPE] Message"
+                // Парсим формат "[12:00:00] [TYPE] Message"
                 const regex = /^\[(.*?)\]\s\[(.*?)\]\s(.*)$/;
                 const match = rawLine.match(regex);
 
                 if (match) {
-                    const [_, timestamp, type, message] = match;
-                    appendLogLine(timestamp, type, message);
+                    appendLogLine(match[1], match[2], match[3]);
                 } else {
-                    // Fallback если формат другой
                     const div = document.createElement('div');
                     div.className = 'log-line';
                     div.style.color = '#888';
+                    div.style.fontSize = '0.7rem';
                     div.textContent = rawLine;
                     terminal.appendChild(div);
                 }
             } catch (e) {
-                console.error("Ошибка истории:", e);
+                console.error("Parse error:", e);
             }
         }
 
@@ -135,8 +247,7 @@
             .withAutomaticReconnect()
             .build();
 
-        // Прием живых логов через SignalR
-        connection.on("ReceiveLog", function (timestamp, type, message) {
+        connection.on("ReceiveLog", (timestamp, type, message) => {
             appendLogLine(timestamp, type, message);
         });
 
@@ -147,16 +258,19 @@
                 const history = await response.json();
                 history.forEach(line => parseAndAppendHistoryLine(line));
             } catch (err) {
-                console.error("Ошибка загрузки истории:", err);
+                console.error("History load failed:", err);
             }
         }
 
-        connection.onclose(() => { statusDot.className = "status-dot"; statusText.textContent = "Offline"; });
+        connection.onclose(() => {
+            statusDot.className = "status-dot";
+            statusText.textContent = "Offline";
+        });
 
         loadHistory().then(() => {
             connection.start().then(() => {
                 statusDot.className = "status-dot status-connected";
-                statusText.textContent = `Live: ${provider.toUpperCase()} ${userName}`;
+                statusText.textContent = `${provider.toUpperCase()} | ${userName}`;
                 statusText.style.color = "#10b981";
             });
         });
