@@ -72,7 +72,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 					{
 						// 6. Помечаем прочитанным
 						await _bskyService.MarkConvoAsReadAsync(botModel, msg.ConvoId, messages.Last().Id);
-						await _console.Log($"✅ Ответили в чат {msg.ConvoId}", bot.UserId, bot.Id);
+						await _console.Log($"Ответили в чат {msg.ConvoId}", bot.UserId, bot.Id);
 					}
 				}
 			}

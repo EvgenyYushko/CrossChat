@@ -16,4 +16,5 @@ public record PublishThreadsCommand
 	public int BotDbId { get; init; }             // ID настроек в нашей БД
 	public string CreationId { get; init; } = string.Empty; // ID контейнера от Meta
 	public string TargetMediaId { get; init; } = string.Empty; // Для логов
+	public string Username { get; init; } = string.Empty;
 }

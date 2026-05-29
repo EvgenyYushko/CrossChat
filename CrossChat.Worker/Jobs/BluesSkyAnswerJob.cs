@@ -115,7 +115,7 @@ namespace CrossChat.Worker.Jobs
 				}
 				catch (Exception ex)
 				{
-					await _console.LogError($"Ошибка обработки бота {bot.Handle}, {ex}", bot.UserId, bot.Id);
+					await _console.LogError($"Ошибка обработки бота {bot.Handle}", bot.UserId, bot.Id);
 				}
 			}
 		}

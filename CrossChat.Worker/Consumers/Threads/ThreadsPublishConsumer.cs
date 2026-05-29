@@ -34,7 +34,7 @@ public class ThreadsPublishConsumer : IConsumer<PublishThreadsCommand>
 		{
 			// 2. Публикуем!
 			await _threadsService.PublishReplyAsync(msg.CreationId, settings.AccessToken);
-			await _console.Log($"✅ Ответ на {msg.TargetMediaId} опубликован!", settings.UserId, settings.Id);
+			await _console.Log($"Ответ для {msg.Username} на {msg.TargetMediaId} опубликован!", settings.UserId, settings.Id);
 		}
 		else if (status == "IN_PROGRESS")
 		{
@@ -48,6 +48,7 @@ public class ThreadsPublishConsumer : IConsumer<PublishThreadsCommand>
 		}
 		else
 		{
+			await _console.LogError($"Ошибка публикации для {msg.Username} на {msg.CreationId}: статус {status} на {msg.TargetMediaId}!", settings.UserId, settings.Id);
 			_logger.LogError($"[Threads] ❌ Ошибка публикации {msg.CreationId}: статус {status}");
 		}
 	}

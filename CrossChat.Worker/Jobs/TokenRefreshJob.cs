@@ -168,7 +168,7 @@ public class TokenRefreshJob : IJob
 				{
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
-					await _threadsConsole.Log($"✅ Threads токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
+					await _threadsConsole.Log($"токен обновлен для {settings.Username} UserId={settings.UserId}", settings.UserId, settings.Id);
 
 					var profile = await _threadsService.GetThreadsUserProfileAsync(result.Value.NewToken);
 					string? base64Icon = null;
@@ -180,12 +180,12 @@ public class TokenRefreshJob : IJob
 				}
 				else
 				{
-					await _threadsConsole.LogWarning($"⚠️ Не удалось обновить Threads токен для User {settings.UserId}", settings.UserId, settings.Id);
+					await _threadsConsole.LogWarning($"⚠️ Не удалось обновить Threads токен для {settings.Username} User {settings.UserId}", settings.UserId, settings.Id);
 				}
 			}
 			catch (Exception ex)
 			{
-				await _threadsConsole.LogError($"❌ Ошибка Threads User {settings.UserId}, {ex}", settings.UserId, settings.Id);
+				await _threadsConsole.LogError($"❌ Ошибка Threads {settings.Username} User {settings.UserId}, {ex}", settings.UserId, settings.Id);
 			}
 		}
 	}

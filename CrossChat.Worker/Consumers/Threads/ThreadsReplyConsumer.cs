@@ -1,3 +1,4 @@
+using System;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
@@ -14,13 +15,16 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 	private readonly AppDbContext _db;
 	private readonly IThreadsService _threadsService;
 	private readonly IAiService _aiService;
+	private readonly IThreadsConsole _console;
 	private readonly IDatabase _redis;
 
 	public ThreadsReplyConsumer(ILogger<ThreadsReplyConsumer> logger, AppDbContext db,
-		IThreadsService threadsService, IAiService aiService, IConnectionMultiplexer redis)
+		IThreadsService threadsService, IAiService aiService, IConnectionMultiplexer redis, IThreadsConsole console)
 	{
 		_logger = logger; _db = db; _threadsService = threadsService;
-		_aiService = aiService; _redis = redis.GetDatabase();
+		_aiService = aiService;
+		_console = console;
+		_redis = redis.GetDatabase();
 	}
 
 	public async Task Consume(ConsumeContext<ThreadsEventReceived> context)
@@ -41,7 +45,7 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 
 		try
 		{
-			_logger.LogInformation($"[Threads] Генерируем ответ для @{msg.Username} на '{msg.Text}'");
+			await _console.Log($"Генерируем ответ для @{msg.Username} на '{msg.Text}'", settings.UserId, settings.Id);
 
 			// 3. Запрос к ИИ
 			var prompt = $"{settings.SystemPrompt}\n\nТы отвечаешь в Threads. Пользователь @{msg.Username} написал: {msg.Text}";
@@ -61,7 +65,8 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 			{
 				BotDbId = settings.Id, // используем UserId как ключ
 				CreationId = creationId,
-				TargetMediaId = msg.MediaId
+				TargetMediaId = msg.MediaId,
+				Username = msg.Username
 			});
 		}
 		catch (Exception ex)

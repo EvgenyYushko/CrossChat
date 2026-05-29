@@ -226,6 +226,18 @@
             filter: invert(1) brightness(2);
         }
 
+        .bot-link-wrapper {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+            .bot-link-wrapper:hover {
+                transform: translateX(5px); /* Легкое смещение вправо при наведении */
+                opacity: 0.8;
+            }
+
          .icon-fb {
         background: #1877F2;
         box-shadow: 0 4px 12px rgba(24, 119, 242, 0.3);
@@ -289,22 +301,38 @@
             <br />
             @foreach (var bot in Model.InstagramSettingsList)
             {
-                <div class="card" style="margin-bottom: 20px;">
-                    
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                        @if (!string.IsNullOrEmpty(@bot.ProfilePictureUrl))
-                        {
-                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%;">
-                        }
-                        <div>
-                            <div style="font-weight:600;">@bot.Username</div>
+                <div class="card" style="margin-bottom: 20px; padding: 1.2rem;">
+
+                    <!-- Оборачиваем весь контент в ссылку -->
+                    <a href="/instagram?botId=@bot.Id" class="bot-link-wrapper">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Аватарка -->
+                            @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                            {
+                                <img src="@bot.ProfilePictureUrl" style="width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--glass-border);">
+                            }
+                            else
+                            {
+                                <div style="width: 52px; height: 52px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">IG</div>
+                            }
+
+                        <!-- Инфо -->
+                        <div style="flex-grow: 1;">
+                            <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Username</div>
                             <div style="margin-top:2px;">
-                                @(bot.IsActive? Html.Raw("<span style='color:#10b981;'>● Бот работает</span>") : Html.Raw("<span style='color:#fbbf24;'>⚠️ Бот выключен</span>"))
-                            </div>
+                                @(bot.IsActive ? Html.Raw("<span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>")
+                                               : Html.Raw("<span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>"))
                         </div>
                     </div>
-
-                    <a href="/instagram?botId=@bot.Id" class="btn-instagram">⚙️ Настроить бота</a>
+                            <!-- Иконка стрелочки (шеврон) для интуитивности -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                    </a>
                 </div>
             }
         } 
@@ -339,28 +367,45 @@
             <br />
             @foreach (var setting in Model.FacebookSettingsList)
             {
-                <div class="card" style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 1rem;">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        @if (!string.IsNullOrEmpty(setting.ProfilePictureUrl))
-                        {
-                            <img src="@setting.ProfilePictureUrl" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #1877F2;">
-                        }
-                        <div style="flex-grow: 1;">
-                            <div style="font-weight:600; font-size: 0.95rem;">@setting.PageName</div>
-                            <div style="font-size:0.8rem; margin-top:2px;">
-                                @if (setting.IsActive)
-                                {
-                                    <span style='color:#10b981;'>● Бот активен</span>
-                                }
-                                else
-                                {
-                                    <span style='color:#fbbf24;'>⚠️ Отключен</span>
-                                }
+                <!-- Используем тот же класс обертки-ссылки bot-link-wrapper -->
+                <a href="/facebook?botId=@setting.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Аватарка страницы FB -->
+                            @if (!string.IsNullOrEmpty(setting.ProfilePictureUrl))
+                            {
+                                <img src="@setting.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #1877F2; object-fit: cover;">
+                            }
+                            else
+                            {
+                                <div style="width: 48px; height: 48px; border-radius: 50%; background: #1877F2; display:flex; align-items:center; justify-content:center; color: white;">FB</div>
+                            }
+
+                            <!-- Информация о странице -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.05rem; color: var(--text-main);">@setting.PageName</div>
+                                <div style="font-size:0.85rem; margin-top:2px;">
+                                    @if (setting.IsActive)
+                                    {
+                                        <span style='color:#10b981;'>● Бот активен</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24;'>⚠️ Отключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка перехода (Шеврон) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
-                        <a href="/facebook?Botid=@setting.Id" style="text-decoration:none; opacity: 0.7;">⚙️</a>
                     </div>
-                </div>
+                </a>
             }
         }
     </div>
@@ -392,34 +437,45 @@
             <br />
             @foreach (var bot in Model.ThreadsSettingsList)
             {
-                <!-- Вложенная карточка конкретного аккаунта Threads -->
-                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02);">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
-                        {
-                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
-                        }
-                        else
-                        {
-                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">TH</div>
-                        }
-                        <div>
-                            <div style="font-weight:600;">@@@bot.Username</div>
-                            <div style="margin-top:2px;">
-                                @if (bot.IsActive)
-                                {
-                                    <span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>
-                                }
-                                else
-                                {
-                                    <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>
-                                }
+                <!-- Обертка-ссылка для всей карточки -->
+                <a href="/threads?botId=@bot.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Аватарка аккаунта Threads -->
+                            @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                            {
+                                <img src="@bot.ProfilePictureUrl" style="width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--glass-border); object-fit: cover;">
+                            }
+                            else
+                            {
+                                <div style="width: 52px; height: 52px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold;">TH</div>
+                            }
+
+                            <!-- Информация об аккаунте -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Username</div>
+                                <div style="margin-top:2px;">
+                                    @if (bot.IsActive)
+                                    {
+                                        <span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
                     </div>
-
-                    <a href="/threads?botId=@bot.Id" class="btn-instagram" style="btn-instagram">⚙️ Настроить бота</a>
-                </div>
+                </a>
             }
         }
     </div>
@@ -451,29 +507,40 @@
             <br />
             @foreach (var bot in Model.TelegramUserBotSettingsList)
             {
-                <!-- Вложенная карточка конкретного аккаунта Телеграм -->
-                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02);">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                                             
-                         <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">TH</div>
-                        
-                        <div>
-                            <div style="font-weight:600;">@@@bot.TgUserId</div>
-                            <div style="margin-top:2px;">
-                                @if (bot.IsActive)
-                                {
-                                    <span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>
-                                }
-                                else
-                                {
-                                    <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>
-                                }
+                <!-- Обертка-ссылка для всей карточки юзербота -->
+                <a href="/telegram-user?botId=@bot.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Заглушка аватарки (Синий цвет Telegram) -->
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
+                                TG
+                            </div>
+
+                            <!-- Информация об аккаунте -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">ID: @bot.TgUserId</div>
+                                <div style="margin-top:2px;">
+                                    @if (bot.IsActive)
+                                    {
+                                        <span style='color:#10b981; font-size: 0.85rem;'>● Бот в сети (User)</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот отключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
                     </div>
-
-                    <a href="/telegram-user?botId=@bot.Id" class="btn-instagram" style="btn-instagram">⚙️ Настроить бота</a>
-                </div>
+                </a>
             }
         }
     </div>
@@ -504,20 +571,39 @@
 
         @if (Model.TelegramSettings != null && !string.IsNullOrEmpty(Model.TelegramSettings.BotToken))
         {
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                <div style="width: 48px; height: 48px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color:white; font-size: 1.2rem;">
-                    @Model.TelegramSettings.BotUsername?.Substring(0, 1)
-                </div>
-                <div>
-                    <div style="font-weight:600;">@@@Model.TelegramSettings.BotUsername</div>
-                    <div style="font-size:0.85rem; margin-top:2px;">
-                        @(Model.TelegramSettings.IsActive? Html.Raw("<span style='color:#10b981;'>● Бот работает</span>") : Html.Raw("<span style='color:#fbbf24;'>⚠️ Бот выключен</span>"))
+            <!-- Обертка-ссылка для всей карточки Telegram бота -->
+            <a href="/telegram" class="bot-link-wrapper">
+                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+
+                        <!-- Аватарка (Заглушка с первой буквой ника) -->
+                        <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color:white; font-size: 1.3rem; font-weight: bold; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
+                            @(Model.TelegramSettings.BotUsername?.Length > 0 ? Model.TelegramSettings.BotUsername.Substring(0, 1).ToUpper() : "B")
+                        </div>
+
+                        <!-- Информация о боте -->
+                        <div style="flex-grow: 1;">
+                            <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@Model.TelegramSettings.BotUsername</div>
+                            <div style="font-size:0.85rem; margin-top:2px;">
+                                @if (Model.TelegramSettings.IsActive)
+                                {
+                                    <span style='color:#10b981;'>● Бот работает (API)</span>
+                                }
+                                else
+                                {
+                                    <span style='color:#fbbf24;'>⚠️ Бот выключен</span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Иконка шеврона (стрелочка вправо) -->
+                        <div style="opacity: 0.3; color: var(--text-main);">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <a href="/telegram" class="btn-telegram">
-                ⚙️ Настроить и @(Model.TelegramSettings.IsActive ? "Выключить" : "Включить")
             </a>
         }
         else
@@ -553,27 +639,47 @@
             <br />
             @foreach (var bot in Model.BlueSkySettingsList)
             {
-                <div class="card" style="margin-bottom: 20px;">
+                <!-- Обертка-ссылка для всей карточки BlueSky -->
+                <a href="/bluesky?botId=@bot.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 20px; padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
 
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
-                        {
-                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
-                        }
-                        else
-                        {
-                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">TH</div>
-                        }
-                        <div>
-                            <div style="font-weight:600;">@bot.Handle</div>
-                            <div style="margin-top:2px;">
-                                @(bot.IsActive? Html.Raw("<span style='color:#10b981;'>● Бот работает</span>") : Html.Raw("<span style='color:#fbbf24;'>⚠️ Бот выключен</span>"))
+                            <!-- Аватарка аккаунта BlueSky (Base64 из БД) -->
+                            @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                            {
+                                <img src="@bot.ProfilePictureUrl" style="width: 52px; height: 52px; border-radius: 50%; border: 2px solid #0085ff; object-fit: cover;">
+                            }
+                            else
+                            {
+                                <div style="width: 52px; height: 52px; border-radius: 50%; background: #0085ff; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.1rem; flex-shrink: 0;">
+                                    BS
+                                </div>
+                            }
+
+                            <!-- Информация об аккаунте -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Handle</div>
+                                <div style="margin-top:2px;">
+                                    @if (bot.IsActive)
+                                    {
+                                        <span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
                     </div>
-
-                    <a href="/bluesky?botId=@bot.Id" class="btn-instagram">⚙️ Настроить бота</a>
-                </div>
+                </a>
             }
         }
     </div>
@@ -605,34 +711,47 @@
             <br />
             @foreach (var bot in Model.XSettingsList)
             {
-                <!-- Вложенная карточка конкретного аккаунта X -->
-                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02);">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom:1rem;">
-                        @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
-                        {
-                            <img src="@bot.ProfilePictureUrl" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--glass-border);">
-                        }
-                        else
-                        {
-                            <div style="width: 48px; height: 48px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">X</div>
-                        }
-                        <div>
-                            <div style="font-weight:600;">@@@bot.ScreenName</div>
-                            <div style="margin-top:2px;">
-                                @if (bot.IsActive)
-                                {
-                                    <span style='color:#10b981; font-size: 0.85rem;'>● Бот активен</span>
-                                }
-                                else
-                                {
-                                    <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Отключен</span>
-                                }
+                <!-- Обертка-ссылка для всей карточки X (Twitter) -->
+                <a href="/x?botId=@bot.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Аватарка аккаунта X -->
+                            @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
+                            {
+                                <img src="@bot.ProfilePictureUrl" style="width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--glass-border); object-fit: cover;">
+                            }
+                            else
+                            {
+                                <div style="width: 52px; height: 52px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.1rem; flex-shrink: 0;">
+                                    X
+                                </div>
+                            }
+
+                            <!-- Информация об аккаунте -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.ScreenName</div>
+                                <div style="margin-top:2px;">
+                                    @if (bot.IsActive)
+                                    {
+                                        <span style='color:#10b981; font-size: 0.85rem;'>● Бот активен</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Отключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
                     </div>
-
-                    <a href="/x?botId=@bot.Id" class="btn-instagram" style="background: #222;">⚙️ Настроить посты</a>
-                </div>
+                </a>
             }
         }
     </div>

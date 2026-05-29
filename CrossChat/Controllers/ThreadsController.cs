@@ -183,13 +183,13 @@ namespace CrossChat.Controllers
 			{
 				// 1. Обмен кода на Short-Lived Token (через graph.threads.net)
 				var formData = new Dictionary<string, string>
-			{
-				{ "client_id", ThreadsAppId },
-				{ "client_secret", ThreadsAppSecret },
-				{ "grant_type", "authorization_code" },
-				{ "redirect_uri", RedirectUri },
-				{ "code", code }
-			};
+				{
+					{ "client_id", ThreadsAppId },
+					{ "client_secret", ThreadsAppSecret },
+					{ "grant_type", "authorization_code" },
+					{ "redirect_uri", RedirectUri },
+					{ "code", code }
+				};
 
 				var shortResp = await _httpClient.PostAsync("https://graph.threads.net/oauth/access_token", new FormUrlEncodedContent(formData));
 				var shortJson = await shortResp.Content.ReadAsStringAsync();
