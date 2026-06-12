@@ -19,7 +19,7 @@ namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("x")]
-	public class XController : Controller
+	public class XController : BaseController
 	{
 		private readonly AppDbContext _db;
 		private readonly HttpClient _httpClient;
@@ -203,7 +203,7 @@ namespace CrossChat.Controllers
 			bool isNew = false;
 			if (settings == null)
 			{
-				settings = new XSettings { UserId = userId, XUserId = xUserId };
+				settings = new XSettings { UserId = userId, XUserId = xUserId, ProfileId = GetActiveProfileId().Value };
 				_db.XSettings.Add(settings);
 				isNew = true;
 			}
@@ -242,8 +242,6 @@ namespace CrossChat.Controllers
 			using var sha256 = SHA256.Create();
 			var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(verifier));
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
-		}
-
-		
+		}		
 	}
 }

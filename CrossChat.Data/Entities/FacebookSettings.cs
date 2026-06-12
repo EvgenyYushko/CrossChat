@@ -22,5 +22,8 @@ namespace CrossChat.Data.Entities
 		public string SystemPrompt { get; set; } = "Ты ассистент на странице Facebook. Отвечай вежливо.";
 
 		public DateTime? TokenExpiresAt { get; set; } // Для страниц они часто бессрочные, но лучше хранить
+
+		public int ProfileId { get; set; }
+		public Profile Profile { get; set; } = null!;
 	}
 }

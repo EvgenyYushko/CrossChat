@@ -21,4 +21,7 @@ public class ThreadsSettings
 	public string SystemPrompt { get; set; } = "Ты ассистент в Threads. Отвечай кратко.";
 
 	public DateTime? LastProcessedAt { get; set; }
+
+	public int ProfileId { get; set; }
+	public Profile Profile { get; set; } = null!;
 }

@@ -1,0 +1,133 @@
+@model CrossChat.Controllers.AuthUser
+@{
+    ViewData["Title"] = "Выбор профиля";
+}
+
+@section Styles {
+    <style>
+        .container { max-width: 900px; margin: 6rem auto 3rem; padding: 0 1rem; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            display: block;
+            color: var(--text-main);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+            border-color: var(--accent-color);
+        }
+
+        .card-dashed {
+            border: 2px dashed var(--glass-border);
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-dashed:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .avatar-lg {
+            width: 100px; height: 100px;
+            border-radius: 50%; object-fit: cover;
+            margin-bottom: 1rem; border: 3px solid var(--accent-color);
+        }
+
+        h1 { color: var(--text-main); margin-bottom: 1rem; }
+        h3 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+        p { color: var(--text-secondary); font-size: 0.9rem; }
+
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <!-- Вставляем меню пользователя в Навбар Лейаута -->
+    <div style="display: flex; align-items: center;">
+        @* <span class="user-email">@Model.User.Email</span> *@
+        <form action="/auth/logout" method="post" style="margin:0">
+            <button class="logout-btn">Выйти</button>
+        </form>
+    </div>
+}
+ 
+<div class="container">
+    <!-- Карточка Приветствия -->
+    <div class="card" style="display:flex; align-items:center; gap:15px;">
+        @if (!string.IsNullOrEmpty(Model.User.AvatarUrl))
+        {
+            <img src="@Model.User.AvatarUrl" style="width:50px; height:50px; border-radius:50%;" alt="Avatar">
+        }
+        else
+        {
+            <div style="width:50px; height:50px; border-radius:50%; background:#333; display:flex; align-items:center; justify-content:center;">
+                @Model.User.Name.Substring(0, 1)
+            </div>
+        }
+        <div>
+            <h2 style="margin:0; font-size:1.2rem;">Привет, @Model.User.Name!</h2>
+        </div>
+       @*  <a href="/auth/console" class="logout-btn" style="border-color:var(--accent-color); color:var(--accent-color);">
+            💻 Открыть консоль разработчика
+        </a> *@
+    </div>
+
+</div>
+
+<div class="container">
+    <h1 style="text-align: center;">Выберите личность</h1>
+    
+    <div class="grid">
+        @if (Model != null)
+        {
+            @foreach (var profile in Model.User.Profile)
+            {
+                <a href="/profile?profileId=@profile.Id" class="card">
+                    @if (!string.IsNullOrEmpty(profile.AvatarUrl))
+                    {
+                        <img src="@profile.AvatarUrl" class="avatar-lg" alt="@profile.Name">
+                    }
+                    else
+                    {
+                        <div class="avatar-lg" style="background:#333; display:flex; align-items:center; justify-content:center; font-size:2rem; margin: 0 auto 1rem;">
+                            @profile.Name.Substring(0, 1)
+                        </div>
+                    }
+                    <h3>@profile.Name</h3>
+                    <p>Перейти к управлению</p>
+                </a>
+            }
+        }
+
+        <a href="/profile/create" class="card card-dashed">
+            <h3>+ Добавить профиль</h3>
+        </a>
+    </div>
+</div>

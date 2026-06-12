@@ -13,7 +13,7 @@ namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("facebook")]
-	public class FaceBookController : Controller
+	public class FaceBookController : BaseController
 	{
 		private readonly ILogger<FaceBookController> _logger;
 		private readonly SocialMediaSettings _settings;
@@ -214,7 +214,7 @@ namespace CrossChat.Controllers
 
 			if (settings == null)
 			{
-				settings = new FacebookSettings { UserId = userId, PageId = pageId };
+				settings = new FacebookSettings { UserId = userId, PageId = pageId, ProfileId = GetActiveProfileId().Value };
 				_db.FacebookSettings.Add(settings);
 			}
 

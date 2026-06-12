@@ -23,5 +23,8 @@ namespace CrossChat.Data.Entities
 
 		public bool IsActive { get; set; } = false;
 		public string SystemPrompt { get; set; } = "Ты ассистент в BlueSky. Отвечай лаконично.";
+
+		public int ProfileId { get; set; }
+		public Profile Profile { get; set; } = null!;
 	}
 }

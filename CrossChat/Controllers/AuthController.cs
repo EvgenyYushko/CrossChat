@@ -130,9 +130,7 @@ public class AuthController : Controller
 				Email = email,
 				Name = name ?? "User",
 				AvatarUrl = base64Avatar ?? avatarUrl,
-				CreatedAt = DateTime.UtcNow,
-				// Сразу создаем пустые настройки инсты
-				InstagramSettingsList = new List<InstagramSettings>()
+				CreatedAt = DateTime.UtcNow
 			};
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
@@ -169,7 +167,7 @@ public class AuthController : Controller
 			authProperties);
 
 		// Редирект в личный кабинет
-		return RedirectToAction("Profile");
+		return Redirect("/profiles");
 	}
 
 	[HttpPost("logout")]
@@ -177,42 +175,6 @@ public class AuthController : Controller
 	{
 		await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 		return RedirectToAction("Index", "Home");
-	}
-
-	// Страница профиля (пока заглушка)
-	[HttpGet("profile")]
-	[Authorize] // Только для вошедших
-	public async Task<IActionResult> Profile()
-	{
-		// Безопасно пытаемся достать ID
-		var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-		// Если ID нет или он не число (битая кука)
-		if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
-		{
-			// ЭВАКУАЦИЯ: Чистим куки и шлем на вход
-			await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-			return RedirectToAction("Index", "Home");
-		}
-
-		var user = await _db.Users
-			.Include(u => u.InstagramSettingsList)
-			.Include(u => u.FacebookSettingsList)
-			.Include(u => u.ThreadsSettingsList)
-			.Include(u => u.TelegramSettings)
-			.Include(u => u.BlueSkySettingsList)
-			.Include(u => u.XSettingsList)
-			.Include(u => u.TelegramUserBotSettingsList)
-			.FirstOrDefaultAsync(u => u.Id == userId);
-
-		// Если юзер был удален из базы, а кука осталась
-		if (user == null)
-		{
-			await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-			return RedirectToAction("Index", "Home");
-		}
-
-		return View(user);
 	}
 
 	private async Task<string?> DownloadImageAsBase64(string imageUrl)

@@ -14,4 +14,7 @@ public class TelegramSettings
     public string? BotUsername { get; set; }
     public bool IsActive { get; set; } = false;
     public string SystemPrompt { get; set; } = "Ты бот в Telegram. Отвечай вежливо.";
+
+    public int ProfileId { get; set; }
+	public Profile Profile { get; set; } = null!;
 }

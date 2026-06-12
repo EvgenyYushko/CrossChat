@@ -35,8 +35,11 @@ public class InstagramSettings
 	public string AllowedReactions { get; set; } = "💯🔥😘😂👍😋🥰💋💕💝";
 
 	public int MaxAnswerMessagesCount { get; set; } = 100;
-    public int MaxAnswersTokensCount { get; set; } = 1000000;
+	public int MaxAnswersTokensCount { get; set; } = 1000000;
 
 	// Связь: у одного бота много клиентов (тех, кто ему пишет)
 	public ICollection<InstagramBotCustomer> Customers { get; set; } = new List<InstagramBotCustomer>();
+
+	public int ProfileId { get; set; }
+	public Profile Profile { get; set; } = null!;
 }

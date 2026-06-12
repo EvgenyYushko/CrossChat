@@ -4,6 +4,10 @@
     bool isConnected = !string.IsNullOrEmpty(Model?.AccessToken);
 }
 
+@section NavbarActions {
+    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Профиль</a>
+}
+
 @section Styles {
     <style>
         .container {

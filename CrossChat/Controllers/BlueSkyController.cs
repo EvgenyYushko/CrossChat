@@ -15,7 +15,7 @@ namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("bluesky")]
-	public class BlueSkyController : Controller
+	public class BlueSkyController : BaseController
 	{
 		private readonly ILogger<BlueSkyController> _logger;
 		private readonly AppDbContext _db;
@@ -369,7 +369,7 @@ namespace CrossChat.Controllers
 
 		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate, string? profilePicUrl)
 		{
-			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО BlueSky аккаунта (по DID)
+			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО BlueSky аккаунта (по DID)		
 			var settings = await _db.BlueSkySettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.Did == did);
 
@@ -379,6 +379,7 @@ namespace CrossChat.Controllers
 				// 2. Если такого аккаунта еще нет — создаем
 				settings = new BlueSkySettings { UserId = userId, Did = did };
 				_db.BlueSkySettings.Add(settings);
+				settings.ProfileId = GetActiveProfileId().Value;;
 				isNew = true;
 			}
 
@@ -487,6 +488,4 @@ namespace CrossChat.Controllers
 			}
 		}
 	}
-
-
 }

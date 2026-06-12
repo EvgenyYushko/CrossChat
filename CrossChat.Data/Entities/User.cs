@@ -16,14 +16,6 @@ public class User
 	public string? AvatarUrl { get; set; }
 
 	public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-	// Связь 1 к 1 с настройками Инстаграма
-	public ICollection<InstagramSettings> InstagramSettingsList { get; set; } = new List<InstagramSettings>();
-	public ICollection<FacebookSettings> FacebookSettingsList { get; set; } = new List<FacebookSettings>();
-	public ICollection<ThreadsSettings> ThreadsSettingsList { get; set; } = new List<ThreadsSettings>();
-	public ICollection<BlueSkySettings> BlueSkySettingsList { get; set; } = new List<BlueSkySettings>();
-	public ICollection<XSettings> XSettingsList { get; set; } = new List<XSettings>();
-	public ICollection<TelegramUserBotSettings> TelegramUserBotSettingsList { get; set; } = new List<TelegramUserBotSettings>();
-
-	public TelegramSettings? TelegramSettings { get; set; }
+		
+	public ICollection<Profile> Profile { get; set; } = new List<Profile>();
 }

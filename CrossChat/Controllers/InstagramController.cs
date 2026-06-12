@@ -17,7 +17,7 @@ namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("instagram")]
-	public class InstagramController : Controller // Наследуем от Controller, чтобы работали View и Redirect
+	public class InstagramController : BaseController
 	{
 		private readonly ILogger<InstagramController> _logger;
 		private readonly SocialMediaSettings _settings;
@@ -450,6 +450,7 @@ namespace CrossChat.Controllers
 				{
 					UserId = userId,
 					InstagramBusinessId = instagramUserId,
+					ProfileId = GetActiveProfileId().Value
 				};
 				_db.InstagramSettings.Add(settings);
 			}

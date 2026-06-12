@@ -22,5 +22,8 @@ namespace CrossChat.Data.Entities
 
 		public bool IsActive { get; set; } = false;
 		public string SystemPrompt { get; set; } = "Ты — креативный автор в X (Twitter). Пиши цепляющие посты.";
+
+		public int ProfileId { get; set; }
+		public Profile Profile { get; set; } = null!;
 	}
 }

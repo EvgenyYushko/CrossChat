@@ -1,4 +1,8 @@
-@model CrossChat.Data.Entities.User
+@* @{
+    Layout = null;
+}
+<h1>Тестовая страница: @Model.Name</h1> *@
+@model CrossChat.Data.Entities.Profile
 @{
     ViewData["Title"] = "Личный кабинет";
 }
@@ -151,15 +155,19 @@
             }
         }
 
-        .logout-btn {
-            background: transparent;
-            border: 1px solid var(--glass-border);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
+        @@keyframes pulse-plus {
+            0%, 100%
+
+        {
+            box-shadow: 0 0 0 0 rgba(16,185,129,0.5);
         }
+
+        50% {
+            box-shadow: 0 0 0 8px rgba(16,185,129,0);
+        }
+
+        }
+
 
         .user-email {
             color: var(--text-secondary);
@@ -246,15 +254,7 @@
     </style>
 }
 
-@section NavbarActions {
-    <!-- Вставляем меню пользователя в Навбар Лейаута -->
-    <div style="display: flex; align-items: center;">
-        <span class="user-email">@Model.Email</span>
-        <form action="/auth/logout" method="post" style="margin:0">
-            <button class="logout-btn">Выйти</button>
-        </form>
-    </div>
-}
+
 
 <div class="container">
     <!-- Карточка Приветствия -->
@@ -278,35 +278,34 @@
     </div>
 
     <!-- Карточка Instagram -->
-    <div class="card" >
+    <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-
-        <div style="display:flex; align-items:center;">
-            <div class="service-icon icon-insta">
-                <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" /></svg>
+            <div style="display:flex; align-items:center;">
+                <div class="service-icon icon-insta">
+                    <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" /></svg>
+                </div>
+                <h3 style="margin:0; font-size:1.2rem;">Instagram</h3>
             </div>
-            <h3 style="margin:0; font-size:1.2rem;">Instagram</h3>
-        </div>
 
-            @if (Model.InstagramSettingsList == null || !Model.InstagramSettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
+            <a href="/instagram" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
+           
         </div>
-
-        <a href="/instagram" class="btn-instagram">+ Подключить аккаунт</a>        
 
         @if (Model.InstagramSettingsList != null && Model.InstagramSettingsList.Any())
         {
-            <br />
             @foreach (var bot in Model.InstagramSettingsList)
             {
                 <div class="card" style="margin-bottom: 20px; padding: 1.2rem;">
-
                     <!-- Оборачиваем весь контент в ссылку -->
                     <a href="/instagram?botId=@bot.Id" class="bot-link-wrapper">
                         <div style="display: flex; align-items: center; gap: 15px;">
-
                             <!-- Аватарка -->
                             @if (!string.IsNullOrEmpty(bot.ProfilePictureUrl))
                             {
@@ -316,26 +315,25 @@
                             {
                                 <div style="width: 52px; height: 52px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center;">IG</div>
                             }
-
                         <!-- Инфо -->
                         <div style="flex-grow: 1;">
-                            <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Username</div>
+                            <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@bot.Username</div>
                             <div style="margin-top:2px;">
                                 @(bot.IsActive ? Html.Raw("<span style='color:#10b981; font-size: 0.85rem;'>● Бот работает</span>")
-                                               : Html.Raw("<span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>"))
+                                                            : Html.Raw("<span style='color:#fbbf24; font-size: 0.85rem;'>⚠️ Бот выключен</span>"))
                         </div>
                     </div>
-                            <!-- Иконка стрелочки (шеврон) для интуитивности -->
-                            <div style="opacity: 0.3; color: var(--text-main);">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
-                            </div>
-                        </div>
-                    </a>
+                    <!-- Иконка стрелочки (шеврон) для интуитивности -->
+                    <div style="opacity: 0.3; color: var(--text-main);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </div>
                 </div>
-            }
-        } 
+            </a>
+        </div>
+                }
+        }
     </div>
 
      <br />
@@ -351,20 +349,20 @@
                 <h3 style="margin:0; font-size:1.2rem;">Facebook Pages</h3>
             </div>
 
-            @if (Model.FacebookSettingsList == null || !Model.FacebookSettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
-        </div>
+            <!-- Кнопка перехода к управлению страницами -->
+            <a href="/facebook" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
 
-        <!-- Кнопка перехода к управлению страницами -->
-        <a href="/facebook" class="btn-instagram" style="background: #1877F2; border: none;">
-            @("+ Подключить Facebook")
-        </a>
+        </div>
 
         @if (Model.FacebookSettingsList != null && Model.FacebookSettingsList.Any())
         {
-            <br />
             @foreach (var setting in Model.FacebookSettingsList)
             {
                 <!-- Используем тот же класс обертки-ссылки bot-link-wrapper -->
@@ -423,18 +421,19 @@
                 <h3 style="margin:0; font-size:1.2rem;">Threads</h3>
             </div>
 
-            @if (Model.ThreadsSettingsList == null || !Model.ThreadsSettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
+            <!-- Кнопка подключения нового аккаунта -->
+            <a href="/threads" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
         </div>
-
-        <!-- Кнопка подключения нового аккаунта -->
-        <a href="/threads" class="btn-instagram" style="btn-instagram">+ Подключить Threads</a>
 
         @if (Model.ThreadsSettingsList != null && Model.ThreadsSettingsList.Any())
         {
-            <br />
             @foreach (var bot in Model.ThreadsSettingsList)
             {
                 <!-- Обертка-ссылка для всей карточки -->
@@ -454,7 +453,7 @@
 
                             <!-- Информация об аккаунте -->
                             <div style="flex-grow: 1;">
-                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Username</div>
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@bot.Username</div>
                                 <div style="margin-top:2px;">
                                     @if (bot.IsActive)
                                     {
@@ -493,18 +492,18 @@
                 <h3 style="margin:0; font-size:1.2rem;">Telegram (User)</h3>
             </div>
 
-            @if (Model.TelegramUserBotSettingsList == null || !Model.TelegramUserBotSettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
+            <a href="/telegram-user" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
         </div>
-
-        <!-- Кнопка подключения нового аккаунта -->
-        <a href="/telegram-user" class="btn-instagram" style="btn-instagram">+ Подключить User</a>
 
         @if (Model.TelegramUserBotSettingsList != null && Model.TelegramUserBotSettingsList.Any())
         {
-            <br />
             @foreach (var bot in Model.TelegramUserBotSettingsList)
             {
                 <!-- Обертка-ссылка для всей карточки юзербота -->
@@ -565,52 +564,54 @@
             }
             else
             {
-                <span class="status-badge status-disconnected">Не подключено</span>
+                <a href="/telegram-user" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+                   onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+                   onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </a>
             }
         </div>
 
-        @if (Model.TelegramSettings != null && !string.IsNullOrEmpty(Model.TelegramSettings.BotToken))
-        {
-            <!-- Обертка-ссылка для всей карточки Telegram бота -->
-            <a href="/telegram" class="bot-link-wrapper">
-                <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
+            @if (Model.TelegramSettings != null && !string.IsNullOrEmpty(Model.TelegramSettings.BotToken))
+            {
+                <!-- Обертка-ссылка для всей карточки Telegram бота -->
+                <a href="/telegram" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
 
-                        <!-- Аватарка (Заглушка с первой буквой ника) -->
-                        <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color:white; font-size: 1.3rem; font-weight: bold; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
-                            @(Model.TelegramSettings.BotUsername?.Length > 0 ? Model.TelegramSettings.BotUsername.Substring(0, 1).ToUpper() : "B")
-                        </div>
+                            <!-- Аватарка (Заглушка с первой буквой ника) -->
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color:white; font-size: 1.3rem; font-weight: bold; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
+                                @(Model.TelegramSettings.BotUsername?.Length > 0 ? Model.TelegramSettings.BotUsername.Substring(0, 1).ToUpper() : "B")
+                            </div>
 
-                        <!-- Информация о боте -->
-                        <div style="flex-grow: 1;">
-                            <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@Model.TelegramSettings.BotUsername</div>
-                            <div style="font-size:0.85rem; margin-top:2px;">
-                                @if (Model.TelegramSettings.IsActive)
-                                {
-                                    <span style='color:#10b981;'>● Бот работает (API)</span>
-                                }
-                                else
-                                {
-                                    <span style='color:#fbbf24;'>⚠️ Бот выключен</span>
-                                }
+                            <!-- Информация о боте -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@Model.TelegramSettings.BotUsername</div>
+                                <div style="font-size:0.85rem; margin-top:2px;">
+                                    @if (Model.TelegramSettings.IsActive)
+                                    {
+                                        <span style='color:#10b981;'>● Бот работает (API)</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24;'>⚠️ Бот выключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
                             </div>
                         </div>
-
-                        <!-- Иконка шеврона (стрелочка вправо) -->
-                        <div style="opacity: 0.3; color: var(--text-main);">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        </div>
                     </div>
-                </div>
-            </a>
-        }
-        else
-        {
-            <p style="color:#aaa; font-size:0.9rem; margin-bottom:0;">Подключите бота через API токен.</p>
-            <a href="/telegram" class="btn-telegram">+ Подключить Telegram</a>
-        }
+                </a>
+            }
     </div>
 
     <br/>
@@ -626,17 +627,18 @@
                 <h3 style="margin:0; font-size:1.2rem;">BlueSky</h3>
             </div>
 
-            @if (Model.BlueSkySettingsList == null || !Model.BlueSkySettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
+            <a href="/bluesky" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
         </div>
-
-        <a href="/bluesky" class="btn-instagram">+ Подключить аккаунт</a>
 
         @if (Model.BlueSkySettingsList != null && Model.BlueSkySettingsList.Any())
         {
-            <br />
             @foreach (var bot in Model.BlueSkySettingsList)
             {
                 <!-- Обертка-ссылка для всей карточки BlueSky -->
@@ -658,7 +660,7 @@
 
                             <!-- Информация об аккаунте -->
                             <div style="flex-grow: 1;">
-                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.Handle</div>
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@bot.Handle</div>
                                 <div style="margin-top:2px;">
                                     @if (bot.IsActive)
                                     {
@@ -697,18 +699,18 @@
                 <h3 style="margin:0; font-size:1.2rem;">X (Twitter)</h3>
             </div>
 
-            @if (Model.XSettingsList == null || !Model.XSettingsList.Any())
-            {
-                <span class="status-badge status-disconnected">Не подключено</span>
-            }
+            <a href="/x" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
         </div>
-
-        <!-- Кнопка подключения нового аккаунта -->
-        <a href="/x" class="btn-instagram" style="background: #000; border: 1px solid #333;">+ Подключить X</a>
 
         @if (Model.XSettingsList != null && Model.XSettingsList.Any())
         {
-            <br />
             @foreach (var bot in Model.XSettingsList)
             {
                 <!-- Обертка-ссылка для всей карточки X (Twitter) -->
@@ -730,7 +732,7 @@
 
                             <!-- Информация об аккаунте -->
                             <div style="flex-grow: 1;">
-                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@@@bot.ScreenName</div>
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@bot.ScreenName</div>
                                 <div style="margin-top:2px;">
                                     @if (bot.IsActive)
                                     {

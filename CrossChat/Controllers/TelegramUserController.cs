@@ -13,7 +13,7 @@ namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("telegram-user")]
-	public class TelegramUserController : Controller
+	public class TelegramUserController : BaseController
 	{
 		private readonly AppDbContext _db;
 		private readonly ILogger<TelegramUserController> _logger;
@@ -61,7 +61,8 @@ namespace CrossChat.Controllers
 				ProxyPass = input.ProxyPass,
 				TgUserName = input.TgUserName ?? "",
 				SystemPrompt = "Ты вежливый ассистент.",
-				IsActive = true
+				IsActive = true,
+				ProfileId = GetActiveProfileId().Value
 			};
 
 			_db.TelegramUsersBotSettings.Add(dbEntry);

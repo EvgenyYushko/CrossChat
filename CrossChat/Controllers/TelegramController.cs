@@ -15,7 +15,7 @@ using static CrossChat.Constants.AppConstants;
 namespace CrossChat.Controllers
 {
 	[Route("telegram")]
-	public class TelegramController : Controller
+	public class TelegramController : BaseController
 	{
 		private readonly IPublishEndpoint _publish;
 
@@ -65,7 +65,7 @@ namespace CrossChat.Controllers
 				if (settings == null)
 				{
 					// Если в базе нет, создаем новый объект
-					settings = new TelegramSettings { UserId = userId };
+					settings = new TelegramSettings { UserId = userId, ProfileId = GetActiveProfileId().Value };
 					isNew = true;
 				}
 

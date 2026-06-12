@@ -3,6 +3,7 @@ using System;
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CrossChat.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260529113227_AddProfiles")]
+    partial class AddProfiles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -73,7 +76,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("BlueSkySettings", (string)null);
+                    b.ToTable("BlueSkySettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.BotResponseLog", b =>
@@ -101,7 +104,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("BotResponseLogs", (string)null);
+                    b.ToTable("BotResponseLogs");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.FacebookSettings", b =>
@@ -146,7 +149,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("FacebookSettings", (string)null);
+                    b.ToTable("FacebookSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>
@@ -183,7 +186,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("InstagramSettingsId");
 
-                    b.ToTable("InstagramBotCustomers", (string)null);
+                    b.ToTable("InstagramBotCustomers");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramSettings", b =>
@@ -260,7 +263,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("InstagramSettings", (string)null);
+                    b.ToTable("InstagramSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.Profile", b =>
@@ -285,7 +288,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Profile", (string)null);
+                    b.ToTable("Profile");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.TelegramSettings", b =>
@@ -313,7 +316,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("ProfileId");
 
-                    b.ToTable("TelegramSettings", (string)null);
+                    b.ToTable("TelegramSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.TelegramUserBotSettings", b =>
@@ -372,7 +375,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TelegramUsersBotSettings", (string)null);
+                    b.ToTable("TelegramUsersBotSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.ThreadsSettings", b =>
@@ -420,7 +423,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ThreadsSettings", (string)null);
+                    b.ToTable("ThreadsSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.User", b =>
@@ -457,7 +460,7 @@ namespace CrossChat.Data.Migrations
                     b.HasIndex("GoogleId")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.XSettings", b =>
@@ -505,7 +508,7 @@ namespace CrossChat.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("XSettings", (string)null);
+                    b.ToTable("XSettings");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>

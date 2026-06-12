@@ -16,7 +16,7 @@ using static CrossChat.Constants.AppConstants;
 namespace CrossChat.Controllers
 {
 	[Route("threads")]
-	public class ThreadsController : Controller
+	public class ThreadsController : BaseController
 	{
 		private readonly ILogger<ThreadsController> _logger;
 		private readonly AppDbContext _db;
@@ -251,7 +251,8 @@ namespace CrossChat.Controllers
 				settings = new ThreadsSettings
 				{
 					UserId = userId,
-					ThreadsUserId = threadsId
+					ThreadsUserId = threadsId,
+					ProfileId = GetActiveProfileId().Value
 				};
 				_db.ThreadsSettings.Add(settings);
 				isNew = true;

@@ -1,0 +1,62 @@
+@{
+    ViewData["Title"] = "Создание профиля";
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 500px;
+            margin: 6rem auto;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+        }
+
+        h1 {
+            color: var(--text-main);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 1rem;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            box-sizing: border-box;
+            margin-bottom: 1rem;
+        }
+    </style>
+}
+
+<div class="container">
+    <div class="card">
+        <h1>Новая личность</h1>
+        <form action="/profile/create" method="post">
+            <label>Как назвать этот профиль?</label>
+            <input type="text" name="name" class="text-input" placeholder="Например: Алина Кросс" required>
+
+            <button type="submit" class="btn-primary">Создать профиль</button>
+            <a href="/auth/profile" style="display:block; margin-top:1rem; color:var(--text-secondary); text-decoration:none;">Отмена</a>
+        </form>
+    </div>
+</div>
