@@ -55,7 +55,12 @@ namespace CrossChat.Controllers
 
 			// Загружаем настройки, чтобы передать их во View
 			var settings = await _db.InstagramSettings
+				.Include(p => p.Profile)
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			// Генерируем ссылки для кнопок (они нужны, если user.InstagramSettings == null)
 			var instaScopes = string.Join(",",
@@ -119,7 +124,8 @@ namespace CrossChat.Controllers
 			bool isReactionsEnabled,
 			string allowedReactions,
 			int maxAnswerMessagesCount,
-			int maxAnswersTokensCount)
+			int maxAnswersTokensCount, 
+			int profileId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -161,6 +167,7 @@ namespace CrossChat.Controllers
 
 				settings.MaxAnswerMessagesCount = maxAnswerMessagesCount;
 				settings.MaxAnswersTokensCount = maxAnswersTokensCount;
+				settings.ProfileId = profileId;
 
 				var reactionList = allowedReactions?.EnumerateRunes()
 					.Select(r => r.ToString())
@@ -422,7 +429,7 @@ namespace CrossChat.Controllers
 			return Content(html, "text/html");
 		}
 
-		
+
 
 		// =========================================================
 		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
@@ -526,6 +533,32 @@ namespace CrossChat.Controllers
 
 			await _db.SaveChangesAsync();
 			return true;
-		}		
+		}
+
+		[HttpPost("change-profile")]
+		[Authorize]
+		public async Task<IActionResult> ChangeProfile(int botId, int targetProfileId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			// 1. Проверяем, что бот принадлежит нам
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			// 2. Проверяем, что целевой профиль тоже принадлежит нам
+			var profileExists = await _db.Profile
+				.AnyAsync(p => p.Id == targetProfileId && p.UserId == userId);
+
+			if (settings != null && profileExists)
+			{
+				settings.ProfileId = targetProfileId; // Магия: просто меняем ID профиля
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation($"[Instagram] Бот {botId} перенесен в профиль {targetProfileId}");
+				return RedirectToAction("Index", new { botId = botId, saved = "true" });
+			}
+
+			return BadRequest("Не удалось перенести бота.");
+		}
 	}
 }

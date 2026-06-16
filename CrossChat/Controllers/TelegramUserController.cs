@@ -27,7 +27,6 @@ namespace CrossChat.Controllers
 			_logger = logger;
 		}
 
-
 		[HttpGet]
 		public async Task<IActionResult> Index(int botId)
 		{
@@ -37,8 +36,12 @@ namespace CrossChat.Controllers
 
 			// 1. Достаем настройки из базы
 			var settings = await _db.TelegramUsersBotSettings
+				.Include(p => p.Profile)
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			return View(settings);
 		}
@@ -105,7 +108,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update")]
 		[Authorize]
-		public async Task<IActionResult> Update(int botId, string systemPrompt, string ProxyHost, int? ProxyPort, string ProxyUser, string ProxyPass)
+		public async Task<IActionResult> Update(int botId, string systemPrompt, string ProxyHost, int? ProxyPort, string ProxyUser, string ProxyPass, int profileId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -125,6 +128,7 @@ namespace CrossChat.Controllers
 			settings.ProxyPort = ProxyPort;
 			settings.ProxyUser = ProxyUser;
 			settings.ProxyPass = ProxyPass;
+			settings.ProfileId = profileId;
 
 			await _db.SaveChangesAsync();
 

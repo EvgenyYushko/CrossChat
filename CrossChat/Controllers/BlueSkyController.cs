@@ -43,7 +43,14 @@ namespace CrossChat.Controllers
 
 			//_logger.LogInformation($"botId = {botId}, userId = {userId}");
 
-			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+			var settings = await _db.BlueSkySettings
+				.Include(p => p.Profile)
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
+
 			return View(settings);
 		}
 
@@ -436,7 +443,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update")]
 		[Authorize]
-		public async Task<IActionResult> Update(int botId, string systemPrompt)
+		public async Task<IActionResult> Update(int botId, string systemPrompt, int profileId)
 		{
 			// 1. Получаем ID текущего пользователя
 			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -454,6 +461,7 @@ namespace CrossChat.Controllers
 			{
 				settings.SystemPrompt = systemPrompt;
 				settings.IsActive = isActive;
+				settings.ProfileId = profileId;
 
 				await _db.SaveChangesAsync();
 				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}. Активен: {isActive}");

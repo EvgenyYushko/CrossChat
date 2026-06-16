@@ -31,7 +31,6 @@ namespace CrossChat.Controllers
 			_publish = publish;
 		}
 
-
 		[HttpGet]
 		public async Task<IActionResult> Index()
 		{
@@ -41,7 +40,12 @@ namespace CrossChat.Controllers
 
 			// 1. Достаем настройки из базы
 			var settings = await _db.TelegramSettings
+				.Include(p => p.Profile)
 				.FirstOrDefaultAsync(s => s.UserId == userId);
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			return View(settings);
 		}
@@ -131,7 +135,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update")]
 		[Authorize]
-		public async Task<IActionResult> Update(string systemPrompt)
+		public async Task<IActionResult> Update(string systemPrompt, int profileId)
 		{
 			// Явно читаем чекбокс из формы
 			// Если "isActive" есть в форме - значит true, иначе false
@@ -141,7 +145,6 @@ namespace CrossChat.Controllers
 			bool isActive = isActiveRaw.Contains("true");
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = await _db.TelegramSettings.FirstOrDefaultAsync(s => s.UserId == userId);
-
 
 			if (settings != null)
 			{
@@ -161,6 +164,8 @@ namespace CrossChat.Controllers
 				}
 
 				settings.SystemPrompt = systemPrompt ?? "";
+				settings.ProfileId = profileId;
+
 				await _db.SaveChangesAsync();
 			}
 

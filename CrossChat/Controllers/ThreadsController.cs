@@ -149,7 +149,12 @@ namespace CrossChat.Controllers
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
 			var settings = await _db.ThreadsSettings
+				.Include(p => p.Profile)
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			// Формируем ссылку на авторизацию Threads
 			var scopes = string.Join(",",
@@ -464,7 +469,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -495,6 +500,7 @@ namespace CrossChat.Controllers
 				// 3. Обновляем модель
 				settings.IsActive = isActive;
 				settings.SystemPrompt = systemPrompt ?? "";
+				settings.ProfileId = profileId;
 
 				await _db.SaveChangesAsync();
 				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");

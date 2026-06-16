@@ -48,8 +48,12 @@ namespace CrossChat.Controllers
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 			var settings = botId.HasValue
-				? await _db.XSettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId)
+				? await _db.XSettings.Include(p => p.Profile).FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId)
 				: null;
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			return View(settings);
 		}
@@ -151,7 +155,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive, int profileId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -162,6 +166,8 @@ namespace CrossChat.Controllers
 			{
 				settings.SystemPrompt = systemPrompt;
 				settings.IsActive = isActive;
+				settings.ProfileId = profileId;
+
 				// Можно добавить сохранение лимитов, если ты их ввел в БД
 
 				await _db.SaveChangesAsync();

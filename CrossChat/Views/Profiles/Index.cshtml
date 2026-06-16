@@ -65,6 +65,47 @@
             cursor: pointer;
             font-size: 0.9rem;
         }
+
+        .card-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        .dots-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.5rem;
+            padding: 5px 10px;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            background: #1a1a1a;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            z-index: 10;
+        }
+
+            .dropdown-menu.show {
+                display: block;
+            }
+
+        .dropdown-item {
+            display: block;
+            padding: 8px 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+            .dropdown-item:hover {
+                background: #333;
+            }
     </style>
 }
 
@@ -92,24 +133,35 @@
             </div>
         }
         <div>
-            <h2 style="margin:0; font-size:1.2rem;">Привет, @Model.User.Name!</h2>
+            <h2 style="margin:0; font-size:1.2rem;">@Model.User.Name</h2>
         </div>
        @*  <a href="/auth/console" class="logout-btn" style="border-color:var(--accent-color); color:var(--accent-color);">
             💻 Открыть консоль разработчика
         </a> *@
     </div>
 
-</div>
+    <br/>
 
-<div class="container">
-    <h1 style="text-align: center;">Выберите личность</h1>
-    
+    <h1 style="text-align: center;">Ваши профили</h1>
+
     <div class="grid">
-        @if (Model != null)
+        @foreach (var profile in Model.User.Profile)
         {
-            @foreach (var profile in Model.User.Profile)
-            {
-                <a href="/profile?profileId=@profile.Id" class="card">
+            <div class="card" style="position: relative;">
+                <!-- 1. Меню трех точек (ВНЕ ссылки) -->
+                <div class="card-actions" style="position: absolute; top: 10px; right: 10px;">
+                    <button class="dots-btn" onclick="toggleMenu(@profile.Id)">⋮</button>
+                    <div id="menu-@profile.Id" class="dropdown-menu">
+                        <a href="/profile/edit/@profile.Id" class="dropdown-item">Редактировать</a>
+                        <form action="/profile/delete" method="post" onsubmit="return confirm('Удалить профиль?');">
+                            <input type="hidden" name="id" value="@profile.Id" />
+                            <button type="submit" class="dropdown-item" style="color:red; background:none; border:none; width:100%; text-align:left;">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 2. Кликабельная часть (ССЫЛКА) -->
+                <a href="/profile?profileId=@profile.Id" style="text-decoration:none; color:inherit; display:block;">
                     @if (!string.IsNullOrEmpty(profile.AvatarUrl))
                     {
                         <img src="@profile.AvatarUrl" class="avatar-lg" alt="@profile.Name">
@@ -121,9 +173,8 @@
                         </div>
                     }
                     <h3>@profile.Name</h3>
-                    <p>Перейти к управлению</p>
                 </a>
-            }
+            </div>
         }
 
         <a href="/profile/create" class="card card-dashed">
@@ -131,3 +182,24 @@
         </a>
     </div>
 </div>
+
+    
+
+@section Scripts {
+    <script>
+        function toggleMenu(id) {
+            // Закрываем другие меню, если открыты
+            document.querySelectorAll('.dropdown-menu').forEach(m => {
+                if(m.id !== 'menu-' + id) m.classList.remove('show');
+            });
+            document.getElementById('menu-' + id).classList.toggle('show');
+        }
+
+        // Закрыть меню при клике в любое другое место
+        window.onclick = function(event) {
+            if (!event.target.matches('.dots-btn')) {
+                document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+            }
+        }
+    </script>
+}

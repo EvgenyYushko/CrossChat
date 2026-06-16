@@ -88,8 +88,13 @@ namespace CrossChat.Controllers
 			if (botId.HasValue)
 			{
 				settings = await _db.FacebookSettings
+					.Include(p => p.Profile)
 					.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 			}
+
+			ViewBag.Profiles = await _db.Profile
+				.Where(p => p.UserId == userId)
+				.ToListAsync();
 
 			// Ссылка на авторизацию (если нужно подключить новую страницу)
 			var fbScopes = "pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
@@ -158,7 +163,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
 		{
 			// 1. Получаем ID текущего пользователя
 			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -185,6 +190,7 @@ namespace CrossChat.Controllers
 				// 4. Обновляем данные
 				settings.SystemPrompt = systemPrompt;
 				settings.IsActive = isActive;
+				settings.ProfileId = profileId;
 
 				// ВАЖНО: В Facebook Pages вебхуки обычно настраиваются один раз на всё приложение
 				// в панели разработчика. Поэтому здесь мы просто меняем флаг IsActive в нашей БД.

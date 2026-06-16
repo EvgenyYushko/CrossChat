@@ -253,8 +253,22 @@
                         <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
                     </div>
 
+                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
+                        <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
+
+                        <select name="profileId" class="select-input">
+                            @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
+                            {
+                                <option value="@p.Id" selected="@(p.Id == Model.ProfileId)">
+                                    @p.Name
+                                </option>
+                            }
+                        </select>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                 </form>
+
             </div>
 
             <form action="/facebook/disconnect" method="post" onsubmit="return confirm('Отключить эту страницу?');">

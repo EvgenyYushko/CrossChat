@@ -67,25 +67,122 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpGet("create")]
+		[Authorize]
 		public IActionResult Create() => View();
 
 		[HttpPost("create")]
-		public async Task<IActionResult> Create(string name)
+		[Authorize]
+		public async Task<IActionResult> Create([FromForm]string name, IFormFile? avatarFile)
 		{
+			_logger.LogInformation($"[CreateProfile] Получено имя: '{name}', Размер файла: {avatarFile?.Length ?? 0}");
+
+			if (string.IsNullOrWhiteSpace(name))
+			{
+				TempData["Error"] = "Имя профиля обязательно!";
+				return View(); // Возвращаем форму обратно с ошибкой
+			}
+
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
 			var newProfile = new Profile
 			{
 				UserId = userId,
 				Name = name,
-				AvatarUrl = null // Можно добавить логику загрузки фото позже
+				AvatarUrl = null
 			};
+
+			if (avatarFile != null)
+			{
+				newProfile.AvatarUrl = await ProcessUploadedFileToBase64(avatarFile);
+			}
 
 			_db.Profile.Add(newProfile);
 
 			await _db.SaveChangesAsync();
 
 			return Redirect("/profiles");
+		}
+
+		[HttpPost("delete")]
+		[Authorize]
+		public async Task<IActionResult> Delete(int id)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			// Подгружаем ВСЕ коллекции, чтобы проверить, пуст ли профиль
+			var profile = await _db.Profile
+				.Include(p => p.InstagramSettingsList)
+				.Include(p => p.ThreadsSettingsList)
+				.Include(p => p.XSettingsList)
+				.Include(p => p.FacebookSettingsList)
+				.Include(p => p.TelegramSettings)
+				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.BlueSkySettingsList)
+				.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+
+			if (profile == null) return NotFound();
+
+			// Проверка на наличие подключенных аккаунтов
+			bool hasBots = (profile.InstagramSettingsList.Any() ||
+							profile.ThreadsSettingsList.Any() ||
+							profile.XSettingsList.Any() ||
+							profile.FacebookSettingsList.Any() ||
+							profile.TelegramUserBotSettingsList.Any() ||
+							profile.TelegramSettings != null ||
+							profile.BlueSkySettingsList.Any());
+
+			if (hasBots)
+			{
+				TempData["Error"] = "Сначала удалите все подключенные соцсети из профиля.";
+				return Redirect("/profiles");
+			}
+
+			_db.Profile.Remove(profile);
+			await _db.SaveChangesAsync();
+			return Redirect("/profiles");
+		}
+
+		[HttpGet("edit/{id}")]
+		public async Task<IActionResult> Edit(int id)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var profile = await _db.Profile.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+
+			if (profile == null) return NotFound();
+
+			// Возвращаем вьюху "Create", но передаем в нее данные профиля
+			return View("Create", profile);
+		}
+
+		[HttpPost("edit/{id}")]
+		public async Task<IActionResult> Edit(int id, string name, IFormFile? avatarFile)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var profile = await _db.Profile.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+
+			if (profile != null)
+			{
+				profile.Name = name;
+				if (avatarFile != null)
+				{
+					profile.AvatarUrl = await ProcessUploadedFileToBase64(avatarFile);
+				}
+				await _db.SaveChangesAsync();
+			}
+			return Redirect("/profiles");
+		}
+
+		private async Task<string?> ProcessUploadedFileToBase64(IFormFile file)
+		{
+			if (file == null || file.Length == 0) return null;
+
+			using var ms = new MemoryStream();
+			await file.CopyToAsync(ms);
+			var bytes = ms.ToArray();
+
+			// Формируем формат Data URI
+			var base64String = Convert.ToBase64String(bytes);
+			return $"data:{file.ContentType};base64,{base64String}";
 		}
 	}
 }

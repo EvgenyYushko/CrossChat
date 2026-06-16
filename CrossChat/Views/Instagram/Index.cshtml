@@ -394,15 +394,7 @@
             border: 1px solid var(--glass-border);
             color: var(--text-main);
             background: var(--input-bg);
-        }
-
-        /* .custom-disabled {
-            background-color: #f0f0f0 !important;
-            color: #888 !important;
-            cursor: not-allowed !important;
-            border-color: #ddd !important;
-            pointer-events: none; /* Запрещает клики и фокус */
-        }
+        }       
     </style>
 }
 
@@ -534,6 +526,19 @@
                     <div class="form-group">
                         <label>Промпт для Комментариев</label>
                         <textarea name="commentPrompt" rows="3">@Model.CommentPrompt</textarea>
+                    </div>
+
+                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
+                        <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
+
+                        <select name="profileId" class="select-input">
+                            @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
+                            {
+                                <option value="@p.Id" selected="@(p.Id == Model.ProfileId)">
+                                    @p.Name
+                                </option>
+                            }
+                        </select>
                     </div>
 
                     <script>

@@ -270,13 +270,13 @@
             </div>
         }
         <div>
-            <h2 style="margin:0; font-size:1.2rem;">Привет, @Model.Name!</h2>
+            <h2 style="margin:0; font-size:1.2rem;">@Model.Name</h2>
         </div>
        @*  <a href="/auth/console" class="logout-btn" style="border-color:var(--accent-color); color:var(--accent-color);">
             💻 Открыть консоль разработчика
         </a> *@
     </div>
-
+    <br/>
     <!-- Карточка Instagram -->
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
@@ -518,7 +518,7 @@
 
                             <!-- Информация об аккаунте -->
                             <div style="flex-grow: 1;">
-                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">ID: @bot.TgUserId</div>
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@bot.TgUserId</div>
                                 <div style="margin-top:2px;">
                                     @if (bot.IsActive)
                                     {
@@ -564,7 +564,7 @@
             }
             else
             {
-                <a href="/telegram-user" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+                <a href="/telegram" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
                    onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
                    onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">

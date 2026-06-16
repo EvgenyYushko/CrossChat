@@ -1,12 +1,14 @@
+@model CrossChat.Data.Entities.Profile
 @{
-    ViewData["Title"] = "Создание профиля";
+    bool isEdit = Model != null && Model.Id > 0;
+    ViewData["Title"] = isEdit ? "Редактирование профиля" : "Создание профиля";
 }
 
 @section Styles {
     <style>
         .container {
-            max-width: 500px;
-            margin: 6rem auto;
+            max-width: 700px; /* Сделали шире, чем было (600px -> 700px) */
+            margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
 
@@ -14,16 +16,78 @@
             background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
-            padding: 2.5rem;
+            padding: 3rem; /* Больше воздуха */
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
         }
 
         h1 {
             color: var(--text-main);
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
             text-align: center;
         }
 
-        .btn-primary {
+        .form-group {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.6rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .text-input, textarea {
+            width: 100%;
+            padding: 1rem;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            border-radius: 12px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        /* Аватарка */
+        .avatar-wrapper {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 2rem auto;
+            cursor: pointer;
+        }
+
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid var(--accent-color);
+        }
+
+        .edit-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: white;
+        }
+
+        .avatar-wrapper:hover .edit-overlay {
+            opacity: 1;
+        }
+
+        /* Кнопки */
+        .btn-submit {
             background: var(--accent-color);
             color: white;
             border: none;
@@ -33,30 +97,102 @@
             cursor: pointer;
             font-weight: 600;
             margin-top: 1rem;
+            transition: all 0.3s ease; /* Плавный переход */
         }
 
-        .text-input {
-            width: 100%;
-            padding: 1rem;
-            background: var(--input-bg);
-            border: 1px solid var(--glass-border);
+        .btn-submit:hover {
+                filter: brightness(1.2); /* Эффект "подсветки" */
+                transform: scale(1.02);   /* Легкое увеличение */
+                box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); /* Неоновое свечение */
+            }
+
+        .btn-cancel {
+            display: block;
+            margin-top: 1rem;
+            color: #dc2626; /* Глубокий, приятный красный */
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 12px 16px;
             border-radius: 12px;
-            color: var(--text-main);
+            transition: all 0.2s;
+            cursor: pointer;
+            background: transparent;
+            border: 1px solid rgba(220, 38, 38, 0.2);
+            text-align: center;
+            width: 100%;
             box-sizing: border-box;
-            margin-bottom: 1rem;
+        }
+
+            .btn-cancel:hover {
+                color: #b91c1c; /* Становится чуть темнее/насыщеннее */
+                background: rgba(220, 38, 38, 0.05); /* Легкий красный фон */
+                border-color: rgba(220, 38, 38, 0.5);
+            }
+
+        .actions-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 1.5rem;
         }
     </style>
 }
 
 <div class="container">
     <div class="card">
-        <h1>Новая личность</h1>
-        <form action="/profile/create" method="post">
-            <label>Как назвать этот профиль?</label>
-            <input type="text" name="name" class="text-input" placeholder="Например: Алина Кросс" required>
+        <h1>@(isEdit ? "Редактирование профиля" : "Создание профиля")</h1>
 
-            <button type="submit" class="btn-primary">Создать профиль</button>
-            <a href="/auth/profile" style="display:block; margin-top:1rem; color:var(--text-secondary); text-decoration:none;">Отмена</a>
+        <form action="@(isEdit ? $"/profile/edit/{Model.Id}" : "/profile/create")"
+              method="post"
+              enctype="multipart/form-data">
+
+            <!-- Аватарка -->
+            <div class="avatar-wrapper" onclick="document.getElementById('fileInput').click()">
+                @if (isEdit && !string.IsNullOrEmpty(Model?.AvatarUrl))
+                {
+                    <img src="@Model.AvatarUrl" id="avatarPreview" class="big-avatar" alt="Avatar">
+                }
+                else
+                {
+                    <div id="avatarPreview" class="big-avatar" style="background:#333; display:flex; align-items:center; justify-content:center; font-size:3rem;">
+                        @(isEdit? Model.Name.Substring(0, 1) : "+")
+                    </div>
+                }
+                <div class="edit-overlay"><span>✏️</span></div>
+                <input type="file" name="avatarFile" id="fileInput" accept="image/*" style="display:none" onchange="previewImage(event)">
+            </div>
+
+            <!-- Имя -->
+            <div class="form-group">
+                <label>Имя профиля</label>
+                <input type="text" name="name" class="text-input" value="@(isEdit? Model.Name: "")" placeholder="Например: Новый профиль" required>
+            </div>
+
+            <button type="submit" class="btn-submit">@(isEdit ? "Сохранить изменения" : "Создать профиль")</button>
+            <a href="/profiles" class="btn-cancel">Отмена</a>
         </form>
     </div>
 </div>
+
+<script>
+    function previewImage(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('avatarPreview');
+
+                // Если у нас был div с буквой, превращаем его в img
+                if (preview.tagName !== 'IMG') {
+                    const newImg = document.createElement('img');
+                    newImg.id = 'avatarPreview';
+                    newImg.className = 'big-avatar';
+                    preview.parentNode.replaceChild(newImg, preview);
+                }
+
+                document.getElementById('avatarPreview').src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+    }
+</script>
