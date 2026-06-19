@@ -70,7 +70,7 @@ public class EmailService : IEmailService
 	{
 		var logoUrl = $"{APP_URL}{logoPath}"; 
 
-		var html = WelcomeEmailTemplate.GetHtml(userName, userEmail, loginUrl, logoUrl);
+		var html = EmailTemplates.GetHtml(userName, userEmail, loginUrl, logoUrl);
 
 		await SendFromNoReplyAsync(
 			userEmail,
@@ -131,6 +131,13 @@ public class EmailService : IEmailService
 			);
 			throw;
 		}
+	}
+
+	public async Task SendErrorRefreshToken(string toEmail, string userName, int botId, string botName, string socialType)
+	{
+		var loginUrl = $"{APP_URL}/{socialType}?botId={botId}"; // Ссылка на страницу подключения
+        var emailBody = EmailTemplates.GetReauthEmailHtml(userName, botName, socialType, loginUrl);
+        await SendFromNoReplyAsync(toEmail, $"⚠️ Бот {botName} ({socialType}) требует внимания", emailBody);
 	}
 
 	/// <summary>

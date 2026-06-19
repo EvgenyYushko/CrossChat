@@ -22,6 +22,7 @@ public class TokenRefreshJob : IJob
 	private readonly IFaceBookConsole _faceBookConsole;
 	private readonly IThreadsConsole _threadsConsole;
 	private readonly IXConsole _xConsole;
+	private readonly IEmailService _emailService;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly SocialMediaSettings _settings;
 
@@ -37,7 +38,8 @@ public class TokenRefreshJob : IJob
 		IInstagramConsole instagramConsole,
 		IFaceBookConsole faceBookConsole,
 		IThreadsConsole threadsConsole,
-		IXConsole xConsole
+		IXConsole xConsole,
+		IEmailService emailService
 		)
 	{
 		_db = db;
@@ -50,6 +52,7 @@ public class TokenRefreshJob : IJob
 		_faceBookConsole = faceBookConsole;
 		_threadsConsole = threadsConsole;
 		_xConsole = xConsole;
+		_emailService = emailService;
 		_logger = logger;
 		_settings = options.Value;
 	}
@@ -80,6 +83,7 @@ public class TokenRefreshJob : IJob
 	private async Task RefreshInstagramTokens(DateTime thresholdDate)
 	{
 		var instaUsers = await _db.InstagramSettings
+			.Include(p => p.User)
 			.Where(s => s.AccessToken != null && s.TokenExpiresAt != null && s.TokenExpiresAt < thresholdDate)
 			.ToListAsync();
 
@@ -108,6 +112,7 @@ public class TokenRefreshJob : IJob
 			}
 			catch (Exception ex)
 			{
+                await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.Username, "Instagram");
 				await _instagramConsole.LogError($"❌ Ошибка Instagram User {settings.UserId}, {ex}", settings.UserId, settings.Id);
 			}
 		}
@@ -116,6 +121,7 @@ public class TokenRefreshJob : IJob
 	private async Task RefreshFaceBookData()
 	{
 		var users = await _db.FacebookSettings
+			.Include(p => p.User)
 			.Where(s => s.IsActive)
 			.ToListAsync();
 
@@ -143,6 +149,7 @@ public class TokenRefreshJob : IJob
 			}
 			catch (Exception ex)
 			{
+                await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.PageName, "FaceBook");
 				await _faceBookConsole.LogError($"❌ Ошибка FaceBook User {settings.UserId}, {ex}", settings.UserId, settings.Id);
 			}
 		}
@@ -152,6 +159,7 @@ public class TokenRefreshJob : IJob
 	{
 		// Выбираем все записи Threads, которые скоро протухнут
 		var threadsUsers = await _db.ThreadsSettings
+			.Include(p => p.User)
 			.Where(s => s.AccessToken != null && s.TokenExpiresAt != null && s.TokenExpiresAt < thresholdDate)
 			.ToListAsync();
 
@@ -180,6 +188,7 @@ public class TokenRefreshJob : IJob
 				}
 				else
 				{
+					await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.Username, "Threads");
 					await _threadsConsole.LogWarning($"⚠️ Не удалось обновить Threads токен для {settings.Username} User {settings.UserId}", settings.UserId, settings.Id);
 				}
 			}
@@ -223,6 +232,7 @@ public class TokenRefreshJob : IJob
 	{
 		// Ищем токены X, которые скоро истекают
 		var xBots = await _db.XSettings
+			.Include(p => p.User)
 			.Where(s => s.AccessToken != null && s.TokenExpiresAt < thresholdDate)
 			.ToListAsync();
 
@@ -230,19 +240,19 @@ public class TokenRefreshJob : IJob
 
 		_logger.LogInformation($"[TokenRefreshJob] X: найдено {xBots.Count} токенов для обновления.");
 
-		foreach (var bot in xBots)
+		foreach (var settings in xBots)
 		{
 			try
 			{
-				var result = await _xService.RefreshTokenAsync(bot.RefreshToken!, _settings.XClientId, _settings.XClientSecret);
+				var result = await _xService.RefreshTokenAsync(settings.RefreshToken!, _settings.XClientId, _settings.XClientSecret);
 
 				if (result != null)
 				{
-					bot.AccessToken = result.Value.AccessToken;
-					bot.RefreshToken = result.Value.RefreshToken; // ОБЯЗАТЕЛЬНО сохраняем новый рефреш-токен
-					bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+					settings.AccessToken = result.Value.AccessToken;
+					settings.RefreshToken = result.Value.RefreshToken; // ОБЯЗАТЕЛЬНО сохраняем новый рефреш-токен
+					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
-					await _xConsole.Log($"✅ X токен обновлен для @{bot.ScreenName}", bot.UserId, bot.Id);
+					await _xConsole.Log($"✅ X токен обновлен для @{settings.ScreenName}", settings.UserId, settings.Id);
 
 					var profile = await _xService.GetXUserProfileAsync(result.Value.AccessToken);
 					string? base64Icon = null;
@@ -250,17 +260,19 @@ public class TokenRefreshJob : IJob
 					{
 						base64Icon = await DownloadImageAsBase64(profile.ProfilePictureUrl);
 					}
-					bot.ProfilePictureUrl = base64Icon;
+					settings.ProfilePictureUrl = base64Icon;
 				}
 				else
 				{
-					await _xConsole.LogWarning($"⚠️ Не удалось обновить X для @{bot.ScreenName}. Возможно, доступ отозван.", bot.UserId, bot.Id);
-					// bot.IsActive = false; // Опционально: выключаем бота при ошибке
+					await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+					await _xConsole.LogWarning($"⚠️ Не удалось обновить X для @{settings.ScreenName}. Возможно, доступ отозван.", settings.UserId, settings.Id);
+					// settings.IsActive = false; // Опционально: выключаем бота при ошибке
 				}
 			}
 			catch (Exception ex)
 			{
-				await _xConsole.LogError($"❌ Ошибка X Refresh для {bot.ScreenName}, {ex}", bot.UserId, bot.Id);
+				await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+				await _xConsole.LogError($"❌ Ошибка X Refresh для {settings.ScreenName}, {ex}", settings.UserId, settings.Id);
 			}
 		}
 	}

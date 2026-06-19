@@ -1,6 +1,6 @@
 namespace CrossChat.Helpers
 {
-	public static class WelcomeEmailTemplate
+	public static class EmailTemplates
 	{
 		public static string GetHtml(string userName, string userEmail, string loginUrl, string logoUrl)
 {
@@ -236,5 +236,49 @@ namespace CrossChat.Helpers
 </body>
 </html>";
 }
+
+        public static string GetReauthEmailHtml(string userName, string botName, string socialType, string loginUrl)
+        {
+            return $@"
+            <!DOCTYPE html>
+            <html>
+            <body style=""margin: 0; padding: 0; background-color: #f8fafc; font-family: sans-serif;"">
+                <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""padding: 40px 0;"">
+                    <tr>
+                        <td align=""center"">
+                            <table width=""600"" cellpadding=""0"" cellspacing=""0"" style=""background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"">
+                                <tr>
+                                    <td style=""padding: 40px; text-align: center;"">
+                                        <div style=""font-size: 48px; margin-bottom: 20px;"">⚠️</div>
+                                        <h1 style=""color: #1a202c; font-size: 24px; margin: 0 0 10px 0;"">Требуется внимание</h1>
+                                        <p style=""color: #4a5568; font-size: 16px;"">Привет, <strong>{userName}</strong>!</p>
+                                        <p style=""color: #4a5568; font-size: 16px;"">
+                                            Ваш бот <strong>{botName}</strong> в сети <strong>{socialType}</strong> перестал отвечать. 
+                                            Скорее всего, истек срок действия доступа или сменился пароль.
+                                        </p>
+
+                                        <!-- Bulletproof Button -->
+                                        <table width=""100%"" cellspacing=""0"" cellpadding=""0"" style=""margin-top: 30px;"">
+                                            <tr>
+                                                <td align=""center"">
+                                                    <a href=""{loginUrl}"" style=""background-color: #6366f1; color: #ffffff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;"">
+                                                        Переподключить бота
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <p style=""color: #a0aec0; font-size: 14px; margin-top: 30px;"">
+                                            Если это были не вы, просто проигнорируйте письмо.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>";
+        }
 	}
 }
