@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <!-- Твои пакеты (MassTransit и т.д.) оставляем как есть -->
+    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="MassTransit.Quartz" Version="8.5.8" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.24" />

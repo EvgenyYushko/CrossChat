@@ -1,0 +1,154 @@
+using CrossChat.Helpers;
+using CrossChat.Integrations.Interfaces;
+using  CrossChat.Integrations.Models;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using Microsoft.Extensions.Options;
+using MimeKit;
+using static CrossChat.Constants.AppConstants;
+
+namespace CrossChat.Services;
+
+public class EmailService : IEmailService
+{
+	private readonly EmailSettings _settings;
+	private readonly ILogger<EmailService> _logger;
+
+	public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger)
+	{
+		_settings = settings.Value;
+		_logger = logger;
+	}
+
+	public async Task SendFromNoReplyAsync(string toEmail, string subject, string htmlBody)
+	{
+		await SendEmailAsync(
+			_settings.NoReplyAddress,
+			_settings.NoReplyName,
+			toEmail,
+			subject,
+			htmlBody
+		);
+	}
+
+	public async Task SendFromNoReplyAsync(string toEmail, string subject, string htmlBody, string plainTextBody)
+	{
+		await SendEmailAsync(
+			_settings.NoReplyAddress,
+			_settings.NoReplyName,
+			toEmail,
+			subject,
+			htmlBody,
+			plainTextBody
+		);
+	}
+
+	public async Task SendFromSupportAsync(string toEmail, string subject, string htmlBody)
+	{
+		await SendEmailAsync(
+			_settings.SupportAddress,
+			_settings.SupportName,
+			toEmail,
+			subject,
+			htmlBody
+		);
+	}
+
+	public async Task SendFromSupportAsync(string toEmail, string subject, string htmlBody, string plainTextBody)
+	{
+		await SendEmailAsync(
+			_settings.SupportAddress,
+			_settings.SupportName,
+			toEmail,
+			subject,
+			htmlBody,
+			plainTextBody
+		);
+	}
+
+	public async Task SendWelcomeEmailAsync(string userName, string userEmail, string loginUrl, string logoPath = "/images/CrossChatPng.png")
+	{
+		var logoUrl = $"{APP_URL}{logoPath}"; 
+
+		var html = WelcomeEmailTemplate.GetHtml(userName, userEmail, loginUrl, logoUrl);
+
+		await SendFromNoReplyAsync(
+			userEmail,
+			"🎉 Добро пожаловать в CrossChat!",
+			html
+		);
+	}
+
+	public async Task SendEmailAsync(
+		string fromAddress,
+		string fromName,
+		string toEmail,
+		string subject,
+		string htmlBody,
+		string plainTextBody = null)
+	{
+		try
+		{
+			var email = new MimeMessage();
+			email.From.Add(new MailboxAddress(fromName, fromAddress));
+			email.To.Add(MailboxAddress.Parse(toEmail));
+			email.Subject = subject;
+
+			// Создаём составное тело письма (HTML + Plain text fallback)
+			var bodyBuilder = new BodyBuilder
+			{
+				HtmlBody = htmlBody,
+				TextBody = plainTextBody ?? StripHtml(htmlBody)
+			};
+
+			email.Body = bodyBuilder.ToMessageBody();
+
+			using var smtp = new SmtpClient();
+
+			// Проверка сертификата
+			smtp.CheckCertificateRevocation = _settings.CheckCertificateRevocation;
+
+			await smtp.ConnectAsync(
+				_settings.SmtpHost,
+				_settings.SmtpPort,
+				_settings.UseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None
+			);
+
+			await smtp.AuthenticateAsync(_settings.SmtpUsername, _settings.SmtpPassword);
+			await smtp.SendAsync(email);
+			await smtp.DisconnectAsync(true);
+
+			_logger.LogInformation(
+				"Письмо успешно отправлено от {From} на {To} с темой '{Subject}'",
+				fromAddress, toEmail, subject
+			);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex,
+				"Ошибка отправки email от {From} на {To}: {Message}",
+				fromAddress, toEmail, ex.Message
+			);
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// Простая очистка HTML для plain text версии
+	/// </summary>
+	private static string StripHtml(string html)
+	{
+		if (string.IsNullOrEmpty(html))
+			return string.Empty;
+
+		// Удаляем HTML теги
+		var plainText = System.Text.RegularExpressions.Regex.Replace(
+			html, "<[^>]*>", string.Empty
+		);
+
+		// Декодируем HTML сущности
+		plainText = System.Net.WebUtility.HtmlDecode(plainText);
+
+		return plainText.Trim();
+	}
+}

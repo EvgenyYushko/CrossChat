@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -16,12 +17,14 @@ public class AuthController : Controller
 {
 	private readonly AppDbContext _db;
 	private readonly ILogger<AuthController> _logger;
+	private readonly IEmailService _emailService;
 	IDatabase _redis;
 
-	public AuthController(AppDbContext db, ILogger<AuthController> logger, IConnectionMultiplexer redisMux)
+	public AuthController(AppDbContext db, ILogger<AuthController> logger, IConnectionMultiplexer redisMux, IEmailService emailService)
 	{
 		_db = db;
 		_logger = logger;
+		_emailService = emailService;
 		_redis = redisMux.GetDatabase();
 	}
 
@@ -134,6 +137,16 @@ public class AuthController : Controller
 			};
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
+
+			var loginUrl = "https://crosschat.ru/profiles";
+			var userName = user.Name;
+			var userEmail = user.Email;
+
+			await _emailService.SendWelcomeEmailAsync(
+				userName,
+				userEmail,
+				loginUrl
+			);
 		}
 		else
 		{

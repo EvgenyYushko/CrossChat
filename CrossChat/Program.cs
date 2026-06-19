@@ -3,6 +3,7 @@ using CrossChat.Data;
 using CrossChat.Helpers;
 using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Services;
 using CrossChat.Models;
 using CrossChat.Services;
@@ -33,6 +34,7 @@ builder.Configuration.AddJsonFile("/etc/secrets/SocialMedia", optional: true, re
 // Регистрируем настройки в DI (чтобы использовать через IOptions<T>)
 builder.Services.Configure<SocialMediaSettings>(builder.Configuration.GetSection("SocialMedia"));
 builder.Services.Configure<ExternalHostingsSettings>(builder.Configuration.GetSection("ExternalHostingsSettings"));
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 
 var connectionString = Environment.GetEnvironmentVariable("DB_URL_POSTGRESQL");
 if (string.IsNullOrEmpty(connectionString))
@@ -186,6 +188,8 @@ builder.Services.AddSingleton<IFaceBookConsole, FaceBookConsole>();
 builder.Services.AddSingleton<IThreadsConsole, ThreadsConsole>();
 builder.Services.AddSingleton<IXConsole, XConsole>();
 builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
+
+builder.Services.AddSingleton<IEmailService, EmailService>();
 
 var app = builder.Build();
 
