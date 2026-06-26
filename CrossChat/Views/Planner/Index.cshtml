@@ -8,132 +8,712 @@
     <!-- FullCalendar CSS -->
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
     <style>
-        .container { max-width: 900px; margin: 2rem auto; padding: 1rem; }
-        #calendar { background: var(--card-bg); padding: 1rem; border-radius: 16px; border: 1px solid var(--glass-border); color: var(--text-main); }
-        .fc .fc-toolbar-title { color: var(--text-main); }
-        .fc .fc-button-primary { background: var(--accent-color); border: none; }
+        .container {
+            max-width: 900px;
+            margin: 5rem auto 2rem;
+            padding: 0 1rem;
+        }
+
+        #calendar {
+            background: var(--card-bg, #1e293b);
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            color: var(--text-main, #f1f5f9);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .fc .fc-toolbar-title {
+            color: var(--text-main, #f1f5f9);
+        }
+
+        .fc .fc-button-primary {
+            background: var(--accent-color, #3b82f6);
+            border: none;
+        }
+
+        /* Элегантное модальное окно с размытием заднего плана */
+        #postModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        /* Карточка модального окна */
+        .modal-card {
+            background: var(--card-bg, #1e293b);
+            color: var(--text-main, #f1f5f9);
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: 20px;
+            width: 100%;
+            max-width: 520px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            max-height: 90vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        /* Кнопка закрытия (крестик) */
+        .close-modal-btn {
+            position: absolute;
+            top: 1.25rem;
+            right: 1.25rem;
+            background: none;
+            border: none;
+            color: var(--text-muted, #94a3b8);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            line-height: 1;
+        }
+
+            .close-modal-btn:hover {
+                color: var(--text-main, #ffffff);
+            }
+
+        /* Формы и разметка */
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: #ffffff;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+            .form-group label {
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: var(--text-muted, #94a3b8);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+        /* Поля ввода и текстовые области */
+        .text-input, textarea {
+            background: rgba(15, 23, 42, 0.3);
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: 10px;
+            color: #f1f5f9;
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+            .text-input:focus, textarea:focus {
+                border-color: var(--accent-color, #3b82f6);
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+            }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        /* Стилизация области загрузки файлов */
+        .file-upload-zone {
+            border: 2px dashed var(--glass-border, rgba(255, 255, 255, 0.15));
+            border-radius: 10px;
+            padding: 1.25rem;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            background: rgba(15, 23, 42, 0.15);
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+            .file-upload-zone:hover {
+                background: rgba(15, 23, 42, 0.25);
+                border-color: var(--accent-color, #3b82f6);
+            }
+
+            .file-upload-zone input[type="file"] {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                opacity: 0;
+                cursor: pointer;
+            }
+
+        .upload-text {
+            font-size: 0.9rem;
+            color: var(--text-muted, #94a3b8);
+        }
+
+        /* Сетка для картинок превью */
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 8px;
+            margin: 0.5rem 0 1rem 0;
+        }
+
+        .thumb {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s ease;
+        }
+
+            .thumb:hover {
+                transform: scale(1.05);
+            }
+
+        /* Панель кнопок действий */
+        .form-actions {
+            display: flex;
+            flex-direction: row-reverse;
+            gap: 0.75rem;
+            margin-top: 1.75rem;
+            align-items: center;
+        }
+
+        .btn-primary, .btn-cancel, .btn-danger {
+            padding: 0.7rem 1.25rem;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent-color, #3b82f6);
+            color: #ffffff;
+        }
+
+            .btn-primary:hover {
+                background: #2563eb;
+            }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted, #94a3b8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+            .btn-cancel:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: #ffffff;
+            }
+
+        .btn-danger {
+            background: #ef4444;
+            color: #ffffff;
+            margin-right: auto; /* Сдвигаем кнопку удаления влево */
+        }
+
+            .btn-danger:hover {
+                background: #dc2626;
+            }
+
+        /* Адаптивность FullCalendar и Модалки */
+        @@media (max-width: 600px) {
+            .fc .fc-toolbar {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .fc .fc-toolbar-title {
+                font-size: 1.1rem;
+            }
+
+            .modal-card {
+                padding: 1.25rem;
+                border-radius: 16px;
+            }
+
+            .form-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn-danger {
+                margin-right: 0;
+                order: 3; /* Кнопка удаления на мобильных будет в самом низу */
+            }
+        }
+
+        /* Контейнер для превью картинки с кнопкой удаления */
+        .thumb-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
+            /* Кнопка удаления в правом верхнем углу картинки */
+            .thumb-wrapper .remove-thumb-btn {
+                position: absolute;
+                top: -6px;
+                right: -6px;
+                background: #ef4444;
+                color: #ffffff;
+                border: none;
+                border-radius: 50%;
+                width: 22px;
+                height: 22px;
+                font-size: 14px;
+                font-weight: bold;
+                line-height: 20px;
+                text-align: center;
+                cursor: pointer;
+                padding: 0;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.2s, transform 0.1s;
+                z-index: 10;
+            }
+
+                .thumb-wrapper .remove-thumb-btn:hover {
+                    background: #dc2626;
+                    transform: scale(1.1);
+                }
+
+        /* Подсветка зоны загрузки при перетаскивании файлов */
+        .file-upload-zone.highlight {
+            border-color: var(--accent-color, #3b82f6);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Делаем курсор-указатель для превьюшек, чтобы показать кликабельность */
+        .thumb {
+            cursor: pointer;
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+
+            .thumb:hover {
+                transform: scale(1.05);
+                filter: brightness(0.9);
+            }
+
+        /* Окно полноэкранного просмотра (выше модалки редактирования) */
+        #imageLightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9); /* Очень темный размытый фон */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 3000; /* Выше основного модального окна (2000) */
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+            #imageLightbox.active {
+                display: flex;
+                opacity: 1;
+            }
+
+        /* Большая картинка внутри лайтбокса */
+        #lightboxImage {
+            max-width: 90vw;
+            max-height: 85vh;
+            object-fit: contain; /* Картинка сохраняет пропорции и не обрезается */
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            transform: scale(0.95);
+            transition: transform 0.25s ease;
+            cursor: zoom-out; /* Показывает, что при клике картинка закроется */
+        }
+
+        #imageLightbox.active #lightboxImage {
+            transform: scale(1);
+        }
+
+        /* Кнопка закрытия большой картинки */
+        .close-lightbox-btn {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #ffffff;
+            font-size: 2rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 3010;
+        }
+
+            .close-lightbox-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                transform: scale(1.05);
+            }
     </style>
 }
 
+<!-- Модальное окно (скрыто по умолчанию) -->
 <div class="container">
     <div id='calendar'></div>
-    <!-- Модальное окно (скрыто по умолчанию) -->
-    <div id="postModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; justify-content:center; align-items:center;">
-        <div class="card" style="width: 90%; max-width: 500px; text-align: left;">
-            <h2 style="color:white; margin-bottom:1rem;">Создать пост</h2>
-            <form id="postForm" action="/planner/create" method="post" enctype="multipart/form-data">
+
+    <!-- Модальное окно -->
+    <div id="postModal">
+        <div class="modal-card">
+            <button class="close-modal-btn" onclick="closeModal()">&times;</button>
+            <h2 id="modalTitle" class="modal-title">Редактирование поста</h2>
+
+            <form id="postForm" method="post" enctype="multipart/form-data">
                 <input type="hidden" name="profileId" value="@ViewBag.ProfileId" />
                 <input type="hidden" name="networkType" value="@ViewBag.Network" />
+
+                <!-- Контейнер для передачи Base64 оставшихся картинок -->
+                <div id="hiddenInputsContainer"></div>
+
                 <div class="form-group">
                     <label>Дата и время публикации</label>
                     <input type="datetime-local" name="showDate" id="showDateInput" class="text-input" required>
                 </div>
 
+                <!-- Галерея для превью -->
+                <div id="imageGallery" class="image-gallery"></div>
+
                 <div class="form-group">
-                    <label>Фото/Видео</label>
-                    <input type="file" name="images" multiple accept="image/*,video/*" class="text-input">
+                    <label>Добавить фото/видео</label>
+                    <div class="file-upload-zone" id="dropZone">
+                        <span class="upload-text">📁 Нажмите для выбора файлов или перетащите их сюда</span>
+                        <input type="file" id="fileInput" name="images" multiple accept="image/*,video/*">
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label>Текст поста</label>
-                    <textarea name="caption" required></textarea>
+                    <textarea name="caption" id="captionInput" required placeholder="Введите текст вашего сообщения..."></textarea>
                 </div>
 
-                <button id="postForm-ok" type="submit" class="btn-primary">Запланировать</button>
-                <button type="button" class="btn-danger" onclick="closeModal()">Отмена</button>
-
-                <input type="hidden" name="postId" id="postId" />
-                <button type="button" id="deleteBtn" class="btn-danger" style="display:none;" onclick="deletePost()">Удалить пост</button>
+                <div class="form-actions">
+                    <button id="postForm-ok" type="submit" class="btn-primary">Сохранить</button>
+                    <button type="button" class="btn-cancel" onclick="closeModal()">Отмена</button>
+                    <input type="hidden" name="postId" id="postId" />
+                    <button type="button" id="deleteBtn" class="btn-danger" onclick="deletePost()">Удалить пост</button>
+                </div>
             </form>
         </div>
+    </div>
+    <div id="imageLightbox" onclick="closeLightbox()">
+        <button class="close-lightbox-btn" onclick="closeLightbox()">&times;</button>
+        <img id="lightboxImage" src="" alt="Просмотр изображения">
     </div>
 </div>
 
 @section Scripts {
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
-    <script>
-        // 1. Выносим переменные и функции ЗА пределы FullCalendar
-        let isEditMode = false;
-        const modal = document.getElementById('postModal');
-        const dateInput = document.getElementById('showDateInput');
-        const postIdInput = document.getElementById('postId');
+        <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+        <script>
+            let isEditMode = false;
+            const modal = document.getElementById('postModal');
+            const dateInput = document.getElementById('showDateInput');
+            const postIdInput = document.getElementById('postId');
 
-        async function deletePost() {
-            if (!confirm('Удалить пост?')) return;
-            const postId = postIdInput.value;
-            const response = await fetch(`/planner/delete/${postId}`, { method: 'POST' });
-            if (response.ok) location.reload();
-            else alert("Ошибка при удалении");
-        }
+            // Локальные хранилища для файлов и картинок
+            let selectedFiles = [];   // Хранит новые объекты File
+            let existingImages = [];  // Хранит строки Base64 с сервера
 
-        // Функция форматирования
-        function formatToInput(date) {
-            const pad = (num) => num.toString().padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T12:00`;
-        }
+            async function deletePost() {
+                if (!confirm('Удалить пост?')) return;
+                const postId = postIdInput.value;
+                const response = await fetch(`/planner/delete/${postId}`, { method: 'POST' });
+                if (response.ok) location.reload();
+                else alert("Ошибка при удалении");
+            }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            var calendarEl = document.getElementById('calendar');
+            function formatToInput(date) {
+                const pad = (num) => num.toString().padStart(2, '0');
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T12:00`;
+            }
 
-            var calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'dayGridMonth',
-                locale: 'ru',
-                selectable: true,
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridWeek'
-                },
-                // ВАЖНО: Убедись, что путь к API правильный
-                events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
+            // Функция синхронизации массива selectedFiles с элементом input[type="file"]
+            function syncFileInput() {
+                const fileInput = document.getElementById('fileInput');
+                const dataTransfer = new DataTransfer();
+                selectedFiles.forEach(file => dataTransfer.items.add(file));
+                fileInput.files = dataTransfer.files;
+            }
 
-                // 2. Обработчик клика по событию (Редактирование)
-                eventClick: function(info) {
-                    const postId = info.event.id;
-                    const network = "@ViewBag.Network";
-                    isEditMode = true;
+            // Рендеринг галереи превью
+                function renderGallery() {
+                const gallery = document.getElementById('imageGallery');
+                const hiddenContainer = document.getElementById('hiddenInputsContainer');
+                gallery.innerHTML = '';
+                hiddenContainer.innerHTML = '';
 
-                    fetch(`/planner/get/${postId}`)
-                        .then(res => res.json())
-                        .then(post => {
-                             console.log("Данные поста:", post);
-                             console.log("СОцсеть:", network);
+                // 1. Отрисовка картинок из базы данных
+                existingImages.forEach((imgData, index) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'thumb-wrapper';
 
-                            postIdInput.value = post.Id;
-                            document.getElementById('showDateInput').value = post.ShowDate.slice(0, 16);
+                    const img = document.createElement('img');
+                    img.className = 'thumb';
 
-                            const networkData = post.Networks[network];
-                            document.querySelector('textarea[name="caption"]').value = networkData ? networkData.Caption : "";
+                    let src = imgData;
+                    if (!imgData.startsWith('data:')) {
+                        let mimeType = 'image/jpeg';
+                        if (imgData.startsWith('iVBORw')) mimeType = 'image/png';
+                        else if (imgData.startsWith('R0lGOD')) mimeType = 'image/gif';
+                        else if (imgData.startsWith('UklGR')) mimeType = 'image/webp';
+                        src = `data:${mimeType};base64,${imgData}`;
+                    }
+                    img.src = src;
 
-                            document.getElementById('deleteBtn').style.display = 'block';
-                            document.getElementById('postForm').action = `/planner/update/${postId}`;
-                            document.getElementById('postForm-ok').textContent = `Изменить`;
-                            modal.style.display = 'flex';
-                        });
-                },
+                    // ПРИ КЛИКЕ НА КАРТИНКУ: Открываем ее во весь экран
+                    img.onclick = () => openLightbox(src);
 
-                // 3. Обработчик клика по пустому дню (Создание)
-                dateClick: function(info) {
-                    isEditMode = false;
-                    document.getElementById('postForm').action = "/planner/create";
-                    document.getElementById('deleteBtn').style.display = 'none';
-                    document.getElementById('postForm-ok').textContent = `Запланировать`;
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'remove-thumb-btn';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation(); // Предотвращаем срабатывание клика по самой картинке
+                        existingImages.splice(index, 1);
+                        renderGallery();
+                    };
 
-                    let selectedDate = info.date;
-                    if (info.allDay) selectedDate.setHours(12, 0);
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(removeBtn);
+                    gallery.appendChild(wrapper);
 
-                    dateInput.value = formatToInput(selectedDate);
-                    modal.style.display = 'flex';
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'keptImages';
+                    hiddenInput.value = imgData;
+                    hiddenContainer.appendChild(hiddenInput);
+                });
+
+                // 2. Отрисовка новых выбранных файлов
+                selectedFiles.forEach((file, index) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'thumb-wrapper';
+
+                    const img = document.createElement('img');
+                    img.className = 'thumb';
+
+                    const blobUrl = URL.createObjectURL(file);
+                    img.src = blobUrl;
+                    img.onload = () => { /* URL освобождается внутри closeLightbox или при уничтожении */ };
+
+                    // ПРИ КЛИКЕ НА КАРТИНКУ: Открываем ее во весь экран
+                    img.onclick = () => openLightbox(blobUrl);
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'remove-thumb-btn';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation(); // Предотвращаем срабатывание клика по картинке
+                        selectedFiles.splice(index, 1);
+                        URL.revokeObjectURL(blobUrl); // Освобождаем память
+                        syncFileInput();
+                        renderGallery();
+                    };
+
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(removeBtn);
+                    gallery.appendChild(wrapper);
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                var calendarEl = document.getElementById('calendar');
+
+                var calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: window.innerWidth < 600 ? 'listMonth' : 'dayGridMonth',
+                    locale: 'ru',
+                    selectable: true,
+                    height: 'auto',
+                    headerToolbar: {
+                        left: 'prev,next today',
+                        center: 'title',
+                        right: 'dayGridMonth,timeGridWeek'
+                    },
+                    events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
+
+                    eventClick: function(info) {
+                        const postId = info.event.id;
+                        const network = "@ViewBag.Network";
+                        isEditMode = true;
+
+                        // Сброс массивов перед редактированием
+                        selectedFiles = [];
+                        existingImages = [];
+
+                        const postIdInput = document.getElementById('postId');
+                        const dateInput = document.getElementById('showDateInput');
+                        const captionInput = document.querySelector('textarea[name="caption"]');
+                        const deleteBtn = document.getElementById('deleteBtn');
+                        const postForm = document.getElementById('postForm');
+                        const postFormOk = document.getElementById('postForm-ok');
+
+                        document.getElementById('modalTitle').textContent = "Редактирование поста";
+
+                        fetch(`/planner/get/${postId}`)
+                            .then(res => res.json())
+                            .then(post => {
+                                postIdInput.value = post.id || post.Id;
+
+                                const showDate = post.showDate || post.ShowDate;
+                                if (showDate) {
+                                    dateInput.value = showDate.slice(0, 16);
+                                }
+
+                                const networks = post.networks || post.Networks;
+                                const networkData = networks ? networks[network] : null;
+                                captionInput.value = networkData ? (networkData.caption || networkData.Caption || "") : "";
+
+                                deleteBtn.style.display = 'block';
+                                postForm.action = `/planner/update/${postId}`;
+                                postFormOk.textContent = "Изменить";
+
+                                // Подгружаем старые картинки в массив
+                                const images = post.images || post.Images;
+                                if (images && images.length > 0) {
+                                    existingImages = [...images];
+                                }
+
+                                syncFileInput();
+                                renderGallery();
+
+                                modal.style.display = 'flex';
+                            })
+                            .catch(err => console.error("Ошибка загрузки поста:", err));
+                    },
+
+                    dateClick: function(info) {
+                        isEditMode = false;
+                        document.getElementById('modalTitle').textContent = "Новый пост";
+                        document.getElementById('postForm').action = "/planner/create";
+                        document.getElementById('deleteBtn').style.display = 'none';
+                        document.getElementById('postForm-ok').textContent = `Запланировать`;
+                        document.querySelector('textarea[name="caption"]').value = "";
+
+                        // Сброс локальных данных
+                        selectedFiles = [];
+                        existingImages = [];
+                        syncFileInput();
+                        renderGallery();
+
+                        let selectedDate = info.date;
+                        if (info.allDay) selectedDate.setHours(12, 0);
+
+                        dateInput.value = formatToInput(selectedDate);
+                        modal.style.display = 'flex';
+                    }
+                });
+                calendar.render();
+
+                // Инициализация Drag and Drop
+                const dropZone = document.getElementById('dropZone');
+                const fileInput = document.getElementById('fileInput');
+
+                if (dropZone && fileInput) {
+                    // Предотвращение стандартных событий браузера
+                    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                        dropZone.addEventListener(eventName, e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }, false);
+                    });
+
+                    // Подсветка зоны при перетаскивании
+                    ['dragenter', 'dragover'].forEach(eventName => {
+                        dropZone.addEventListener(eventName, () => dropZone.classList.add('highlight'), false);
+                    });
+
+                    ['dragleave', 'drop'].forEach(eventName => {
+                        dropZone.addEventListener(eventName, () => dropZone.classList.remove('highlight'), false);
+                    });
+
+                    // Обработка сброса файлов
+                    dropZone.addEventListener('drop', e => {
+                        const dt = e.dataTransfer;
+                        const files = dt.files;
+                        if (files.length > 0) {
+                            for (let i = 0; i < files.length; i++) {
+                                selectedFiles.push(files[i]);
+                            }
+                            syncFileInput();
+                            renderGallery();
+                        }
+                    }, false);
+
+                    // Обработка стандартного выбора файлов кликом
+                    fileInput.addEventListener('change', function() {
+                        if (this.files.length > 0) {
+                            for (let i = 0; i < this.files.length; i++) {
+                                selectedFiles.push(this.files[i]);
+                            }
+                            syncFileInput();
+                            renderGallery();
+                        }
+                    });
                 }
             });
-            calendar.render();
-        });
 
-        function closeModal() { modal.style.display = 'none'; }
+            function closeModal() { modal.style.display = 'none'; }
 
-        // Закрытие по клику на фон
-        window.onclick = function(event) {
-            if (event.target == modal) closeModal();
-        }
-    </script>
+            // Открытие полноразмерного просмотра
+            function openLightbox(src) {
+                const lightbox = document.getElementById('imageLightbox');
+                const lightboxImg = document.getElementById('lightboxImage');
+
+                lightboxImg.src = src;
+                lightbox.style.display = 'flex';
+
+                // Небольшая задержка для корректного срабатывания CSS-анимации transition
+                setTimeout(() => {
+                    lightbox.classList.add('active');
+                }, 10);
+            }
+
+            // Закрытие полноразмерного просмотра
+            function closeLightbox() {
+                const lightbox = document.getElementById('imageLightbox');
+                lightbox.classList.remove('active');
+
+                // Ждем окончания анимации перед скрытием элемента
+                setTimeout(() => {
+                    lightbox.style.display = 'none';
+                    document.getElementById('lightboxImage').src = '';
+                }, 250);
+            }
+
+            window.onclick = function(event) {
+                if (event.target == modal) closeModal();
+            }
+        </script>
 }

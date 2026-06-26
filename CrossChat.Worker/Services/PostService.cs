@@ -236,12 +236,37 @@ namespace CrossChat.Worker.Services
 			// Загружаем пост вместе с состояниями
 			var entity = await _appDbContext.Posts
 				.Include(p => p.NetworkStates)
+				.Include(p => p.Images)
 				.FirstOrDefaultAsync(p => p.Id == post.Id);
 
 			if (entity != null)
 			{
 				entity.AccessLevel = (int)post.Access;
 				entity.ShowDate = post.ShowDate;
+
+				var imagesToRemove = entity.Images
+					.Where(dbImg => !post.Images.Contains(dbImg.Base64Data))
+					.ToList();
+
+				foreach (var img in imagesToRemove)
+				{
+					entity.Images.Remove(img);
+					_appDbContext.Remove(img); // Явно помечаем сущность на удаление из БД
+				}
+
+				// 2. Добавляем новые картинки, которых еще нет в базе данных
+				var existingBase64s = entity.Images.Select(img => img.Base64Data).ToHashSet();
+				foreach (var newBase64 in post.Images)
+				{
+					if (!existingBase64s.Contains(newBase64))
+					{
+						entity.Images.Add(new PostImageEntity
+						{
+							PostId = entity.Id,
+							Base64Data = newBase64
+						});
+					}
+				}
 
 				// Проходимся по словарю из нашей модели (где есть ВСЕ ключи)
 				foreach (var kvp in post.Networks)

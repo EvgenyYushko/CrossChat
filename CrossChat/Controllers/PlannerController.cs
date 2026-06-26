@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.Json.Serialization; 
+using System.Text.Json.Serialization;
 using CrossChat.Data;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
@@ -105,10 +105,11 @@ namespace CrossChat.Controllers
 		{
 			var post = await _postService.GetPostByIdAsync(id);
 			// Настраиваем сериализатор
-			var options = new JsonSerializerOptions {
+			var options = new JsonSerializerOptions
+			{
 				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
 			};
-    
+
 			return post != null ? Json(post, options) : NotFound();
 		}
 
@@ -120,23 +121,45 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("update/{id}")]
-		public async Task<IActionResult> Update(Guid id, [FromForm] int profileId, [FromForm] string networkType, [FromForm] string caption, [FromForm] DateTime showDate)
+		public async Task<IActionResult> Update(
+			Guid id,
+			[FromForm] int profileId,
+			[FromForm] string networkType,
+			[FromForm] string caption,
+			[FromForm] DateTime showDate,
+			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
+			[FromForm] List<IFormFile> images)   // Новые добавленные файлы
 		{
-			// 1. Получаем существующий пост
+			// 1. Получаем существующий пост из базы данных
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
 
-			// 2. Обновляем данные
-			post.ShowDate = showDate; // Обновляем дату
+			// 2. Обновляем базовые данные
+			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
-			// Обновляем текст для нужной соцсети
+			// Обновляем текст для выбранной соцсети
 			var netType = Enum.Parse<NetworkType>(networkType);
 			if (post.Networks.ContainsKey(netType))
 			{
 				post.Networks[netType].Caption = caption;
 			}
 
-			// 3. Сохраняем
+			// 3. Обновляем список картинок поста
+			// Перезаписываем список картинок только теми старыми картинками, которые пользователь не удалил на фронтенде
+			post.Images = keptImages ?? new List<string>();
+
+			// Добавляем новые картинки, если они были загружены
+			if (images != null && images.Count > 0)
+			{
+				foreach (var file in images)
+				{
+					using var ms = new MemoryStream();
+					await file.CopyToAsync(ms);
+					post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+				}
+			}
+
+			// 4. Сохраняем изменения в базе
 			await _postService.UpdatePostAsync(post);
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
