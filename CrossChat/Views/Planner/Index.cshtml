@@ -1,0 +1,139 @@
+@{
+    ViewData["Title"] = "Планировщик";
+    var profileId = Context.Request.Query["profileId"];
+    var network = Context.Request.Query["network"];
+}
+
+@section Styles {
+    <!-- FullCalendar CSS -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
+    <style>
+        .container { max-width: 900px; margin: 2rem auto; padding: 1rem; }
+        #calendar { background: var(--card-bg); padding: 1rem; border-radius: 16px; border: 1px solid var(--glass-border); color: var(--text-main); }
+        .fc .fc-toolbar-title { color: var(--text-main); }
+        .fc .fc-button-primary { background: var(--accent-color); border: none; }
+    </style>
+}
+
+<div class="container">
+    <div id='calendar'></div>
+    <!-- Модальное окно (скрыто по умолчанию) -->
+    <div id="postModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; justify-content:center; align-items:center;">
+        <div class="card" style="width: 90%; max-width: 500px; text-align: left;">
+            <h2 style="color:white; margin-bottom:1rem;">Создать пост</h2>
+            <form id="postForm" action="/planner/create" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="profileId" value="@ViewBag.ProfileId" />
+                <input type="hidden" name="networkType" value="@ViewBag.Network" />
+                <div class="form-group">
+                    <label>Дата и время публикации</label>
+                    <input type="datetime-local" name="showDate" id="showDateInput" class="text-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Фото/Видео</label>
+                    <input type="file" name="images" multiple accept="image/*,video/*" class="text-input">
+                </div>
+
+                <div class="form-group">
+                    <label>Текст поста</label>
+                    <textarea name="caption" required></textarea>
+                </div>
+
+                <button id="postForm-ok" type="submit" class="btn-primary">Запланировать</button>
+                <button type="button" class="btn-danger" onclick="closeModal()">Отмена</button>
+
+                <input type="hidden" name="postId" id="postId" />
+                <button type="button" id="deleteBtn" class="btn-danger" style="display:none;" onclick="deletePost()">Удалить пост</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+    <script>
+        // 1. Выносим переменные и функции ЗА пределы FullCalendar
+        let isEditMode = false;
+        const modal = document.getElementById('postModal');
+        const dateInput = document.getElementById('showDateInput');
+        const postIdInput = document.getElementById('postId');
+
+        async function deletePost() {
+            if (!confirm('Удалить пост?')) return;
+            const postId = postIdInput.value;
+            const response = await fetch(`/planner/delete/${postId}`, { method: 'POST' });
+            if (response.ok) location.reload();
+            else alert("Ошибка при удалении");
+        }
+
+        // Функция форматирования
+        function formatToInput(date) {
+            const pad = (num) => num.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T12:00`;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var calendarEl = document.getElementById('calendar');
+
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                locale: 'ru',
+                selectable: true,
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek'
+                },
+                // ВАЖНО: Убедись, что путь к API правильный
+                events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
+
+                // 2. Обработчик клика по событию (Редактирование)
+                eventClick: function(info) {
+                    const postId = info.event.id;
+                    const network = "@ViewBag.Network";
+                    isEditMode = true;
+
+                    fetch(`/planner/get/${postId}`)
+                        .then(res => res.json())
+                        .then(post => {
+                             console.log("Данные поста:", post);
+                             console.log("СОцсеть:", network);
+
+                            postIdInput.value = post.Id;
+                            document.getElementById('showDateInput').value = post.ShowDate.slice(0, 16);
+
+                            const networkData = post.Networks[network];
+                            document.querySelector('textarea[name="caption"]').value = networkData ? networkData.Caption : "";
+
+                            document.getElementById('deleteBtn').style.display = 'block';
+                            document.getElementById('postForm').action = `/planner/update/${postId}`;
+                            document.getElementById('postForm-ok').textContent = `Изменить`;
+                            modal.style.display = 'flex';
+                        });
+                },
+
+                // 3. Обработчик клика по пустому дню (Создание)
+                dateClick: function(info) {
+                    isEditMode = false;
+                    document.getElementById('postForm').action = "/planner/create";
+                    document.getElementById('deleteBtn').style.display = 'none';
+                    document.getElementById('postForm-ok').textContent = `Запланировать`;
+
+                    let selectedDate = info.date;
+                    if (info.allDay) selectedDate.setHours(12, 0);
+
+                    dateInput.value = formatToInput(selectedDate);
+                    modal.style.display = 'flex';
+                }
+            });
+            calendar.render();
+        });
+
+        function closeModal() { modal.style.display = 'none'; }
+
+        // Закрытие по клику на фон
+        window.onclick = function(event) {
+            if (event.target == modal) closeModal();
+        }
+    </script>
+}

@@ -231,7 +231,9 @@
             <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn" style="background:#1877f2; margin-top: 1rem;">
                 💻 Открыть консоль
             </a>
-
+            <a href="/planner?profileId=@Model.Id&network=Facebook" class="btn" style="background: #6366f1; margin-top: 10px;">
+                📅 Автопостинг
+            </a>
             <div class="form-section">
                 <form action="/facebook/update-settings" method="post">
                     <input type="hidden" name="botId" value="@Model.Id" />

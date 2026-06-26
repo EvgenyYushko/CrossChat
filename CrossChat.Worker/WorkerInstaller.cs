@@ -4,6 +4,7 @@ using CrossChat.Worker.Consumers.BlueSky;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
+using CrossChat.Worker.Services;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
 using MassTransit;
@@ -57,6 +58,8 @@ namespace CrossChat.Worker
 			});
 
 			services.AddSingleton<ITelegramService, TelegramService>();
+
+			services.AddScoped<IPostService, PostService>();
 		}
 	}
 }

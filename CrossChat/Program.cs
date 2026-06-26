@@ -42,6 +42,9 @@ if (string.IsNullOrEmpty(connectionString))
 	connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 }
 
+// Разрешает сохранять даты в любом формате без ошибок
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 options.UseNpgsql(connectionString, npgsqlOptions =>
 {

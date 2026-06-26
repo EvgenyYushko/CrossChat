@@ -3,6 +3,7 @@ using System;
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CrossChat.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623141639_TestMigration")]
+    partial class TestMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -261,81 +264,6 @@ namespace CrossChat.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("InstagramSettings");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.NetworkStateEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Caption")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("NetworkType")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PostId");
-
-                    b.ToTable("NetworkStates");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AccessLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("ProfileId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ShowDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProfileId");
-
-                    b.ToTable("Posts");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostImageEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Base64Data")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PostId");
-
-                    b.ToTable("PostImages");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.Profile", b =>
@@ -663,39 +591,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.NetworkStateEntity", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.Posting.PostEntity", "Post")
-                        .WithMany("NetworkStates")
-                        .HasForeignKey("PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Post");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostEntity", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
-                        .WithMany()
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Profile");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostImageEntity", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.Posting.PostEntity", "Post")
-                        .WithMany("Images")
-                        .HasForeignKey("PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Post");
-                });
-
             modelBuilder.Entity("CrossChat.Data.Entities.Profile", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.User", "User")
@@ -791,13 +686,6 @@ namespace CrossChat.Data.Migrations
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramSettings", b =>
                 {
                     b.Navigation("Customers");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostEntity", b =>
-                {
-                    b.Navigation("Images");
-
-                    b.Navigation("NetworkStates");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.Profile", b =>

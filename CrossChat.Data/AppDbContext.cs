@@ -1,4 +1,5 @@
 using CrossChat.Data.Entities;
+using CrossChat.Data.Entities.Posting;
 using Microsoft.EntityFrameworkCore;
 
 namespace CrossChat.Data
@@ -19,6 +20,10 @@ namespace CrossChat.Data
 		public DbSet<BotResponseLog> BotResponseLogs { get; set; }
 		public DbSet<Profile> Profile { get; set; }
 
+
+		public DbSet<PostEntity> Posts { get; set; }
+		public DbSet<PostImageEntity> PostImages { get; set; }
+		public DbSet<NetworkStateEntity> NetworkStates { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
