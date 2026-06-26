@@ -204,6 +204,7 @@ namespace CrossChat.Worker.Services
 			var entity = await _appDbContext.Posts
 				.Include(p => p.Images)
 				.Include(p => p.NetworkStates)
+				.AsSplitQuery() // <-- Ключевое исправление: разделяет один тяжелый запрос на три легких
 				.FirstOrDefaultAsync(p => p.Id == id);
 
 			if (entity == null) return null;

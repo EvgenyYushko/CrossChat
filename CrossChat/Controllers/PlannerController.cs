@@ -108,6 +108,8 @@ namespace CrossChat.Controllers
 			var options = new JsonSerializerOptions
 			{
 				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
+				// Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
+				,Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping 
 			};
 
 			return post != null ? Json(post, options) : NotFound();
