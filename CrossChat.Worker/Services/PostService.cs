@@ -362,7 +362,7 @@ namespace CrossChat.Worker.Services
 
 			var options = new MemoryCacheEntryOptions()
 				.SetSize(estimatedSize) // Указываем вес записи для контроля общего лимита в 150 МБ
-				.SetAbsoluteExpiration(TimeSpan.FromHours(1)); // Время жизни ровно 1 час
+				.SetAbsoluteExpiration(TimeSpan.FromHours(3)); // Время жизни ровно 3 час
 
 			_cache.Set(post.Id, post, options);
 		}
