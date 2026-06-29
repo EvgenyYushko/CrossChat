@@ -29,13 +29,13 @@ namespace CrossChat.Worker.Jobs
 		}
 
 		public async Task Execute(IJobExecutionContext context)
-		{
+		{return ;
 			try
 			{
 				var activeBots = await _db.FacebookSettings
 					.Where(s => s.IsActive)
 					.ToListAsync();
-
+				return ;
 				foreach (var bot in activeBots)
 				{
 					await _console.Log($"Проверка аккаунта @{bot.PageName}", bot.UserId, bot.Id);

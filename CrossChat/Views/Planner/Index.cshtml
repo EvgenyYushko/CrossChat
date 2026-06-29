@@ -602,15 +602,32 @@
                     display: block !important;
                     max-width: 100% !important;
                 }
+
+            /* --- БЛОКИРОВЩИК ИНТЕРФЕЙСА ПРИ ОТПРАВКЕ --- */
+            .modal-blocker {
+                display: none; /* Скрыт по умолчанию */
+                position: absolute;
+                top: 0; left: 0;
+                width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.3); /* Легкий темный фильтр */
+                backdrop-filter: blur(1.5px);
+                -webkit-backdrop-filter: blur(1.5px);
+                z-index: 100; /* Накладывается поверх всех элементов карточки */
+                border-radius: 20px;
+                cursor: not-allowed; /* Курсор запрета */
+            }
+
             /* --- СТИЛИЗАЦИЯ ПРОГРЕСС-БАРА ЗАГРУЗКИ --- */
             .upload-progress-container {
-                display: none; /* Скрыт по умолчанию */
+                display: none;
                 margin-top: 1.25rem;
                 background: rgba(15, 23, 42, 0.2);
                 border: 1px solid var(--glass-border);
                 padding: 1rem;
                 border-radius: 12px;
                 transition: all 0.3s ease;
+                position: relative; /* Добавлено */
+                z-index: 101;
             }
 
             .progress-bar-bg {
@@ -669,6 +686,9 @@
     <!-- Модальное окно -->
     <div id="postModal">
         <div class="modal-card">
+            <!-- Защитный слой-блокировщик кликов -->
+            <div id="modalBlocker" class="modal-blocker"></div>
+
             <button class="close-modal-btn" onclick="closeModal()">&times;</button>
             <h2 id="modalTitle" class="modal-title">Редактирование поста</h2>
 
@@ -700,7 +720,7 @@
                     <textarea name="caption" id="captionInput" required placeholder="Введите текст вашего сообщения..."></textarea>
                 </div>
 
-                <div id="uploadProgressContainer" class="upload-progress-container">
+                <div id="uploadProgressContainer" class="upload-progress-container" style="display: none;">
                     <div class="progress-bar-bg">
                         <div id="uploadProgressFill" class="progress-bar-fill"></div>
                     </div>
@@ -727,6 +747,8 @@
         <!-- Подключаем русский перевод и региональные стандарты -->
         <script>
             let isEditMode = false;
+            let isUploading = false; // Глобальный флаг процесса загрузки
+
             const modal = document.getElementById('postModal');
             const dateInput = document.getElementById('showDateInput');
             const postIdInput = document.getElementById('postId');
@@ -736,6 +758,7 @@
             let existingImages = [];  // Хранит строки Base64 с сервера
 
             async function deletePost() {
+                if (isUploading) return; // Блокируем удаление во время отправки другого запроса
                 if (!confirm('Удалить пост?')) return;
                 const postId = postIdInput.value;
                 const response = await fetch(`/planner/delete/${postId}`, { method: 'POST' });
@@ -1025,7 +1048,10 @@
                 }
             });
 
-            function closeModal() { modal.style.display = 'none'; }
+            function closeModal() {
+                if (isUploading) return; // ЗАПРЕЩАЕМ закрывать окно, если идет отправка файлов!
+                modal.style.display = 'none';
+            }
 
             // Открытие полноразмерного просмотра
             function openLightbox(src) {
@@ -1053,7 +1079,9 @@
                 }, 250);
             }
 
+            // Закрытие по клику на фон
             window.onclick = function(event) {
+                if (isUploading) return; // ЗАПРЕЩАЕМ закрывать по фону во время загрузки!
                 if (event.target == modal) closeModal();
             }
 
@@ -1079,10 +1107,15 @@
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
                 const progressText = document.getElementById('uploadProgressText');
+                const modalBlocker = document.getElementById('modalBlocker');
 
                 const submitBtn = document.getElementById('postForm-ok');
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
+
+                // Переключаем флаг отправки и активируем стеклянный блокировщик кликов
+                isUploading = true;
+                modalBlocker.style.display = 'block';
 
                 // Показываем прогресс-бар и блокируем кнопки управления
                 progressContainer.style.display = 'block';
@@ -1114,6 +1147,7 @@
                 // Обработка успешного завершения запроса
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
+                        isUploading = false; // Сбрасываем флаг перед редиректом
                         // Перенаправляем браузер по адресу редиректа контроллера (Index)
                         window.location.href = xhr.responseURL || window.location.href;
                     } else {
@@ -1135,9 +1169,14 @@
             function resetUploadProgress() {
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
+                const modalBlocker = document.getElementById('modalBlocker');
                 const submitBtn = document.getElementById('postForm-ok');
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
+
+                // Разблокируем интерфейс
+                isUploading = false;
+                modalBlocker.style.display = 'none';
 
                 progressContainer.style.display = 'none';
                 submitBtn.disabled = false;

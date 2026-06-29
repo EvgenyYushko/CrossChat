@@ -59,6 +59,7 @@ public class TokenRefreshJob : IJob
 
 	public async Task Execute(IJobExecutionContext context)
 	{
+		return;
 		_logger.LogInformation("🔄 [TokenRefreshJob] Начало комплексной проверки токенов...");
 		var thresholdDate = DateTime.UtcNow.AddDays(10);
 
