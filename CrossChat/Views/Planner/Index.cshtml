@@ -603,19 +603,24 @@
                     max-width: 100% !important;
                 }
 
-            /* --- БЛОКИРОВЩИК ИНТЕРФЕЙСА ПРИ ОТПРАВКЕ --- */
-            .modal-blocker {
-                display: none; /* Скрыт по умолчанию */
-                position: absolute;
-                top: 0; left: 0;
-                width: 100%; height: 100%;
-                background: rgba(15, 23, 42, 0.3); /* Легкий темный фильтр */
-                backdrop-filter: blur(1.5px);
-                -webkit-backdrop-filter: blur(1.5px);
-                z-index: 100; /* Накладывается поверх всех элементов карточки */
-                border-radius: 20px;
-                cursor: not-allowed; /* Курсор запрета */
+            /* Когда карточка в режиме загрузки, мы намертво отключаем любые клики по ней */
+            .modal-card.uploading {
+                pointer-events: none !important;
+                user-select: none !important;
             }
+                /* Изящно приглушаем все элементы формы, показывая, что они временно неактивны */
+                .modal-card.uploading .close-modal-btn,
+                .modal-card.uploading form .form-group,
+                .modal-card.uploading form .image-gallery,
+                .modal-card.uploading form .form-actions {
+                    opacity: 0.4;
+                    transition: opacity 0.3s ease;
+                }
+                /* Но сам прогресс-бар мы оставляем максимально ярким и активным */
+                .modal-card.uploading #uploadProgressContainer {
+                    opacity: 1 !important;
+                    pointer-events: auto !important; /* Разрешаем клики по нему, если потребуется */
+                }
 
             /* --- СТИЛИЗАЦИЯ ПРОГРЕСС-БАРА ЗАГРУЗКИ --- */
             .upload-progress-container {
@@ -686,8 +691,6 @@
     <!-- Модальное окно -->
     <div id="postModal">
         <div class="modal-card">
-            <!-- Защитный слой-блокировщик кликов -->
-            <div id="modalBlocker" class="modal-blocker"></div>
 
             <button class="close-modal-btn" onclick="closeModal()">&times;</button>
             <h2 id="modalTitle" class="modal-title">Редактирование поста</h2>
@@ -916,6 +919,8 @@
                     const network = "@ViewBag.Network";
                     isEditMode = true;
 
+                    resetModalFormState();
+
                     // Находим элементы
                     const gallery = document.getElementById('imageGallery');
                     const postIdInput = document.getElementById('postId');
@@ -979,6 +984,9 @@
 
                     dateClick: function(info) {
                         isEditMode = false;
+
+                        resetModalFormState();
+
                         document.getElementById('modalTitle').textContent = "Новый пост";
                         document.getElementById('postForm').action = "/planner/create";
                         document.getElementById('deleteBtn').style.display = 'none';
@@ -1097,6 +1105,36 @@
                 }
             });
 
+            function resetModalFormState() {
+                isUploading = false;
+            
+                // Убираем блокировку и затухание с карточки
+                document.querySelector('.modal-card').classList.remove('uploading');
+            
+                // Скрываем и сбрасываем полосу прогресса загрузки
+                const progressContainer = document.getElementById('uploadProgressContainer');
+                const progressFill = document.getElementById('uploadProgressFill');
+                const progressText = document.getElementById('uploadProgressText');
+            
+                progressContainer.style.display = 'none';
+                progressFill.style.width = '0%';
+                progressFill.classList.remove('pulse');
+                progressText.textContent = 'Загрузка: 0%';
+
+                // Возвращаем кнопкам формы исходное состояние
+                const submitBtn = document.getElementById('postForm-ok');
+                const cancelBtn = document.querySelector('.btn-cancel');
+            
+                submitBtn.disabled = false;
+                cancelBtn.style.display = 'inline-block';
+
+                // Очищаем галерею картинок и временные массивы файлов
+                document.getElementById('imageGallery').innerHTML = '';
+                selectedFiles = [];
+                existingImages = [];
+                syncFileInput();
+            }
+
             // Функция отправки формы через AJAX с отслеживанием прогресса
             function submitFormWithProgress() {
                 const form = document.getElementById('postForm');
@@ -1107,23 +1145,21 @@
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
                 const progressText = document.getElementById('uploadProgressText');
-                const modalBlocker = document.getElementById('modalBlocker');
 
                 const submitBtn = document.getElementById('postForm-ok');
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
 
-                // Переключаем флаг отправки и активируем стеклянный блокировщик кликов
+                // АКТИВИРУЕМ БЛОКИРОВКУ: Карточка затухает, клики по ней отключаются на уровне браузера
                 isUploading = true;
-                modalBlocker.style.display = 'block';
+                document.querySelector('.modal-card').classList.add('uploading');
 
-                // Показываем прогресс-бар и блокируем кнопки управления
+                // Показываем прогресс-бар и отключаем кнопки
                 progressContainer.style.display = 'block';
                 submitBtn.disabled = true;
                 deleteBtn.style.display = 'none';
-                cancelBtn.style.display = 'none'; // Скрываем отмену, чтобы пользователь случайно не прервал процесс
+                cancelBtn.style.display = 'none';
 
-                // Создаем XMLHttpRequest запрос
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
 
@@ -1136,9 +1172,8 @@
                             progressFill.style.width = percentComplete + '%';
                             progressText.textContent = `Загрузка файлов: ${percentComplete}% (${formatBytes(e.loaded)} из ${formatBytes(e.total)})`;
                         } else {
-                            // Файлы полностью улетели в сеть, теперь сервер выполняет C#-код сжатия
                             progressFill.style.width = '100%';
-                            progressFill.classList.add('pulse'); // Запускаем пульсацию
+                            progressFill.classList.add('pulse');
                             progressText.textContent = 'Идет обработка и сжатие изображений на сервере...';
                         }
                     }
@@ -1147,8 +1182,8 @@
                 // Обработка успешного завершения запроса
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        isUploading = false; // Сбрасываем флаг перед редиректом
-                        // Перенаправляем браузер по адресу редиректа контроллера (Index)
+                        isUploading = false;
+                        document.querySelector('.modal-card').classList.remove('uploading');
                         window.location.href = xhr.responseURL || window.location.href;
                     } else {
                         alert('Произошла ошибка при сохранении поста: ' + xhr.statusText);
@@ -1169,14 +1204,14 @@
             function resetUploadProgress() {
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
-                const modalBlocker = document.getElementById('modalBlocker');
+
                 const submitBtn = document.getElementById('postForm-ok');
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
 
                 // Разблокируем интерфейс
                 isUploading = false;
-                modalBlocker.style.display = 'none';
+                document.querySelector('.modal-card').classList.remove('uploading');
 
                 progressContainer.style.display = 'none';
                 submitBtn.disabled = false;

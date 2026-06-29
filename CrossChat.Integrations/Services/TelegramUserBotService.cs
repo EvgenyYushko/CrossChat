@@ -30,7 +30,6 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<Client> CreateAndConnectAsync(UserBotDto dto)
 		{
-			return null;
 			string path = GetSessionPath(dto.Id);
 
 			// 1. Восстанавливаем файл сессии, если есть байты
