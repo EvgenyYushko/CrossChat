@@ -8,14 +8,13 @@
     <!-- FullCalendar CSS -->
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
     <style>
-        /* Адаптивный контейнер */
+        /* --- ГЛОБАЛЬНЫЕ СТИЛИ (РАБОТАЮТ НА ПК И ТЕЛЕФОНАХ) --- */
         .container {
             max-width: 900px;
             margin: 5rem auto 2rem;
             padding: 0 1rem;
         }
 
-        /* --- КАСТОМИЗАЦИЯ FULLCALENDAR (DARK & LIGHT СОВМЕСТИМОСТЬ) --- */
         #calendar {
             background: var(--card-bg, #1e293b);
             padding: 1.5rem;
@@ -24,14 +23,12 @@
             color: var(--text-main);
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
             transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-            /* Внутренние переменные FullCalendar */
             --fc-border-color: var(--glass-border);
-            --fc-today-bg-color: rgba(99, 102, 241, 0.12); /* Мягкий цвет сегодня */
-            --fc-neutral-bg-color: rgba(0, 0, 0, 0.02); /* По умолчанию для светлой темы */
+            --fc-today-bg-color: rgba(99, 102, 241, 0.12);
+            --fc-neutral-bg-color: rgba(0, 0, 0, 0.02);
             --fc-page-bg-color: transparent;
         }
 
-        /* Особые настройки пустого фона ячеек для темной темы */
         [data-theme="dark"] #calendar {
             --fc-neutral-bg-color: rgba(255, 255, 255, 0.02);
             --fc-today-bg-color: rgba(99, 102, 241, 0.18);
@@ -46,7 +43,7 @@
             transition: color 0.3s ease;
         }
 
-        /* Современные скругленные кнопки календаря */
+        /* Кнопки навигации */
         .fc .fc-button {
             background: var(--input-bg) !important;
             color: var(--text-main) !important;
@@ -60,21 +57,18 @@
             text-transform: capitalize;
         }
 
-            /* Наведение на кнопки */
             .fc .fc-button:hover {
                 background: var(--glass-bg) !important;
                 border-color: var(--accent-color) !important;
                 color: var(--accent-color) !important;
             }
 
-        /* Активная кнопка (выбранный вид) */
         .fc .fc-button-active, .fc .fc-button-primary:active {
             background: var(--accent-color) !important;
             color: #ffffff !important;
             border-color: var(--accent-color) !important;
         }
 
-        /* Кнопка "Сегодня" (today) */
         .fc .fc-today-button {
             background: rgba(99, 102, 241, 0.1) !important;
             color: var(--accent-color) !important;
@@ -86,7 +80,7 @@
                 color: #ffffff !important;
             }
 
-        /* Заголовки дней недели (пн, вт, ср...) */
+        /* Заголовки дней недели */
         .fc th {
             padding: 12px 0 !important;
             font-weight: 700;
@@ -124,7 +118,7 @@
             opacity: 0.5;
         }
 
-        /* Оформление запланированных постов (событий на календаре) */
+        /* События */
         .fc-event {
             cursor: pointer;
             border-radius: 8px !important;
@@ -137,29 +131,24 @@
             transition: background-color 0.2s, color 0.2s;
         }
 
-        /* 1. Настройка для обычных событий с точкой (Timed/Dot events) */
         .fc-daygrid-dot-event {
-            /* Создаем мягкую нейтральную плашку (8% серого), которая контрастна на обеих темах */
             background: rgba(120, 120, 120, 0.08) !important;
             border: 1px solid var(--glass-border) !important;
-            color: var(--text-main) !important; /* Автоматический цвет текста: темный на светлой, белый на темной */
+            color: var(--text-main) !important;
         }
 
-            /* Наведение на обычные события */
             .fc-daygrid-dot-event:hover {
                 background: rgba(120, 120, 120, 0.15) !important;
             }
 
-            /* Гарантируем правильный цвет текста и времени внутри плашки */
             .fc-daygrid-dot-event .fc-event-title,
             .fc-daygrid-dot-event .fc-event-time {
                 color: var(--text-main) !important;
                 transition: color 0.3s ease;
             }
 
-        /* 2. Настройка для сплошных цветных блоков (All-day/Block events), если они появятся */
         .fc-daygrid-block-event {
-            color: #ffffff !important; /* На цветном фоне текст всегда белый */
+            color: #ffffff !important;
         }
 
             .fc-daygrid-block-event .fc-event-title {
@@ -216,7 +205,6 @@
                 color: var(--text-main);
             }
 
-        /* Исправление: динамический цвет заголовка (var(--text-main) вместо #ffffff) */
         .modal-title {
             font-size: 1.5rem;
             font-weight: 700;
@@ -240,7 +228,6 @@
                 letter-spacing: 0.05em;
             }
 
-        /* Поля ввода */
         .text-input, textarea {
             background: var(--input-bg, rgba(15, 23, 42, 0.3));
             border: 1px solid var(--glass-border);
@@ -265,7 +252,6 @@
             font-family: inherit;
         }
 
-        /* Загрузка файлов */
         .file-upload-zone {
             border: 2px dashed var(--glass-border);
             border-radius: 10px;
@@ -297,7 +283,6 @@
             color: var(--text-secondary);
         }
 
-        /* Сетка картинок */
         .image-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
@@ -305,7 +290,6 @@
             margin: 0.5rem 0 1rem 0;
         }
 
-        /* Контейнер картинки */
         .thumb-wrapper {
             position: relative;
             width: 100%;
@@ -327,7 +311,6 @@
                 filter: brightness(0.9);
             }
 
-        /* Кнопка удаления на картинке */
         .thumb-wrapper .remove-thumb-btn {
             position: absolute;
             top: -6px;
@@ -357,7 +340,6 @@
                 transform: scale(1.1);
             }
 
-        /* Подсветка Drag and Drop */
         .file-upload-zone.highlight {
             border-color: var(--accent-color);
             background: rgba(99, 102, 241, 0.1);
@@ -425,7 +407,7 @@
                 transform: scale(1.05);
             }
 
-        /* Кнопки */
+        /* Кнопки модалки */
         .form-actions {
             display: flex;
             flex-direction: row-reverse;
@@ -474,41 +456,108 @@
                 background: #dc2626;
             }
 
-            /* --- СТИЛИЗАЦИЯ КАСТОМНОГО ЗАГОЛОВКА ДНЕЙ (НЕДЕЛЯ) --- */
+        /* --- ГЛОБАЛЬНЫЙ ПРОГРЕСС-БАР ЗАГРУЗКИ (РАБОТАЕТ И НА ПК, И НА МОБИЛЬНЫХ) --- */
+        .upload-progress-container {
+            display: none; /* Скрыт по умолчанию */
+            margin-top: 1.25rem;
+            background: rgba(15, 23, 42, 0.2);
+            border: 1px solid var(--glass-border);
+            padding: 1rem;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 101; /* Прогресс-бар будет ярким поверх затухающих полей */
+        }
+
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            height: 12px;
+            width: 100%;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .progress-bar-fill {
+            background: var(--primary-gradient, linear-gradient(135deg, #6366f1 0%, #a855f7 100%));
+            height: 100%;
+            width: 0%;
+            border-radius: 8px;
+            transition: width 0.1s ease;
+        }
+
+            /* Эффект пульсации при серверной обработке */
+            .progress-bar-fill.pulse {
+                animation: progressPulse 1.5s infinite ease-in-out;
+            }
+
+        @@keyframes progressPulse {
+            0%
+
+        {
+            opacity: 0.6;
+        }
+
+        50% {
+            opacity: 1;
+        }
+
+        100% {
+            opacity: 0.6;
+        }
+
+        }
+
+        .progress-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: block;
+            text-align: center;
+        }
+
+        /* --- ЭЛЕГАНТНОЕ БЛОКИРОВАНИЕ ИНТЕРФЕЙСА (РАБОТАЕТ И НА ПК, И НА МОБИЛЬНЫХ) --- */
+        .modal-card.uploading {
+            pointer-events: none !important;
+            user-select: none !important;
+        }
+
+            .modal-card.uploading .close-modal-btn,
+            .modal-card.uploading form .form-group,
+            .modal-card.uploading form .image-gallery,
+            .modal-card.uploading form .form-actions {
+                opacity: 0.4;
+                transition: opacity 0.3s ease;
+            }
+
+            .modal-card.uploading #uploadProgressContainer {
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
+
+        /* Кастомные заголовки дней (неделя) */
         .custom-day-header {
             line-height: 1.2;
             text-align: center;
             padding: 4px 0;
         }
-        /* Стиль для дня недели (ПН, ВТ...) */
-        .custom-day-header b {
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 700;
-        }
-        /* Стиль для числа (29, 30...) */
-        .custom-day-header span {
-            color: var(--text-main);
-            font-size: 1.1rem;
-            font-weight: 800;
-        }
 
-        /* Адаптивное уменьшение шрифтов для мобильных устройств */
-        @@media (max-width: 600px) {
-            .custom-day-header {
-                padding: 2px 0;
-            }
             .custom-day-header b {
-                font-size: 0.65rem;
+                color: var(--text-secondary);
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-weight: 700;
             }
-            .custom-day-header span {
-                font-size: 0.9rem;
-            }
-        }
 
-        /* Адаптивность FullCalendar и Модалки на телефонах */
+            .custom-day-header span {
+                color: var(--text-main);
+                font-size: 1.1rem;
+                font-weight: 800;
+            }
+
+        /* --- МОБИЛЬНЫЕ ОВЕРРАЙДЫ (МЕДИА-ЗАПРОС) --- */
         @@media (max-width: 600px) {
             .fc .fc-toolbar
 
@@ -533,40 +582,33 @@
 
         .btn-danger {
             margin-right: 0;
-            order: 3; /* Кнопка удаления на мобильных будет в самом низу */
+            order: 3;
         }
 
-        /* --- УЛУЧШЕННАЯ СЕТКА НА ТЕЛЕФОНАХ --- */
-
-        /* Корректируем пропорции, чтобы ячейки стали ровными квадратами (~45x45px) */
         .fc .fc-daygrid-day-frame {
             min-height: 45px !important;
         }
 
-        /* Ультра-компактные плашки событий для мобильного */
         .fc-event {
             padding: 1px 3px !important;
-            font-size: 9px !important; /* Уменьшаем шрифт до читаемого минимума */
+            font-size: 9px !important;
             margin: 1px 2px !important;
-            border-radius: 4px !important; /* Более тонкое скругление для маленького элемента */
+            border-radius: 4px !important;
             display: flex !important;
             align-items: center;
             gap: 2px !important;
             box-shadow: none !important;
         }
 
-        /* Уменьшаем оранжевую/зеленую точку статуса */
         .fc-daygrid-event-dot {
-            border-width: 2.5px !important; /* Делаем точку изящнее */
+            border-width: 2.5px !important;
             margin: 0 !important;
         }
 
-        /* Скрываем время (10:48) на мобилках. Это освобождает место для названия поста */
         .fc-event-time {
             display: none !important;
         }
 
-        /* Жестко обрезаем текст названия поста троеточием (...) внутри ячейки */
         .fc-event-title-container,
         .fc-event-title {
             overflow: hidden !important;
@@ -576,110 +618,45 @@
             font-size: 9px !important;
             line-height: 1.1 !important;
         }
-            /* Жестко ограничиваем вертикальные блоки событий, чтобы они физически не могли выйти за границы своей колонки */
-            .fc-timegrid-event,
-            .fc-v-event {
-                overflow: hidden !important;
-                padding: 1px 2px !important;
-                box-shadow: none !important;
-                border-radius: 4px !important;
-            }
-                /* Скрываем время внутри вертикальных событий на телефонах, чтобы освободить узкое пространство */
-                .fc-timegrid-event .fc-event-time,
-                .fc-v-event .fc-event-time {
-                    display: none !important;
-                }
-                /* Сжимаем и обрезаем текст внутри событий недели */
-                .fc-timegrid-event .fc-event-main,
-                .fc-timegrid-event .fc-event-title,
-                .fc-v-event .fc-event-main,
-                .fc-v-event .fc-event-title {
-                    overflow: hidden !important;
-                    white-space: nowrap !important;
-                    text-overflow: ellipsis !important; /* Добавляет троеточие (...) при обрезании */
-                    font-size: 8px !important; /* Уменьшаем шрифт до 8px, так как колонки экстремально узкие */
-                    line-height: 1 !important;
-                    display: block !important;
-                    max-width: 100% !important;
-                }
 
-            /* Когда карточка в режиме загрузки, мы намертво отключаем любые клики по ней */
-            .modal-card.uploading {
-                pointer-events: none !important;
-                user-select: none !important;
-            }
-                /* Изящно приглушаем все элементы формы, показывая, что они временно неактивны */
-                .modal-card.uploading .close-modal-btn,
-                .modal-card.uploading form .form-group,
-                .modal-card.uploading form .image-gallery,
-                .modal-card.uploading form .form-actions {
-                    opacity: 0.4;
-                    transition: opacity 0.3s ease;
-                }
-                /* Но сам прогресс-бар мы оставляем максимально ярким и активным */
-                .modal-card.uploading #uploadProgressContainer {
-                    opacity: 1 !important;
-                    pointer-events: auto !important; /* Разрешаем клики по нему, если потребуется */
-                }
-
-            /* --- СТИЛИЗАЦИЯ ПРОГРЕСС-БАРА ЗАГРУЗКИ --- */
-            .upload-progress-container {
-                display: none;
-                margin-top: 1.25rem;
-                background: rgba(15, 23, 42, 0.2);
-                border: 1px solid var(--glass-border);
-                padding: 1rem;
-                border-radius: 12px;
-                transition: all 0.3s ease;
-                position: relative; /* Добавлено */
-                z-index: 101;
-            }
-
-            .progress-bar-bg {
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 8px;
-                height: 12px;
-                width: 100%;
-                overflow: hidden;
-                margin-bottom: 0.5rem;
-                border: 1px solid var(--glass-border);
-            }
-
-            .progress-bar-fill {
-                background: var(--primary-gradient, linear-gradient(135deg, #6366f1 0%, #a855f7 100%));
-                height: 100%;
-                width: 0%;
-                border-radius: 8px;
-                transition: width 0.1s ease;
-            }
-                /* Эффект пульсации полосы при обработке на сервере */
-                .progress-bar-fill.pulse {
-                    animation: progressPulse 1.5s infinite ease-in-out;
-                }
-            @@keyframes progressPulse {
-                0%
-
-                {
-                    opacity: 0.6;
-                }
-
-                50% {
-                    opacity: 1;
-                }
-
-                100% {
-                    opacity: 0.6;
-                }
-
-                }
-
-        .progress-text {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-            display: block;
-            text-align: center;
+        .fc-timegrid-event,
+        .fc-v-event {
+            overflow: hidden !important;
+            padding: 1px 2px !important;
+            box-shadow: none !important;
+            border-radius: 4px !important;
         }
+
+            .fc-timegrid-event .fc-event-time,
+            .fc-v-event .fc-event-time {
+                display: none !important;
+            }
+
+            .fc-timegrid-event .fc-event-main,
+            .fc-timegrid-event .fc-event-title,
+            .fc-v-event .fc-event-main,
+            .fc-v-event .fc-event-title {
+                overflow: hidden !important;
+                white-space: nowrap !important;
+                text-overflow: ellipsis !important;
+                font-size: 8px !important;
+                line-height: 1 !important;
+                display: block !important;
+                max-width: 100% !important;
+            }
+
+        .custom-day-header {
+            padding: 2px 0;
+        }
+
+            .custom-day-header b {
+                font-size: 0.65rem;
+            }
+
+            .custom-day-header span {
+                font-size: 0.9rem;
+            }
+
         }
     </style>
 }
@@ -1136,12 +1113,13 @@
             }
 
             // Функция отправки формы через AJAX с отслеживанием прогресса
-            function submitFormWithProgress() {
+            async function submitFormWithProgress() {
                 const form = document.getElementById('postForm');
-                const formData = new FormData(form);
+
+                // Создаем пустой FormData для ручного наполнения
+                const formData = new FormData();
                 const url = form.action;
 
-                // Находим элементы интерфейса прогресс-бара
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
                 const progressText = document.getElementById('uploadProgressText');
@@ -1150,16 +1128,46 @@
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
 
-                // АКТИВИРУЕМ БЛОКИРОВКУ: Карточка затухает, клики по ней отключаются на уровне браузера
+                // АКТИВИРУЕМ БЛОКИРОВКУ (карточка затухает, клики отключаются)
                 isUploading = true;
                 document.querySelector('.modal-card').classList.add('uploading');
 
-                // Показываем прогресс-бар и отключаем кнопки
+                // Показываем прогресс-бар и скрываем кнопки управления
                 progressContainer.style.display = 'block';
                 submitBtn.disabled = true;
                 deleteBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
 
+                // 1. Копируем стандартные текстовые поля формы в FormData
+                formData.append('profileId', form.querySelector('[name="profileId"]').value);
+                formData.append('networkType', form.querySelector('[name="networkType"]').value);
+                formData.append('caption', form.querySelector('[name="caption"]').value);
+                formData.append('showDate', form.querySelector('[name="showDate"]').value);
+                formData.append('postId', form.querySelector('[name="postId"]').value);
+
+                // Переносим старые сохраненные картинки (keptImages)
+                const keptInputs = form.querySelectorAll('[name="keptImages"]');
+                keptInputs.forEach(input => formData.append('keptImages', input.value));
+
+                // 2. Сжимаем файлы прямо на устройстве пользователя перед отправкой по сети
+                try {
+                    progressFill.style.width = '5%';
+                    for (let i = 0; i < selectedFiles.length; i++) {
+                        progressText.textContent = `Оптимизация файла ${i + 1} из ${selectedFiles.length}...`;
+
+                        // Сжимаем до макс 1600px и качества 80% прямо в браузере
+                        const compressedFile = await compressImageOnClient(selectedFiles[i], 1600, 0.8);
+
+                        formData.append('images', compressedFile);
+                    }
+                } catch (err) {
+                    console.error('Ошибка подготовки файлов:', err);
+                    alert('Не удалось подготовить изображения к отправке.');
+                    resetUploadProgress();
+                    return;
+                }
+
+                // 3. Отправляем подготовленный легкий пакет файлов на сервер
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
 
@@ -1170,16 +1178,15 @@
 
                         if (percentComplete < 100) {
                             progressFill.style.width = percentComplete + '%';
-                            progressText.textContent = `Загрузка файлов: ${percentComplete}% (${formatBytes(e.loaded)} из ${formatBytes(e.total)})`;
+                            progressText.textContent = `Загрузка сжатых файлов: ${percentComplete}% (${formatBytes(e.loaded)} из ${formatBytes(e.total)})`;
                         } else {
                             progressFill.style.width = '100%';
                             progressFill.classList.add('pulse');
-                            progressText.textContent = 'Идет обработка и сжатие изображений на сервере...';
+                            progressText.textContent = 'Идет сохранение на сервере...';
                         }
                     }
                 };
 
-                // Обработка успешного завершения запроса
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         isUploading = false;
@@ -1191,7 +1198,6 @@
                     }
                 };
 
-                // Обработка сетевой ошибки
                 xhr.onerror = function() {
                     alert('Произошла сетевая ошибка при отправке данных на сервер.');
                     resetUploadProgress();
@@ -1232,5 +1238,56 @@
                 const i = Math.floor(Math.log(bytes) / Math.log(k));
                 return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
             }
+
+            // Функция пропорционального сжатия изображения в браузере перед отправкой
+            function compressImageOnClient(file, maxDimension = 1600, quality = 0.9) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = function(event) {
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = function() {
+                            const canvas = document.createElement('canvas');
+                            let width = img.width;
+                            let height = img.height;
+
+                            // Вычисляем новые пропорции ресайза
+                            if (width > maxDimension || height > maxDimension) {
+                                if (width > height) {
+                                    height = Math.round((height * maxDimension) / width);
+                                    width = maxDimension;
+                                } else {
+                                    width = Math.round((width * maxDimension) / height);
+                                    height = maxDimension;
+                                }
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+
+                            // Конвертируем холст в Blob (JPEG)
+                            canvas.toBlob((blob) => {
+                                if (blob) {
+                                    // Создаем новый объект File для отправки
+                                    const compressedFile = new File([blob], file.name, {
+                                        type: 'image/jpeg',
+                                        lastModified: Date.now()
+                                    });
+                                    resolve(compressedFile);
+                                } else {
+                                    reject(new Error('Ошибка сжатия'));
+                                }
+                            }, 'image/jpeg', quality);
+                        };
+                        img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
+                    };
+                    reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+                });
+            }
+
         </script>
 }

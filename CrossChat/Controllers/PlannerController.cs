@@ -20,7 +20,7 @@ namespace CrossChat.Controllers
 		private readonly AppDbContext _db;
 		private readonly IPostService _postService;
 		private readonly ILogger<PlannerController> _logger;
-		private const bool SHRIK_IMAGES = true;
+		private const bool SHRIK_IMAGES = false;
 
 		public PlannerController(AppDbContext db, IPostService postService, ILogger<PlannerController> logger)
 		{
@@ -66,7 +66,14 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("create")]
-		public async Task<IActionResult> Create(int profileId, NetworkType networkType, string caption, DateTime showDate, List<IFormFile> images)
+		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		public async Task<IActionResult> Create(
+			[FromForm] int profileId, 
+			[FromForm] NetworkType networkType, 
+			[FromForm] string caption, 
+			[FromForm] DateTime showDate, 
+			List<IFormFile> images)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -161,6 +168,8 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("update/{id}")]
+		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
 		public async Task<IActionResult> Update(
 			Guid id,
 			[FromForm] int profileId,
