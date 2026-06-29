@@ -19,11 +19,14 @@ namespace CrossChat.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly IPostService _postService;
+		private readonly ILogger<PlannerController> _logger;
+		private const bool SHRIK_IMAGES = true;
 
-		public PlannerController(AppDbContext db, IPostService postService)
+		public PlannerController(AppDbContext db, IPostService postService, ILogger<PlannerController> logger)
 		{
 			_db = db;
 			_postService = postService;
+			_logger = logger;
 		}
 
 		[HttpGet]
@@ -80,11 +83,45 @@ namespace CrossChat.Controllers
 			};
 
 			// 2. Обработка картинок
-			foreach (var file in images)
+			if (images != null && images.Count > 0)
 			{
-				using var ms = new MemoryStream();
-				await file.CopyToAsync(ms);
-				post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+				if (SHRIK_IMAGES)
+				{
+					_logger.LogInformation("=== СЖАТИЕ ИЗОБРАЖЕНИЙ: СОЗДАНИЕ ПОСТА ===");
+					foreach (var file in images)
+					{
+						try
+						{
+							var compressResult = await ImageHelper.CompressAndConvertToBase64Async(file);
+							post.Images.Add(compressResult.Base64);
+
+							// Выводим развернутую статистику до и после
+							_logger.LogInformation(
+								"Файл: {FileName}\n" +
+								"  [ДО]: {OrigWidth}x{OrigHeight} px | Размер: {OrigSize:F3} МБ\n" +
+								"  [ПОСЛЕ]: {CompWidth}x{CompHeight} px | Размер JPEG: {CompSize:F3} МБ\n" +
+								"  [В БД (Base64)]: Символов: {B64Length} | Итоговый вес в БД: {B64DbSize:F3} МБ",
+								file.FileName,
+								compressResult.OriginalWidth, compressResult.OriginalHeight, compressResult.OriginalSizeMb,
+								compressResult.CompressedWidth, compressResult.CompressedHeight, compressResult.CompressedSizeMb,
+								compressResult.Base64.Length, compressResult.Base64DbSizeMb);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Ошибка при сжатии изображения {FileName}", file.FileName);
+						}
+					}
+					_logger.LogInformation("=========================================");
+				}
+				else
+				{
+					foreach (var file in images)
+					{
+						using var ms = new MemoryStream();
+						await file.CopyToAsync(ms);
+						post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+					}
+				}
 			}
 
 			// 3. Добавляем состояние сети
@@ -108,8 +145,9 @@ namespace CrossChat.Controllers
 			var options = new JsonSerializerOptions
 			{
 				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
-				// Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
-				,Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping 
+															   // Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
+				,
+				Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
 			};
 
 			return post != null ? Json(post, options) : NotFound();
@@ -153,11 +191,41 @@ namespace CrossChat.Controllers
 			// Добавляем новые картинки, если они были загружены
 			if (images != null && images.Count > 0)
 			{
-				foreach (var file in images)
+				if (SHRIK_IMAGES)
 				{
-					using var ms = new MemoryStream();
-					await file.CopyToAsync(ms);
-					post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+					_logger.LogInformation("=== СЖАТИЕ ИЗОБРАЖЕНИЙ: ОБНОВЛЕНИЕ ПОСТА ===");
+					foreach (var file in images)
+					{
+						try
+						{
+							var compressResult = await ImageHelper.CompressAndConvertToBase64Async(file);
+							post.Images.Add(compressResult.Base64);
+
+							_logger.LogInformation(
+								"Файл: {FileName}\n" +
+								"  [ДО]: {OrigWidth}x{OrigHeight} px | Размер: {OrigSize:F3} МБ\n" +
+								"  [ПОСЛЕ]: {CompWidth}x{CompHeight} px | Размер JPEG: {CompSize:F3} МБ\n" +
+								"  [В БД (Base64)]: Символов: {B64Length} | Итоговый вес в БД: {B64DbSize:F3} МБ",
+								file.FileName,
+								compressResult.OriginalWidth, compressResult.OriginalHeight, compressResult.OriginalSizeMb,
+								compressResult.CompressedWidth, compressResult.CompressedHeight, compressResult.CompressedSizeMb,
+								compressResult.Base64.Length, compressResult.Base64DbSizeMb);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Ошибка при сжатии изображения {FileName}", file.FileName);
+						}
+					}
+					_logger.LogInformation("===========================================");
+				}
+				else
+				{
+					foreach (var file in images)
+					{
+						using var ms = new MemoryStream();
+						await file.CopyToAsync(ms);
+						post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+					}
 				}
 			}
 
