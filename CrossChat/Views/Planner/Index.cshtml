@@ -1150,22 +1150,28 @@
                 keptInputs.forEach(input => formData.append('keptImages', input.value));
 
                 // 2. Сжимаем файлы прямо на устройстве пользователя перед отправкой по сети
-                try {
-                    progressFill.style.width = '5%';
-                    for (let i = 0; i < selectedFiles.length; i++) {
-                        progressText.textContent = `Оптимизация файла ${i + 1} из ${selectedFiles.length}...`;
+                 try {
+                        progressFill.style.width = '5%';
+                        for (let i = 0; i < selectedFiles.length; i++) {
+                            progressText.textContent = `Оптимизация файла ${i + 1} из ${selectedFiles.length}...`;
+                        
+                            // Запоминаем истинный размер файла (в байтах) до сжатия
+                            const originalSizeBytes = selectedFiles[i].size;
 
-                        // Сжимаем до макс 1600px и качества 80% прямо в браузере
-                        const compressedFile = await compressImageOnClient(selectedFiles[i], 1600, 0.8);
-
-                        formData.append('images', compressedFile);
+                            const result = await compressImageOnClient(selectedFiles[i], 1600, 0.8);
+                    
+                            formData.append('images', result.file);
+                            // Передаем текстовые разрешения как обычные поля формы
+                            formData.append('originalDimensions', result.originalResolution);
+                            formData.append('compressedDimensions', result.compressedResolution);
+                            formData.append('originalSizes', originalSizeBytes); 
+                        }
+                    } catch (err) {
+                        console.error('Ошибка при подготовке файлов на клиенте:', err);
+                        alert('Не удалось подготовить изображения к отправке.');
+                        resetUploadProgress();
+                        return;
                     }
-                } catch (err) {
-                    console.error('Ошибка подготовки файлов:', err);
-                    alert('Не удалось подготовить изображения к отправке.');
-                    resetUploadProgress();
-                    return;
-                }
 
                 // 3. Отправляем подготовленный легкий пакет файлов на сервер
                 const xhr = new XMLHttpRequest();
@@ -1252,7 +1258,10 @@
                             let width = img.width;
                             let height = img.height;
 
-                            // Вычисляем новые пропорции ресайза
+                            // Запоминаем исходное разрешение
+                            const originalResolution = `${width}x${height}`;
+
+                            // Вычисляем пропорции ресайза
                             if (width > maxDimension || height > maxDimension) {
                                 if (width > height) {
                                     height = Math.round((height * maxDimension) / width);
@@ -1263,21 +1272,29 @@
                                 }
                             }
 
+                            // Запоминаем сжатое разрешение
+                            const compressedResolution = `${width}x${height}`;
+
                             canvas.width = width;
                             canvas.height = height;
 
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
 
-                            // Конвертируем холст в Blob (JPEG)
+                            // Конвертируем в JPEG
                             canvas.toBlob((blob) => {
                                 if (blob) {
-                                    // Создаем новый объект File для отправки
                                     const compressedFile = new File([blob], file.name, {
                                         type: 'image/jpeg',
                                         lastModified: Date.now()
                                     });
-                                    resolve(compressedFile);
+                        
+                                    // ВОЗВРАЩАЕМ: сжатый файл и оба разрешения текстом
+                                    resolve({
+                                        file: compressedFile,
+                                        originalResolution: originalResolution,
+                                        compressedResolution: compressedResolution
+                                    });
                                 } else {
                                     reject(new Error('Ошибка сжатия'));
                                 }

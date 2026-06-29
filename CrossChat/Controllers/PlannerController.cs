@@ -66,13 +66,16 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("create")]
-		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		//[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		//[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
 		public async Task<IActionResult> Create(
-			[FromForm] int profileId, 
-			[FromForm] NetworkType networkType, 
-			[FromForm] string caption, 
-			[FromForm] DateTime showDate, 
+			[FromForm] int profileId,
+			[FromForm] NetworkType networkType,
+			[FromForm] string caption,
+			[FromForm] DateTime showDate,
+			[FromForm] List<string> originalDimensions,
+			[FromForm] List<string> compressedDimensions,
+			[FromForm] List<long> originalSizes,  
 			List<IFormFile> images)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -122,12 +125,38 @@ namespace CrossChat.Controllers
 				}
 				else
 				{
-					foreach (var file in images)
+					for (int i = 0; i < images.Count; i++)
 					{
-						using var ms = new MemoryStream();
-						await file.CopyToAsync(ms);
-						post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+						var file = images[i];
+						try
+						{
+							using var ms = new MemoryStream();
+							await file.CopyToAsync(ms);
+							var base64 = Convert.ToBase64String(ms.ToArray());
+							post.Images.Add(base64);
+
+							double receivedSizeMb = file.Length / (1024.0 * 1024.0);
+							double dbSizeMb = base64.Length / (1024.0 * 1024.0);
+
+							string origDim = (originalDimensions != null && originalDimensions.Count > i) ? originalDimensions[i] : "Неизвестно";
+							string compDim = (compressedDimensions != null && compressedDimensions.Count > i) ? compressedDimensions[i] : "Неизвестно";
+
+							long origSizeBytes = (originalSizes != null && originalSizes.Count > i) ? originalSizes[i] : 0;
+							double origSizeMb = origSizeBytes / (1024.0 * 1024.0);
+
+							_logger.LogInformation(
+							"Файл [{FileName}] успешно получен от клиента:\n" +
+							"  [РАЗРЕШЕНИЕ]: {OrigDim} px ==> уменьшено до ==> {CompDim} px\n" +
+							"  [ВЕС ФАЙЛА]: Исходный: {OrigSize:F3} МБ ==> сжат до ==> {RecSize:F3} МБ\n" +
+							"  [В БД (Base64)]: Длина строки {B64Length} символов | Примерный вес в БД: {DbSize:F3} МБ",
+								file.FileName, origDim, compDim, origSizeMb, receivedSizeMb, base64.Length, dbSizeMb);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Ошибка при конвертации полученного файла {FileName}", file.FileName);
+						}
 					}
+					_logger.LogInformation("============================================================");
 				}
 			}
 
@@ -144,32 +173,9 @@ namespace CrossChat.Controllers
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
 		}
 
-		[HttpGet("get/{id}")]
-		public async Task<IActionResult> GetPost(Guid id)
-		{
-			var post = await _postService.GetPostByIdAsync(id);
-			// Настраиваем сериализатор
-			var options = new JsonSerializerOptions
-			{
-				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
-															   // Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
-				,
-				Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-			};
-
-			return post != null ? Json(post, options) : NotFound();
-		}
-
-		[HttpPost("delete/{id}")]
-		public async Task<IActionResult> Delete(Guid id)
-		{
-			await _postService.DeletePostAsync(id);
-			return Ok();
-		}
-
 		[HttpPost("update/{id}")]
-		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		//[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		//[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
 		public async Task<IActionResult> Update(
 			Guid id,
 			[FromForm] int profileId,
@@ -177,6 +183,9 @@ namespace CrossChat.Controllers
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
 			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
+			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
+			[FromForm] List<string> compressedDimensions,
+			[FromForm] List<long> originalSizes,
 			[FromForm] List<IFormFile> images)   // Новые добавленные файлы
 		{
 			// 1. Получаем существующий пост из базы данных
@@ -229,12 +238,38 @@ namespace CrossChat.Controllers
 				}
 				else
 				{
-					foreach (var file in images)
+					for (int i = 0; i < images.Count; i++)
 					{
-						using var ms = new MemoryStream();
-						await file.CopyToAsync(ms);
-						post.Images.Add(Convert.ToBase64String(ms.ToArray()));
+						var file = images[i];
+						try
+						{
+							using var ms = new MemoryStream();
+							await file.CopyToAsync(ms);
+							var base64 = Convert.ToBase64String(ms.ToArray());
+							post.Images.Add(base64);
+
+							double receivedSizeMb = file.Length / (1024.0 * 1024.0);
+							double dbSizeMb = base64.Length / (1024.0 * 1024.0);
+
+							string origDim = (originalDimensions != null && originalDimensions.Count > i) ? originalDimensions[i] : "Неизвестно";
+							string compDim = (compressedDimensions != null && compressedDimensions.Count > i) ? compressedDimensions[i] : "Неизвестно";
+
+							long origSizeBytes = (originalSizes != null && originalSizes.Count > i) ? originalSizes[i] : 0;
+							double origSizeMb = origSizeBytes / (1024.0 * 1024.0);
+
+							_logger.LogInformation(
+								"Файл [{FileName}] успешно получен от клиента:\n" +
+								"  [РАЗРЕШЕНИЕ]: {OrigDim} px ==> уменьшено до ==> {CompDim} px\n" +
+								"  [ВЕС ФАЙЛА]: Исходный: {OrigSize:F3} МБ ==> сжат до ==> {RecSize:F3} МБ\n" +
+								"  [В БД (Base64)]: Длина строки {B64Length} символов | Примерный вес в БД: {DbSize:F3} МБ",
+								file.FileName, origDim, compDim, origSizeMb, receivedSizeMb, base64.Length, dbSizeMb);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Ошибка при конвертации полученного файла {FileName}", file.FileName);
+						}
 					}
+					_logger.LogInformation("============================================================");
 				}
 			}
 
@@ -242,6 +277,29 @@ namespace CrossChat.Controllers
 			await _postService.UpdatePostAsync(post);
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
+		}
+
+		[HttpGet("get/{id}")]
+		public async Task<IActionResult> GetPost(Guid id)
+		{
+			var post = await _postService.GetPostByIdAsync(id);
+			// Настраиваем сериализатор
+			var options = new JsonSerializerOptions
+			{
+				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
+															   // Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
+				,
+				Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+			};
+
+			return post != null ? Json(post, options) : NotFound();
+		}
+
+		[HttpPost("delete/{id}")]
+		public async Task<IActionResult> Delete(Guid id)
+		{
+			await _postService.DeletePostAsync(id);
+			return Ok();
 		}
 	}
 }
