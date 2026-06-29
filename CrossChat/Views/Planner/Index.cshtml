@@ -474,35 +474,135 @@
                 background: #dc2626;
             }
 
-        /* Адаптивность */
+            /* --- СТИЛИЗАЦИЯ КАСТОМНОГО ЗАГОЛОВКА ДНЕЙ (НЕДЕЛЯ) --- */
+        .custom-day-header {
+            line-height: 1.2;
+            text-align: center;
+            padding: 4px 0;
+        }
+        /* Стиль для дня недели (ПН, ВТ...) */
+        .custom-day-header b {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+        }
+        /* Стиль для числа (29, 30...) */
+        .custom-day-header span {
+            color: var(--text-main);
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+
+        /* Адаптивное уменьшение шрифтов для мобильных устройств */
         @@media (max-width: 600px) {
-            .fc .fc-toolbar {
-                flex-direction: column;
-                gap: 10px;
+            .custom-day-header {
+                padding: 2px 0;
             }
+            .custom-day-header b {
+                font-size: 0.65rem;
+            }
+            .custom-day-header span {
+                font-size: 0.9rem;
+            }
+        }
 
-            .fc .fc-toolbar-title {
-                font-size: 1.1rem;
-            }
+        /* Адаптивность FullCalendar и Модалки на телефонах */
+        @@media (max-width: 600px) {
+            .fc .fc-toolbar
 
-            .modal-card {
-                padding: 1.25rem;
-                border-radius: 16px;
-            }
+        {
+            flex-direction: column;
+            gap: 10px;
+        }
 
-            .form-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
+        .fc .fc-toolbar-title {
+            font-size: 1.1rem;
+        }
 
-            .btn-danger {
-                margin-right: 0;
-                order: 3;
-            }
+        .modal-card {
+            padding: 1.25rem;
+            border-radius: 16px;
+        }
 
-            .fc .fc-daygrid-day-frame {
-                min-height: 55px !important;
+        .form-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .btn-danger {
+            margin-right: 0;
+            order: 3; /* Кнопка удаления на мобильных будет в самом низу */
+        }
+
+        /* --- УЛУЧШЕННАЯ СЕТКА НА ТЕЛЕФОНАХ --- */
+
+        /* Корректируем пропорции, чтобы ячейки стали ровными квадратами (~45x45px) */
+        .fc .fc-daygrid-day-frame {
+            min-height: 45px !important;
+        }
+
+        /* Ультра-компактные плашки событий для мобильного */
+        .fc-event {
+            padding: 1px 3px !important;
+            font-size: 9px !important; /* Уменьшаем шрифт до читаемого минимума */
+            margin: 1px 2px !important;
+            border-radius: 4px !important; /* Более тонкое скругление для маленького элемента */
+            display: flex !important;
+            align-items: center;
+            gap: 2px !important;
+            box-shadow: none !important;
+        }
+
+        /* Уменьшаем оранжевую/зеленую точку статуса */
+        .fc-daygrid-event-dot {
+            border-width: 2.5px !important; /* Делаем точку изящнее */
+            margin: 0 !important;
+        }
+
+        /* Скрываем время (10:48) на мобилках. Это освобождает место для названия поста */
+        .fc-event-time {
+            display: none !important;
+        }
+
+        /* Жестко обрезаем текст названия поста троеточием (...) внутри ячейки */
+        .fc-event-title-container,
+        .fc-event-title {
+            overflow: hidden !important;
+            white-space: nowrap !important;
+            text-overflow: ellipsis !important;
+            max-width: 100% !important;
+            font-size: 9px !important;
+            line-height: 1.1 !important;
+        }
+            /* Жестко ограничиваем вертикальные блоки событий, чтобы они физически не могли выйти за границы своей колонки */
+            .fc-timegrid-event,
+            .fc-v-event {
+                overflow: hidden !important;
+                padding: 1px 2px !important;
+                box-shadow: none !important;
+                border-radius: 4px !important;
             }
+                /* Скрываем время внутри вертикальных событий на телефонах, чтобы освободить узкое пространство */
+                .fc-timegrid-event .fc-event-time,
+                .fc-v-event .fc-event-time {
+                    display: none !important;
+                }
+                /* Сжимаем и обрезаем текст внутри событий недели */
+                .fc-timegrid-event .fc-event-main,
+                .fc-timegrid-event .fc-event-title,
+                .fc-v-event .fc-event-main,
+                .fc-v-event .fc-event-title {
+                    overflow: hidden !important;
+                    white-space: nowrap !important;
+                    text-overflow: ellipsis !important; /* Добавляет троеточие (...) при обрезании */
+                    font-size: 8px !important; /* Уменьшаем шрифт до 8px, так как колонки экстремально узкие */
+                    line-height: 1 !important;
+                    display: block !important;
+                    max-width: 100% !important;
+                }
+
         }
     </style>
 }
@@ -688,59 +788,109 @@
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
-                        right: 'dayGridMonth,timeGridWeek'
+                        right: 'dayGridMonth,timeGridWeek,timeGridDay'
                     },
+
+                    // --- КАСТОМИЗАЦИЯ ЗАГОЛОВКОВ ДЛЯ НЕРАБОЧИХ/РАБОЧИХ ВИДОВ ---
+                    views: {
+                        timeGridWeek: {
+                            // Кастомный рендеринг заголовков колонок ТОЛЬКО для недели
+                            dayHeaderContent: function(arg) {
+                                // Получаем сокращенный день недели (ПН, ВТ...) и удаляем точку, если браузер её добавил
+                                const weekday = arg.date.toLocaleDateString('ru-RU', { weekday: 'short' })
+                                                       .replace('.', '')
+                                                       .toUpperCase();
+                                // Получаем число месяца (29, 30...)
+                                const day = arg.date.getDate();
+
+                                // Возвращаем HTML: день недели сверху, число снизу на новой строке
+                                return { 
+                                    html: `<div class="custom-day-header"><b>${weekday}</b><br><span>${day}</span></div>` 
+                                };
+                            }
+                        },
+                        // --- НАСТРОЙКА ДЛЯ РЕЖИМА ОДНОГО ДНЯ ---
+                        timeGridDay: {
+                            dayHeaderContent: function(arg) {
+                                // Полное название дня недели (ПОНЕДЕЛЬНИК, ВТОРНИК...)
+                                const weekday = arg.date.toLocaleDateString('ru-RU', { weekday: 'long' }).toUpperCase();
+                                // Число и название месяца (29 июня)
+                                const dayMonth = arg.date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+                                return {
+                                    html: `<div class="custom-day-header"><b>${weekday}</b><br><span>${dayMonth}</span></div>`
+                                };
+                            }
+                        }
+                    },
+
                     events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
 
-                    eventClick: function(info) {
-                        const postId = info.event.id;
-                        const network = "@ViewBag.Network";
-                        isEditMode = true;
+                eventClick: function(info) {
+                    const postId = info.event.id;
+                    const network = "@ViewBag.Network";
+                    isEditMode = true;
 
-                        // Сброс массивов перед редактированием
-                        selectedFiles = [];
-                        existingImages = [];
+                    // Находим элементы
+                    const gallery = document.getElementById('imageGallery');
+                    const postIdInput = document.getElementById('postId');
+                    const dateInput = document.getElementById('showDateInput');
+                    const captionInput = document.querySelector('textarea[name="caption"]');
+                    const deleteBtn = document.getElementById('deleteBtn');
+                    const postForm = document.getElementById('postForm');
+                    const postFormOk = document.getElementById('postForm-ok');
 
-                        const postIdInput = document.getElementById('postId');
-                        const dateInput = document.getElementById('showDateInput');
-                        const captionInput = document.querySelector('textarea[name="caption"]');
-                        const deleteBtn = document.getElementById('deleteBtn');
-                        const postForm = document.getElementById('postForm');
-                        const postFormOk = document.getElementById('postForm-ok');
+                    // 1. Сразу очищаем старые данные и ставим текст "Загрузка..."
+                    postIdInput.value = "";
+                    dateInput.value = "";
+                    captionInput.value = "Загрузка данных постов...";
 
-                        document.getElementById('modalTitle').textContent = "Редактирование поста";
+                    // Показываем красивый текстовый лоадер в галерее
+                    gallery.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
 
-                        fetch(`/planner/get/${postId}`)
-                            .then(res => res.json())
-                            .then(post => {
-                                postIdInput.value = post.id || post.Id;
+                    // Сброс массивов перед редактированием
+                    selectedFiles = [];
+                    existingImages = [];
 
-                                const showDate = post.showDate || post.ShowDate;
-                                if (showDate) {
-                                    dateInput.value = showDate.slice(0, 16);
-                                }
+                    // 2. ОТКРЫВАЕМ МОДАЛКУ МГНОВЕННО, не дожидаясь ответа от сервера!
+                    modal.style.display = 'flex';
 
-                                const networks = post.networks || post.Networks;
-                                const networkData = networks ? networks[network] : null;
-                                captionInput.value = networkData ? (networkData.caption || networkData.Caption || "") : "";
+                    // 3. Запускаем фоновый запрос данных
+                    fetch(`/planner/get/${postId}`)
+                        .then(res => res.json())
+                        .then(post => {
+                            // Очищаем лоадер из галереи
+                            gallery.innerHTML = '';
 
-                                deleteBtn.style.display = 'block';
-                                postForm.action = `/planner/update/${postId}`;
-                                postFormOk.textContent = "Изменить";
+                            postIdInput.value = post.id || post.Id;
 
-                                // Подгружаем старые картинки в массив
-                                const images = post.images || post.Images;
-                                if (images && images.length > 0) {
-                                    existingImages = [...images];
-                                }
+                            const showDate = post.showDate || post.ShowDate;
+                            if (showDate) {
+                                dateInput.value = showDate.slice(0, 16);
+                            }
 
-                                syncFileInput();
-                                renderGallery();
+                            const networks = post.networks || post.Networks;
+                            const networkData = networks ? networks[network] : null;
+                            captionInput.value = networkData ? (networkData.caption || networkData.Caption || "") : "";
 
-                                modal.style.display = 'flex';
-                            })
-                            .catch(err => console.error("Ошибка загрузки поста:", err));
-                    },
+                            deleteBtn.style.display = 'block';
+                            postForm.action = `/planner/update/${postId}`;
+                            postFormOk.textContent = "Изменить";
+
+                            const images = post.images || post.Images;
+                            if (images && images.length > 0) {
+                                existingImages = [...images];
+                            }
+
+                            syncFileInput();
+                            renderGallery(); // Рендерим картинки, когда они докачались
+                        })
+                        .catch(err => {
+                            console.error("Ошибка загрузки поста:", err);
+                            captionInput.value = "Ошибка при загрузке данных.";
+                            gallery.innerHTML = '<span style="color: #ef4444;">Не удалось загрузить изображения</span>';
+                        });
+                },
 
                     dateClick: function(info) {
                         isEditMode = false;
