@@ -6,6 +6,7 @@ using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Worker.Services
 {
@@ -18,10 +19,12 @@ namespace CrossChat.Worker.Services
 		});
 
 		private readonly AppDbContext _appDbContext;
+		private readonly ILogger<PostService> _logger;
 
-		public PostService(AppDbContext appDbContext)
+		public PostService(AppDbContext appDbContext, ILogger<PostService> logger)
 		{
 			_appDbContext = appDbContext;
+			_logger = logger;
 		}
 
 		public async Task<List<BlogPost>> GetPendingPostsAsync(int profileId, AccessLevel accessLevel, int count)
@@ -208,6 +211,7 @@ namespace CrossChat.Worker.Services
 			// 1. Сначала ищем в БУФЕРЕ
 			if (_cache.TryGetValue(id, out BlogPost? cachedPost))
 			{
+				_logger.LogInformation("file take from cashe");
 				return cachedPost;
 			}
 

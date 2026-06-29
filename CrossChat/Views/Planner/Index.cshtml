@@ -8,31 +8,165 @@
     <!-- FullCalendar CSS -->
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
     <style>
+        /* Адаптивный контейнер */
         .container {
             max-width: 900px;
             margin: 5rem auto 2rem;
             padding: 0 1rem;
         }
 
+        /* --- КАСТОМИЗАЦИЯ FULLCALENDAR (DARK & LIGHT СОВМЕСТИМОСТЬ) --- */
         #calendar {
             background: var(--card-bg, #1e293b);
             padding: 1.5rem;
-            border-radius: 16px;
-            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
-            color: var(--text-main, #f1f5f9);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+            /* Внутренние переменные FullCalendar */
+            --fc-border-color: var(--glass-border);
+            --fc-today-bg-color: rgba(99, 102, 241, 0.12); /* Мягкий цвет сегодня */
+            --fc-neutral-bg-color: rgba(0, 0, 0, 0.02); /* По умолчанию для светлой темы */
+            --fc-page-bg-color: transparent;
         }
 
+        /* Особые настройки пустого фона ячеек для темной темы */
+        [data-theme="dark"] #calendar {
+            --fc-neutral-bg-color: rgba(255, 255, 255, 0.02);
+            --fc-today-bg-color: rgba(99, 102, 241, 0.18);
+        }
+
+        /* Название месяца/недели */
         .fc .fc-toolbar-title {
-            color: var(--text-main, #f1f5f9);
+            color: var(--text-main);
+            font-weight: 700;
+            font-size: 1.4rem;
+            letter-spacing: -0.02em;
+            transition: color 0.3s ease;
         }
 
-        .fc .fc-button-primary {
-            background: var(--accent-color, #3b82f6);
-            border: none;
+        /* Современные скругленные кнопки календаря */
+        .fc .fc-button {
+            background: var(--input-bg) !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--glass-border) !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            font-size: 0.9rem !important;
+            padding: 0.5rem 1rem !important;
+            transition: all 0.2s ease !important;
+            box-shadow: none !important;
+            text-transform: capitalize;
         }
 
-        /* Элегантное модальное окно с размытием заднего плана */
+            /* Наведение на кнопки */
+            .fc .fc-button:hover {
+                background: var(--glass-bg) !important;
+                border-color: var(--accent-color) !important;
+                color: var(--accent-color) !important;
+            }
+
+        /* Активная кнопка (выбранный вид) */
+        .fc .fc-button-active, .fc .fc-button-primary:active {
+            background: var(--accent-color) !important;
+            color: #ffffff !important;
+            border-color: var(--accent-color) !important;
+        }
+
+        /* Кнопка "Сегодня" (today) */
+        .fc .fc-today-button {
+            background: rgba(99, 102, 241, 0.1) !important;
+            color: var(--accent-color) !important;
+            border-color: rgba(99, 102, 241, 0.2) !important;
+        }
+
+            .fc .fc-today-button:hover {
+                background: var(--accent-color) !important;
+                color: #ffffff !important;
+            }
+
+        /* Заголовки дней недели (пн, вт, ср...) */
+        .fc th {
+            padding: 12px 0 !important;
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border: none !important;
+            background: transparent !important;
+        }
+
+        /* Оформление сетки дней */
+        .fc td, .fc th {
+            border-color: var(--glass-border) !important;
+        }
+
+        .fc-theme-standard .fc-scrollgrid {
+            border: 1px solid var(--glass-border) !important;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        /* Числа внутри ячеек */
+        .fc .fc-daygrid-day-number {
+            color: var(--text-main);
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 6px 8px !important;
+            transition: color 0.3s ease;
+        }
+
+        /* Числа дней соседних месяцев */
+        .fc .fc-day-other .fc-daygrid-day-number {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        /* Оформление запланированных постов (событий на календаре) */
+        .fc-event {
+            cursor: pointer;
+            border-radius: 8px !important;
+            padding: 4px 8px !important;
+            font-size: 0.8rem !important;
+            font-weight: 600 !important;
+            margin: 2px 4px !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            border: none !important;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        /* 1. Настройка для обычных событий с точкой (Timed/Dot events) */
+        .fc-daygrid-dot-event {
+            /* Создаем мягкую нейтральную плашку (8% серого), которая контрастна на обеих темах */
+            background: rgba(120, 120, 120, 0.08) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-main) !important; /* Автоматический цвет текста: темный на светлой, белый на темной */
+        }
+
+            /* Наведение на обычные события */
+            .fc-daygrid-dot-event:hover {
+                background: rgba(120, 120, 120, 0.15) !important;
+            }
+
+            /* Гарантируем правильный цвет текста и времени внутри плашки */
+            .fc-daygrid-dot-event .fc-event-title,
+            .fc-daygrid-dot-event .fc-event-time {
+                color: var(--text-main) !important;
+                transition: color 0.3s ease;
+            }
+
+        /* 2. Настройка для сплошных цветных блоков (All-day/Block events), если они появятся */
+        .fc-daygrid-block-event {
+            color: #ffffff !important; /* На цветном фоне текст всегда белый */
+        }
+
+            .fc-daygrid-block-event .fc-event-title {
+                color: #ffffff !important;
+            }
+
+        /* --- СТИЛИЗАЦИЯ МОДАЛЬНОГО ОКНА --- */
         #postModal {
             display: none;
             position: fixed;
@@ -49,11 +183,10 @@
             padding: 1rem;
         }
 
-        /* Карточка модального окна */
         .modal-card {
             background: var(--card-bg, #1e293b);
             color: var(--text-main, #f1f5f9);
-            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border: 1px solid var(--glass-border);
             border-radius: 20px;
             width: 100%;
             max-width: 520px;
@@ -63,9 +196,9 @@
             max-height: 90vh;
             overflow-y: auto;
             scrollbar-width: thin;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* Кнопка закрытия (крестик) */
         .close-modal-btn {
             position: absolute;
             top: 1.25rem;
@@ -80,15 +213,16 @@
         }
 
             .close-modal-btn:hover {
-                color: var(--text-main, #ffffff);
+                color: var(--text-main);
             }
 
-        /* Формы и разметка */
+        /* Исправление: динамический цвет заголовка (var(--text-main) вместо #ffffff) */
         .modal-title {
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 1.5rem;
-            color: #ffffff;
+            color: var(--text-main);
+            transition: color 0.3s ease;
         }
 
         .form-group {
@@ -106,23 +240,23 @@
                 letter-spacing: 0.05em;
             }
 
-        /* Поля ввода и текстовые области */
+        /* Поля ввода */
         .text-input, textarea {
-            background: rgba(15, 23, 42, 0.3);
-            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            background: var(--input-bg, rgba(15, 23, 42, 0.3));
+            border: 1px solid var(--glass-border);
             border-radius: 10px;
-            color: #f1f5f9;
+            color: var(--text-main);
             padding: 0.75rem 1rem;
             font-size: 0.95rem;
             outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.3s ease;
             width: 100%;
             box-sizing: border-box;
         }
 
             .text-input:focus, textarea:focus {
                 border-color: var(--accent-color, #3b82f6);
-                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
             }
 
         textarea {
@@ -131,21 +265,21 @@
             font-family: inherit;
         }
 
-        /* Стилизация области загрузки файлов */
+        /* Загрузка файлов */
         .file-upload-zone {
-            border: 2px dashed var(--glass-border, rgba(255, 255, 255, 0.15));
+            border: 2px dashed var(--glass-border);
             border-radius: 10px;
             padding: 1.25rem;
             text-align: center;
             cursor: pointer;
             position: relative;
-            background: rgba(15, 23, 42, 0.15);
+            background: var(--input-bg, rgba(15, 23, 42, 0.15));
             transition: background 0.2s ease, border-color 0.2s ease;
         }
 
             .file-upload-zone:hover {
-                background: rgba(15, 23, 42, 0.25);
-                border-color: var(--accent-color, #3b82f6);
+                background: var(--glass-bg);
+                border-color: var(--accent-color);
             }
 
             .file-upload-zone input[type="file"] {
@@ -160,10 +294,10 @@
 
         .upload-text {
             font-size: 0.9rem;
-            color: var(--text-muted, #94a3b8);
+            color: var(--text-secondary);
         }
 
-        /* Сетка для картинок превью */
+        /* Сетка картинок */
         .image-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
@@ -171,20 +305,127 @@
             margin: 0.5rem 0 1rem 0;
         }
 
+        /* Контейнер картинки */
+        .thumb-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
         .thumb {
             width: 100%;
             aspect-ratio: 1;
             object-fit: cover;
             border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: transform 0.2s ease;
+            border: 1px solid var(--glass-border);
+            transition: transform 0.2s ease, filter 0.2s ease;
+            cursor: pointer;
         }
 
             .thumb:hover {
                 transform: scale(1.05);
+                filter: brightness(0.9);
             }
 
-        /* Панель кнопок действий */
+        /* Кнопка удаления на картинке */
+        .thumb-wrapper .remove-thumb-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #ef4444;
+            color: #ffffff;
+            border: none;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 20px;
+            text-align: center;
+            cursor: pointer;
+            padding: 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.1s;
+            z-index: 10;
+        }
+
+            .thumb-wrapper .remove-thumb-btn:hover {
+                background: #dc2626;
+                transform: scale(1.1);
+            }
+
+        /* Подсветка Drag and Drop */
+        .file-upload-zone.highlight {
+            border-color: var(--accent-color);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        /* Лайтбокс */
+        #imageLightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+            #imageLightbox.active {
+                display: flex;
+                opacity: 1;
+            }
+
+        #lightboxImage {
+            max-width: 90vw;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            transform: scale(0.95);
+            transition: transform 0.25s ease;
+            cursor: zoom-out;
+        }
+
+        #imageLightbox.active #lightboxImage {
+            transform: scale(1);
+        }
+
+        .close-lightbox-btn {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #ffffff;
+            font-size: 2rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 3010;
+        }
+
+            .close-lightbox-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                transform: scale(1.05);
+            }
+
+        /* Кнопки */
         .form-actions {
             display: flex;
             flex-direction: row-reverse;
@@ -214,26 +455,26 @@
 
         .btn-cancel {
             background: rgba(255, 255, 255, 0.05);
-            color: var(--text-muted, #94a3b8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            border: 1px solid var(--glass-border);
         }
 
             .btn-cancel:hover {
-                background: rgba(255, 255, 255, 0.1);
-                color: #ffffff;
+                background: var(--glass-bg);
+                color: var(--text-main);
             }
 
         .btn-danger {
             background: #ef4444;
             color: #ffffff;
-            margin-right: auto; /* Сдвигаем кнопку удаления влево */
+            margin-right: auto;
         }
 
             .btn-danger:hover {
                 background: #dc2626;
             }
 
-        /* Адаптивность FullCalendar и Модалки */
+        /* Адаптивность */
         @@media (max-width: 600px) {
             .fc .fc-toolbar {
                 flex-direction: column;
@@ -256,127 +497,13 @@
 
             .btn-danger {
                 margin-right: 0;
-                order: 3; /* Кнопка удаления на мобильных будет в самом низу */
-            }
-        }
-
-        /* Контейнер для превью картинки с кнопкой удаления */
-        .thumb-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 1;
-        }
-
-            /* Кнопка удаления в правом верхнем углу картинки */
-            .thumb-wrapper .remove-thumb-btn {
-                position: absolute;
-                top: -6px;
-                right: -6px;
-                background: #ef4444;
-                color: #ffffff;
-                border: none;
-                border-radius: 50%;
-                width: 22px;
-                height: 22px;
-                font-size: 14px;
-                font-weight: bold;
-                line-height: 20px;
-                text-align: center;
-                cursor: pointer;
-                padding: 0;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: background 0.2s, transform 0.1s;
-                z-index: 10;
+                order: 3;
             }
 
-                .thumb-wrapper .remove-thumb-btn:hover {
-                    background: #dc2626;
-                    transform: scale(1.1);
-                }
-
-        /* Подсветка зоны загрузки при перетаскивании файлов */
-        .file-upload-zone.highlight {
-            border-color: var(--accent-color, #3b82f6);
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-        /* Делаем курсор-указатель для превьюшек, чтобы показать кликабельность */
-        .thumb {
-            cursor: pointer;
-            transition: transform 0.2s ease, filter 0.2s ease;
-        }
-
-            .thumb:hover {
-                transform: scale(1.05);
-                filter: brightness(0.9);
+            .fc .fc-daygrid-day-frame {
+                min-height: 55px !important;
             }
-
-        /* Окно полноэкранного просмотра (выше модалки редактирования) */
-        #imageLightbox {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(15, 23, 42, 0.9); /* Очень темный размытый фон */
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            z-index: 3000; /* Выше основного модального окна (2000) */
-            justify-content: center;
-            align-items: center;
-            opacity: 0;
-            transition: opacity 0.25s ease;
         }
-
-            #imageLightbox.active {
-                display: flex;
-                opacity: 1;
-            }
-
-        /* Большая картинка внутри лайтбокса */
-        #lightboxImage {
-            max-width: 90vw;
-            max-height: 85vh;
-            object-fit: contain; /* Картинка сохраняет пропорции и не обрезается */
-            border-radius: 12px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-            transform: scale(0.95);
-            transition: transform 0.25s ease;
-            cursor: zoom-out; /* Показывает, что при клике картинка закроется */
-        }
-
-        #imageLightbox.active #lightboxImage {
-            transform: scale(1);
-        }
-
-        /* Кнопка закрытия большой картинки */
-        .close-lightbox-btn {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: #ffffff;
-            font-size: 2rem;
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s, transform 0.2s;
-            z-index: 3010;
-        }
-
-            .close-lightbox-btn:hover {
-                background: rgba(255, 255, 255, 0.2);
-                transform: scale(1.05);
-            }
     </style>
 }
 
@@ -435,6 +562,7 @@
 
 @section Scripts {
         <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+        <!-- Подключаем русский перевод и региональные стандарты -->
         <script>
             let isEditMode = false;
             const modal = document.getElementById('postModal');
@@ -552,8 +680,9 @@
                 var calendarEl = document.getElementById('calendar');
 
                 var calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: window.innerWidth < 600 ? 'listMonth' : 'dayGridMonth',
+                    initialView: 'dayGridMonth',
                     locale: 'ru',
+                    firstDay: 1, // <-- Указывает, что неделя начинается с Понедельника
                     selectable: true,
                     height: 'auto',
                     headerToolbar: {
