@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using CrossChat.Data;
 using CrossChat.Data.Entities.Posting;
 using CrossChat.Integrations.Enums;
@@ -6,14 +5,18 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CrossChat.Worker.Services
 {
 	public class PostService : IPostService
 	{
-		// БУФЕР (КЕШ) - аналог вашего старого списка _posts
-		// Храним уже готовые Domain-модели, чтобы не мапить каждый раз
-		private readonly ConcurrentDictionary<Guid, BlogPost> _cache = new();
+		// Инициализируем локальный MemoryCache с жестким лимитом по памяти в байтах
+		private static readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions
+		{
+			SizeLimit = 150 * 1024 * 1024 // Лимит кеша: 150 Мегабайт
+		});
+
 		private readonly AppDbContext _appDbContext;
 
 		public PostService(AppDbContext appDbContext)
@@ -29,6 +32,7 @@ namespace CrossChat.Worker.Services
 			var entities = await _appDbContext.Posts
 				.Include(p => p.Images)       // Сразу грузим картинки
 				.Include(p => p.NetworkStates)// И статусы
+				.AsSplitQuery()
 				.Where(p => p.ProfileId == profileId)
 				.Where(p => p.AccessLevel == (int)accessLevel)
 				.Where(p => p.NetworkStates.Any(ns => ns.Status == (int)SocialStatus.Pending))
@@ -43,7 +47,7 @@ namespace CrossChat.Worker.Services
 			{
 				// Можно обновить кэш, чтобы UI сразу увидел, что посты взяты в работу
 				var model = MapToDomain(entity);
-				_cache[entity.Id] = model;
+				AddToCache(model);
 				result.Add(model);
 			}
 
@@ -59,6 +63,7 @@ namespace CrossChat.Worker.Services
 			var query = _appDbContext.Posts
 				.Include(p => p.Images)
 				.Include(p => p.NetworkStates)
+				.AsSplitQuery()
 				.Where(p => p.AccessLevel == (int)accessLevel)
 				.Where(p => p.NetworkStates.Any() &&
 							p.NetworkStates.All(ns => ns.Status == (int)SocialStatus.Published));
@@ -74,10 +79,8 @@ namespace CrossChat.Worker.Services
 			var result = new List<BlogPost>();
 			foreach (var entity in entities)
 			{
-				// Обновляем кэш (хотя если вы собираетесь их удалять, это может быть не обязательно, 
-				// но для консистентности оставим)
 				var model = MapToDomain(entity);
-				_cache[entity.Id] = model;
+				AddToCache(model);
 				result.Add(model);
 			}
 
@@ -94,7 +97,7 @@ namespace CrossChat.Worker.Services
 			// Строим запрос
 			IQueryable<PostEntity> query = _appDbContext.Posts
 				.Include(p => p.NetworkStates) // Нам нужны статусы для фильтрации
-				.Where(p => p.ProfileId == profileId); 
+				.Where(p => p.ProfileId == profileId);
 
 			// Фильтр по Приватности
 			if (accessFilter == AccessFilter.Public)
@@ -123,19 +126,27 @@ namespace CrossChat.Worker.Services
 				// Если пост уже есть в кеше и он "свежий" - берем его. 
 				// Но для списка нам нужны только заголовки, так что можно и смапить.
 				// Для надежности берем полную версию.
-				if (!_cache.ContainsKey(entity.Id))
+				if (!_cache.TryGetValue(entity.Id, out BlogPost? cachedPost))
 				{
-					// Если в кеше нет, надо подгрузить картинки (мы их не инклюдили выше для скорости)
-					// Но так как вы просили "доставай из буфера", давайте сделаем полную загрузку.
+					// Если в кэше нет — загружаем полную запись (с картинками)
 					var fullEntity = await _appDbContext.Posts
 						.Include(p => p.Images)
 						.Include(p => p.NetworkStates)
+						.AsSplitQuery()
 						.FirstOrDefaultAsync(p => p.Id == entity.Id);
 
-					var model = MapToDomain(fullEntity);
-					_cache[fullEntity.Id] = model;
+					if (fullEntity != null)
+					{
+						cachedPost = MapToDomain(fullEntity);
+						// Сохраняем в кэш с ограничением времени и размера
+						AddToCache(cachedPost);
+					}
 				}
-				result.Add(_cache[entity.Id]);
+
+				if (cachedPost != null)
+				{
+					result.Add(cachedPost);
+				}
 			}
 
 			return result;
@@ -189,13 +200,13 @@ namespace CrossChat.Worker.Services
 				Published = publishedCount,
 				Total = totalCount
 			};
-		}		
+		}
 
 		// 2. Получить один пост
 		public async Task<BlogPost?> GetPostByIdAsync(Guid id)
 		{
 			// 1. Сначала ищем в БУФЕРЕ
-			if (_cache.TryGetValue(id, out var cachedPost))
+			if (_cache.TryGetValue(id, out BlogPost? cachedPost))
 			{
 				return cachedPost;
 			}
@@ -210,7 +221,9 @@ namespace CrossChat.Worker.Services
 			if (entity == null) return null;
 
 			var model = MapToDomain(entity);
-			_cache[id] = model; // Сохраняем в буфер
+
+			AddToCache(model); // Сохраняем в буфер с расчетом размера и TTL
+
 			return model;
 		}
 
@@ -221,12 +234,12 @@ namespace CrossChat.Worker.Services
 		{
 			// 1. Сохраняем в БД
 			var entity = MapToEntity(post);
-			
+
 			_appDbContext.Posts.Add(entity);
 			await _appDbContext.SaveChangesAsync();
 
 			// 2. Кладем в кеш (обновляем ID если база сгенерила, но у нас GUID создается в C#)
-			_cache[post.Id] = post;
+			AddToCache(post);
 		}
 
 		// 4. Обновить пост (Описание, Статусы)
@@ -238,6 +251,7 @@ namespace CrossChat.Worker.Services
 			var entity = await _appDbContext.Posts
 				.Include(p => p.NetworkStates)
 				.Include(p => p.Images)
+				.AsSplitQuery() 
 				.FirstOrDefaultAsync(p => p.Id == post.Id);
 
 			if (entity != null)
@@ -318,7 +332,7 @@ namespace CrossChat.Worker.Services
 			}
 
 			// Обновляем кеш
-			_cache[post.Id] = post;
+			AddToCache(post);
 		}
 
 		// 5. Удалить пост целиком
@@ -332,11 +346,53 @@ namespace CrossChat.Worker.Services
 			}
 
 			// Удаляем из кеша
-			_cache.TryRemove(id, out _);
+			_cache.Remove(id);
 		}
 
-		// --- MAPPERS (Преобразование типов) ---
+		#region Вспомогательные методы кеширования
 
+		// Метод безопасного добавления в кеш с установкой лимитов
+		private void AddToCache(BlogPost post)
+		{
+			long estimatedSize = CalculatePostSize(post);
+
+			var options = new MemoryCacheEntryOptions()
+				.SetSize(estimatedSize) // Указываем вес записи для контроля общего лимита в 150 МБ
+				.SetAbsoluteExpiration(TimeSpan.FromHours(1)); // Время жизни ровно 1 час
+
+			_cache.Set(post.Id, post, options);
+		}
+
+		// Примерная оценка веса объекта в байтах
+		private static long CalculatePostSize(BlogPost post)
+		{
+			long size = 512; // Базовый примерный вес метаданных класса (в байтах)
+
+			// Считаем размер картинок (символ Unicode в C# занимает 2 байта)
+			if (post.Images != null)
+			{
+				foreach (var img in post.Images)
+				{
+					size += (img.Length * 2);
+				}
+			}
+
+			// Считаем размер текстовых описаний соцсетей
+			if (post.Networks != null)
+			{
+				foreach (var net in post.Networks.Values)
+				{
+					size += (net.Caption?.Length ?? 0) * 2;
+					size += 128; // Вес структуры NetworkPostData
+				}
+			}
+
+			return size;
+		}
+
+		#endregion
+
+		// --- MAPPERS (Преобразование типов) ---
 		private BlogPost MapToDomain(PostEntity entity)
 		{
 			var post = new BlogPost
@@ -368,7 +424,7 @@ namespace CrossChat.Worker.Services
 				Id = post.Id,
 				ProfileId = post.ProfileId,
 				CreatedAt = post.CreatedAt,
-				ShowDate = post.ShowDate, 
+				ShowDate = post.ShowDate,
 				AccessLevel = (int)post.Access,
 				Images = new List<PostImageEntity>(),
 				NetworkStates = new List<NetworkStateEntity>()
