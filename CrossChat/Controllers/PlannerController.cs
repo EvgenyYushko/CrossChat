@@ -101,11 +101,11 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("create")]
-		//[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		//[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
 		public async Task<IActionResult> Create(
 			[FromForm] int profileId,
-			[FromForm] NetworkType networkType,
+			[FromForm] string networkType, // Унифицировали: теперь тип string вместо NetworkType
 			[FromForm] List<string> selectedNetworks, // Чекбоксы выбранных сетей из формы
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
@@ -127,7 +127,125 @@ namespace CrossChat.Controllers
 				Access = AccessLevel.Public
 			};
 
-			// 2. Обработка картинок
+			// 2. Наполнение и валидация соцсетей (Вызов общего хелпера)
+			if (!FillNetworkData(post, networkType, selectedNetworks, caption))
+			{
+				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
+			}
+
+			// 3. Обработка и сжатие картинок
+			await UploadMedia(originalDimensions, compressedDimensions, originalSizes, images, post);
+
+			// 4. Сохраняем пост в БД
+			await _postService.AddPostAsync(post);
+
+			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
+		}
+
+		[HttpPost("update/{id}")]
+		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
+		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		public async Task<IActionResult> Update(
+			Guid id,
+			[FromForm] int profileId,
+			[FromForm] string networkType,
+			[FromForm] string caption,
+			[FromForm] DateTime showDate,
+			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
+			[FromForm] List<string> selectedNetworks, // Список выбранных соцсетей (для режима All)
+			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
+			[FromForm] List<string> compressedDimensions,
+			[FromForm] List<long> originalSizes,
+			[FromForm] List<IFormFile> images)   // Новые добавленные файлы
+		{
+			// 1. Получаем существующий пост из базы данных
+			var post = await _postService.GetPostByIdAsync(id);
+			if (post == null) return NotFound();
+
+			// 2. Обновляем базовые данные
+			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
+
+			// 3. Обновление текстов и статусов соцсетей (Вызов общего хелпера)
+			if (!FillNetworkData(post, networkType, selectedNetworks, caption))
+			{
+				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
+			}
+
+			// 4. Обновляем список картинок поста
+			post.Images = keptImages ?? new List<string>();
+
+			// 5. Обработка новых картинок
+			await UploadMedia(originalDimensions, compressedDimensions, originalSizes, images, post);
+
+			// 6. Сохраняем изменения в базе
+			await _postService.UpdatePostAsync(post);
+
+			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
+		}
+
+		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption)
+		{
+			if (networkType == "All")
+			{
+				// Валидация: в общем режиме должен быть выбран хотя бы один чекбокс
+				if (selectedNetworks == null || selectedNetworks.Count == 0)
+				{
+					return false; // Валидация не прошла
+				}
+
+				// Сбрасываем в статус "None" тексты и направления для сетей, у которых сняли галочки
+				foreach (var net in NetworkMetadata.Supported)
+				{
+					if (!selectedNetworks.Contains(net.ToString()))
+					{
+						post.Networks[net] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+					}
+				}
+
+				// Наполняем или обновляем тексты для активных чекбоксов
+				foreach (var netName in selectedNetworks)
+				{
+					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
+					{
+						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
+
+						if (post.Networks.ContainsKey(parsedNet))
+						{
+							// Записываем персональный текст (или общий, если персональный не введен)
+							post.Networks[parsedNet].Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
+
+							// Если соцсеть только что добавили — переводим в статус ожидания публикации
+							if (post.Networks[parsedNet].Status == SocialStatus.None)
+							{
+								post.Networks[parsedNet].Status = SocialStatus.Pending;
+							}
+						}
+					}
+				}
+			}
+			else
+			{
+				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): обновляем текст только для текущей соцсети
+				if (Enum.TryParse<NetworkType>(networkType, out var parsedNet))
+				{
+					if (post.Networks.ContainsKey(parsedNet))
+					{
+						post.Networks[parsedNet].Caption = caption;
+
+						// Если создаем с нуля в одиночной соцсети — активируем статус ожидания
+						if (post.Networks[parsedNet].Status == SocialStatus.None)
+						{
+							post.Networks[parsedNet].Status = SocialStatus.Pending;
+						}
+					}
+				}
+			}
+
+			return true; // Валидация успешно пройдена
+		}
+
+		private async Task UploadMedia(List<string> originalDimensions, List<string> compressedDimensions, List<long> originalSizes, List<IFormFile> images, BlogPost post)
+		{
 			if (images != null && images.Count > 0)
 			{
 				if (SHRIK_IMAGES)
@@ -194,177 +312,6 @@ namespace CrossChat.Controllers
 					_logger.LogInformation("============================================================");
 				}
 			}
-
-			// НАПОЛНЕНИЕ СОЦСЕТЕЙ
-			if (networkType == NetworkType.All)
-			{
-				// Если создаем в общем режиме, динамически читаем тексты для всех выбранных чекбоксами соцсетей
-				foreach (var netName in selectedNetworks)
-				{
-					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
-					{
-						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
-						post.Networks[parsedNet] = new NetworkPostData
-						{
-							Status = SocialStatus.Pending,
-							Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption
-						};
-					}
-				}
-			}
-			else
-			{
-				// 3. Добавляем состояние сети
-				post.Networks[networkType] = new NetworkPostData
-				{
-					Status = SocialStatus.Pending,
-					Caption = caption
-				};
-			}
-
-			// 4. Сохраняем через твой PostService
-			await _postService.AddPostAsync(post);
-
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
-		}
-
-		[HttpPost("update/{id}")]
-		//[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		//[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
-		public async Task<IActionResult> Update(
-			Guid id,
-			[FromForm] int profileId,
-			[FromForm] string networkType,
-			[FromForm] string caption,
-			[FromForm] DateTime showDate,
-			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
-			[FromForm] List<string> selectedNetworks, // Список выбранных соцсетей (для режима All)
-			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
-			[FromForm] List<string> compressedDimensions,
-			[FromForm] List<long> originalSizes,
-			[FromForm] List<IFormFile> images)   // Новые добавленные файлы
-		{
-			// 1. Получаем существующий пост из базы данных
-			var post = await _postService.GetPostByIdAsync(id);
-			if (post == null) return NotFound();
-
-			// 2. Обновляем базовые данные
-			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
-
-			// Обновляем текст для выбранной соцсети
-
-			// ОБНОВЛЕНИЕ ТЕКСТОВ ДЛЯ СЕТЕЙ
-			if (networkType == "All")
-			{
-				// Сначала сбрасываем тексты и статусы для сетей, у которых убрали галочки
-				foreach (var net in NetworkMetadata.Supported)
-				{
-					if (!selectedNetworks.Contains(net.ToString()))
-					{
-						post.Networks[net] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
-					}
-				}
-
-				// Добавляем/обновляем тексты для активных сетей
-				foreach (var netName in selectedNetworks)
-				{
-					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
-					{
-						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
-						post.Networks[parsedNet].Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
-						
-						// Если сеть только что добавили, даем ей статус ожидания
-						if (post.Networks[parsedNet].Status == SocialStatus.None)
-						{
-							post.Networks[parsedNet].Status = SocialStatus.Pending;
-						}
-					}
-				}
-			}
-			else
-			{
-				var netType = Enum.Parse<NetworkType>(networkType);
-				if (post.Networks.ContainsKey(netType))
-				{
-					post.Networks[netType].Caption = caption;
-				}
-			}
-
-			// 3. Обновляем список картинок поста
-			// Перезаписываем список картинок только теми старыми картинками, которые пользователь не удалил на фронтенде
-			post.Images = keptImages ?? new List<string>();
-
-			// Добавляем новые картинки, если они были загружены
-			if (images != null && images.Count > 0)
-			{
-				if (SHRIK_IMAGES)
-				{
-					_logger.LogInformation("=== СЖАТИЕ ИЗОБРАЖЕНИЙ: ОБНОВЛЕНИЕ ПОСТА ===");
-					foreach (var file in images)
-					{
-						try
-						{
-							var compressResult = await ImageHelper.CompressAndConvertToBase64Async(file);
-							post.Images.Add(compressResult.Base64);
-
-							_logger.LogInformation(
-								"Файл: {FileName}\n" +
-								"  [ДО]: {OrigWidth}x{OrigHeight} px | Размер: {OrigSize:F3} МБ\n" +
-								"  [ПОСЛЕ]: {CompWidth}x{CompHeight} px | Размер JPEG: {CompSize:F3} МБ\n" +
-								"  [В БД (Base64)]: Символов: {B64Length} | Итоговый вес в БД: {B64DbSize:F3} МБ",
-								file.FileName,
-								compressResult.OriginalWidth, compressResult.OriginalHeight, compressResult.OriginalSizeMb,
-								compressResult.CompressedWidth, compressResult.CompressedHeight, compressResult.CompressedSizeMb,
-								compressResult.Base64.Length, compressResult.Base64DbSizeMb);
-						}
-						catch (Exception ex)
-						{
-							_logger.LogError(ex, "Ошибка при сжатии изображения {FileName}", file.FileName);
-						}
-					}
-					_logger.LogInformation("===========================================");
-				}
-				else
-				{
-					for (int i = 0; i < images.Count; i++)
-					{
-						var file = images[i];
-						try
-						{
-							using var ms = new MemoryStream();
-							await file.CopyToAsync(ms);
-							var base64 = Convert.ToBase64String(ms.ToArray());
-							post.Images.Add(base64);
-
-							double receivedSizeMb = file.Length / (1024.0 * 1024.0);
-							double dbSizeMb = base64.Length / (1024.0 * 1024.0);
-
-							string origDim = (originalDimensions != null && originalDimensions.Count > i) ? originalDimensions[i] : "Неизвестно";
-							string compDim = (compressedDimensions != null && compressedDimensions.Count > i) ? compressedDimensions[i] : "Неизвестно";
-
-							long origSizeBytes = (originalSizes != null && originalSizes.Count > i) ? originalSizes[i] : 0;
-							double origSizeMb = origSizeBytes / (1024.0 * 1024.0);
-
-							_logger.LogInformation(
-								"Файл [{FileName}] успешно получен от клиента:\n" +
-								"  [РАЗРЕШЕНИЕ]: {OrigDim} px ==> уменьшено до ==> {CompDim} px\n" +
-								"  [ВЕС ФАЙЛА]: Исходный: {OrigSize:F3} МБ ==> сжат до ==> {RecSize:F3} МБ\n" +
-								"  [В БД (Base64)]: Длина строки {B64Length} символов | Примерный вес в БД: {DbSize:F3} МБ",
-								file.FileName, origDim, compDim, origSizeMb, receivedSizeMb, base64.Length, dbSizeMb);
-						}
-						catch (Exception ex)
-						{
-							_logger.LogError(ex, "Ошибка при конвертации полученного файла {FileName}", file.FileName);
-						}
-					}
-					_logger.LogInformation("============================================================");
-				}
-			}
-
-			// 4. Сохраняем изменения в базе
-			await _postService.UpdatePostAsync(post);
-
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
 		}
 
 		[HttpPost("update-date/{id}")]

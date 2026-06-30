@@ -925,7 +925,7 @@
                             <input type="checkbox" name="selectedNetworks" value="X"> X
                         </label>
                     </div>
-                </div>
+                </div>                
 
                 <!-- Галерея для превью -->
                 <div id="imageGallery" class="image-gallery"></div>
@@ -936,6 +936,13 @@
                         <span class="upload-text">📁 Нажмите для выбора файлов или перетащите их сюда</span>
                         <input type="file" id="fileInput" name="images" multiple accept="image/*,video/*">
                     </div>
+                </div>
+
+                <!-- Чекбокс "Один текст для всех" (добавлен сюда) -->
+                <div class="form-group" id="unifiedTextGroup" style="display: none;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.9rem; cursor: pointer; color: var(--text-main);">
+                        <input type="checkbox" id="unifiedTextCheckbox" checked onchange="toggleUnifiedTextMode()" style="width: 16px; height: 16px; accent-color: var(--accent-color);"> Один текст для всех соцсетей
+                    </label>
                 </div>
 
                 <!-- Контейнер для динамического текста постов -->
@@ -1292,6 +1299,7 @@
 
                     events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
 
+                // КЛИК ПО СОБЫТИЮ (РЕДАКТИРОВАНИЕ)
                 eventClick: function(info) {
                     const postId = info.event.id;
                     const currentNetwork = "@ViewBag.Network";
@@ -1326,14 +1334,11 @@
 
                             const networks = post.networks || post.Networks;
 
+                            // Собираем активные сети
                             let activeNets = [];
                             for (let key in networks) {
-                                const netData = networks[key];
-                                if (netData) {
-                                    // Безопасно читаем статус в любом регистре (Status или status)
-                                    const status = netData.status !== undefined ? netData.status : netData.Status;
-
-                                    // Если статус не равен "None", не равен 0 и существует
+                                if (networks[key]) {
+                                    const status = networks[key].status !== undefined ? networks[key].status : networks[key].Status;
                                     if (status !== undefined && status !== null && status !== "None" && status !== 0) {
                                         activeNets.push(key);
                                     }
@@ -1341,96 +1346,103 @@
                             }
                             const isMultiPost = activeNets.length > 1;
 
-                            // Безопасные ссылки на DOM-элементы
                             const netSelectGroup = document.getElementById('networkSelectGroup');
                             const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
                             const warningDiv = document.getElementById('multiPostWarning');
 
                             if (currentNetwork === "All") {
-                                // Общий режим
+                                // ОБЩИЙ РЕЖИМ
                                 if (netSelectGroup) netSelectGroup.style.display = 'block';
-                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                                document.getElementById('unifiedTextGroup').style.display = 'block';
                                 if (warningDiv) warningDiv.style.display = 'none';
-                                if (defaultCaptionInput) defaultCaptionInput.required = false;
 
                                 dateInput.disabled = false;
                                 document.getElementById('fileInput').disabled = false;
                                 document.querySelector('.file-upload-zone').style.opacity = '1';
 
-                                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
-                                    const netName = cb.value;
-                                    const isActive = activeNets.includes(netName);
-                                    cb.checked = isActive;
-
-                                    const subGroup = document.getElementById(`captionGroup_${netName}`);
-                                    const subTextarea = document.getElementById(`captionInput_${netName}`);
-
-                                    if (subGroup && subTextarea) {
-                                        if (isActive) {
-                                            subGroup.style.display = 'block';
-                                            subTextarea.value = networks[netName].caption || networks[netName].Caption || "";
-                                            subTextarea.required = true;
-                                        } else {
-                                            subGroup.style.display = 'none';
-                                            subTextarea.value = "";
-                                            subTextarea.required = false;
-                                        }
+                                // УМНОЕ ОПРЕДЕЛЕНИЕ ЕДИНОГО ТЕКСТА:
+                                // Проверяем, одинаковые ли текста во всех активных соцсетях поста
+                                let isUnified = true;
+                                let firstActiveCaption = null;
+                                activeNets.forEach(net => {
+                                    const text = networks[net].caption || networks[net].Caption || "";
+                                    if (firstActiveCaption === null) {
+                                        firstActiveCaption = text;
+                                    } else if (text !== firstActiveCaption) {
+                                        isUnified = false; // Текстовки отличаются!
                                     }
                                 });
-                            } else {
-                                // Одиночный режим (Instagram, Telegram...)
-                                if (netSelectGroup) netSelectGroup.style.display = 'none';
-                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
-                                if (defaultCaptionInput) defaultCaptionInput.required = true;
+                                if (firstActiveCaption === null) firstActiveCaption = "";
 
-                                const netData = networks[currentNetwork];
+                                // Выставляем статус чекбокса "Один текст для всех"
+                                document.getElementById('unifiedTextCheckbox').checked = isUnified;
+
+                                if (isUnified) {
+                                    if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+                                    if (defaultCaptionInput) {
+                                        defaultCaptionInput.value = firstActiveCaption;
+                                        defaultCaptionInput.required = true;
+                                    }
+                                } else {
+                                    if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                                    if (defaultCaptionInput) defaultCaptionInput.required = false;
+                                }
+
+                            // Выставляем чекбоксы соцсетей и заполняем их текстареа
+                            document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                                const netName = cb.value;
+                                const isActive = activeNets.includes(netName);
+                                cb.checked = isActive;
+
+                                const subGroup = document.getElementById(`captionGroup_${netName}`);
+                                const subTextarea = document.getElementById(`captionInput_${netName}`);
+
+                                if (subGroup && subTextarea) {
+                                    subTextarea.value = networks[netName].caption || networks[netName].Caption || "";
+
+                                    // Показываем подгруппу только если сеть активна И мы в раздельном режиме (isUnified = false)
+                                    if (isActive && !isUnified) {
+                                        subGroup.style.display = 'block';
+                                        subTextarea.required = true;
+                                    } else {
+                                        subGroup.style.display = 'none';
+                                        subTextarea.required = false;
+                                    }
+                                }
+                            });
+                            } else {
+                                // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
+                                if (netSelectGroup) netSelectGroup.style.display = 'none';
+                                document.getElementById('unifiedTextGroup').style.display = 'none';
+                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+
                                 if (defaultCaptionInput) {
+                                    defaultCaptionInput.required = true;
+                                    const netData = networks[currentNetwork];
                                     defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
                                 }
 
                                 if (isMultiPost) {
-                                    // УМНАЯ БЛОКИРОВКА ДЛЯ МУЛЬТИПОСТИНГА
                                     const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
-                                    const warningDiv = document.getElementById('multiPostWarning');
                                     if (warningDiv) {
                                         warningDiv.style.display = 'block';
                                         warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
                                     }
 
-                                    // АКТИВИРУЕМ БЛОКИРОВКИ:
-                                    isImageEditingLocked = true; // Блокируем картинки!
+                                    isImageEditingLocked = true;
                                     dateInput.disabled = true;
                                     document.getElementById('fileInput').disabled = true;
 
-                                     // СКРЫВАЕМ группу загрузки файлов полностью!
                                     const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) {
-                                        fileUploadGroup.style.display = 'none';
-                                    }
-
-                                    const dropZone = document.getElementById('dropZone');
-                                    if (dropZone) {
-                                        dropZone.style.opacity = '0.4';
-                                        dropZone.style.cursor = 'not-allowed'; // Запрещающий курсор
-                                    }
+                                    if (fileUploadGroup) fileUploadGroup.style.display = 'none';
                                 } else {
-                                    // Одиночный стандартный пост - разрешаем всё
                                     isImageEditingLocked = false;
                                     dateInput.disabled = false;
                                     document.getElementById('fileInput').disabled = false;
                                     if (warningDiv) warningDiv.style.display = 'none';
 
-                                    // ПОКАЗЫВАЕМ группу загрузки файлов обратно
                                     const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) {
-                                        fileUploadGroup.style.display = 'block';
-                                    }
-
-                                    const dropZone = document.getElementById('dropZone');
-                                    if (dropZone) {
-                                        dropZone.style.opacity = '1';
-                                        dropZone.style.cursor = 'pointer';
-                                    }
+                                    if (fileUploadGroup) fileUploadGroup.style.display = 'block';
                                 }
                             }
 
@@ -1463,27 +1475,38 @@
 
                     dateInput.disabled = false;
                     document.getElementById('fileInput').disabled = false;
-                    document.querySelector('.file-upload-zone').style.opacity = '1';
+
+                    const fileUploadGroup = document.getElementById('fileUploadGroup');
+                    if (fileUploadGroup) fileUploadGroup.style.display = 'block';
 
                     const netSelectGroup = document.getElementById('networkSelectGroup');
                     const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
 
                     if (currentNetwork === "All") {
                         if (netSelectGroup) netSelectGroup.style.display = 'block';
-                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                        document.getElementById('unifiedTextGroup').style.display = 'block';
+
+                        // По умолчанию "Один текст" включен, поэтому показываем дефолтный текстареа
+                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
                         const defCapInput = document.getElementById('captionInput');
-                        if (defCapInput) defCapInput.required = false;
+                        if (defCapInput) {
+                            defCapInput.required = true;
+                            defCapInput.value = "";
+                        }
+
                         document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
                             cb.checked = false;
                         });
                     } else {
                         if (netSelectGroup) netSelectGroup.style.display = 'none';
+                        document.getElementById('unifiedTextGroup').style.display = 'none';
                         if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
-                    const defCapInput = document.getElementById('captionInput');
-                    if (defCapInput) {
-                        defCapInput.required = true;
-                        defCapInput.value = "";
-                    }
+
+                        const defCapInput = document.getElementById('captionInput');
+                        if (defCapInput) {
+                            defCapInput.required = true;
+                            defCapInput.value = "";
+                        }
                     }
 
                     let selectedDate = info.date;
@@ -1645,20 +1668,18 @@
                 existingImages = [];
                 syncFileInput();
 
-                // Скрываем кастомные поля текстов
+                // Сбрасываем предупреждение, чекбокс "Один текст" и кастомные текстареа
                 document.getElementById('multiPostWarning').style.display = 'none';
-                document.querySelectorAll('.caption-sub-group').forEach(group => {
-                    group.style.display = 'none';
-                    group.querySelector('textarea').value = '';
-                    group.querySelector('textarea').required = false;
-                });
+                document.getElementById('unifiedTextGroup').style.display = 'none';
+                document.getElementById('unifiedTextCheckbox').checked = true; // по умолчанию Единый текст включен
 
-                // Скрываем кастомные поля текстов
-                document.getElementById('multiPostWarning').style.display = 'none';
-                document.querySelectorAll('.caption-sub-group').forEach(group => {
+                document.querySelectorAll('[id^="captionGroup_"]').forEach(group => {
                     group.style.display = 'none';
-                    group.querySelector('textarea').value = '';
-                    group.querySelector('textarea').required = false;
+                    const txt = group.querySelector('textarea');
+                    if (txt) {
+                        txt.value = '';
+                        txt.required = false;
+                    }
                 });
 
                 // СБРОС: Снимаем обязательность с дефолтного поля по умолчанию
@@ -1668,19 +1689,74 @@
                 }
             }
 
-            // Функция динамического переключения полей ввода в режиме All
+            /// Функция включения/выключения режима "Один текст для всех"
+            function toggleUnifiedTextMode() {
+                const isUnified = document.getElementById('unifiedTextCheckbox').checked;
+                const defaultGroup = document.getElementById('defaultCaptionGroup');
+                const defaultTextarea = document.getElementById('captionInput');
+
+                if (isUnified) {
+                    // РЕЖИМ: ОДИН ТЕКСТ
+                    if (defaultGroup) defaultGroup.style.display = 'block';
+                    if (defaultTextarea) defaultTextarea.required = true;
+
+                    // Скрываем все раздельные текстареа по маске ID
+                    document.querySelectorAll('[id^="captionGroup_"]').forEach(group => {
+                        group.style.display = 'none';
+                        const txt = group.querySelector('textarea');
+                        if (txt) txt.required = false;
+                    });
+                } else {
+                    // РЕЖИМ: РАЗНЫЕ ТЕКСТЫ
+                    if (defaultGroup) defaultGroup.style.display = 'none';
+                    if (defaultTextarea) defaultTextarea.required = false;
+
+                    const commonText = defaultTextarea ? defaultTextarea.value : "";
+
+                    // Показываем текстареа только для выбранных чекбоксами сетей
+                    const selectedNets = document.querySelectorAll('input[name="selectedNetworks"]:checked');
+                    selectedNets.forEach(cb => {
+                        const netName = cb.value;
+                        const subGroup = document.getElementById(`captionGroup_${netName}`);
+                        const subTextarea = document.getElementById(`captionInput_${netName}`);
+                    
+                        if (subGroup && subTextarea) {
+                            subGroup.style.display = 'block';
+                            subTextarea.required = true;
+                        
+                            if (!subTextarea.value) {
+                                subTextarea.value = commonText;
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Функция динамического отображения полей при кликах на чекбоксы соцсетей
             function toggleCaptionField(netName) {
+                const isUnified = document.getElementById('unifiedTextCheckbox').checked;
+                if (isUnified) return; // Если включен единый текст, ничего динамически не показываем
+
                 const cb = document.querySelector(`input[name="selectedNetworks"][value="${netName}"]`);
                 const subGroup = document.getElementById(`captionGroup_${netName}`);
                 const subTextarea = document.getElementById(`captionInput_${netName}`);
-            
+
                 if (cb && cb.checked) {
-                    subGroup.style.display = 'block';
-                    subTextarea.required = true;
+                    if (subGroup) subGroup.style.display = 'block';
+                    if (subTextarea) {
+                        subTextarea.required = true;
+                        // Автоматически копируем текст из дефолтного поля при открытии нового направления
+                        const commonText = document.getElementById('captionInput').value;
+                        if (!subTextarea.value) {
+                            subTextarea.value = commonText;
+                        }
+                    }
                 } else if (subGroup) {
                     subGroup.style.display = 'none';
-                    subTextarea.required = false;
-                    subTextarea.value = '';
+                    if (subTextarea) {
+                        subTextarea.required = false;
+                        subTextarea.value = '';
+                    }
                 }
             }
 
@@ -1694,6 +1770,17 @@
             // Функция отправки формы через AJAX с отслеживанием прогресса
             async function submitFormWithProgress() {
                 const form = document.getElementById('postForm');
+
+                // --- ВАЛИДАЦИЯ: Проверяем, выбрана ли хотя бы одна соцсеть в режиме All ---
+                const currentNetwork = "@ViewBag.Network";
+                const selectedNets = form.querySelectorAll('input[name="selectedNetworks"]:checked');
+
+                if (currentNetwork === "All" && selectedNets.length === 0) {
+                    alert("Пожалуйста, выберите хотя бы одну социальную сеть для публикации поста!");
+                    return; // Прерываем отправку формы намертво!
+                }
+
+                // Создаем пустой FormData для ручного наполнения
                 const formData = new FormData();
                 const url = form.action;
 
@@ -1705,34 +1792,43 @@
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
 
+                // АКТИВИРУЕМ БЛОКИРОВКУ (карточка затухает, клики отключаются)
                 isUploading = true;
                 document.querySelector('.modal-card').classList.add('uploading');
 
+                // Показываем прогресс-бар и скрываем кнопки управления
                 progressContainer.style.display = 'block';
                 submitBtn.disabled = true;
                 deleteBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
 
-                // Наполняем стандартные поля
+                // 1. Копируем стандартные текстовые поля формы в FormData
                 formData.append('profileId', form.querySelector('[name="profileId"]').value);
                 formData.append('networkType', form.querySelector('[name="networkType"]').value);
                 formData.append('showDate', form.querySelector('[name="showDate"]').value);
                 formData.append('postId', form.querySelector('[name="postId"]').value);
 
-                // Собираем keptImages
+                // Переносим старые сохраненные картинки (keptImages)
                 const keptInputs = form.querySelectorAll('[name="keptImages"]');
                 keptInputs.forEach(input => formData.append('keptImages', input.value));
 
-                // Собираем выбранные соцсети (чекбоксы)
-                const selectedNets = form.querySelectorAll('[name="selectedNetworks"]:checked');
+                // Переносим выбранные чекбоксы соцсетей
                 selectedNets.forEach(cb => formData.append('selectedNetworks', cb.value));
 
                 // Собираем текста постов (в зависимости от режима)
-                const currentNetwork = "@ViewBag.Network";
                 if (currentNetwork === "All") {
+                    const isUnified = document.getElementById('unifiedTextCheckbox').checked;
+                    const commonText = document.getElementById('captionInput').value;
+
                     selectedNets.forEach(cb => {
-                        const textValue = document.getElementById(`captionInput_${cb.value}`).value;
-                        formData.append(`caption_${cb.value}`, textValue);
+                        const netName = cb.value;
+                        let textValue = "";
+                        if (isUnified) {
+                            textValue = commonText; // Все соцсети получают один общий текст
+                        } else {
+                            textValue = document.getElementById(`captionInput_${netName}`).value;
+                        }
+                        formData.append(`caption_${netName}`, textValue);
                     });
                 } else {
                     formData.append('caption', document.getElementById('captionInput').value);
