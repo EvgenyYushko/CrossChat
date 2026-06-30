@@ -279,6 +279,22 @@ namespace CrossChat.Controllers
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
 		}
 
+		[HttpPost("update-date/{id}")]
+		public async Task<IActionResult> UpdateDate(Guid id, [FromForm] DateTime newDate)
+		{
+			// 1. Получаем существующий пост
+			var post = await _postService.GetPostByIdAsync(id);
+			if (post == null) return NotFound();
+
+			// 2. Обновляем только дату публикации (приводим ее к UTC)
+			post.ShowDate = DateTime.SpecifyKind(newDate, DateTimeKind.Utc);
+
+			// 3. Сохраняем изменения в БД и обновляем кеш
+			await _postService.UpdatePostAsync(post);
+
+			return Ok();
+		}
+
 		[HttpGet("get/{id}")]
 		public async Task<IActionResult> GetPost(Guid id)
 		{

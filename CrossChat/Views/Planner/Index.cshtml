@@ -848,12 +848,44 @@
                     initialView: 'dayGridMonth',
                     locale: 'ru',
                     firstDay: 1, // <-- Указывает, что неделя начинается с Понедельника
+                    editable: true, // <-- Включает перетаскивание и изменение размеров событий на календаре!
                     selectable: true,
                     height: 'auto',
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
                         right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                    },
+
+                    // --- ОБРАБОТЧИК ПЕРЕТАСКИВАНИЯ ПОСТА МЫШКОЙ ---
+                    eventDrop: function(info) {
+                        const postId = info.event.id;
+
+                        // ПОЛУЧАЕМ ДАТУ В ЛОКАЛЬНОМ ВРЕМЕНИ (без сдвига на 3 часа)
+                        const localDate = info.event.start;
+                        const pad = (num) => num.toString().padStart(2, '0');
+
+                        // Собираем формат YYYY-MM-DDTHH:mm:ss
+                        const localDateStr = `${localDate.getFullYear()}-${pad(localDate.getMonth() + 1)}-${pad(localDate.getDate())}T${pad(localDate.getHours())}:${pad(localDate.getMinutes())}:${pad(localDate.getSeconds())}`;
+
+                        const formData = new FormData();
+                        formData.append('newDate', localDateStr); // Отправляем точное локальное время
+
+                        // Отправляем быстрый фоновый запрос на сервер
+                        fetch(`/planner/update-date/${postId}`, {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(res => {
+                            if (!res.ok) {
+                                throw new Error('Ошибка сервера при изменении даты');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Ошибка изменения даты:', err);
+                            alert('Не удалось перенести пост. Проверьте соединение с интернетом.');
+                            info.revert(); // Возвращаем ярлык обратно в случае сбоя
+                        });
                     },
 
                     // --- КАСТОМИЗАЦИЯ ЗАГОЛОВКОВ ДЛЯ НЕРАБОЧИХ/РАБОЧИХ ВИДОВ ---
