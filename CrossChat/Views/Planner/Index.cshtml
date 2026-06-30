@@ -29,10 +29,10 @@
             --fc-page-bg-color: transparent;
         }
 
-        [data-theme="dark"] #calendar {
-            --fc-neutral-bg-color: rgba(255, 255, 255, 0.02);
-            --fc-today-bg-color: rgba(99, 102, 241, 0.18);
-        }
+       /*  [data-theme="dark"] img.net-icon[src*="threads"] {
+            filter: invert(1) brightness(2);
+            transition: filter 0.3s ease;
+        } */
 
         /* Название месяца/недели */
         .fc .fc-toolbar-title {
@@ -774,10 +774,10 @@
             white-space: nowrap;
         }
 
-        /* --- ПАНЕЛЬ КРУГЛЫХ КНОПОК-ПЕРЕКЛЮЧАТЕЛЕЙ --- */
+        /* --- МИНИМАЛИСТИЧНЫЕ КНОПКИ-ЛОГОТИПЫ (БЕЗ КРУЖОЧКОВ) --- */
         #networkSelectGroup .network-checkboxes-container {
             display: flex;
-            gap: 12px;
+            gap: 16px;
             flex-wrap: wrap;
             margin-top: 8px;
             align-items: center;
@@ -786,10 +786,10 @@
         #networkSelectGroup label {
             display: inline-flex;
             align-items: center;
-            position: relative; /* Для позиционирования мгновенного тултипа */
+            position: relative;
         }
 
-            /* 1. Намертво скрываем стандартный квадратный чекбокс */
+            /* Скрываем системный чекбокс */
             #networkSelectGroup label input[type="checkbox"] {
                 position: absolute;
                 opacity: 0;
@@ -798,56 +798,57 @@
                 pointer-events: none;
             }
 
-            /* 2. Стилизуем круглую подложку для иконки */
+            /* Контейнер иконки */
             #networkSelectGroup label span[data-tooltip] {
-                display: inline-flex;
+                display: inline-flex !important;
                 align-items: center;
                 justify-content: center;
-                width: 40px;
-                height: 40px;
-                border-radius: 50%;
-                background: rgba(120, 120, 120, 0.08); /* Мягкий нейтральный фон */
-                border: 1px solid var(--glass-border);
+                width: 32px;
+                height: 32px;
+                background: none !important;
+                border: none !important;
                 cursor: pointer;
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative !important; /* ИСПРАВЛЕНИЕ: Вернули для точного позиционирования тултипа */
+                transition: all 0.2s ease;
             }
 
-        /* Иконка внутри кнопки по умолчанию */
+        /* Состояние иконки ПО УМОЛЧАНИЮ (выключена) */
         #networkSelectGroup .net-icon {
-            width: 18px !important;
-            height: 18px !important;
-            color: var(--text-secondary);
-            transition: all 0.2s ease;
+            width: 32px !important;
+            height: 32px !important;
+            opacity: 0.35;
+            filter: grayscale(100%);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            object-fit: contain !important;
         }
 
-        /* Наведение на неактивную кнопку */
-        #networkSelectGroup label:hover span[data-tooltip] {
-            background: rgba(120, 120, 120, 0.16);
-            border-color: var(--accent-color);
-        }
-
+        /* НАВЕДЕНИЕ НА НЕАКТИВНУЮ: Иконка увеличивается и частично возвращает цвет */
         #networkSelectGroup label:hover .net-icon {
             transform: scale(1.15);
-            color: var(--text-main);
+            opacity: 0.7;
+            filter: grayscale(50%);
         }
 
-        /* 3. АКТИВНОЕ СОСТОЯНИЕ: Когда скрытый чекбокс нажат — окрашиваем кнопку в акцентный цвет */
-        #networkSelectGroup label input[type="checkbox"]:checked + span[data-tooltip] {
-            background: var(--accent-color, #6366f1) !important;
-            border-color: var(--accent-color, #6366f1) !important;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        /* АКТИВНОЕ СОСТОЯНИЕ (Включена) */
+        #networkSelectGroup label input[type="checkbox"]:checked + span[data-tooltip] .net-icon {
+            opacity: 1 !important;
+            filter: grayscale(0%) !important;
+            transform: scale(1.1); /* Легкий зум в обычном активном состоянии */
         }
-            /* Иконка нажатой кнопки становится белой для идеального контраста */
-            #networkSelectGroup label input[type="checkbox"]:checked + span[data-tooltip] .net-icon {
-                color: #ffffff !important;
-            }
+
+        /* ИСПРАВЛЕНИЕ (UX): НАВЕДЕНИЕ НА УЖЕ АКТИВНУЮ иконку */
+        /* Делает сильный зум (1.25x) и добавляет неоновое свечение в цвет бренда! */
+        #networkSelectGroup label:hover input[type="checkbox"]:checked + span[data-tooltip] .net-icon {
+            transform: scale(1.25) !important;
+            filter: grayscale(0%) drop-shadow(0 0 6px currentColor) !important;
+        }
 
 
         /* --- МГНОВЕННЫЙ CSS-ТУЛТИП БЕЗ ЗАДЕРЖЕК --- */
         #networkSelectGroup label span[data-tooltip]::after {
-            content: attr(data-tooltip); /* Берем имя сети из дата-атрибута */
+            content: attr(data-tooltip);
             position: absolute;
-            bottom: 125%; /* Размещаем ровно над кнопкой */
+            bottom: 125%; /* Позиционируется ровно над иконкой благодаря relative у span */
             left: 50%;
             transform: translateX(-50%) scale(0.9);
             background: var(--card-bg, #1e293b);
@@ -860,7 +861,7 @@
             white-space: nowrap;
             opacity: 0;
             pointer-events: none;
-            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); /* Мгновенный переход */
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             z-index: 200;
         }
@@ -869,6 +870,12 @@
         #networkSelectGroup label:hover span[data-tooltip]::after {
             opacity: 1;
             transform: translateX(-50%) scale(1);
+        }
+
+        /* Автоматическая инверсия цвета для PNG-иконки Threads на темной теме календаря */
+        [data-theme="dark"] img.net-icon[src*="threads"] {
+            filter: invert(1) brightness(2);
+            transition: filter 0.3s ease;
         }
     </style>
 }
@@ -904,12 +911,6 @@
                     <label>Опубликовать в сети:</label>
                     <div class="network-checkboxes-container">
                         <label>
-                            <input type="checkbox" name="selectedNetworks" value="TelegramPublic" style="width: 16px; height: 16px;"> TelegramPublic
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="TelegramPrivate" style="width: 16px; height: 16px;"> TelegramPrivate
-                        </label>
-                        <label>
                             <input type="checkbox" name="selectedNetworks" value="Instagram"> Instagram
                         </label>
                         <label>
@@ -919,10 +920,16 @@
                             <input type="checkbox" name="selectedNetworks" value="BlueSky"> BlueSky
                         </label>
                         <label>
+                            <input type="checkbox" name="selectedNetworks" value="X"> X
+                        </label>
+                        <label>
                             <input type="checkbox" name="selectedNetworks" value="Threads"> Threads
                         </label>
                         <label>
-                            <input type="checkbox" name="selectedNetworks" value="X"> X
+                            <input type="checkbox" name="selectedNetworks" value="TelegramPublic" style="width: 16px; height: 16px;"> Telegram 
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="TelegramPrivate" style="width: 16px; height: 16px;"> Private
                         </label>
                     </div>
                 </div>                
@@ -1155,7 +1162,32 @@
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
-                        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                        right: 'multiMonthYear,dayGridMonth,timeGridWeek,timeGridDay'
+                    },
+
+                    // --- АВТОСКРОЛЛ К ТЕКУЩЕМУ МЕСЯЦУ ПРИ ОТКРЫТИИ ГОДА ---
+                    datesSet: function(info) {
+                        // Если пользователь включил годовой режим просмотра
+                        if (info.view.type === 'multiMonthYear') {
+                            // Ищем ячейку сегодняшнего дня
+                            const todayCell = document.querySelector('.fc-day-today');
+                        
+                            if (todayCell) {
+                                // Находим контейнер месяца, в котором лежит этот день
+                                const monthContainer = todayCell.closest('.fc-multimonth-month');
+                            
+                                if (monthContainer) {
+                                    // Делаем небольшую задержку (100мс), чтобы браузер успел отрисовать сетку,
+                                    // и плавно скроллим текущий месяц в самый центр экрана
+                                    setTimeout(() => {
+                                        monthContainer.scrollIntoView({ 
+                                            behavior: 'smooth', 
+                                            block: 'center' 
+                                        });
+                                    }, 100);
+                                }
+                            }
+                        }
                     },
 
                     // --- РЕНДЕРИНГ СОДЕРЖИМОГО СОБЫТИЯ ---
@@ -1986,36 +2018,55 @@
             }
 
             // Функция-хелпер для получения красивых SVG-иконок соцсетей
+                    // Профессиональная цветная функция-хелпер для получения иконок соцсетей
             function getNetworkIcon(network) {
                 const net = (network || '').toLowerCase();
 
-                // Telegram (Бумажный самолетик)
+                // 1. Telegram Public & Private (Официальный голубой цвет #2AABEE)
                 if (net.includes('telegrampublic') || net.includes('telegramprivate')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z"/></svg>`;
+                    return `<svg class="net-icon" viewBox="0 0 24 24" style="color: #2AABEE;"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z"/></svg>`;
                 }
-                // Instagram (Камера)
+
+                // 2. Instagram (Векторный градиент с точным совпадением цветов бренда)
                 if (net.includes('instagram')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>`;
+                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <defs>
+                            <linearGradient id="instaGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#f09433" />
+                                <stop offset="25%" stop-color="#e6683c" />
+                                <stop offset="50%" stop-color="#dc2743" />
+                                <stop offset="75%" stop-color="#cc2366" />
+                                <stop offset="100%" stop-color="#bc1888" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="url(#instaGrad)"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke="url(#instaGrad)"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" stroke="url(#instaGrad)"></line>
+                    </svg>`;
                 }
-                // Facebook
+
+                // 3. Facebook Pages (Официальный синий цвет #1877F2)
                 if (net.includes('facebook')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`;
+                    return `<svg class="net-icon" viewBox="0 0 24 24" style="color: #1877F2;"><path fill="currentColor" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`;
                 }
-                // X
+
+                // 4. X / Twitter (Адаптивный белый/черный цвет под тему сайта)
                 if (net === 'x' || net === 'twitter') {
-                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
+                    return `<svg class="net-icon" viewBox="0 0 24 24" style="color: var(--text-main);" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
                 }
-                // Threads
+
+                // 5. Threads (Адаптивный белый/черный цвет под тему сайта)
                 if (net.includes('threads')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12.583 2.164a7.925 7.925 0 00-4.697 1.54C5.12 5.67 3.961 8.557 4.004 12.18c.046 3.9 1.488 6.55 4.316 7.902a7.6 7.6 0 00-3.541.748 7.373 7.373 0 004.834-1.637l.454.493a8.163 8.163 0 01-5.288 1.844c-1.393 0-2.825-.333-4.14-1.025C4.2 18.736 2.373 15.65 2.32 11.2c-.053-4.48 1.442-8.088 4.453-10.15A10.021 10.021 0 0112.583 0c3.483 0 6.643 1.258 8.441 3.37l-.539.421c-1.656-1.922-4.572-3.076-7.902-3.076a9.2 9.2 0 00-5.32 1.42C4.542 3.84 3.1 7.24 3.16 11.24c.05 4.09 1.7 6.94 4.31 8.01a6.6 6.6 0 00-3.07.61c2.16 0 4.11-.64 5.34-1.74l-.45-.49c-1.08 1-2.8 1.54-4.89 1.54-2.4 0-4.5-1.12-5.59-2.97a7.65 7.65 0 01-.84-3.8c-.03-2.61.54-4.8 1.63-6.19a4.8 4.8 0 013.71-1.67h.03a4.2 4.2 0 013.88 2.5c.67 1.83.67 4 .01 5.8a4.34 4.34 0 01-3.69 2.5h-.11c-1.29 0-2.31-.59-2.81-1.61A3.75 7.02 0 019 9.87c.01-1.42.42-2.58 1.15-3.26a3.63 3.63 0 012.39-.77 2.33 2.33 0 012.22 1.23l.18.35.32-.4c.73-1.11 1.94-1.77 3.3-1.77 2.32 0 4.46 1.48 5.48 3.73.91 2.33.91 5.09-.01 7.42-1.03 2.25-3.17 3.73-5.49 3.73a4.2 4.2 0 01-3.88-2.5 4.34 4.34 0 01.01-3.3 4.34 4.34 0 013.69-2.5h.11c1.29 0 2.31.59 2.81 1.61a3.75 7.02 0 01.21 2.05c-.01 1.42-.42 2.58-1.15 3.26a1.94 1.94 0 01-1.39.46z" /></svg>`;
+                    return `<img class="net-icon" src="/images/threads.png" alt="Threads" />`;
                 }
-                // Bluesky
+
+                // 6. Bluesky (Официальный синий цвет #0085ff)
                 if (net.includes('bluesky')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.57c2.16-3.85 4.97-6.9 7.32-6.9 2.92 0 4.68 2.65 4.68 5.38 0 4.42-4.14 7.91-7.31 9.77-1.17.68-2.53 1.12-3.89 1.12h-.8c-1.36 0-2.72-.44-3.89-1.12C4.84 16.96.7 13.47.7 9.05c0-2.73 1.76-5.38 4.68-5.38 2.35 0 5.16 3.05 7.32 6.9z"/></svg>`;
+                    return `<img class="net-icon" src="/images/bluesky-logo.png" alt="BlueSky" />`;
                 }
 
                 // Заглушка по умолчанию (Календарик)
-                return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
+                return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
             }
 
             // Функция автоматического преобразования текстовых меток чекбоксов в SVG-иконки
