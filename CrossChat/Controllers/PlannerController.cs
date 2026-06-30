@@ -59,7 +59,8 @@ namespace CrossChat.Controllers
 				id = p.Id,
 				title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Caption ?? "Пост",
 				start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"), // ISO формат
-				backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24"
+				backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
+				network = networkType 
 			});
 
 			return Json(events);
