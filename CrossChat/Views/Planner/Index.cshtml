@@ -930,7 +930,7 @@
                 <!-- Галерея для превью -->
                 <div id="imageGallery" class="image-gallery"></div>
 
-                <div class="form-group">
+                <div class="form-group" id="fileUploadGroup">
                     <label>Добавить фото/видео</label>
                     <div class="file-upload-zone" id="dropZone">
                         <span class="upload-text">📁 Нажмите для выбора файлов или перетащите их сюда</span>
@@ -1402,6 +1402,12 @@
                                     dateInput.disabled = true;
                                     document.getElementById('fileInput').disabled = true;
 
+                                     // СКРЫВАЕМ группу загрузки файлов полностью!
+                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                    if (fileUploadGroup) {
+                                        fileUploadGroup.style.display = 'none';
+                                    }
+
                                     const dropZone = document.getElementById('dropZone');
                                     if (dropZone) {
                                         dropZone.style.opacity = '0.4';
@@ -1413,6 +1419,12 @@
                                     dateInput.disabled = false;
                                     document.getElementById('fileInput').disabled = false;
                                     if (warningDiv) warningDiv.style.display = 'none';
+
+                                    // ПОКАЗЫВАЕМ группу загрузки файлов обратно
+                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                    if (fileUploadGroup) {
+                                        fileUploadGroup.style.display = 'block';
+                                    }
 
                                     const dropZone = document.getElementById('dropZone');
                                     if (dropZone) {
@@ -1615,6 +1627,12 @@
                 dateInput.disabled = false;
                 document.getElementById('fileInput').disabled = false;
             
+                // ВОССТАНАВЛИВАЕМ видимость группы загрузки файлов
+                const fileUploadGroup = document.getElementById('fileUploadGroup');
+                if (fileUploadGroup) {
+                    fileUploadGroup.style.display = 'block';
+                }
+
                 const dropZone = document.getElementById('dropZone');
                 if (dropZone) {
                     dropZone.style.opacity = '1';
