@@ -412,6 +412,9 @@
             <a href="/auth/console?provider=x&botId=@Model.Id&username=@Model.ScreenName" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
                 💻 Открыть консоль
             </a>
+            <a href="/planner?profileId=@Model.ProfileId&network=X" class="btn" style="background: #6366f1; margin-top: 10px;">
+                📅 Автопостинг
+            </a>
             <form action="/x/update-settings" method="post" class="form-section" style="text-align:left; margin-top:2rem;">
                 <input type="hidden" name="botId" value="@Model.Id">
 

@@ -14,6 +14,7 @@ namespace CrossChat.Integrations.Models.Posting.Configurations
 			{ NetworkType.X, ("X", "✗") },
 			{ NetworkType.TelegramPublic, ("Telegram Public", "📱") },
 			{ NetworkType.TelegramPrivate, ("Telegram Private", "💋") },
+			{ NetworkType.Threads, ("Threads", "💋") },
 		};
 
 		// Список поддерживаемых сетей (исключая All)
@@ -27,6 +28,7 @@ namespace CrossChat.Integrations.Models.Posting.Configurations
 			NetworkType.BlueSky,
 			NetworkType.X,
 			NetworkType.TelegramPublic,
+			NetworkType.Threads
 		};
 
 		// Куда постить, если нажали "Во все Приватные"

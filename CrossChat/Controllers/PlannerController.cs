@@ -6,6 +6,7 @@ using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
+using CrossChat.Integrations.Models.Posting.Configurations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -44,26 +45,59 @@ namespace CrossChat.Controllers
 		public async Task<IActionResult> GetEvents(int profileId, string networkType)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-			var netType = Enum.Parse<NetworkType>(networkType);
-			int netTypeId = (int)netType;
 
-			var posts = await _db.Posts
-				.Include(p => p.NetworkStates)
-				.Where(p => p.ProfileId == profileId &&
-							p.NetworkStates.Any(ns => ns.NetworkType == netTypeId && ns.Status != (int)SocialStatus.None))
-				.ToListAsync();
-
-			// Превращаем наши посты в формат FullCalendar
-			var events = posts.Select(p => new
+			if (networkType == "All")
 			{
-				id = p.Id,
-				title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Caption ?? "Пост",
-				start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"), // ISO формат
-				backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
-				network = networkType 
-			});
+				// ОБЩИЙ РЕЖИМ: Выбираем посты, у которых активно хотя бы одно направление
+				var posts = await _db.Posts
+					.Include(p => p.NetworkStates)
+					.Where(p => p.ProfileId == profileId &&
+								p.NetworkStates.Any(ns => ns.Status != (int)SocialStatus.None))
+					.ToListAsync();
 
-			return Json(events);
+				var events = posts.Select(p =>
+				{
+					// Выбираем только активные состояния соцсетей
+					var activeStates = p.NetworkStates.Where(ns => ns.Status != (int)SocialStatus.None).ToList();
+					var mainCaption = activeStates.FirstOrDefault()?.Caption ?? "Пост";
+
+					return new
+					{
+						id = p.Id,
+						title = mainCaption,
+						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+						backgroundColor = "#4f46e5", // Красивый индиго цвет для общей ленты
+						network = "All",
+						// Передаем массив имен активных соцсетей на фронтенд для рендеринга иконок
+						activeNetworks = activeStates.Select(ns => ((NetworkType)ns.NetworkType).ToString()).ToList()
+					};
+				});
+
+				return Json(events);
+			}
+			else
+			{
+				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): код остается прежним
+				var netType = Enum.Parse<NetworkType>(networkType);
+				int netTypeId = (int)netType;
+
+				var posts = await _db.Posts
+					.Include(p => p.NetworkStates)
+					.Where(p => p.ProfileId == profileId &&
+								p.NetworkStates.Any(ns => ns.NetworkType == netTypeId && ns.Status != (int)SocialStatus.None))
+					.ToListAsync();
+
+				var events = posts.Select(p => new
+				{
+					id = p.Id,
+					title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Caption ?? "Пост",
+					start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+					backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
+					network = networkType
+				});
+
+				return Json(events);
+			}
 		}
 
 		[HttpPost("create")]
@@ -72,15 +106,15 @@ namespace CrossChat.Controllers
 		public async Task<IActionResult> Create(
 			[FromForm] int profileId,
 			[FromForm] NetworkType networkType,
+			[FromForm] List<string> selectedNetworks, // Чекбоксы выбранных сетей из формы
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
 			[FromForm] List<string> originalDimensions,
 			[FromForm] List<string> compressedDimensions,
-			[FromForm] List<long> originalSizes,  
+			[FromForm] List<long> originalSizes,
 			List<IFormFile> images)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
 			var utcDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
 			// 1. Создаем BlogPost (Domain Model)
@@ -161,12 +195,32 @@ namespace CrossChat.Controllers
 				}
 			}
 
-			// 3. Добавляем состояние сети
-			post.Networks[networkType] = new NetworkPostData
+			// НАПОЛНЕНИЕ СОЦСЕТЕЙ
+			if (networkType == NetworkType.All)
 			{
-				Status = SocialStatus.Pending,
-				Caption = caption
-			};
+				// Если создаем в общем режиме, динамически читаем тексты для всех выбранных чекбоксами соцсетей
+				foreach (var netName in selectedNetworks)
+				{
+					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
+					{
+						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
+						post.Networks[parsedNet] = new NetworkPostData
+						{
+							Status = SocialStatus.Pending,
+							Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption
+						};
+					}
+				}
+			}
+			else
+			{
+				// 3. Добавляем состояние сети
+				post.Networks[networkType] = new NetworkPostData
+				{
+					Status = SocialStatus.Pending,
+					Caption = caption
+				};
+			}
 
 			// 4. Сохраняем через твой PostService
 			await _postService.AddPostAsync(post);
@@ -184,6 +238,7 @@ namespace CrossChat.Controllers
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
 			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
+			[FromForm] List<string> selectedNetworks, // Список выбранных соцсетей (для режима All)
 			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
 			[FromForm] List<string> compressedDimensions,
 			[FromForm] List<long> originalSizes,
@@ -197,10 +252,42 @@ namespace CrossChat.Controllers
 			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
 			// Обновляем текст для выбранной соцсети
-			var netType = Enum.Parse<NetworkType>(networkType);
-			if (post.Networks.ContainsKey(netType))
+
+			// ОБНОВЛЕНИЕ ТЕКСТОВ ДЛЯ СЕТЕЙ
+			if (networkType == "All")
 			{
-				post.Networks[netType].Caption = caption;
+				// Сначала сбрасываем тексты и статусы для сетей, у которых убрали галочки
+				foreach (var net in NetworkMetadata.Supported)
+				{
+					if (!selectedNetworks.Contains(net.ToString()))
+					{
+						post.Networks[net] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+					}
+				}
+
+				// Добавляем/обновляем тексты для активных сетей
+				foreach (var netName in selectedNetworks)
+				{
+					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
+					{
+						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
+						post.Networks[parsedNet].Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
+						
+						// Если сеть только что добавили, даем ей статус ожидания
+						if (post.Networks[parsedNet].Status == SocialStatus.None)
+						{
+							post.Networks[parsedNet].Status = SocialStatus.Pending;
+						}
+					}
+				}
+			}
+			else
+			{
+				var netType = Enum.Parse<NetworkType>(networkType);
+				if (post.Networks.ContainsKey(netType))
+				{
+					post.Networks[netType].Caption = caption;
+				}
 			}
 
 			// 3. Обновляем список картинок поста
@@ -313,9 +400,29 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("delete/{id}")]
-		public async Task<IActionResult> Delete(Guid id)
+		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType)
 		{
-			await _postService.DeletePostAsync(id);
+			var post = await _postService.GetPostByIdAsync(id);
+			if (post == null) return NotFound();
+
+			var netType = Enum.Parse<NetworkType>(networkType);
+
+			// ЕСЛИ удаляем из общей вкладки "All" ИЛИ это была единственная активная сеть поста
+			if (netType == NetworkType.All || post.Networks.Count(n => n.Value.Status != SocialStatus.None) <= 1)
+			{
+				// Удаляем полностью весь BlogPost из базы данных
+				await _postService.DeletePostAsync(id);
+			}
+			else
+			{
+				// ЕСЛИ это мультипостинг, но удаляем из конкретной соцсети — убираем только это направление (Status = None)
+				if (post.Networks.ContainsKey(netType))
+				{
+					post.Networks[netType] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+				}
+				await _postService.UpdatePostAsync(post);
+			}
+
 			return Ok();
 		}
 	}

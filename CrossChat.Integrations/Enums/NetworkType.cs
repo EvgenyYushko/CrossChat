@@ -39,6 +39,11 @@ namespace CrossChat.Integrations.Enums
 		/// <summary>
 		/// X (Twiter)
 		/// </summary>
-		X
+		X,
+
+		/// <summary>
+		/// Threads
+		/// </summary>
+		Threads
 	}
 }

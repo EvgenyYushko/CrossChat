@@ -754,6 +754,122 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
+
+        /* Выравнивание нескольких иконок соцсетей и текста в один ряд */
+        .fc-event-main-content {
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            width: 100%;
+        }
+
+            .fc-event-main-content img,
+            .fc-event-main-content svg {
+                flex-shrink: 0;
+            }
+
+        .fc-event-title-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* --- ПАНЕЛЬ КРУГЛЫХ КНОПОК-ПЕРЕКЛЮЧАТЕЛЕЙ --- */
+        #networkSelectGroup .network-checkboxes-container {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            align-items: center;
+        }
+
+        #networkSelectGroup label {
+            display: inline-flex;
+            align-items: center;
+            position: relative; /* Для позиционирования мгновенного тултипа */
+        }
+
+            /* 1. Намертво скрываем стандартный квадратный чекбокс */
+            #networkSelectGroup label input[type="checkbox"] {
+                position: absolute;
+                opacity: 0;
+                width: 0;
+                height: 0;
+                pointer-events: none;
+            }
+
+            /* 2. Стилизуем круглую подложку для иконки */
+            #networkSelectGroup label span[data-tooltip] {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background: rgba(120, 120, 120, 0.08); /* Мягкий нейтральный фон */
+                border: 1px solid var(--glass-border);
+                cursor: pointer;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+        /* Иконка внутри кнопки по умолчанию */
+        #networkSelectGroup .net-icon {
+            width: 18px !important;
+            height: 18px !important;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        /* Наведение на неактивную кнопку */
+        #networkSelectGroup label:hover span[data-tooltip] {
+            background: rgba(120, 120, 120, 0.16);
+            border-color: var(--accent-color);
+        }
+
+        #networkSelectGroup label:hover .net-icon {
+            transform: scale(1.15);
+            color: var(--text-main);
+        }
+
+        /* 3. АКТИВНОЕ СОСТОЯНИЕ: Когда скрытый чекбокс нажат — окрашиваем кнопку в акцентный цвет */
+        #networkSelectGroup label input[type="checkbox"]:checked + span[data-tooltip] {
+            background: var(--accent-color, #6366f1) !important;
+            border-color: var(--accent-color, #6366f1) !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+            /* Иконка нажатой кнопки становится белой для идеального контраста */
+            #networkSelectGroup label input[type="checkbox"]:checked + span[data-tooltip] .net-icon {
+                color: #ffffff !important;
+            }
+
+
+        /* --- МГНОВЕННЫЙ CSS-ТУЛТИП БЕЗ ЗАДЕРЖЕК --- */
+        #networkSelectGroup label span[data-tooltip]::after {
+            content: attr(data-tooltip); /* Берем имя сети из дата-атрибута */
+            position: absolute;
+            bottom: 125%; /* Размещаем ровно над кнопкой */
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            background: var(--card-bg, #1e293b);
+            color: var(--text-main, #f1f5f9);
+            border: 1px solid var(--glass-border);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); /* Мгновенный переход */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 200;
+        }
+
+        /* Мгновенное появление при наведении курсора */
+        #networkSelectGroup label:hover span[data-tooltip]::after {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
     </style>
 }
 
@@ -775,9 +891,40 @@
                 <!-- Контейнер для передачи Base64 оставшихся картинок -->
                 <div id="hiddenInputsContainer"></div>
 
+                <!-- Предупреждение о блокировке полей при редактировании -->
+                <div id="modalBlocker" class="modal-blocker"></div>
+
                 <div class="form-group">
                     <label>Дата и время публикации</label>
                     <input type="datetime-local" name="showDate" id="showDateInput" class="text-input" required>
+                </div>
+
+                <!-- Блок выбора соцсетей -->
+                <div class="form-group" id="networkSelectGroup" style="display: none;">
+                    <label>Опубликовать в сети:</label>
+                    <div class="network-checkboxes-container">
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="TelegramPublic" style="width: 16px; height: 16px;"> TelegramPublic
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="TelegramPrivate" style="width: 16px; height: 16px;"> TelegramPrivate
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="Instagram"> Instagram
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="Facebook"> Facebook
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="BlueSky"> BlueSky
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="Threads"> Threads
+                        </label>
+                        <label>
+                            <input type="checkbox" name="selectedNetworks" value="X"> X
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Галерея для превью -->
@@ -791,11 +938,52 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Текст поста</label>
-                    <textarea name="caption" id="captionInput" required placeholder="Введите текст вашего сообщения..."></textarea>
+                <!-- Контейнер для динамического текста постов -->
+                <div id="captionContainer">
+                    <div class="form-group" id="defaultCaptionGroup">
+                        <label id="captionLabel">Текст поста</label>
+                        <textarea name="caption" id="captionInput" required placeholder="Введите текст вашего сообщения..."></textarea>
+                    </div>
+
+                    <!-- Скрытые кастомные текста для соцсетей (режим All) -->
+                    <div class="form-group" id="captionGroup_TelegramPublic" style="display: none;">
+                        <label style="color: #3b82f6;">Текст для Telegram</label>
+                        <textarea name="caption_TelegramPublic" id="captionInput_TelegramPublic" placeholder="Введите уникальный текст для TelegramPublic..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_TelegramPrivate" style="display: none;">
+                        <label style="color: #3b82f6;">Текст для TelegramPrivate</label>
+                        <textarea name="caption_TelegramPrivate" id="captionInput_TelegramPrivate" placeholder="Введите уникальный текст для TelegramPrivate..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_Instagram" style="display: none;">
+                        <label style="color: #ec4899;">Текст для Instagram</label>
+                        <textarea name="caption_Instagram" id="captionInput_Instagram" placeholder="Введите уникальный текст для Instagram..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_Facebook" style="display: none;">
+                        <label style="color: #ec4899;">Текст для Facebook</label>
+                        <textarea name="caption_Facebook" id="captionInput_Facebook" placeholder="Введите уникальный текст для Facebook..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_Threads" style="display: none;">
+                        <label style="color: #ec4899;">Текст для Threads</label>
+                        <textarea name="caption_Threads" id="captionInput_Threads" placeholder="Введите уникальный текст для Threads..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_BlueSky" style="display: none;">
+                        <label style="color: #ec4899;">Текст для BlueSky</label>
+                        <textarea name="caption_BlueSky" id="captionInput_BlueSky" placeholder="Введите уникальный текст для BlueSky..."></textarea>
+                    </div>
+                    <div class="form-group" id="captionGroup_X" style="display: none;">
+                        <label style="color: #ec4899;">Текст для X</label>
+                        <textarea name="caption_X" id="captionInput_X" placeholder="Введите уникальный текст для X..."></textarea>
+                    </div>
+                    @* <div class="form-group" id="captionGroup_VK" style="display: none;">
+                        <label style="color: #4c75a3;">Текст для VK</label>
+                        <textarea name="caption_VK" id="captionInput_VK" placeholder="Введите уникальный текст для VK..."></textarea>
+                    </div> *@
                 </div>
 
+                <!-- Предупреждение о коллективном редактировании -->
+                <div id="multiPostWarning" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;"></div>
+
+                <!-- Блок прогресс-бара -->
                 <div id="uploadProgressContainer" class="upload-progress-container" style="display: none;">
                     <div class="progress-bar-bg">
                         <div id="uploadProgressFill" class="progress-bar-fill"></div>
@@ -826,6 +1014,7 @@
         <script>
             let isEditMode = false;
             let isUploading = false; // Глобальный флаг процесса загрузки
+            let isImageEditingLocked = false; 
 
             const modal = document.getElementById('postModal');
             const dateInput = document.getElementById('showDateInput');
@@ -839,7 +1028,8 @@
                 if (isUploading) return; // Блокируем удаление во время отправки другого запроса
                 if (!confirm('Удалить пост?')) return;
                 const postId = postIdInput.value;
-                const response = await fetch(`/planner/delete/${postId}`, { method: 'POST' });
+                const network = "@ViewBag.Network"; // Передаем текущую соцсеть для умного удаления!
+                const response = await fetch(`/planner/delete/${postId}?networkType=${network}`, { method: 'POST' });
                 if (response.ok) location.reload();
                 else alert("Ошибка при удалении");
             }
@@ -858,7 +1048,7 @@
             }
 
             // Рендеринг галереи превью
-                function renderGallery() {
+            function renderGallery() {
                 const gallery = document.getElementById('imageGallery');
                 const hiddenContainer = document.getElementById('hiddenInputsContainer');
                 gallery.innerHTML = '';
@@ -881,22 +1071,24 @@
                         src = `data:${mimeType};base64,${imgData}`;
                     }
                     img.src = src;
-
-                    // ПРИ КЛИКЕ НА КАРТИНКУ: Открываем ее во весь экран
                     img.onclick = () => openLightbox(src);
 
-                    const removeBtn = document.createElement('button');
-                    removeBtn.type = 'button';
-                    removeBtn.className = 'remove-thumb-btn';
-                    removeBtn.innerHTML = '&times;';
-                    removeBtn.onclick = (e) => {
-                        e.stopPropagation(); // Предотвращаем срабатывание клика по самой картинке
-                        existingImages.splice(index, 1);
-                        renderGallery();
-                    };
-
                     wrapper.appendChild(img);
-                    wrapper.appendChild(removeBtn);
+
+                    // ИСПРАВЛЕНИЕ: Создаем крестик удаления ТОЛЬКО если редактирование картинок разрешено!
+                    if (!isImageEditingLocked) {
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'remove-thumb-btn';
+                        removeBtn.innerHTML = '&times;';
+                        removeBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            existingImages.splice(index, 1);
+                            renderGallery();
+                        };
+                        wrapper.appendChild(removeBtn);
+                    }
+
                     gallery.appendChild(wrapper);
 
                     const hiddenInput = document.createElement('input');
@@ -916,30 +1108,34 @@
 
                     const blobUrl = URL.createObjectURL(file);
                     img.src = blobUrl;
-                    img.onload = () => { /* URL освобождается внутри closeLightbox или при уничтожении */ };
-
-                    // ПРИ КЛИКЕ НА КАРТИНКУ: Открываем ее во весь экран
                     img.onclick = () => openLightbox(blobUrl);
 
-                    const removeBtn = document.createElement('button');
-                    removeBtn.type = 'button';
-                    removeBtn.className = 'remove-thumb-btn';
-                    removeBtn.innerHTML = '&times;';
-                    removeBtn.onclick = (e) => {
-                        e.stopPropagation(); // Предотвращаем срабатывание клика по картинке
-                        selectedFiles.splice(index, 1);
-                        URL.revokeObjectURL(blobUrl); // Освобождаем память
-                        syncFileInput();
-                        renderGallery();
-                    };
-
                     wrapper.appendChild(img);
-                    wrapper.appendChild(removeBtn);
+
+                    // ИСПРАВЛЕНИЕ: Создаем крестик удаления ТОЛЬКО если редактирование разрешено!
+                    if (!isImageEditingLocked) {
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'remove-thumb-btn';
+                        removeBtn.innerHTML = '&times;';
+                        removeBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            selectedFiles.splice(index, 1);
+                            URL.revokeObjectURL(blobUrl);
+                            syncFileInput();
+                            renderGallery();
+                        };
+                        wrapper.appendChild(removeBtn);
+                    }
+
                     gallery.appendChild(wrapper);
                 });
             }
 
             document.addEventListener('DOMContentLoaded', function() {
+
+                initCheckboxIcons();
+
                 var calendarEl = document.getElementById('calendar');
 
                 var calendar = new FullCalendar.Calendar(calendarEl, {
@@ -955,62 +1151,64 @@
                         right: 'dayGridMonth,timeGridWeek,timeGridDay'
                     },
 
-                    // --- КАСТОМНЫЙ РЕНДЕРИНГ СОДЕРЖИМОГО СОБЫТИЯ ---
+                    // --- РЕНДЕРИНГ СОДЕРЖИМОГО СОБЫТИЯ ---
                     eventContent: function(arg) {
-                        // Извлекаем переданную из C# строку названия соцсети (или берем текущую из ViewBag)
-                        const network = arg.event.extendedProps.network || "@ViewBag.Network";
-                    
-                        // Получаем соответствующую SVG-иконку
-                        const iconSvg = getNetworkIcon(network);
+                        const currentNetwork = "@ViewBag.Network";
+                        let iconsHtml = '';
                         const titleText = arg.event.title;
 
-                        // Возвращаем кастомный HTML-контент ярлыка
-                        return { 
-                            html: `<div class="fc-event-main-content">${iconSvg}<span class="fc-event-title-text">${titleText}</span></div>` 
+                        if (currentNetwork === "All") {
+                            // Если мы в общем режиме — выводим иконки ВСЕХ активных сетей в ряд!
+                            const activeNets = arg.event.extendedProps.activeNetworks || [];
+                            activeNets.forEach(net => {
+                                iconsHtml += getNetworkIcon(net);
+                            });
+                        } else {
+                            // Если в одиночной сети — выводим только иконку этой соцсети
+                            iconsHtml = getNetworkIcon(currentNetwork);
+                        }
+
+                        return {
+                            html: `<div class="fc-event-main-content">${iconsHtml}<span class="fc-event-title-text">${titleText}</span></div>`
                         };
                     },
 
                     // --- ФИЧА №3: НАВЕДЕНИЕ МЫШИ НА СОБЫТИЕ ---
                     eventMouseEnter: function(info) {
-                        if (window.innerWidth < 600) return; // На смартфонах отключаем всплывающие окна
+                        if (window.innerWidth < 600) return;
 
                         const tooltip = document.getElementById('calendarTooltip');
                         const event = info.event;
-                    
                         const title = event.title;
-                        const network = event.extendedProps.network || "@ViewBag.Network";
-                        const iconSvg = getNetworkIcon(network);
-                    
-                        // Красиво форматируем запланированную дату на русском языке
+                        const currentNetwork = "@ViewBag.Network";
+
+                        let iconsHtml = '';
+                        if (currentNetwork === "All") {
+                            const activeNets = event.extendedProps.activeNetworks || [];
+                            activeNets.forEach(net => { iconsHtml += getNetworkIcon(net); });
+                        } else {
+                            iconsHtml = getNetworkIcon(currentNetwork);
+                        }
+
                         const options = { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
                         const dateStr = event.start.toLocaleDateString('ru-RU', options);
-                    
-                        // Цветовая разметка статуса из цвета фона ярлыка
-                        const isPublished = event.backgroundColor === "#10b981";
-                        const statusText = isPublished ? "Опубликован" : "Ожидает";
                         const statusColor = event.backgroundColor;
 
-                        // Заполняем шаблон данными
                         tooltip.innerHTML = `
                             <div class="tooltip-header">
-                                <div class="tooltip-network">${iconSvg} <span>${network}</span></div>
-                                <span class="tooltip-status" style="background: ${statusColor}">${statusText}</span>
+                                <div class="tooltip-network">${iconsHtml}</div>
+                                <span class="tooltip-status" style="background: ${statusColor}">Пост</span>
                             </div>
                             <div class="tooltip-date">📅 ${dateStr}</div>
                             <div class="tooltip-caption">${title ? title : "<i>Без описания</i>"}</div>
                         `;
 
-                        // Расчет координат для позиционирования ровно по центру над плашкой события
                         const rect = info.el.getBoundingClientRect();
-                    
-                        tooltip.style.display = 'block'; // Показываем блок для вычисления его высоты
+                        tooltip.style.display = 'block';
                         const tooltipHeight = tooltip.offsetHeight;
-                    
-                        // Центрируем тултип горизонтально над ярлыком
+
                         tooltip.style.left = (window.scrollX + rect.left + rect.width / 2 - 130) + 'px';
                         tooltip.style.top = (window.scrollY + rect.top - tooltipHeight - 12) + 'px';
-                    
-                        // Плавное появление
                         tooltip.style.opacity = '1';
                     },
 
@@ -1029,32 +1227,33 @@
 
                     // --- ОБРАБОТЧИК ПЕРЕТАСКИВАНИЯ ПОСТА МЫШКОЙ ---
                     eventDrop: function(info) {
-                        const postId = info.event.id;
+                        // Блокируем перенос на календаре, если это мультипостинг и мы находимся в одиночной соцсети
+                        const currentNetwork = "@ViewBag.Network";
+                        const activeNets = info.event.extendedProps.activeNetworks || [];
+                        if (currentNetwork !== "All" && activeNets.length > 1) {
+                            alert('Изменение даты публикации для мультипостинга заблокировано в одиночной соцсети. Перейдите в общий вид ("All").');
+                            info.revert();
+                            return;
+                        }
 
-                        // ПОЛУЧАЕМ ДАТУ В ЛОКАЛЬНОМ ВРЕМЕНИ (без сдвига на 3 часа)
+                        const postId = info.event.id;
                         const localDate = info.event.start;
                         const pad = (num) => num.toString().padStart(2, '0');
-
-                        // Собираем формат YYYY-MM-DDTHH:mm:ss
                         const localDateStr = `${localDate.getFullYear()}-${pad(localDate.getMonth() + 1)}-${pad(localDate.getDate())}T${pad(localDate.getHours())}:${pad(localDate.getMinutes())}:${pad(localDate.getSeconds())}`;
 
                         const formData = new FormData();
-                        formData.append('newDate', localDateStr); // Отправляем точное локальное время
+                        formData.append('newDate', localDateStr);
 
-                        // Отправляем быстрый фоновый запрос на сервер
                         fetch(`/planner/update-date/${postId}`, {
                             method: 'POST',
                             body: formData
                         })
                         .then(res => {
-                            if (!res.ok) {
-                                throw new Error('Ошибка сервера при изменении даты');
-                            }
+                            if (!res.ok) throw new Error('Ошибка сервера');
                         })
                         .catch(err => {
-                            console.error('Ошибка изменения даты:', err);
-                            alert('Не удалось перенести пост. Проверьте соединение с интернетом.');
-                            info.revert(); // Возвращаем ярлык обратно в случае сбоя
+                            alert('Не удалось изменить дату. Откат изменений.');
+                            info.revert();
                         });
                     },
 
@@ -1095,41 +1294,28 @@
 
                 eventClick: function(info) {
                     const postId = info.event.id;
-                    const network = "@ViewBag.Network";
+                    const currentNetwork = "@ViewBag.Network";
                     isEditMode = true;
 
                     resetModalFormState();
 
-                    // Находим элементы
-                    const gallery = document.getElementById('imageGallery');
                     const postIdInput = document.getElementById('postId');
                     const dateInput = document.getElementById('showDateInput');
-                    const captionInput = document.querySelector('textarea[name="caption"]');
+                    const defaultCaptionInput = document.getElementById('captionInput');
                     const deleteBtn = document.getElementById('deleteBtn');
                     const postForm = document.getElementById('postForm');
                     const postFormOk = document.getElementById('postForm-ok');
 
-                    // 1. Сразу очищаем старые данные и ставим текст "Загрузка..."
-                    postIdInput.value = "";
-                    dateInput.value = "";
-                    captionInput.value = "Загрузка данных постов...";
+                    document.getElementById('modalTitle').textContent = "Редактирование поста";
+                    document.getElementById('imageGallery').innerHTML =
+                        '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
 
-                    // Показываем красивый текстовый лоадер в галерее
-                    gallery.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
-
-                    // Сброс массивов перед редактированием
-                    selectedFiles = [];
-                    existingImages = [];
-
-                    // 2. ОТКРЫВАЕМ МОДАЛКУ МГНОВЕННО, не дожидаясь ответа от сервера!
                     modal.style.display = 'flex';
 
-                    // 3. Запускаем фоновый запрос данных
                     fetch(`/planner/get/${postId}`)
                         .then(res => res.json())
                         .then(post => {
-                            // Очищаем лоадер из галереи
-                            gallery.innerHTML = '';
+                            document.getElementById('imageGallery').innerHTML = '';
 
                             postIdInput.value = post.id || post.Id;
 
@@ -1139,8 +1325,102 @@
                             }
 
                             const networks = post.networks || post.Networks;
-                            const networkData = networks ? networks[network] : null;
-                            captionInput.value = networkData ? (networkData.caption || networkData.Caption || "") : "";
+
+                            let activeNets = [];
+                            for (let key in networks) {
+                                const netData = networks[key];
+                                if (netData) {
+                                    // Безопасно читаем статус в любом регистре (Status или status)
+                                    const status = netData.status !== undefined ? netData.status : netData.Status;
+
+                                    // Если статус не равен "None", не равен 0 и существует
+                                    if (status !== undefined && status !== null && status !== "None" && status !== 0) {
+                                        activeNets.push(key);
+                                    }
+                                }
+                            }
+                            const isMultiPost = activeNets.length > 1;
+
+                            // Безопасные ссылки на DOM-элементы
+                            const netSelectGroup = document.getElementById('networkSelectGroup');
+                            const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
+                            const warningDiv = document.getElementById('multiPostWarning');
+
+                            if (currentNetwork === "All") {
+                                // Общий режим
+                                if (netSelectGroup) netSelectGroup.style.display = 'block';
+                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                                if (warningDiv) warningDiv.style.display = 'none';
+                                if (defaultCaptionInput) defaultCaptionInput.required = false;
+
+                                dateInput.disabled = false;
+                                document.getElementById('fileInput').disabled = false;
+                                document.querySelector('.file-upload-zone').style.opacity = '1';
+
+                                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                                    const netName = cb.value;
+                                    const isActive = activeNets.includes(netName);
+                                    cb.checked = isActive;
+
+                                    const subGroup = document.getElementById(`captionGroup_${netName}`);
+                                    const subTextarea = document.getElementById(`captionInput_${netName}`);
+
+                                    if (subGroup && subTextarea) {
+                                        if (isActive) {
+                                            subGroup.style.display = 'block';
+                                            subTextarea.value = networks[netName].caption || networks[netName].Caption || "";
+                                            subTextarea.required = true;
+                                        } else {
+                                            subGroup.style.display = 'none';
+                                            subTextarea.value = "";
+                                            subTextarea.required = false;
+                                        }
+                                    }
+                                });
+                            } else {
+                                // Одиночный режим (Instagram, Telegram...)
+                                if (netSelectGroup) netSelectGroup.style.display = 'none';
+                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+                                if (defaultCaptionInput) defaultCaptionInput.required = true;
+
+                                const netData = networks[currentNetwork];
+                                if (defaultCaptionInput) {
+                                    defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                                }
+
+                                if (isMultiPost) {
+                                    // УМНАЯ БЛОКИРОВКА ДЛЯ МУЛЬТИПОСТИНГА
+                                    const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
+                                    const warningDiv = document.getElementById('multiPostWarning');
+                                    if (warningDiv) {
+                                        warningDiv.style.display = 'block';
+                                        warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
+                                    }
+
+                                    // АКТИВИРУЕМ БЛОКИРОВКИ:
+                                    isImageEditingLocked = true; // Блокируем картинки!
+                                    dateInput.disabled = true;
+                                    document.getElementById('fileInput').disabled = true;
+
+                                    const dropZone = document.getElementById('dropZone');
+                                    if (dropZone) {
+                                        dropZone.style.opacity = '0.4';
+                                        dropZone.style.cursor = 'not-allowed'; // Запрещающий курсор
+                                    }
+                                } else {
+                                    // Одиночный стандартный пост - разрешаем всё
+                                    isImageEditingLocked = false;
+                                    dateInput.disabled = false;
+                                    document.getElementById('fileInput').disabled = false;
+                                    if (warningDiv) warningDiv.style.display = 'none';
+
+                                    const dropZone = document.getElementById('dropZone');
+                                    if (dropZone) {
+                                        dropZone.style.opacity = '1';
+                                        dropZone.style.cursor = 'pointer';
+                                    }
+                                }
+                            }
 
                             deleteBtn.style.display = 'block';
                             postForm.action = `/planner/update/${postId}`;
@@ -1152,38 +1432,54 @@
                             }
 
                             syncFileInput();
-                            renderGallery(); // Рендерим картинки, когда они докачались
+                            renderGallery();
                         })
                         .catch(err => {
                             console.error("Ошибка загрузки поста:", err);
-                            captionInput.value = "Ошибка при загрузке данных.";
-                            gallery.innerHTML = '<span style="color: #ef4444;">Не удалось загрузить изображения</span>';
                         });
                 },
 
-                    dateClick: function(info) {
-                        isEditMode = false;
+                // КЛИК ПО ПУСТОМУ ДНЮ (СОЗДАНИЕ)
+                dateClick: function(info) {
+                    isEditMode = false;
+                    resetModalFormState();
 
-                        resetModalFormState();
+                    const currentNetwork = "@ViewBag.Network";
+                    document.getElementById('postForm').action = "/planner/create";
+                    document.getElementById('deleteBtn').style.display = 'none';
+                    document.getElementById('postForm-ok').textContent = `Запланировать`;
 
-                        document.getElementById('modalTitle').textContent = "Новый пост";
-                        document.getElementById('postForm').action = "/planner/create";
-                        document.getElementById('deleteBtn').style.display = 'none';
-                        document.getElementById('postForm-ok').textContent = `Запланировать`;
-                        document.querySelector('textarea[name="caption"]').value = "";
+                    dateInput.disabled = false;
+                    document.getElementById('fileInput').disabled = false;
+                    document.querySelector('.file-upload-zone').style.opacity = '1';
 
-                        // Сброс локальных данных
-                        selectedFiles = [];
-                        existingImages = [];
-                        syncFileInput();
-                        renderGallery();
+                    const netSelectGroup = document.getElementById('networkSelectGroup');
+                    const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
 
-                        let selectedDate = info.date;
-                        if (info.allDay) selectedDate.setHours(12, 0);
-
-                        dateInput.value = formatToInput(selectedDate);
-                        modal.style.display = 'flex';
+                    if (currentNetwork === "All") {
+                        if (netSelectGroup) netSelectGroup.style.display = 'block';
+                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                        const defCapInput = document.getElementById('captionInput');
+                        if (defCapInput) defCapInput.required = false;
+                        document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                            cb.checked = false;
+                        });
+                    } else {
+                        if (netSelectGroup) netSelectGroup.style.display = 'none';
+                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+                    const defCapInput = document.getElementById('captionInput');
+                    if (defCapInput) {
+                        defCapInput.required = true;
+                        defCapInput.value = "";
                     }
+                    }
+
+                    let selectedDate = info.date;
+                    if (info.allDay) selectedDate.setHours(12, 0);
+
+                    dateInput.value = formatToInput(selectedDate);
+                    modal.style.display = 'flex';
+                }
                 });
                 calendar.render();
 
@@ -1209,8 +1505,10 @@
                         dropZone.addEventListener(eventName, () => dropZone.classList.remove('highlight'), false);
                     });
 
-                    // Обработка сброса файлов
+                    // Обработка сброса файлов (игнорируем, если заблокировано)
                     dropZone.addEventListener('drop', e => {
+                        if (isImageEditingLocked) return; // ЗАПРЕЩАЕМ Drag and Drop при блокировке!
+
                         const dt = e.dataTransfer;
                         const files = dt.files;
                         if (files.length > 0) {
@@ -1222,8 +1520,13 @@
                         }
                     }, false);
 
-                    // Обработка стандартного выбора файлов кликом
+                    // Обработка стандартного выбора файлов кликом (игнорируем, если заблокировано)
                     fileInput.addEventListener('change', function() {
+                        if (isImageEditingLocked) {
+                            this.value = ''; // Сбрасываем выбор
+                            return; // ЗАПРЕЩАЕМ ручной выбор при блокировке!
+                        }
+
                         if (this.files.length > 0) {
                             for (let i = 0; i < this.files.length; i++) {
                                 selectedFiles.push(this.files[i]);
@@ -1286,7 +1589,8 @@
 
             function resetModalFormState() {
                 isUploading = false;
-            
+                isImageEditingLocked = false;
+
                 // Убираем блокировку и затухание с карточки
                 document.querySelector('.modal-card').classList.remove('uploading');
             
@@ -1307,18 +1611,71 @@
                 submitBtn.disabled = false;
                 cancelBtn.style.display = 'inline-block';
 
+                // Разблокируем поля и зону загрузки по умолчанию
+                dateInput.disabled = false;
+                document.getElementById('fileInput').disabled = false;
+            
+                const dropZone = document.getElementById('dropZone');
+                if (dropZone) {
+                    dropZone.style.opacity = '1';
+                    dropZone.style.cursor = 'pointer'; // Возвращаем обычный курсор
+                }
+
                 // Очищаем галерею картинок и временные массивы файлов
                 document.getElementById('imageGallery').innerHTML = '';
                 selectedFiles = [];
                 existingImages = [];
                 syncFileInput();
+
+                // Скрываем кастомные поля текстов
+                document.getElementById('multiPostWarning').style.display = 'none';
+                document.querySelectorAll('.caption-sub-group').forEach(group => {
+                    group.style.display = 'none';
+                    group.querySelector('textarea').value = '';
+                    group.querySelector('textarea').required = false;
+                });
+
+                // Скрываем кастомные поля текстов
+                document.getElementById('multiPostWarning').style.display = 'none';
+                document.querySelectorAll('.caption-sub-group').forEach(group => {
+                    group.style.display = 'none';
+                    group.querySelector('textarea').value = '';
+                    group.querySelector('textarea').required = false;
+                });
+
+                // СБРОС: Снимаем обязательность с дефолтного поля по умолчанию
+                const defCaption = document.getElementById('captionInput');
+                if (defCaption) {
+                    defCaption.required = false;
+                }
             }
+
+            // Функция динамического переключения полей ввода в режиме All
+            function toggleCaptionField(netName) {
+                const cb = document.querySelector(`input[name="selectedNetworks"][value="${netName}"]`);
+                const subGroup = document.getElementById(`captionGroup_${netName}`);
+                const subTextarea = document.getElementById(`captionInput_${netName}`);
+            
+                if (cb && cb.checked) {
+                    subGroup.style.display = 'block';
+                    subTextarea.required = true;
+                } else if (subGroup) {
+                    subGroup.style.display = 'none';
+                    subTextarea.required = false;
+                    subTextarea.value = '';
+                }
+            }
+
+            // Отслеживание кликов по чекбоксам соцсетей
+            document.addEventListener('change', function(e) {
+                if (e.target && e.target.name === 'selectedNetworks') {
+                    toggleCaptionField(e.target.value);
+                }
+            });
 
             // Функция отправки формы через AJAX с отслеживанием прогресса
             async function submitFormWithProgress() {
                 const form = document.getElementById('postForm');
-
-                // Создаем пустой FormData для ручного наполнения
                 const formData = new FormData();
                 const url = form.action;
 
@@ -1330,60 +1687,66 @@
                 const cancelBtn = document.querySelector('.btn-cancel');
                 const deleteBtn = document.getElementById('deleteBtn');
 
-                // АКТИВИРУЕМ БЛОКИРОВКУ (карточка затухает, клики отключаются)
                 isUploading = true;
                 document.querySelector('.modal-card').classList.add('uploading');
 
-                // Показываем прогресс-бар и скрываем кнопки управления
                 progressContainer.style.display = 'block';
                 submitBtn.disabled = true;
                 deleteBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
 
-                // 1. Копируем стандартные текстовые поля формы в FormData
+                // Наполняем стандартные поля
                 formData.append('profileId', form.querySelector('[name="profileId"]').value);
                 formData.append('networkType', form.querySelector('[name="networkType"]').value);
-                formData.append('caption', form.querySelector('[name="caption"]').value);
                 formData.append('showDate', form.querySelector('[name="showDate"]').value);
                 formData.append('postId', form.querySelector('[name="postId"]').value);
 
-                // Переносим старые сохраненные картинки (keptImages)
+                // Собираем keptImages
                 const keptInputs = form.querySelectorAll('[name="keptImages"]');
                 keptInputs.forEach(input => formData.append('keptImages', input.value));
 
-                // 2. Сжимаем файлы прямо на устройстве пользователя перед отправкой по сети
-                 try {
-                        progressFill.style.width = '5%';
-                        for (let i = 0; i < selectedFiles.length; i++) {
-                            progressText.textContent = `Оптимизация файла ${i + 1} из ${selectedFiles.length}...`;
-                        
-                            // Запоминаем истинный размер файла (в байтах) до сжатия
-                            const originalSizeBytes = selectedFiles[i].size;
+                // Собираем выбранные соцсети (чекбоксы)
+                const selectedNets = form.querySelectorAll('[name="selectedNetworks"]:checked');
+                selectedNets.forEach(cb => formData.append('selectedNetworks', cb.value));
 
-                            const result = await compressImageOnClient(selectedFiles[i], 1600, 0.8);
-                    
-                            formData.append('images', result.file);
-                            // Передаем текстовые разрешения как обычные поля формы
-                            formData.append('originalDimensions', result.originalResolution);
-                            formData.append('compressedDimensions', result.compressedResolution);
-                            formData.append('originalSizes', originalSizeBytes); 
-                        }
-                    } catch (err) {
-                        console.error('Ошибка при подготовке файлов на клиенте:', err);
-                        alert('Не удалось подготовить изображения к отправке.');
-                        resetUploadProgress();
-                        return;
+                // Собираем текста постов (в зависимости от режима)
+                const currentNetwork = "@ViewBag.Network";
+                if (currentNetwork === "All") {
+                    selectedNets.forEach(cb => {
+                        const textValue = document.getElementById(`captionInput_${cb.value}`).value;
+                        formData.append(`caption_${cb.value}`, textValue);
+                    });
+                } else {
+                    formData.append('caption', document.getElementById('captionInput').value);
+                }
+
+                // Оптимизируем новые картинки
+                try {
+                    progressFill.style.width = '5%';
+                    for (let i = 0; i < selectedFiles.length; i++) {
+                        progressText.textContent = `Оптимизация файла ${i + 1} из ${selectedFiles.length}...`;
+                        const originalSizeBytes = selectedFiles[i].size;
+                        const result = await compressImageOnClient(selectedFiles[i], 1600, 0.8);
+
+                        formData.append('images', result.file);
+                        formData.append('originalDimensions', result.originalResolution);
+                        formData.append('compressedDimensions', result.compressedResolution);
+                        formData.append('originalSizes', originalSizeBytes);
                     }
+                } catch (err) {
+                    console.error('Ошибка подготовки файлов:', err);
+                    alert('Не удалось подготовить изображения.');
+                    resetUploadProgress();
+                    return;
+                }
 
-                // 3. Отправляем подготовленный легкий пакет файлов на сервер
+                // Отправляем
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
 
-                // Отслеживание прогресса загрузки файлов на сервер
                 xhr.upload.onprogress = function(e) {
                     if (e.lengthComputable) {
                         const percentComplete = Math.round((e.loaded / e.total) * 100);
-
                         if (percentComplete < 100) {
                             progressFill.style.width = percentComplete + '%';
                             progressText.textContent = `Загрузка сжатых файлов: ${percentComplete}% (${formatBytes(e.loaded)} из ${formatBytes(e.total)})`;
@@ -1401,13 +1764,13 @@
                         document.querySelector('.modal-card').classList.remove('uploading');
                         window.location.href = xhr.responseURL || window.location.href;
                     } else {
-                        alert('Произошла ошибка при сохранении поста: ' + xhr.statusText);
+                        alert('Ошибка сохранения поста: ' + xhr.statusText);
                         resetUploadProgress();
                     }
                 };
 
                 xhr.onerror = function() {
-                    alert('Произошла сетевая ошибка при отправке данных на сервер.');
+                    alert('Произошла сетевая ошибка.');
                     resetUploadProgress();
                 };
 
@@ -1513,36 +1876,55 @@
                 const net = (network || '').toLowerCase();
 
                 // Telegram (Бумажный самолетик)
-                if (net.includes('telegram')) {
+                if (net.includes('telegrampublic') || net.includes('telegramprivate')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z"/></svg>`;
                 }
                 // Instagram (Камера)
                 if (net.includes('instagram')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>`;
                 }
-                // VK / ВКонтакте
-                if (net.includes('vk') || net.includes('vkontakte')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M15.064 0H8.936C2 0 0 2 0 8.936v6.128C0 22 2 24 8.936 24h6.128C22 24 24 22 24 15.064V8.936C24 2 22 0 15.064 0zm3.847 16.924h-1.637c-1.397 0-1.802-.957-2.736-1.895-.8-.795-1.127-.92-1.317-.92-.264 0-.342.078-.342.301v1.658c0 .546-.178.856-1.62.856-2.39 0-4.81-1.463-6.602-4.88-.061-.115-2.585-5.263-2.585-5.263-.122-.246-.134-.41-.013-.574.133-.18.49-.18.49-.18h1.644c.41 0 .611.126.745.424l1.196 2.809c.8 1.887 1.258 2.502 1.583 2.502.16 0 .23-.075.23-.277V9.387c-.066-.913-.678-.99-.678-1.32 0-.156.122-.312.378-.312h2.585c.345 0 .47.18.47.534v3.52c0 .385.071.52.181.52.235 0 .432-.134.869-.57l1.722-2.9c.162-.27.247-.468.618-.468h1.644c.489 0 .6.223.493.568-.163.518-1.921 3.51-1.921 3.51-.186.284-.216.425-.038.647.132.164.577.564 1.157 1.218 1.09 1.212 1.489 1.774 1.574 2.12.091.36-.051.52-.516.52z"/></svg>`;
-                }
-
+                // Facebook
                 if (net.includes('facebook')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`;
                 }
-
+                // X
                 if (net === 'x' || net === 'twitter') {
                     return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
                 }
-
+                // Threads
                 if (net.includes('threads')) {
-                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12.583 2.164a7.925 7.925 0 00-4.697 1.54C5.12 5.67 3.961 8.557 4.004 12.18c.046 3.9 1.488 6.55 4.316 7.902a7.6 7.6 0 00-3.541.748 7.373 7.373 0 004.834-1.637l.454.493a8.163 8.163 0 01-5.288 1.844c-1.393 0-2.825-.333-4.14-1.025C4.2 18.736 2.373 15.65 2.32 11.2c-.053-4.48 1.442-8.088 4.453-10.15A10.021 10.021 0 0112.583 0c3.483 0 6.643 1.258 8.441 3.37l-.539.421c-1.656-1.922-4.572-3.076-7.902-3.076a9.2 9.2 0 00-5.32 1.42C4.542 3.84 3.1 7.24 3.16 11.24c.05 4.09 1.7 6.94 4.31 8.01a6.6 6.6 0 003.07.61c2.16 0 4.11-.64 5.34-1.74l-.45-.49c-1.08 1-2.8 1.54-4.89 1.54-2.4 0-4.5-1.12-5.59-2.97a7.65 7.65 0 01-.84-3.8c-.03-2.61.54-4.8 1.63-6.19a4.8 4.8 0 013.71-1.67h.03a4.2 4.2 0 013.88 2.5c.67 1.83.67 4 .01 5.8a4.34 4.34 0 01-3.69 2.5h-.11c-1.29 0-2.31-.59-2.81-1.61A3.75 7.02 0 019 9.87c.01-1.42.42-2.58 1.15-3.26a3.63 3.63 0 012.39-.77 2.33 2.33 0 012.22 1.23l.18.35.32-.4c.73-1.11 1.94-1.77 3.3-1.77 2.32 0 4.46 1.48 5.48 3.73.91 2.33.91 5.09-.01 7.42-1.03 2.25-3.17 3.73-5.49 3.73a4.2 4.2 0 01-3.88-2.5 4.34 4.34 0 01.01-3.3 4.34 4.34 0 013.69-2.5h.11c1.29 0 2.31.59 2.81 1.61a3.75 7.02 0 01.21 2.05c-.01 1.42-.42 2.58-1.15 3.26a1.94 1.94 0 01-1.39.46z" /></svg>`;
+                    return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12.583 2.164a7.925 7.925 0 00-4.697 1.54C5.12 5.67 3.961 8.557 4.004 12.18c.046 3.9 1.488 6.55 4.316 7.902a7.6 7.6 0 00-3.541.748 7.373 7.373 0 004.834-1.637l.454.493a8.163 8.163 0 01-5.288 1.844c-1.393 0-2.825-.333-4.14-1.025C4.2 18.736 2.373 15.65 2.32 11.2c-.053-4.48 1.442-8.088 4.453-10.15A10.021 10.021 0 0112.583 0c3.483 0 6.643 1.258 8.441 3.37l-.539.421c-1.656-1.922-4.572-3.076-7.902-3.076a9.2 9.2 0 00-5.32 1.42C4.542 3.84 3.1 7.24 3.16 11.24c.05 4.09 1.7 6.94 4.31 8.01a6.6 6.6 0 00-3.07.61c2.16 0 4.11-.64 5.34-1.74l-.45-.49c-1.08 1-2.8 1.54-4.89 1.54-2.4 0-4.5-1.12-5.59-2.97a7.65 7.65 0 01-.84-3.8c-.03-2.61.54-4.8 1.63-6.19a4.8 4.8 0 013.71-1.67h.03a4.2 4.2 0 013.88 2.5c.67 1.83.67 4 .01 5.8a4.34 4.34 0 01-3.69 2.5h-.11c-1.29 0-2.31-.59-2.81-1.61A3.75 7.02 0 019 9.87c.01-1.42.42-2.58 1.15-3.26a3.63 3.63 0 012.39-.77 2.33 2.33 0 012.22 1.23l.18.35.32-.4c.73-1.11 1.94-1.77 3.3-1.77 2.32 0 4.46 1.48 5.48 3.73.91 2.33.91 5.09-.01 7.42-1.03 2.25-3.17 3.73-5.49 3.73a4.2 4.2 0 01-3.88-2.5 4.34 4.34 0 01.01-3.3 4.34 4.34 0 013.69-2.5h.11c1.29 0 2.31.59 2.81 1.61a3.75 7.02 0 01.21 2.05c-.01 1.42-.42 2.58-1.15 3.26a1.94 1.94 0 01-1.39.46z" /></svg>`;
                 }
-
+                // Bluesky
                 if (net.includes('bluesky')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.57c2.16-3.85 4.97-6.9 7.32-6.9 2.92 0 4.68 2.65 4.68 5.38 0 4.42-4.14 7.91-7.31 9.77-1.17.68-2.53 1.12-3.89 1.12h-.8c-1.36 0-2.72-.44-3.89-1.12C4.84 16.96.7 13.47.7 9.05c0-2.73 1.76-5.38 4.68-5.38 2.35 0 5.16 3.05 7.32 6.9z"/></svg>`;
                 }
 
                 // Заглушка по умолчанию (Календарик)
-                return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
+                return `<svg class="net-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
+            }
+
+            // Функция автоматического преобразования текстовых меток чекбоксов в SVG-иконки
+            function initCheckboxIcons() {
+                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                    const netName = cb.value;
+                    const iconHtml = getNetworkIcon(netName);
+                    const label = cb.parentElement; // Находим <label>
+
+                    if (label && iconHtml) {
+                        const checkbox = cb; // Сохраняем ссылку на чекбокс
+
+                        label.innerHTML = ''; // Очищаем текст внутри label
+                        label.appendChild(checkbox); // Возвращаем скрытый чекбокс назад
+
+                        // Создаем круглую подложку с дата-атрибутом мгновенного тултипа
+                        const iconWrapper = document.createElement('span');
+                        iconWrapper.setAttribute('data-tooltip', netName); // Текст всплывает мгновенно!
+                        iconWrapper.innerHTML = iconHtml;
+
+                        label.appendChild(iconWrapper);
+                    }
+                });
             }
         </script>
 }

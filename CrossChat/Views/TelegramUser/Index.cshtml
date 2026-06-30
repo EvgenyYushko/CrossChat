@@ -210,7 +210,9 @@
                 <a href="/auth/console?provider=telegram&botId=@Model.Id&username=@Model.Id" class="btn" style="background:#000; border:1px solid #333;">
                     💻 Открыть консоль бота
                 </a>
-
+                <a href="/planner?profileId=@Model.ProfileId&network=TelegramPublic" class="btn" style="background: #6366f1; margin-top: 10px;">
+                    📅 Автопостинг
+                </a>
                 <h3>Данные сессии (Read-only)</h3>
                 <label>User ID</label>
                 <input type="text" value="@Model.TgUserId" class="text-input" readonly style="opacity: 0.6;">

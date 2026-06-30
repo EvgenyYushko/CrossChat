@@ -271,10 +271,16 @@
         }
         <div>
             <h2 style="margin:0; font-size:1.2rem;">@Model.Name</h2>
-        </div>
+        </div>       
        @*  <a href="/auth/console" class="logout-btn" style="border-color:var(--accent-color); color:var(--accent-color);">
             💻 Открыть консоль разработчика
         </a> *@
+    </div>
+    <br />
+    <div class="card">
+        <a href="/planner?profileId=@Model.Id&network=All" class="btn" style="background: #6366f1; margin-top: 10px;">
+            📅 Автопостинг
+        </a>
     </div>
     <br/>
     <!-- Карточка Instagram -->

@@ -461,6 +461,9 @@
             <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn" style="background:#0085ff; margin-bottom: 1.5rem;">
                 💻 Открыть консоль BlueSky
             </a>
+            <a href="/planner?profileId=@Model.ProfileId&network=BlueSky" class="btn" style="background: #6366f1; margin-top: 10px;">
+                📅 Автопостинг
+            </a>
 
             <form action="/bluesky/update" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id" />
