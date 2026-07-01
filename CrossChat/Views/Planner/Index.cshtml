@@ -1,3 +1,4 @@
+@model CrossChat.Data.Entities.Profile
 @{
     ViewData["Title"] = "Планировщик";
     var profileId = Context.Request.Query["profileId"];
@@ -28,11 +29,6 @@
             --fc-neutral-bg-color: rgba(0, 0, 0, 0.02);
             --fc-page-bg-color: transparent;
         }
-
-       /*  [data-theme="dark"] img.net-icon[src*="threads"] {
-            filter: invert(1) brightness(2);
-            transition: filter 0.3s ease;
-        } */
 
         /* Название месяца/недели */
         .fc .fc-toolbar-title {
@@ -877,6 +873,47 @@
             filter: invert(1) brightness(2);
             transition: filter 0.3s ease;
         }
+
+        /* --- СТИЛЬНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) --- */
+        .context-menu {
+            display: none;
+            position: absolute;
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            z-index: 5000; /* Самый высокий приоритет наложения */
+            padding: 4px;
+            min-width: 140px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            border-radius: 6px;
+            transition: background 0.15s ease;
+        }
+
+            /* Опасные действия (удаление) красим в красный */
+            .context-menu-item.delete-item {
+                color: #ef4444;
+            }
+
+                .context-menu-item.delete-item:hover {
+                    background: rgba(239, 68, 68, 0.1);
+                }
     </style>
 }
 
@@ -894,6 +931,7 @@
             <form id="postForm" method="post" enctype="multipart/form-data">
                 <input type="hidden" name="profileId" value="@ViewBag.ProfileId" />
                 <input type="hidden" name="networkType" value="@ViewBag.Network" />
+                <input type="hidden" name="botId" value="@ViewBag.BotId" />
 
                 <!-- Контейнер для передачи Base64 оставшихся картинок -->
                 <div id="hiddenInputsContainer"></div>
@@ -910,27 +948,77 @@
                 <div class="form-group" id="networkSelectGroup" style="display: none;">
                     <label>Опубликовать в сети:</label>
                     <div class="network-checkboxes-container">
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="Instagram"> Instagram
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="Facebook"> Facebook
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="BlueSky"> BlueSky
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="X"> X
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="Threads"> Threads
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="TelegramPublic" style="width: 16px; height: 16px;"> Telegram 
-                        </label>
-                        <label>
-                            <input type="checkbox" name="selectedNetworks" value="TelegramPrivate" style="width: 16px; height: 16px;"> Private
-                        </label>
+                        <!-- Рендерим Instagram аккаунты -->
+                        @if (Model.InstagramSettingsList != null)
+                        {
+                            @foreach (var bot in Model.InstagramSettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="Instagram_@bot.Id">
+                                    <span>Instagram (@bot.Username)</span>
+                                </label>
+                            }
+                        }
+
+                        <!-- Рендерим Facebook страницы -->
+                        @if (Model.FacebookSettingsList != null)
+                        {
+                            @foreach (var bot in Model.FacebookSettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="Facebook_@bot.Id">
+                                    <span>FB (@bot.PageName)</span>
+                                </label>
+                            }
+                        }
+
+                        <!-- Рендерим Threads аккаунты -->
+                        @if (Model.ThreadsSettingsList != null)
+                        {
+                            @foreach (var bot in Model.ThreadsSettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="Threads_@bot.Id">
+                                    <span>Threads (@bot.Username)</span>
+                                </label>
+                            }
+                        }
+
+                        <!-- Рендерим Telegram User Bots -->
+                        @if (Model.TelegramUserBotSettingsList != null)
+                        {
+                            @foreach (var bot in Model.TelegramUserBotSettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="TelegramPublic_@bot.Id">
+                                    <span>TG User (@bot.TgUserName)</span>
+                                </label>
+                            }
+                        }
+
+                        <!-- Рендерим BlueSky -->
+                        @if (Model.BlueSkySettingsList != null)
+                        {
+                            @foreach (var bot in Model.BlueSkySettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="BlueSky_@bot.Id">
+                                    <span>BlueSky (@bot.Handle)</span>
+                                </label>
+                            }
+                        }
+
+                        <!-- Рендерим X (Twitter) -->
+                        @if (Model.XSettingsList != null)
+                        {
+                            @foreach (var bot in Model.XSettingsList.Where(b => b.IsActive))
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="X_@bot.Id">
+                                    <span>X (@@@bot.ScreenName)</span>
+                                </label>
+                            }
+                        }
                     </div>
                 </div>                
 
@@ -956,42 +1044,11 @@
                 <div id="captionContainer">
                     <div class="form-group" id="defaultCaptionGroup">
                         <label id="captionLabel">Текст поста</label>
-                        <textarea name="caption" id="captionInput" required placeholder="Введите текст вашего сообщения..."></textarea>
+                        <textarea name="caption" id="captionInput" placeholder="Введите текст вашего сообщения..."></textarea>
                     </div>
 
-                    <!-- Скрытые кастомные текста для соцсетей (режим All) -->
-                    <div class="form-group" id="captionGroup_TelegramPublic" style="display: none;">
-                        <label style="color: #3b82f6;">Текст для Telegram</label>
-                        <textarea name="caption_TelegramPublic" id="captionInput_TelegramPublic" placeholder="Введите уникальный текст для TelegramPublic..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_TelegramPrivate" style="display: none;">
-                        <label style="color: #3b82f6;">Текст для TelegramPrivate</label>
-                        <textarea name="caption_TelegramPrivate" id="captionInput_TelegramPrivate" placeholder="Введите уникальный текст для TelegramPrivate..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_Instagram" style="display: none;">
-                        <label style="color: #ec4899;">Текст для Instagram</label>
-                        <textarea name="caption_Instagram" id="captionInput_Instagram" placeholder="Введите уникальный текст для Instagram..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_Facebook" style="display: none;">
-                        <label style="color: #ec4899;">Текст для Facebook</label>
-                        <textarea name="caption_Facebook" id="captionInput_Facebook" placeholder="Введите уникальный текст для Facebook..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_Threads" style="display: none;">
-                        <label style="color: #ec4899;">Текст для Threads</label>
-                        <textarea name="caption_Threads" id="captionInput_Threads" placeholder="Введите уникальный текст для Threads..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_BlueSky" style="display: none;">
-                        <label style="color: #ec4899;">Текст для BlueSky</label>
-                        <textarea name="caption_BlueSky" id="captionInput_BlueSky" placeholder="Введите уникальный текст для BlueSky..."></textarea>
-                    </div>
-                    <div class="form-group" id="captionGroup_X" style="display: none;">
-                        <label style="color: #ec4899;">Текст для X</label>
-                        <textarea name="caption_X" id="captionInput_X" placeholder="Введите уникальный текст для X..."></textarea>
-                    </div>
-                    @* <div class="form-group" id="captionGroup_VK" style="display: none;">
-                        <label style="color: #4c75a3;">Текст для VK</label>
-                        <textarea name="caption_VK" id="captionInput_VK" placeholder="Введите уникальный текст для VK..."></textarea>
-                    </div> *@
+                    <!-- Сюда JS будет динамически генерировать текстареа для выбранных аккаунтов -->
+                    <div id="dynamicCaptions"></div>
                 </div>
 
                 <!-- Предупреждение о коллективном редактировании -->
@@ -1020,6 +1077,12 @@
     </div>
     <!-- Парящий тултип для быстрого превью поста -->
     <div id="calendarTooltip" class="calendar-tooltip"></div>
+    <!-- Кастомное контекстное меню при клике ПКМ на пост -->
+    <div id="calendarContextMenu" class="context-menu">
+        <button type="button" class="context-menu-item delete-item" onclick="triggerContextDelete()">
+            ❌ Удалить пост
+        </button>
+    </div>
 </div>
 
 @section Scripts {
@@ -1029,6 +1092,7 @@
             let isEditMode = false;
             let isUploading = false; // Глобальный флаг процесса загрузки
             let isImageEditingLocked = false; 
+            let contextEventId = null; // Глобальный ID поста, на который кликнули ПКМ
 
             const modal = document.getElementById('postModal');
             const dateInput = document.getElementById('showDateInput');
@@ -1038,12 +1102,53 @@
             let selectedFiles = [];   // Хранит новые объекты File
             let existingImages = [];  // Хранит строки Base64 с сервера
 
+            // Показ контекстного меню в координатах курсора мыши
+            function showContextMenu(e, event) {
+                if (isUploading) return;
+            
+                const menu = document.getElementById('calendarContextMenu');
+                contextEventId = event.id; // Запоминаем ID события
+
+                menu.style.display = 'block';
+                menu.style.left = (window.scrollX + e.clientX) + 'px';
+                menu.style.top = (window.scrollY + e.clientY) + 'px';
+            }
+
+            // Скрытие меню
+            function hideContextMenu() {
+                document.getElementById('calendarContextMenu').style.display = 'none';
+            }
+
+            // Вызов умного удаления через контекстное меню
+            async function triggerContextDelete() {
+                if (!contextEventId || isUploading) return;
+                if (!confirm('Удалить этот пост без открытия формы?')) return;
+
+                const network = "@ViewBag.Network";
+                const botId = "@ViewBag.BotId";
+
+                // Отправляем запрос на удаление
+                const response = await fetch(`/planner/delete/${contextEventId}?networkType=${network}&botId=${botId}`, { method: 'POST' });
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert("Ошибка при удалении поста");
+                }
+            }
+
+            // Скрываем контекстное меню при кликах в любом другом месте экрана или при скролле
+            document.addEventListener('click', hideContextMenu);
+            document.addEventListener('scroll', hideContextMenu);
+
             async function deletePost() {
-                if (isUploading) return; // Блокируем удаление во время отправки другого запроса
-                if (!confirm('Удалить пост?')) return;
+                if (isUploading) return;
+                if (!confirm('Удалить этот пост?')) return;
                 const postId = postIdInput.value;
-                const network = "@ViewBag.Network"; // Передаем текущую соцсеть для умного удаления!
-                const response = await fetch(`/planner/delete/${postId}?networkType=${network}`, { method: 'POST' });
+                const network = "@ViewBag.Network";
+                const botId = "@ViewBag.BotId"; // Получаем BotId из ViewBag!
+
+                // Передаем botId параметром запроса
+                const response = await fetch(`/planner/delete/${postId}?networkType=${network}&botId=${botId}`, { method: 'POST' });
                 if (response.ok) location.reload();
                 else alert("Ошибка при удалении");
             }
@@ -1163,6 +1268,17 @@
                         left: 'prev,next today',
                         center: 'title',
                         right: 'multiMonthYear,dayGridMonth,timeGridWeek,timeGridDay'
+                    },
+
+                    // --- ФИЧА: ОТСЛЕЖИВАНИЕ КЛИКА ПРАВОЙ КНОПКОЙ МЫШИ (ПКМ) ---
+                    eventDidMount: function(info) {
+                        if (window.innerWidth < 600) return; // На мобильных телефонах отключаем ПКМ
+
+                        // Слушаем нажатие правой кнопки мыши на ярлыке события
+                        info.el.addEventListener('contextmenu', function(e) {
+                            e.preventDefault(); // Блокируем стандартное контекстное меню браузера
+                            showContextMenu(e, info.event); // Показываем наше кастомное меню
+                        });
                     },
 
                     // --- АВТОСКРОЛЛ К ТЕКУЩЕМУ МЕСЯЦУ ПРИ ОТКРЫТИИ ГОДА ---
@@ -1329,7 +1445,7 @@
                         }
                     },
 
-                    events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network',
+                events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network&botId=@ViewBag.BotId',
 
                 // КЛИК ПО СОБЫТИЮ (РЕДАКТИРОВАНИЕ)
                 eventClick: function(info) {
@@ -1420,63 +1536,107 @@
                                     if (defaultCaptionInput) defaultCaptionInput.required = false;
                                 }
 
-                            // Выставляем чекбоксы соцсетей и заполняем их текстареа
-                            document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
-                                const netName = cb.value;
-                                const isActive = activeNets.includes(netName);
-                                cb.checked = isActive;
+                             // Выставляем чекбоксы соцсетей и заполняем их текстареа
+                             document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                                    const netKey = cb.value; // формат: "Instagram_5"
+                                    const isActive = activeNets.includes(netKey);
+                                    cb.checked = isActive;
 
-                                const subGroup = document.getElementById(`captionGroup_${netName}`);
-                                const subTextarea = document.getElementById(`captionInput_${netName}`);
+                                    if (isActive) {
+                                        if (!isUnified) {
+                                            // Если мы в раздельном режиме — динамически создаем текстовое поле!
+                                            const groupId = `captionGroup_${netKey}`;
+                                            const inputId = `captionInput_${netKey}`;
 
-                                if (subGroup && subTextarea) {
-                                    subTextarea.value = networks[netName].caption || networks[netName].Caption || "";
+                                            if (!document.getElementById(groupId)) {
+                                                const parts = netKey.split('_');
+                                                const netName = parts[0];
+                                                const container = document.getElementById('dynamicCaptions');
 
-                                    // Показываем подгруппу только если сеть активна И мы в раздельном режиме (isUnified = false)
-                                    if (isActive && !isUnified) {
-                                        subGroup.style.display = 'block';
-                                        subTextarea.required = true;
-                                    } else {
-                                        subGroup.style.display = 'none';
-                                        subTextarea.required = false;
+                                                const groupDiv = document.createElement('div');
+                                                groupDiv.className = 'form-group';
+                                                groupDiv.id = groupId;
+
+                                                const label = document.createElement('label');
+                                                label.style.color = 'var(--accent-color)';
+                                                label.textContent = `Текст для ${netName} (${cb.parentElement.innerText.trim()})`;
+
+                                                const textarea = document.createElement('textarea');
+                                                textarea.name = `caption_${netKey}`;
+                                                textarea.id = inputId;
+                                                textarea.required = true;
+                                                textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
+
+                                                // Заполняем персональным текстом из базы данных!
+                                                textarea.value = networks[netKey].caption || networks[netKey].Caption || "";
+
+                                                groupDiv.appendChild(label);
+                                                groupDiv.appendChild(textarea);
+                                                container.appendChild(groupDiv);
+                                            }
+                                        }
                                     }
-                                }
-                            });
+                                });
+                        } else {
+                            // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
+                            if (netSelectGroup) netSelectGroup.style.display = 'none';
+                            document.getElementById('unifiedTextGroup').style.display = 'none';
+                            if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+
+                            // ИСПРАВЛЕНИЕ: Включаем обязательность видимого поля
+                            if (defaultCaptionInput) defaultCaptionInput.required = true;
+
+                            //  Безопасный поиск текста с приоритетом точного совпадения по BotId
+                            const currentBotId = "@ViewBag.BotId";
+                            const targetKey = `${currentNetwork}_${currentBotId}`;
+                            let netData = null;
+
+                            if (currentBotId && currentBotId !== "0" && networks[targetKey]) {
+                                // 1. ПРИОРИТЕТ: Берем текст строго для текущего открытого BotId (например, "Instagram_6")
+                                netData = networks[targetKey];
                             } else {
-                                // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
-                                if (netSelectGroup) netSelectGroup.style.display = 'none';
-                                document.getElementById('unifiedTextGroup').style.display = 'none';
-                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
-
-                                if (defaultCaptionInput) {
-                                    defaultCaptionInput.required = true;
-                                    const netData = networks[currentNetwork];
-                                    defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
-                                }
-
-                                if (isMultiPost) {
-                                    const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
-                                    if (warningDiv) {
-                                        warningDiv.style.display = 'block';
-                                        warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
+                                // 2. ЗАПАСНОЙ ВАРИАНТ: Если BotId не передан, берем первую запись этого типа
+                                for (let key in networks) {
+                                    if (key.startsWith(currentNetwork + "_")) {
+                                        netData = networks[key];
+                                        break;
                                     }
-
-                                    isImageEditingLocked = true;
-                                    dateInput.disabled = true;
-                                    document.getElementById('fileInput').disabled = true;
-
-                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) fileUploadGroup.style.display = 'none';
-                                } else {
-                                    isImageEditingLocked = false;
-                                    dateInput.disabled = false;
-                                    document.getElementById('fileInput').disabled = false;
-                                    if (warningDiv) warningDiv.style.display = 'none';
-
-                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) fileUploadGroup.style.display = 'block';
                                 }
                             }
+
+                            // Заполняем дефолтное текстовое поле найденным текстом
+                            if (defaultCaptionInput) {
+                                defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                            }
+
+                            // Заполняем дефолтное текстовое поле найденным текстом
+                            if (defaultCaptionInput) {
+                                defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                            }
+
+                            if (isMultiPost) {
+                                const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
+                                if (warningDiv) {
+                                    warningDiv.style.display = 'block';
+                                    warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
+                                }
+
+                                isImageEditingLocked = true;
+                                dateInput.disabled = true;
+                                document.getElementById('fileInput').disabled = true;
+
+                                const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                if (fileUploadGroup) fileUploadGroup.style.display = 'none';
+                            } else {
+                                isImageEditingLocked = false;
+                                dateInput.disabled = false;
+                                document.getElementById('fileInput').disabled = false;
+                                if (warningDiv) warningDiv.style.display = 'none';
+
+                                const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                if (fileUploadGroup) fileUploadGroup.style.display = 'block';
+                            }
+                        }
 
                             deleteBtn.style.display = 'block';
                             postForm.action = `/planner/update/${postId}`;
@@ -1654,67 +1814,52 @@
                 }
             });
 
+            // Очистка состояния формы
             function resetModalFormState() {
                 isUploading = false;
                 isImageEditingLocked = false;
 
-                // Убираем блокировку и затухание с карточки
                 document.querySelector('.modal-card').classList.remove('uploading');
-            
-                // Скрываем и сбрасываем полосу прогресса загрузки
+
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
                 const progressText = document.getElementById('uploadProgressText');
-            
+
                 progressContainer.style.display = 'none';
                 progressFill.style.width = '0%';
                 progressFill.classList.remove('pulse');
                 progressText.textContent = 'Загрузка: 0%';
 
-                // Возвращаем кнопкам формы исходное состояние
                 const submitBtn = document.getElementById('postForm-ok');
                 const cancelBtn = document.querySelector('.btn-cancel');
-            
+
                 submitBtn.disabled = false;
                 cancelBtn.style.display = 'inline-block';
 
-                // Разблокируем поля и зону загрузки по умолчанию
                 dateInput.disabled = false;
                 document.getElementById('fileInput').disabled = false;
-            
-                // ВОССТАНАВЛИВАЕМ видимость группы загрузки файлов
+
                 const fileUploadGroup = document.getElementById('fileUploadGroup');
-                if (fileUploadGroup) {
-                    fileUploadGroup.style.display = 'block';
-                }
+                if (fileUploadGroup) fileUploadGroup.style.display = 'block';
 
                 const dropZone = document.getElementById('dropZone');
                 if (dropZone) {
                     dropZone.style.opacity = '1';
-                    dropZone.style.cursor = 'pointer'; // Возвращаем обычный курсор
+                    dropZone.style.cursor = 'pointer';
                 }
 
-                // Очищаем галерею картинок и временные массивы файлов
                 document.getElementById('imageGallery').innerHTML = '';
                 selectedFiles = [];
                 existingImages = [];
                 syncFileInput();
 
-                // Сбрасываем предупреждение, чекбокс "Один текст" и кастомные текстареа
                 document.getElementById('multiPostWarning').style.display = 'none';
                 document.getElementById('unifiedTextGroup').style.display = 'none';
-                document.getElementById('unifiedTextCheckbox').checked = true; // по умолчанию Единый текст включен
+                document.getElementById('unifiedTextCheckbox').checked = true;
 
-                document.querySelectorAll('[id^="captionGroup_"]').forEach(group => {
-                    group.style.display = 'none';
-                    const txt = group.querySelector('textarea');
-                    if (txt) {
-                        txt.value = '';
-                        txt.required = false;
-                    }
-                });
+                // Очищаем динамические текстовые поля
+                document.getElementById('dynamicCaptions').innerHTML = '';
 
-                // СБРОС: Снимаем обязательность с дефолтного поля по умолчанию
                 const defCaption = document.getElementById('captionInput');
                 if (defCaption) {
                     defCaption.required = false;
@@ -1726,68 +1871,70 @@
                 const isUnified = document.getElementById('unifiedTextCheckbox').checked;
                 const defaultGroup = document.getElementById('defaultCaptionGroup');
                 const defaultTextarea = document.getElementById('captionInput');
+                const dynamicContainer = document.getElementById('dynamicCaptions');
 
                 if (isUnified) {
-                    // РЕЖИМ: ОДИН ТЕКСТ
                     if (defaultGroup) defaultGroup.style.display = 'block';
                     if (defaultTextarea) defaultTextarea.required = true;
-
-                    // Скрываем все раздельные текстареа по маске ID
-                    document.querySelectorAll('[id^="captionGroup_"]').forEach(group => {
-                        group.style.display = 'none';
-                        const txt = group.querySelector('textarea');
-                        if (txt) txt.required = false;
-                    });
+                    dynamicContainer.innerHTML = ''; // Стираем все динамические поля
                 } else {
-                    // РЕЖИМ: РАЗНЫЕ ТЕКСТЫ
                     if (defaultGroup) defaultGroup.style.display = 'none';
                     if (defaultTextarea) defaultTextarea.required = false;
 
                     const commonText = defaultTextarea ? defaultTextarea.value : "";
 
-                    // Показываем текстареа только для выбранных чекбоксами сетей
+                    // Генерируем поля только для выбранных чекбоксами аккаунтов
                     const selectedNets = document.querySelectorAll('input[name="selectedNetworks"]:checked');
                     selectedNets.forEach(cb => {
-                        const netName = cb.value;
-                        const subGroup = document.getElementById(`captionGroup_${netName}`);
-                        const subTextarea = document.getElementById(`captionInput_${netName}`);
-                    
-                        if (subGroup && subTextarea) {
-                            subGroup.style.display = 'block';
-                            subTextarea.required = true;
-                        
-                            if (!subTextarea.value) {
-                                subTextarea.value = commonText;
-                            }
-                        }
+                        toggleCaptionField(cb.value);
                     });
                 }
             }
 
-            // Функция динамического отображения полей при кликах на чекбоксы соцсетей
-            function toggleCaptionField(netName) {
+            // Функция динамического создания/удаления текстовых полей для выбранных ботов
+            function toggleCaptionField(netValue) {
                 const isUnified = document.getElementById('unifiedTextCheckbox').checked;
-                if (isUnified) return; // Если включен единый текст, ничего динамически не показываем
+                if (isUnified) return; // Если включен единый текст, ничего не создаем
 
-                const cb = document.querySelector(`input[name="selectedNetworks"][value="${netName}"]`);
-                const subGroup = document.getElementById(`captionGroup_${netName}`);
-                const subTextarea = document.getElementById(`captionInput_${netName}`);
+                const cb = document.querySelector(`input[name="selectedNetworks"][value="${netValue}"]`);
+                const container = document.getElementById('dynamicCaptions');
+            
+                const groupId = `captionGroup_${netValue}`;
+                const inputId = `captionInput_${netValue}`;
 
                 if (cb && cb.checked) {
-                    if (subGroup) subGroup.style.display = 'block';
-                    if (subTextarea) {
-                        subTextarea.required = true;
-                        // Автоматически копируем текст из дефолтного поля при открытии нового направления
+                    // Если чекбокс нажат и поля еще нет — создаем его динамически!
+                    if (!document.getElementById(groupId)) {
+                        const parts = netValue.split('_');
+                        const netName = parts[0];
+                    
+                        const groupDiv = document.createElement('div');
+                        groupDiv.className = 'form-group';
+                        groupDiv.id = groupId;
+                    
+                        const label = document.createElement('label');
+                        label.style.color = 'var(--accent-color)';
+                        label.textContent = `Текст для ${netName} (${cb.parentElement.innerText.trim()})`;
+                    
+                        const textarea = document.createElement('textarea');
+                        textarea.name = `caption_${netValue}`;
+                        textarea.id = inputId;
+                        textarea.required = true;
+                        textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
+                    
+                        // Копируем дефолтный текст
                         const commonText = document.getElementById('captionInput').value;
-                        if (!subTextarea.value) {
-                            subTextarea.value = commonText;
-                        }
+                        textarea.value = commonText;
+
+                        groupDiv.appendChild(label);
+                        groupDiv.appendChild(textarea);
+                        container.appendChild(groupDiv);
                     }
-                } else if (subGroup) {
-                    subGroup.style.display = 'none';
-                    if (subTextarea) {
-                        subTextarea.required = false;
-                        subTextarea.value = '';
+                } else {
+                    // Если галочку сняли — удаляем блок поля из DOM
+                    const existingGroup = document.getElementById(groupId);
+                    if (existingGroup) {
+                        existingGroup.remove();
                     }
                 }
             }
@@ -1839,6 +1986,11 @@
                 formData.append('networkType', form.querySelector('[name="networkType"]').value);
                 formData.append('showDate', form.querySelector('[name="showDate"]').value);
                 formData.append('postId', form.querySelector('[name="postId"]').value);
+
+                const botIdInput = form.querySelector('[name="botId"]');
+                if (botIdInput && botIdInput.value) {
+                    formData.append('botId', botIdInput.value);
+                }
 
                 // Переносим старые сохраненные картинки (keptImages)
                 const keptInputs = form.querySelectorAll('[name="keptImages"]');
@@ -2023,7 +2175,7 @@
                 const net = (network || '').toLowerCase();
 
                 // 1. Telegram Public & Private (Официальный голубой цвет #2AABEE)
-                if (net.includes('telegrampublic') || net.includes('telegramprivate')) {
+                if (net.includes('telegrampublic') || net.includes('telegramprivate') || net.includes('telegramuserbot')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24" style="color: #2AABEE;"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z"/></svg>`;
                 }
 
@@ -2051,7 +2203,7 @@
                 }
 
                 // 4. X / Twitter (Адаптивный белый/черный цвет под тему сайта)
-                if (net === 'x' || net === 'twitter') {
+                if (net.includes('x') || net.includes('twitter')) {
                     return `<svg class="net-icon" viewBox="0 0 24 24" style="color: var(--text-main);" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
                 }
 

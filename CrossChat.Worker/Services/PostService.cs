@@ -249,13 +249,11 @@ namespace CrossChat.Worker.Services
 		// 4. Обновить пост (Описание, Статусы)
 		public async Task UpdatePostAsync(BlogPost post)
 		{
-			// 1. Обновляем в БД
-
-			// Загружаем пост вместе с состояниями
+			// 1. Загружаем пост вместе с состояниями и картинками
 			var entity = await _appDbContext.Posts
 				.Include(p => p.NetworkStates)
 				.Include(p => p.Images)
-				.AsSplitQuery() 
+				.AsSplitQuery()
 				.FirstOrDefaultAsync(p => p.Id == post.Id);
 
 			if (entity != null)
@@ -263,6 +261,7 @@ namespace CrossChat.Worker.Services
 				entity.AccessLevel = (int)post.Access;
 				entity.ShowDate = post.ShowDate;
 
+				// --- ОБНОВЛЕНИЕ КАРТИНОК ---
 				var imagesToRemove = entity.Images
 					.Where(dbImg => !post.Images.Contains(dbImg.Base64Data))
 					.ToList();
@@ -273,7 +272,7 @@ namespace CrossChat.Worker.Services
 					_appDbContext.Remove(img); // Явно помечаем сущность на удаление из БД
 				}
 
-				// 2. Добавляем новые картинки, которых еще нет в базе данных
+				// Добавляем новые картинки, которых еще нет в базе данных
 				var existingBase64s = entity.Images.Select(img => img.Base64Data).ToHashSet();
 				foreach (var newBase64 in post.Images)
 				{
@@ -287,48 +286,63 @@ namespace CrossChat.Worker.Services
 					}
 				}
 
-				// Проходимся по словарю из нашей модели (где есть ВСЕ ключи)
+				// --- СИНХРОНИЗАЦИЯ СОСТОЯНИЙ СЕТЕЙ (С поддержкой BotId) ---
+
+				// 1. Безопасное удаление: убираем из БД те направления, ключей которых вообще нет в словаре post.Networks
+				var dbStatesToRemove = entity.NetworkStates
+					.Where(ns => !post.Networks.ContainsKey($"{((NetworkType)ns.NetworkType).ToString()}_{ns.BotId}"))
+					.ToList();
+
+				foreach (var state in dbStatesToRemove)
+				{
+					entity.NetworkStates.Remove(state);
+					_appDbContext.NetworkStates.Remove(state);
+				}
+
+				// 2. Добавляем новые или обновляем существующие направления
 				foreach (var kvp in post.Networks)
 				{
-					var netType = (int)kvp.Key;
+					// Парсим составной строковый ключ "Instagram_5" -> "Instagram" и ID бота 5
+					var parts = kvp.Key.Split('_');
+					var netType = (int)Enum.Parse<NetworkType>(parts[0]);
+					var botId = int.Parse(parts[1]);
+
 					var newStatus = (int)kvp.Value.Status;
 					var newCaption = kvp.Value.Caption;
 
-					// Ищем, есть ли запись в БД для этой сети
-					var dbState = entity.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netType);
+					// Ищем запись в БД одновременно по двум критериям: типу соцсети и ID конкретного бота
+					var dbState = entity.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netType && ns.BotId == botId);
 
 					if (dbState != null)
 					{
 						// СЦЕНАРИЙ: Запись в БД есть
-
 						if (kvp.Value.Status == SocialStatus.None)
 						{
-							// 1. Если новый статус None -> УДАЛЯЕМ строку из БД
-							// EF Core поймет, что нужно сделать DELETE
+							// Если статус стал None -> УДАЛЯЕМ строку из БД
 							_appDbContext.NetworkStates.Remove(dbState);
 						}
 						else
 						{
-							// 2. Если статус активный -> ОБНОВЛЯЕМ поля
+							// Если статус активный -> ОБНОВЛЯЕМ поля в БД
 							dbState.Status = newStatus;
 							dbState.Caption = newCaption;
 						}
 					}
 					else
 					{
-						// СЦЕНАРИЙ: Записи в БД нет
-
+						// СЦЕНАРИЙ: Записи в БД нет (пост добавили в новую соцсеть при редактировании)
 						if (kvp.Value.Status != SocialStatus.None)
 						{
-							// 3. Если статус стал активным -> СОЗДАЕМ новую строку
+							// Создаем новую запись состояния для конкретного BotId
 							entity.NetworkStates.Add(new NetworkStateEntity
 							{
+								PostId = entity.Id,
 								NetworkType = netType,
-								Status = newStatus,
-								Caption = newCaption
+								BotId = botId,
+								Caption = newCaption,
+								Status = newStatus
 							});
 						}
-						// Если записи нет и статус None - ничего делать не надо
 					}
 				}
 
@@ -399,65 +413,96 @@ namespace CrossChat.Worker.Services
 		// --- MAPPERS (Преобразование типов) ---
 		private BlogPost MapToDomain(PostEntity entity)
 		{
-			var post = new BlogPost
+			var model = new BlogPost
 			{
 				Id = entity.Id,
 				ProfileId = entity.ProfileId,
-				CreatedAt = entity.CreatedAt,
 				ShowDate = entity.ShowDate,
+				CreatedAt = entity.CreatedAt,
 				Access = (AccessLevel)entity.AccessLevel,
 				Images = entity.Images.Select(img => img.Base64Data).ToList()
 			};
 
-			foreach (var ns in entity.NetworkStates)
+			foreach (var state in entity.NetworkStates)
 			{
-				var type = (NetworkType)ns.NetworkType;
-				if (post.Networks.ContainsKey(type))
+				// Ключ: "Instagram_5", "TelegramUserBot_3" и т.д.
+				var resolvedBotId = state.BotId ?? FindFirstActiveBotId(entity.ProfileId, (NetworkType)state.NetworkType);
+
+				var key = $"{((NetworkType)state.NetworkType).ToString()}_{resolvedBotId}";
+				model.Networks[key] = new NetworkPostData
 				{
-					post.Networks[type].Status = (SocialStatus)ns.Status;
-					post.Networks[type].Caption = ns.Caption;
-				}
+					Status = (SocialStatus)state.Status,
+					Caption = state.Caption
+				};
 			}
-			return post;
+
+			return model;
 		}
 
-		private PostEntity MapToEntity(BlogPost post)
+		private PostEntity MapToEntity(BlogPost model)
 		{
 			var entity = new PostEntity
 			{
-				Id = post.Id,
-				ProfileId = post.ProfileId,
-				CreatedAt = post.CreatedAt,
-				ShowDate = post.ShowDate,
-				AccessLevel = (int)post.Access,
-				Images = new List<PostImageEntity>(),
-				NetworkStates = new List<NetworkStateEntity>()
+				Id = model.Id,
+				ProfileId = model.ProfileId,
+				ShowDate = model.ShowDate,
+				CreatedAt = model.CreatedAt,
+				AccessLevel = (int)model.Access
 			};
 
-			// Картинки
-			foreach (var fileData in post.Images)
+			foreach (var kvp in model.Networks)
 			{
-				entity.Images.Add(new PostImageEntity
-				{
-					Base64Data = fileData // ВАЖНО: Тут должна быть реальная Base64 строка
-				});
-			}
-
-			// Состояния
-			foreach (var kvp in post.Networks)
-			{
-				if (kvp.Value.Status == SocialStatus.None)
-					continue;
+				var parts = kvp.Key.Split('_');
+				var netType = (int)Enum.Parse<NetworkType>(parts[0]);
+				var botId = int.Parse(parts[1]);
 
 				entity.NetworkStates.Add(new NetworkStateEntity
 				{
-					NetworkType = (int)kvp.Key,
-					Status = (int)kvp.Value.Status,
-					Caption = kvp.Value.Caption ?? ""
+					PostId = model.Id,
+					NetworkType = netType,
+					BotId = botId,
+					Caption = kvp.Value.Caption,
+					Status = (int)kvp.Value.Status
 				});
 			}
 
 			return entity;
+		}
+
+		// Вспомогательный метод поиска первого активного BotId в профиле по типу сети
+		private int FindFirstActiveBotId(int profileId, NetworkType netType)
+		{
+			var profile = _appDbContext.Profile
+				.Include(p => p.InstagramSettingsList)
+				.Include(p => p.FacebookSettingsList)
+				.Include(p => p.ThreadsSettingsList)
+				.Include(p => p.XSettingsList)
+				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.TelegramSettings)
+				.Include(p => p.BlueSkySettingsList)
+				.FirstOrDefault(p => p.Id == profileId);
+
+			if (profile == null) return 0;
+
+			switch (netType)
+			{
+				case NetworkType.Instagram:
+					return profile.InstagramSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.Facebook:
+					return profile.FacebookSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.Threads:
+					return profile.ThreadsSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.X:
+					return profile.XSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.TelegramPublic:
+					return profile.TelegramUserBotSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				//case NetworkType.TelegramP:
+				//	return (profile.TelegramSettings != null && profile.TelegramSettings.IsActive) ? profile.TelegramSettings.UserId : 0;
+				case NetworkType.BlueSky:
+					return profile.BlueSkySettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				default:
+					return 0;
+			}
 		}
 	}
 }

@@ -6,7 +6,6 @@ using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
-using CrossChat.Integrations.Models.Posting.Configurations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -31,18 +30,31 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpGet]
-		public IActionResult Index(int profileId, string network)
+		public async Task<IActionResult> Index(int profileId, string network, int? botId)
 		{
+			// Загружаем профиль со всеми его связанными списками настроек соцсетей
+			var profile = await _db.Profile
+				.Include(p => p.InstagramSettingsList)
+				.Include(p => p.FacebookSettingsList)
+				.Include(p => p.ThreadsSettingsList)
+				.Include(p => p.XSettingsList)
+				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.TelegramSettings)
+				.Include(p => p.BlueSkySettingsList)
+				.FirstOrDefaultAsync(p => p.Id == profileId);
+
+			if (profile == null) return NotFound();
+
 			// Передаем параметры во View через ViewBag
 			ViewBag.ProfileId = profileId;
 			ViewBag.Network = network;
+			ViewBag.BotId = botId; // <-- ЗАПОМИНАЕМ конкретный ID подключенного аккаунта/бота!
 
-			// Ищет Views/Planner/Index.cshtml
-			return View();
+			return View(profile);
 		}
 
 		[HttpGet("events")]
-		public async Task<IActionResult> GetEvents(int profileId, string networkType)
+		public async Task<IActionResult> GetEvents(int profileId, string networkType, int? botId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -57,7 +69,6 @@ namespace CrossChat.Controllers
 
 				var events = posts.Select(p =>
 				{
-					// Выбираем только активные состояния соцсетей
 					var activeStates = p.NetworkStates.Where(ns => ns.Status != (int)SocialStatus.None).ToList();
 					var mainCaption = activeStates.FirstOrDefault()?.Caption ?? "Пост";
 
@@ -66,10 +77,10 @@ namespace CrossChat.Controllers
 						id = p.Id,
 						title = mainCaption,
 						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-						backgroundColor = "#4f46e5", // Красивый индиго цвет для общей ленты
+						backgroundColor = "#4f46e5",
 						network = "All",
-						// Передаем массив имен активных соцсетей на фронтенд для рендеринга иконок
-						activeNetworks = activeStates.Select(ns => ((NetworkType)ns.NetworkType).ToString()).ToList()
+						// Отдаем массив ключей "{Соцсеть}_{BotId}"
+						activeNetworks = activeStates.Select(ns => $"{((NetworkType)ns.NetworkType).ToString()}_{ns.BotId}").ToList()
 					};
 				});
 
@@ -77,22 +88,27 @@ namespace CrossChat.Controllers
 			}
 			else
 			{
-				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): код остается прежним
+				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): Фильтруем строго по конкретному BotId!
 				var netType = Enum.Parse<NetworkType>(networkType);
 				int netTypeId = (int)netType;
+
+				// Если BotId не передан явно в запросе календаря, находим первого активного бота
+				var finalBotId = botId ?? FindFirstActiveBotId(profileId, netType);
 
 				var posts = await _db.Posts
 					.Include(p => p.NetworkStates)
 					.Where(p => p.ProfileId == profileId &&
-								p.NetworkStates.Any(ns => ns.NetworkType == netTypeId && ns.Status != (int)SocialStatus.None))
+								p.NetworkStates.Any(ns => ns.NetworkType == netTypeId &&
+														  ns.BotId == finalBotId && // <-- Фильтр по BotId!
+														  ns.Status != (int)SocialStatus.None))
 					.ToListAsync();
 
 				var events = posts.Select(p => new
 				{
 					id = p.Id,
-					title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Caption ?? "Пост",
+					title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId)?.Caption ?? "Пост",
 					start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-					backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
+					backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
 					network = networkType
 				});
 
@@ -109,6 +125,7 @@ namespace CrossChat.Controllers
 			[FromForm] List<string> selectedNetworks, // Чекбоксы выбранных сетей из формы
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
+			[FromForm] int? botId,
 			[FromForm] List<string> originalDimensions,
 			[FromForm] List<string> compressedDimensions,
 			[FromForm] List<long> originalSizes,
@@ -128,7 +145,7 @@ namespace CrossChat.Controllers
 			};
 
 			// 2. Наполнение и валидация соцсетей (Вызов общего хелпера)
-			if (!FillNetworkData(post, networkType, selectedNetworks, caption))
+			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 			{
 				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 			}
@@ -139,7 +156,7 @@ namespace CrossChat.Controllers
 			// 4. Сохраняем пост в БД
 			await _postService.AddPostAsync(post);
 
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
+			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 		}
 
 		[HttpPost("update/{id}")]
@@ -151,6 +168,7 @@ namespace CrossChat.Controllers
 			[FromForm] string networkType,
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
+			[FromForm] int? botId,
 			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
 			[FromForm] List<string> selectedNetworks, // Список выбранных соцсетей (для режима All)
 			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
@@ -166,7 +184,7 @@ namespace CrossChat.Controllers
 			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
 			// 3. Обновление текстов и статусов соцсетей (Вызов общего хелпера)
-			if (!FillNetworkData(post, networkType, selectedNetworks, caption))
+			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 			{
 				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 			}
@@ -180,68 +198,86 @@ namespace CrossChat.Controllers
 			// 6. Сохраняем изменения в базе
 			await _postService.UpdatePostAsync(post);
 
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType });
+			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 		}
 
-		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption)
+		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
 		{
 			if (networkType == "All")
 			{
-				// Валидация: в общем режиме должен быть выбран хотя бы один чекбокс
 				if (selectedNetworks == null || selectedNetworks.Count == 0)
 				{
 					return false; // Валидация не прошла
 				}
 
-				// Сбрасываем в статус "None" тексты и направления для сетей, у которых сняли галочки
-				foreach (var net in NetworkMetadata.Supported)
+				// Сбрасываем те сети, у которых сняли галочки
+				foreach (var key in post.Networks.Keys.ToList())
 				{
-					if (!selectedNetworks.Contains(net.ToString()))
+					if (!selectedNetworks.Contains(key))
 					{
-						post.Networks[net] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+						post.Networks[key] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
 					}
 				}
 
-				// Наполняем или обновляем тексты для активных чекбоксов
-				foreach (var netName in selectedNetworks)
+				// Наполняем выбранные чекбоксами направления
+				foreach (var netKey in selectedNetworks) // формат: "Instagram_5"
 				{
-					if (Enum.TryParse<NetworkType>(netName, out var parsedNet))
+					var parts = netKey.Split('_');
+					if (Enum.TryParse<NetworkType>(parts[0], out var parsedNet))
 					{
-						var specificCaption = Request.Form[$"caption_{netName}"].ToString();
+						var specificCaption = Request.Form[$"caption_{netKey}"].ToString();
+						var finalCaption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
 
-						if (post.Networks.ContainsKey(parsedNet))
+						if (post.Networks.ContainsKey(netKey))
 						{
-							// Записываем персональный текст (или общий, если персональный не введен)
-							post.Networks[parsedNet].Caption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
-
-							// Если соцсеть только что добавили — переводим в статус ожидания публикации
-							if (post.Networks[parsedNet].Status == SocialStatus.None)
+							post.Networks[netKey].Caption = finalCaption;
+							if (post.Networks[netKey].Status == SocialStatus.None)
 							{
-								post.Networks[parsedNet].Status = SocialStatus.Pending;
+								post.Networks[netKey].Status = SocialStatus.Pending;
 							}
+						}
+						else
+						{
+							post.Networks[netKey] = new NetworkPostData
+							{
+								Status = SocialStatus.Pending,
+								Caption = finalCaption
+							};
 						}
 					}
 				}
 			}
 			else
 			{
-				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): обновляем текст только для текущей соцсети
+				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...):
 				if (Enum.TryParse<NetworkType>(networkType, out var parsedNet))
 				{
-					if (post.Networks.ContainsKey(parsedNet))
-					{
-						post.Networks[parsedNet].Caption = caption;
+					// Используем переданный botId напрямую!
+					// Метод FindFirstActiveBotId вызовется только как фоллбек, если botId равен null
+					var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, parsedNet);
+					var netKey = $"{networkType}_{finalBotId}";
 
-						// Если создаем с нуля в одиночной соцсети — активируем статус ожидания
-						if (post.Networks[parsedNet].Status == SocialStatus.None)
+					if (post.Networks.ContainsKey(netKey))
+					{
+						post.Networks[netKey].Caption = caption;
+
+						if (post.Networks[netKey].Status == SocialStatus.None)
 						{
-							post.Networks[parsedNet].Status = SocialStatus.Pending;
+							post.Networks[netKey].Status = SocialStatus.Pending;
 						}
+					}
+					else
+					{
+						post.Networks[netKey] = new NetworkPostData
+						{
+							Status = SocialStatus.Pending,
+							Caption = caption
+						};
 					}
 				}
 			}
 
-			return true; // Валидация успешно пройдена
+			return true;
 		}
 
 		private async Task UploadMedia(List<string> originalDimensions, List<string> compressedDimensions, List<long> originalSizes, List<IFormFile> images, BlogPost post)
@@ -347,30 +383,78 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("delete/{id}")]
-		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType)
+		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType, [FromQuery] int? botId)
 		{
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
 
-			var netType = Enum.Parse<NetworkType>(networkType);
+			// Считаем количество активных направлений публикации
+			var activeNets = post.Networks
+				.Where(n => n.Value.Status != SocialStatus.None)
+				.Select(n => n.Key)
+				.ToList();
 
 			// ЕСЛИ удаляем из общей вкладки "All" ИЛИ это была единственная активная сеть поста
-			if (netType == NetworkType.All || post.Networks.Count(n => n.Value.Status != SocialStatus.None) <= 1)
+			if (networkType == "All" || activeNets.Count <= 1)
 			{
 				// Удаляем полностью весь BlogPost из базы данных
 				await _postService.DeletePostAsync(id);
 			}
 			else
 			{
-				// ЕСЛИ это мультипостинг, но удаляем из конкретной соцсети — убираем только это направление (Status = None)
-				if (post.Networks.ContainsKey(netType))
+				// ЕСЛИ это мультипостинг, но удаляем из конкретной соцсети
+				var netType = Enum.Parse<NetworkType>(networkType);
+				var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, netType);
+
+				// Находим ключ вида "{Соцсеть}_{BotId}"
+				var netKey = $"{networkType}_{finalBotId}";
+
+				if (post.Networks.ContainsKey(netKey))
 				{
-					post.Networks[netType] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+					// Убираем только это направление (переводим в статус None)
+					post.Networks[netKey] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
 				}
 				await _postService.UpdatePostAsync(post);
 			}
 
 			return Ok();
 		}
+
+		// Вспомогательный метод поиска первого активного BotId в профиле по типу сети
+		private int FindFirstActiveBotId(int profileId, NetworkType netType)
+		{
+			var profile = _db.Profile
+				.Include(p => p.InstagramSettingsList)
+				.Include(p => p.FacebookSettingsList)
+				.Include(p => p.ThreadsSettingsList)
+				.Include(p => p.XSettingsList)
+				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.TelegramSettings)
+				.Include(p => p.BlueSkySettingsList)
+				.FirstOrDefault(p => p.Id == profileId);
+
+			if (profile == null) return 0;
+
+			switch (netType)
+			{
+				case NetworkType.Instagram:
+					return profile.InstagramSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.Facebook:
+					return profile.FacebookSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.Threads:
+					return profile.ThreadsSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.X:
+					return profile.XSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.TelegramPublic:
+					return profile.TelegramUserBotSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				//case NetworkType.TelegramP:
+				//	return (profile.TelegramSettings != null && profile.TelegramSettings.IsActive) ? profile.TelegramSettings.UserId : 0;
+				case NetworkType.BlueSky:
+					return profile.BlueSkySettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				default:
+					return 0;
+			}
+		}
+
 	}
 }

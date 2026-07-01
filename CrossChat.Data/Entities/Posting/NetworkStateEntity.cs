@@ -23,5 +23,8 @@ namespace CrossChat.Data.Entities.Posting
 
 		// Статус (Pending, Error, Published)
 		public int Status { get; set; }
+
+		// ID конкретного подключенного аккаунта/бота (например, InstagramSettings.Id, TelegramUserBotSettings.Id и т.д.)
+		public int? BotId { get; set; }
 	}
 }
