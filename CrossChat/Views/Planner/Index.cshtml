@@ -951,7 +951,7 @@
                         <!-- Рендерим Instagram аккаунты -->
                         @if (Model.InstagramSettingsList != null)
                         {
-                            @foreach (var bot in Model.InstagramSettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.InstagramSettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="Instagram_@bot.Id">
@@ -963,7 +963,7 @@
                         <!-- Рендерим Facebook страницы -->
                         @if (Model.FacebookSettingsList != null)
                         {
-                            @foreach (var bot in Model.FacebookSettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.FacebookSettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="Facebook_@bot.Id">
@@ -975,7 +975,7 @@
                         <!-- Рендерим Threads аккаунты -->
                         @if (Model.ThreadsSettingsList != null)
                         {
-                            @foreach (var bot in Model.ThreadsSettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.ThreadsSettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="Threads_@bot.Id">
@@ -987,7 +987,7 @@
                         <!-- Рендерим Telegram User Bots -->
                         @if (Model.TelegramUserBotSettingsList != null)
                         {
-                            @foreach (var bot in Model.TelegramUserBotSettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.TelegramUserBotSettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="TelegramPublic_@bot.Id">
@@ -999,7 +999,7 @@
                         <!-- Рендерим BlueSky -->
                         @if (Model.BlueSkySettingsList != null)
                         {
-                            @foreach (var bot in Model.BlueSkySettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.BlueSkySettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="BlueSky_@bot.Id">
@@ -1011,7 +1011,7 @@
                         <!-- Рендерим X (Twitter) -->
                         @if (Model.XSettingsList != null)
                         {
-                            @foreach (var bot in Model.XSettingsList.Where(b => b.IsActive))
+                            @foreach (var bot in Model.XSettingsList)
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="X_@bot.Id">

@@ -6,8 +6,12 @@
 
 @section Styles {
     <style>
+        /* Уникальные стили для страницы Threads */
+
+        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
             max-width: 800px;
+            width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
@@ -17,7 +21,6 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            text-align: center;
         }
 
         h1 {
@@ -31,7 +34,7 @@
             flex-direction: column;
             align-items: center;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .big-avatar {
@@ -43,6 +46,7 @@
             padding: 4px;
             background: transparent;
             margin-bottom: 1rem;
+            transition: border-color 0.3s ease;
         }
 
         .username {
@@ -74,8 +78,8 @@
             padding: 1rem;
             border-radius: 12px;
             font-family: inherit;
-            resize: none;
-            min-height: 150px;
+            resize: vertical;
+            min-height: 120px;
         }
 
             textarea:focus {
@@ -95,28 +99,61 @@
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            transition: 0.2s;
+            transition: 0.23s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            font-size: 1rem;
+            font-size: 0.95rem;
             box-sizing: border-box;
         }
 
-            .btn svg {
-                width: 24px;
-                height: 24px;
-                fill: white;
-                flex-shrink: 0;
+        /* Группа верхних кнопок управления */
+        .action-buttons-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        /* Стилизация кнопки консоли бота (стеклянный стиль) */
+        .btn-console {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-main) !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+            .btn-console:hover {
+                background: rgba(15, 23, 42, 0.7) !important;
+                border-color: var(--text-secondary) !important;
+                transform: translateY(-1px);
             }
 
-        .btn-threads {
-            background: #000;
-            color: white;
-            border: 1px solid #333;
+        /* Стилизация кнопки автопостинга (Индиго-градиент) */
+        .btn-autoposting {
+            background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
         }
 
-        [data-theme="light"] .btn-threads {
-            background: #000;
+            .btn-autoposting:hover {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+                box-shadow: 0 8px 16px rgba(99, 102, 241, 0.35);
+                transform: translateY(-1px);
+            }
+
+        /* Стилизация кнопки авторизации в Threads */
+        .btn-threads {
+            background: #000000 !important;
+            color: #ffffff !important;
+            border: 1px solid #333333 !important;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.03);
         }
+
+            .btn-threads:hover {
+                background: #111111 !important;
+                border-color: #555555 !important;
+            }
 
         .btn-primary {
             background: var(--accent-color);
@@ -125,10 +162,16 @@
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(239, 68, 68, 0.15);
             color: #ef4444;
             margin-top: 2rem;
+            border: 1px solid rgba(239, 68, 68, 0.25);
         }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
 
         /* СТАТУСЫ */
         .status-badge {
@@ -143,7 +186,7 @@
         }
 
         .status-active {
-            background: rgba(16, 185, 129, 0.2);
+            background: rgba(16, 185, 129, 0.15);
             color: #10b981;
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
@@ -167,7 +210,7 @@
             align-items: center;
             justify-content: space-between;
             margin-bottom: 1.5rem;
-            background: var(--glass-bg);
+            background: rgba(255,255,255,0.03);
             padding: 15px;
             border-radius: 12px;
             border: 1px solid var(--glass-border);
@@ -240,7 +283,7 @@
         .instruction-content {
             display: none;
             text-align: left;
-            background: var(--glass-bg);
+            background: rgba(255,255,255,0.03);
             border-radius: 16px;
             padding: 2rem;
             margin-bottom: 2rem;
@@ -254,19 +297,46 @@
             margin-bottom: 0.5rem;
         }
 
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container {
-                margin-top: 5rem;
+            .container
+
+        {
+            margin-top: 5rem;
+        }
+
+        .card {
+            padding: 1.5rem;
+        }
+
+        .btn {
+            padding: 12px 10px;
+            font-size: 0.9rem;
+        }
+
+        /* Складываем кнопки управления в один ряд вертикально на мобилках */
+        .action-buttons-group {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+
+        }
+
+        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК --- */
+        [data-theme="light"] .btn-console {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+            [data-theme="light"] .btn-console:hover {
+                background: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
             }
 
-            .card {
-                padding: 1.5rem;
-            }
-
-            .btn {
-                padding: 12px 10px;
-                font-size: 0.9rem;
-            }
+        /* В светлой теме кнопка авторизации Threads */
+        [data-theme="light"] .btn-threads {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
     </style>
 }
@@ -279,12 +349,19 @@
     <div class="card">
         @if (isConnected)
         {
-            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">Настройки сохранены!</div>
+            /* === РЕЖИМ НАСТРОЕК === */
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem; text-align: center;">
+                Настройки сохранены!
+            </div>
 
             <div class="connected-header">
                 @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
                 {
                     <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
+                else
+                {
+                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;border-color:white;color:white;">TH</div>
                 }
                 <div class="username">@@@(Model.Username ?? "threads_user")</div>
 
@@ -299,13 +376,18 @@
                     }
                 </div>
             </div>
-            <a href="/auth/console?provider=threads&botId=@Model.Id&username=@Model.Username" class="btn" style="background:#000; border:1px solid #333; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
-            <a href="/planner?profileId=@Model.ProfileId&network=Threads&botId=@Model.Id" class="btn" style="background: #6366f1; margin-top: 10px;">
-                📅 Автопостинг
-            </a>
-            <form action="/threads/update-settings" method="post">
+
+            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <div class="action-buttons-group">
+                <a href="/auth/console?provider=threads&botId=@Model.Id&username=@Model.Username" class="btn btn-console">
+                    💻 Консоль бота
+                </a>
+                <a href="/planner?profileId=@Model.ProfileId&network=Threads&botId=@Model.Id" class="btn btn-autoposting">
+                    📅 Автопостинг
+                </a>
+            </div>
+
+            <form action="/threads/update-settings" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id">
                 <div class="switch-container">
                     <label style="margin:0;">Включить автоответы</label>
@@ -316,7 +398,7 @@
                     </label>
                 </div>
 
-                <div class="form-group" style="text-align:left;">
+                <div class="form-group">
                     <label>Системный промпт (Инструкция)</label>
                     <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
                 </div>
@@ -334,27 +416,41 @@
                     </select>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
             </form>
 
-            <form action="/threads/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить Threads?');">
+            <form action="/threads/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить Threads?');" style="margin-top: 1rem;">
                 <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
         }
         else
         {
-            <button class="instruction-btn" onclick="toggleInstruction()">📖 Как подготовить Threads?</button>
-            <div id="instructionBlock" class="instruction-content">
-                <p>1. Убедитесь, что ваш аккаунт Threads является <strong>профессиональным</strong>.</p>
-                <p>2. В настройках конфиденциальности разрешите ответы (Replies) для всех.</p>
-                <p>3. Нажмите кнопку ниже и разрешите доступ приложению.</p>
-            </div>
+            /* === РЕЖИМ ПОДКЛЮЧЕНИЯ === */
+            <div style="text-align: center;">
+                <h1 style="margin-bottom: 10px;">Подключение Threads</h1>
+                <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите ваш аккаунт Threads для автоответов ИИ в реплаях.</p>
 
-            <div class="login-buttons">
-                <a href="@ViewBag.LoginUrl" class="btn btn-threads">
-                    <svg viewBox="0 0 24 24"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm0-22c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" /></svg>
-                    <span>Войти через Threads</span>
-                </a>
+                <button class="instruction-btn" onclick="toggleInstruction()">📖 Как подготовить Threads?</button>
+
+                <div id="instructionBlock" class="instruction-content">
+                    <p class="step-title">1. Перевод в профессиональный режим</p>
+                    <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.4;">Убедитесь, что ваш аккаунт Threads является <strong>профессиональным</strong> (Бизнес/Автор).</p>
+
+                    <p class="step-title">2. Разрешение ответов</p>
+                    <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.4;">В настройках конфиденциальности Threads разрешите ответы (Replies) для всех.</p>
+
+                    <p class="step-title">3. Авторизация</p>
+                    <p style="font-size: 0.95rem; line-height: 1.4;">Нажмите кнопку ниже и разрешите доступ приложению.</p>
+                </div>
+
+                <div class="login-buttons">
+                    <a href="@ViewBag.LoginUrl" class="btn btn-threads">
+                        <svg viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
+                            <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm0-22c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
+                        </svg>
+                        <span>Войти через Threads</span>
+                    </a>
+                </div>
             </div>
         }
     </div>
@@ -370,8 +466,10 @@
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('saved')) {
             const toast = document.getElementById('toast');
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 3000);
+            if (toast) {
+                toast.style.display = 'block';
+                setTimeout(() => toast.style.display = 'none', 3000);
+            }
         }
     </script>
 }

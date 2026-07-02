@@ -6,8 +6,12 @@
 
 @section Styles {
     <style>
+        /* Уникальные стили для страницы Facebook */
+
+        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ И ОТСТУПОВ */
         .container {
             max-width: 800px;
+            width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
@@ -17,16 +21,15 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            text-align: center;
         }
 
-        /* HEADER */
+        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
         .connected-header {
             display: flex;
             flex-direction: column;
             align-items: center;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .big-avatar {
@@ -70,9 +73,14 @@
             padding: 1rem;
             border-radius: 12px;
             font-family: inherit;
-            resize: none;
+            resize: vertical;
             min-height: 150px;
         }
+
+            textarea:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
 
         /* КНОПКИ */
         .btn {
@@ -86,15 +94,53 @@
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            transition: 0.2s;
+            transition: 0.23s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            font-size: 1rem;
+            font-size: 0.95rem;
             box-sizing: border-box;
         }
+
+        /* Группа верхних кнопок управления */
+        .action-buttons-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        /* Стилизация кнопки консоли бота (стеклянный стиль) */
+        .btn-console {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-main) !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+            .btn-console:hover {
+                background: rgba(15, 23, 42, 0.7) !important;
+                border-color: var(--text-secondary) !important;
+                transform: translateY(-1px);
+            }
+
+        /* Стилизация кнопки автопостинга (Индиго-градиент) */
+        .btn-autoposting {
+            background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+            .btn-autoposting:hover {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+                box-shadow: 0 8px 16px rgba(99, 102, 241, 0.35);
+                transform: translateY(-1px);
+            }
 
         .btn-fb {
             background: #1877F2;
             color: white;
+            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
         }
 
         .btn-primary {
@@ -104,10 +150,16 @@
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(239, 68, 68, 0.15);
             color: #ef4444;
             margin-top: 2rem;
+            border: 1px solid rgba(239, 68, 68, 0.25);
         }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
 
         /* СТАТУСЫ */
         .status-badge {
@@ -122,13 +174,22 @@
         }
 
         .status-active {
-            background: rgba(16, 185, 129, 0.2);
+            background: rgba(16, 185, 129, 0.15);
             color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
         }
 
         .status-paused {
             background: rgba(234, 179, 8, 0.2);
             color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
         }
 
         /* ТОГГЛ */
@@ -137,7 +198,7 @@
             align-items: center;
             justify-content: space-between;
             margin-bottom: 1.5rem;
-            background: var(--glass-bg);
+            background: rgba(255,255,255,0.03);
             padding: 15px;
             border-radius: 12px;
             border: 1px solid var(--glass-border);
@@ -188,15 +249,37 @@
                 transform: translateX(24px);
             }
 
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container {
-                margin-top: 5rem;
-            }
+            .container
 
-            .card {
-                padding: 1.5rem;
-            }
+        {
+            margin-top: 5rem;
         }
+
+        .card {
+            padding: 1.5rem;
+        }
+
+        /* Складываем кнопки управления в один ряд вертикально на мобилках */
+        .action-buttons-group {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+
+        }
+
+        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК --- */
+        [data-theme="light"] .btn-console {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+            [data-theme="light"] .btn-console:hover {
+                background: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
+            }
     </style>
 }
 
@@ -219,7 +302,7 @@
                 <div style="margin-top: 10px;">
                     @if (Model.IsActive)
                     {
-                        <span class="status-badge status-active">● Бот работает</span>
+                        <span class="status-badge status-active"><span class="dot"></span> Бот работает</span>
                     }
                     else
                     {
@@ -228,12 +311,16 @@
                 </div>
             </div>
 
-            <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn" style="background:#1877f2; margin-top: 1rem;">
-                💻 Открыть консоль
-            </a>
-            <a href="/planner?profileId=@Model.ProfileId&network=Facebook&botId=@Model.Id" class="btn" style="background: #6366f1; margin-top: 10px;">
-                📅 Автопостинг
-            </a>
+            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <div class="action-buttons-group">
+                <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn btn-console">
+                    💻 Консоль бота
+                </a>
+                <a href="/planner?profileId=@Model.ProfileId&network=Facebook&botId=@Model.Id" class="btn btn-autoposting">
+                    📅 Автопостинг
+                </a>
+            </div>
+
             <div class="form-section">
                 <form action="/facebook/update-settings" method="post">
                     <input type="hidden" name="botId" value="@Model.Id" />
@@ -275,8 +362,8 @@
 
             <form action="/facebook/disconnect" method="post" onsubmit="return confirm('Отключить эту страницу?');">
                 <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
-            </form>            
+                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Удалить интеграцию</button>
+            </form>
         }
         else
         {
@@ -286,8 +373,8 @@
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                 </svg>
             </div>
-            <h1>Facebook Pages</h1>
-            <p style="color:var(--text-secondary); margin-bottom:2rem;">Подключите страницы Facebook для автоответов в Messenger.</p>
+            <h1 style="text-align: center;">Facebook Pages</h1>
+            <p style="color:var(--text-secondary); margin-bottom:2rem; text-align: center;">Подключите страницы Facebook для автоответов в Messenger.</p>
 
             <a href="@ViewBag.FbLoginUrl" class="btn btn-fb">
                 <span>Войти через Facebook</span>

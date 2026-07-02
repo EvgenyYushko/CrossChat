@@ -11,8 +11,8 @@
 
         /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
-            max-width: 800px; /* Было 800px, проверь что это применилось */
-            width: 100%; /* Занимаем всю доступную ширину до 800px */
+            max-width: 800px;
+            width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
@@ -22,16 +22,15 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            /* Убираем text-align: center отсюда, чтобы формы были слева, а шапка по центру */
         }
 
         /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
         .connected-header {
             display: flex;
             flex-direction: column;
-            align-items: center; /* Центрируем всё по горизонтали */
+            align-items: center;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .big-avatar {
@@ -71,9 +70,28 @@
             color: var(--text-secondary);
         }
 
+        /* СТИЛИЗАЦИЯ ИСПРАВЛЕННЫХ ТЕКСТОВЫХ ПОЛЕЙ ВВОДА */
+        .text-input {
+            width: 100%;
+            box-sizing: border-box; /* Исключает вылет полей за рамки */
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+            .text-input:focus {
+                border-color: var(--accent-color);
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+            }
+
         textarea {
             width: 100%;
-            box-sizing: border-box; /* Важно! */
+            box-sizing: border-box;
             background: var(--input-bg);
             border: 1px solid var(--glass-border);
             color: var(--text-main);
@@ -101,17 +119,47 @@
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            transition: 0.2s;
+            transition: 0.23s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            font-size: 1rem;
+            font-size: 0.95rem;
             box-sizing: border-box;
         }
 
-            .btn svg {
-                width: 24px;
-                height: 24px;
-                fill: white;
-                flex-shrink: 0;
+        /* Группа верхних кнопок управления */
+        .action-buttons-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        /* Стилизация кнопки консоли бота */
+        .btn-console {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-main) !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+            .btn-console:hover {
+                background: rgba(15, 23, 42, 0.7) !important;
+                border-color: var(--text-secondary) !important;
+                transform: translateY(-1px);
+            }
+
+        /* Стилизация кнопки автопостинга (Индиго градиент) */
+        .btn-autoposting {
+            background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+            .btn-autoposting:hover {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+                box-shadow: 0 8px 16px rgba(99, 102, 241, 0.35);
+                transform: translateY(-1px);
             }
 
         .btn-primary {
@@ -121,13 +169,15 @@
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.15);
             color: #ef4444;
             margin-top: 2rem;
+            border: 1px solid rgba(239, 68, 68, 0.25);
         }
 
             .btn-danger:hover {
-                background: rgba(239, 68, 68, 0.3);
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
             }
 
         .login-buttons {
@@ -185,7 +235,7 @@
         }
 
         .status-active {
-            background: rgba(16, 185, 129, 0.2);
+            background: rgba(16, 185, 129, 0.15);
             color: #10b981;
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
@@ -354,35 +404,53 @@
         }
 
         @@keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
+            from
 
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         }
 
         /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container {
-                margin-top: 5rem;
-            }
+            .container
 
-            .card {
-                padding: 1.5rem;
-            }
+        {
+            margin-top: 5rem;
+        }
 
-            .instruction-content {
-                padding: 1rem;
-            }
+        .card {
+            padding: 1.5rem;
+        }
 
-            .btn {
-                padding: 12px 10px;
-                font-size: 0.9rem;
-            }
+        .instruction-content {
+            padding: 1rem;
+        }
+
+        .btn {
+            padding: 12px 10px;
+            font-size: 0.9rem;
+        }
+
+        /* ИСПРАВЛЕНИЕ: Складываем кнопки управления в один ряд вертикально на мобилках */
+        .action-buttons-group {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+
+        /* ИСПРАВЛЕНИЕ: Складываем поля лимитов в один ряд вертикально на мобилках */
+        .limits-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+
         }
 
         .reactions-input {
@@ -394,7 +462,19 @@
             border: 1px solid var(--glass-border);
             color: var(--text-main);
             background: var(--input-bg);
-        }       
+        }
+
+        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК КОНСОЛИ И ЛИМИТОВ --- */
+        [data-theme="light"] .btn-console {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+            [data-theme="light"] .btn-console:hover {
+                background: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
+            }
     </style>
 }
 
@@ -447,27 +527,32 @@
                     }
                 </div>
             </div>
-            <a href="/auth/console?provider=instagram&botId=@Model.Id&username=@Model.Username" class="btn" style="background:#000; border:1px solid #333;">
-                💻 Открыть консоль бота
-            </a>
-            <a href="/planner?profileId=@Model.ProfileId&network=Instagram&botId=@Model.Id" class="btn" style="background: #6366f1; margin-top: 10px;">
-                📅 Автопостинг
-            </a>
+
+            <!-- НОВАЯ ЭЛЕГАНТНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <div class="action-buttons-group">
+                <a href="/auth/console?provider=instagram&botId=@Model.Id&username=@Model.Username" class="btn btn-console">
+                    💻 Консоль бота
+                </a>
+                <a href="/planner?profileId=@Model.ProfileId&network=Instagram&botId=@Model.Id" class="btn btn-autoposting">
+                    📅 Автопостинг
+                </a>
+            </div>
+
             <div class="form-section">
                 <form action="/instagram/update-settings" method="post">
-                    <!-- Общие переключатели -->
                     <input type="hidden" name="botId" value="@Model.Id">
                     <h4 style="margin-bottom: 15px;">Основные настройки</h4>
+
                     <div class="switch-container">
                         <label>Автоответы в Direct</label>
                         <input type="checkbox" name="isDirectEnabled" value="true" @(Model.IsDirectEnabled ? "checked" : "")>
-                        <input type="hidden" name="isDirectEnabled" value="false"> <!-- Обязательно для ASP.NET -->
+                        <input type="hidden" name="isDirectEnabled" value="false">
                     </div>
 
                     <div class="switch-container">
                         <label>Автоответы в Комментариях</label>
                         <input type="checkbox" name="isCommentsEnabled" value="true" @(Model.IsCommentsEnabled ? "checked" : "")>
-                        <input type="hidden" name="isCommentsEnabled" value="false"> <!-- Обязательно для ASP.NET -->
+                        <input type="hidden" name="isCommentsEnabled" value="false">
                     </div>
 
                     <!-- Переключатели обработки медиа -->
@@ -508,7 +593,8 @@
                         <small class="text-muted">Просто вставьте любимые эмодзи в поле выше.</small>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; ">
+                    <!-- ИСПРАВЛЕННЫЙ БЛОК ЛИМИТОВ С СЕТКОЙ И СТИЛИЗОВАННЫМ .TEXT-INPUT -->
+                    <div class="limits-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem;">
                         <div class="form-group">
                             <label>Лимит ответов</label>
                             <input type="number" name="maxAnswerMessagesCount" value="@Model.MaxAnswerMessagesCount" class="text-input" style="margin:0;">
@@ -558,21 +644,12 @@
                         }
 
                         function filterEmojis(input) {
-                            // Регулярное выражение для поиска эмодзи
-                            // Оно охватывает большинство стандартных диапазонов эмодзи в Unicode
                             const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
-
                             const value = input.value;
                             const matches = value.match(emojiRegex);
-
-                            // Если введено что-то кроме эмодзи, оставляем только найденные эмодзи
-                            if (matches) 
-                            {
+                            if (matches) {
                                 input.value = matches.join('');
-                            } 
-                            else 
-                            {
-                                // Если вообще нет эмодзи - очищаем поле
+                            } else {
                                 input.value = '';
                             }
                         }
@@ -600,13 +677,11 @@
                 </button>
 
                 <div id="instructionBlock" class="instruction-content">
-                    <!-- Вступление про безопасность -->
                     <div class="safety-note">
                         <strong>Безопасно и официально</strong><br>
                         CrossChat работает по официальному API Instagram. Блокировки аккаунта за использование нашего сервиса исключены. Мы соблюдаем все правила компании Meta.
                     </div>
 
-                    <!-- Шаг 1 -->
                     <div class="instruction-step">
                         <div class="step-title"><div class="step-num">1</div> Перевод в профессиональный режим</div>
                         <ul class="step-list">
@@ -614,14 +689,12 @@
                             <li>Перейдите в пункт <strong>"Тип аккаунта и инструменты"</strong></li>
                             <li>Нажмите <strong>"Переключиться на профессиональный аккаунт"</strong> (Бизнес).</li>
                         </ul>
-
                         <div class="tip-box">
                             <strong>💡 Как проверить, что у вас уже профи-аккаунт?</strong><br>
                             Если в настройках вы видите раздел "Для профессиональных аккаунтов" и пункт "Инструменты для бизнеса/автора" — значит, всё уже готово.
                         </div>
                     </div>
 
-                    <!-- Шаг 2 -->
                     <div class="instruction-step">
                         <div class="step-title"><div class="step-num">2</div> Разрешение доступа к сообщениям</div>
                         <p class="step-desc" style="color:#fbbf24; margin-bottom:10px;">⚠️ Это самый важный шаг!</p>
@@ -633,7 +706,6 @@
                         </ul>
                     </div>
 
-                    <!-- Шаг 3 -->
                     <div class="instruction-step">
                         <div class="step-title"><div class="step-num">3</div> Подключение</div>
                         <p class="step-desc">
@@ -661,4 +733,3 @@
         }
     </div>
 </div>
-

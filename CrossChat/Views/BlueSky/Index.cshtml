@@ -10,9 +10,12 @@
 
 @section Styles {
     <style>
+        /* Уникальные стили для страницы BlueSky */
+
+        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
-            max-width: 800px; /* Было 800px, проверь что это применилось */
-            width: 100%; /* Занимаем всю доступную ширину до 800px */
+            max-width: 800px;
+            width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
         }
@@ -22,16 +25,15 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
-            /* Убираем text-align: center отсюда, чтобы формы были слева, а шапка по центру */
         }
 
         /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
         .connected-header {
             display: flex;
             flex-direction: column;
-            align-items: center; /* Центрируем всё по горизонтали */
+            align-items: center;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .big-avatar {
@@ -39,7 +41,7 @@
             height: 120px;
             border-radius: 50%;
             object-fit: cover;
-            border: 4px solid #e1306c;
+            border: 4px solid #0085ff; /* ИСПРАВЛЕНИЕ: Фирменный синий цвет BlueSky вместо Instagram */
             padding: 4px;
             background: transparent;
             margin-bottom: 1rem;
@@ -49,6 +51,7 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
+            color: var(--text-main);
         }
 
         .user-id {
@@ -71,9 +74,28 @@
             color: var(--text-secondary);
         }
 
+        /* СТИЛИЗАЦИЯ ИСПРАВЛЕННЫХ ТЕКСТОВЫХ ПОЛЕЙ ВВОДА */
+        .text-input {
+            width: 100%;
+            box-sizing: border-box; /* Исключает вылет полей за рамки */
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+            .text-input:focus {
+                border-color: var(--accent-color);
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+            }
+
         textarea {
             width: 100%;
-            box-sizing: border-box; /* Важно! */
+            box-sizing: border-box;
             background: var(--input-bg);
             border: 1px solid var(--glass-border);
             color: var(--text-main);
@@ -101,18 +123,54 @@
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            transition: 0.2s;
+            transition: 0.23s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            font-size: 1rem;
+            font-size: 0.95rem;
             box-sizing: border-box;
         }
 
-            .btn svg {
-                width: 24px;
-                height: 24px;
-                fill: white;
-                flex-shrink: 0;
+        /* Группа верхних кнопок управления */
+        .action-buttons-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        /* Стилизация кнопки консоли бота (стеклянный стиль) */
+        .btn-console {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-main) !important;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+            .btn-console:hover {
+                background: rgba(15, 23, 42, 0.7) !important;
+                border-color: var(--text-secondary) !important;
+                transform: translateY(-1px);
             }
+
+        /* Стилизация кнопки автопостинга (Индиго-градиент) */
+        .btn-autoposting {
+            background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+            .btn-autoposting:hover {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+                box-shadow: 0 8px 16px rgba(99, 102, 241, 0.35);
+                transform: translateY(-1px);
+            }
+
+        .btn-bsky {
+            background: #0085ff;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0, 133, 255, 0.2);
+        }
 
         .btn-primary {
             background: var(--accent-color);
@@ -121,13 +179,15 @@
         }
 
         .btn-danger {
-            background: rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.15);
             color: #ef4444;
             margin-top: 2rem;
+            border: 1px solid rgba(239, 68, 68, 0.25);
         }
 
             .btn-danger:hover {
-                background: rgba(239, 68, 68, 0.3);
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
             }
 
         .login-buttons {
@@ -135,18 +195,6 @@
             flex-direction: column;
             gap: 1rem;
             margin-top: 1rem;
-        }
-
-        .btn-insta {
-            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(220, 39, 67, 0.2);
-        }
-
-        .btn-fb {
-            background: #1877F2;
-            color: white;
-            box-shadow: 0 4px 12px rgba(24, 119, 242, 0.2);
         }
 
         .separator {
@@ -185,7 +233,7 @@
         }
 
         .status-active {
-            background: rgba(16, 185, 129, 0.2);
+            background: rgba(16, 185, 129, 0.15);
             color: #10b981;
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
@@ -354,35 +402,47 @@
         }
 
         @@keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
+            from
 
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         }
 
         /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container {
-                margin-top: 5rem;
-            }
+            .container
 
-            .card {
-                padding: 1.5rem;
-            }
+        {
+            margin-top: 5rem;
+        }
 
-            .instruction-content {
-                padding: 1rem;
-            }
+        .card {
+            padding: 1.5rem;
+        }
 
-            .btn {
-                padding: 12px 10px;
-                font-size: 0.9rem;
-            }
+        .instruction-content {
+            padding: 1rem;
+        }
+
+        .btn {
+            padding: 12px 10px;
+            font-size: 0.9rem;
+        }
+
+        /* Складываем кнопки управления в один ряд вертикально на мобилках */
+        .action-buttons-group {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+
         }
 
         .reactions-input {
@@ -396,7 +456,17 @@
             background: var(--input-bg);
         }
 
-        /* Используй те же стили для формы и переключателей, что и в Instagram */
+        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК --- */
+        [data-theme="light"] .btn-console {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+            [data-theme="light"] .btn-console:hover {
+                background: #f1f5f9 !important;
+                border-color: #94a3b8 !important;
+            }
     </style>
 }
 
@@ -412,26 +482,47 @@
             }
         }
 
-        function toggleInstruction() { /* ... твоя логика ... */ }
+        function toggleInstruction() {
+            var block = document.getElementById('instructionBlock');
+            if (block.style.display === 'block') {
+                block.style.display = 'none';
+            } else {
+                block.style.display = 'block';
+                block.classList.add('open');
+            }
+        }
     </script>
 }
 
 <div class="container">
     <div class="card">
-        <h1>BlueSky Бот</h1>
-
         @if (!isConnected)
         {
-            <p>Введите ваш Handle (например, username.bsky.social) для подключения</p>
-            <form action="/bluesky/connect" method="post">
-                <input type="text" name="handle" class="text-input" placeholder="username.bsky.social" required>
-                <button type="submit" class="btn btn-bsky">Авторизоваться</button>
-            </form>
+            /* === РЕЖИМ ПОДКЛЮЧЕНИЯ === */
+            <div style="text-align: center;">
+                <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="#0085ff" style="color: #0085ff; filter: drop-shadow(0 4px 12px rgba(0, 133, 255, 0.25));">
+                        <path d="M12 10.57c2.16-3.85 4.97-6.9 7.32-6.9 2.92 0 4.68 2.65 4.68 5.38 0 4.42-4.14 7.91-7.31 9.77-1.17.68-2.53 1.12-3.89 1.12h-.8c-1.36 0-2.72-.44-3.89-1.12C4.84 16.96.7 13.47.7 9.05c0-2.73 1.76-5.38 4.68-5.38 2.35 0 5.16 3.05 7.32 6.9z" />
+                    </svg>
+                </div>
+                <h1 style="margin-bottom: 10px;">Подключение BlueSky</h1>
+                <p style="color:var(--text-secondary); margin-bottom:2rem;">
+                    Введите ваш Handle (например, username.bsky.social) для подключения.
+                </p>
+
+                <form action="/bluesky/connect" method="post" style="text-align: left;">
+                    <div class="form-group">
+                        <label>Никнейм (Handle)</label>
+                        <input type="text" name="handle" class="text-input" placeholder="username.bsky.social" required>
+                    </div>
+                    <button type="submit" class="btn btn-bsky" style="margin-top: 15px;">Авторизоваться</button>
+                </form>
+            </div>
         }
         else
         {
             /* === РЕЖИМ НАСТРОЕК === */
-            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem;">
+            <div id="toast" style="display:none; background:#10b981; color:white; padding:10px; border-radius:8px; margin-bottom:1rem; text-align: center;">
                 Настройки сохранены!
             </div>
 
@@ -458,12 +549,15 @@
                 </div>
             </div>
 
-            <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn" style="background:#0085ff; margin-bottom: 1.5rem;">
-                💻 Открыть консоль BlueSky
-            </a>
-            <a href="/planner?profileId=@Model.ProfileId&network=BlueSky&botId=@Model.Id" class="btn" style="background: #6366f1; margin-top: 10px;">
-                📅 Автопостинг
-            </a>
+            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <div class="action-buttons-group">
+                <a href="/auth/console?provider=bluesky&botId=@Model.Id&username=@Model.Handle" class="btn btn-console">
+                    💻 Консоль бота
+                </a>
+                <a href="/planner?profileId=@Model.ProfileId&network=BlueSky&botId=@Model.Id" class="btn btn-autoposting">
+                    📅 Автопостинг
+                </a>
+            </div>
 
             <form action="/bluesky/update" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id" />
@@ -507,7 +601,7 @@
 
             <form action="/bluesky/disconnect" method="post" onsubmit="return confirm('Отключить аккаунт BlueSky?');" style="margin-top: 1rem;">
                 <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
+                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Удалить интеграцию</button>
             </form>
         }
     </div>
