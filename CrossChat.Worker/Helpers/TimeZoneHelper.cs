@@ -1,4 +1,4 @@
-namespace CrossChat.Helpers
+namespace CrossChat.Worker.Helpers
 {
 	public static class TimeZoneHelper
 	{

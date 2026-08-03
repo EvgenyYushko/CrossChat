@@ -1,4 +1,5 @@
 using CrossChat.Integrations.Models;
+using static CrossChat.Integrations.Services.InstagramService;
 
 namespace CrossChat.Integrations.Interfaces
 {
@@ -62,5 +63,12 @@ namespace CrossChat.Integrations.Interfaces
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
 
 		Task<string> GetUserContextForAiAsync(string userId, string accessToken);
+
+
+		// Media part
+		Task<CreateMediaResult> CreateMediaAsync(List<string> base64Strings, string accessToken, string caption);
+
+		Task<string> PublishStoryFromBase64(string base64Img, string accessToken);
+
 	}
 }

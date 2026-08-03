@@ -450,8 +450,24 @@ namespace CrossChat.Worker.Services
 				AccessLevel = (int)model.Access
 			};
 
+			if (model.Images != null && model.Images.Count > 0)
+			{
+				foreach (var base64 in model.Images)
+				{
+					entity.Images.Add(new PostImageEntity
+					{
+						PostId = model.Id,
+						Base64Data = base64
+					});
+				}
+			}
+
+			// Маппинг состояний соцсетей
 			foreach (var kvp in model.Networks)
 			{
+				// Пропускаем неактивные направления (Status = None), чтобы не засорять БД пустыми строками
+				if (kvp.Value.Status == SocialStatus.None) continue;
+
 				var parts = kvp.Key.Split('_');
 				var netType = (int)Enum.Parse<NetworkType>(parts[0]);
 				var botId = int.Parse(parts[1]);

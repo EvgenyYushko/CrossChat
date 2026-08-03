@@ -9,7 +9,7 @@ using CrossChat.Integrations.Models.Posting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {

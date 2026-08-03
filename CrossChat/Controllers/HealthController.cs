@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {

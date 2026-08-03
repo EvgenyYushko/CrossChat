@@ -1,9 +1,11 @@
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
 using CrossChat.Worker.Consumers.BlueSky;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
+using CrossChat.Worker.Facades;
 using CrossChat.Worker.Services;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
@@ -27,9 +29,11 @@ namespace CrossChat.Worker
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 
-		public static void AddWorkerServices(this IServiceCollection services, string token)
+		public static void AddWorkerServices(this IServiceCollection services, string token, SiteSettings siteSettings)
 		{
 			// Регистрируем HttpClient для Инстаграма
+			services.AddSingleton(siteSettings);
+
 			services.AddHttpClient<IInstagramService, InstagramService>(client =>
 			{
 				client.BaseAddress = new Uri("https://graph.instagram.com/");
@@ -58,6 +62,7 @@ namespace CrossChat.Worker
 			});
 
 			services.AddSingleton<ITelegramService, TelegramService>();
+			services.AddScoped<SocialPublicationFacade>();
 
 			services.AddScoped<IPostService, PostService>();
 		}

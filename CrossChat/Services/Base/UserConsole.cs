@@ -2,7 +2,7 @@ using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
-using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Services.Base
 {

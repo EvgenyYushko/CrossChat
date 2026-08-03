@@ -5,26 +5,27 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using CrossChat.Integrations.Models.Site;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Polly;
 
 namespace CrossChat.Integrations.Services;
 
-public class InstagramService : IInstagramService
+public partial class InstagramService : IInstagramService
 {
 	private readonly HttpClient _httpClient;
 	private readonly ILogger<InstagramService> _logger;
 	private readonly IAiService _aiService;
+	private readonly SiteSettings _siteSettings;
+	private const string ApiVersion = "v21.0";	
 
-	// Используем актуальную версию API
-	private const string ApiVersion = "v21.0";
-
-	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger, IAiService aiService)
+	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger, IAiService aiService, SiteSettings siteSettings)
 	{
 		_httpClient = httpClient;
 		_logger = logger;
 		_aiService = aiService;
+		_siteSettings = siteSettings;
 	}
 
 	public async Task<(string NewToken, int ExpiresIn)?> RefreshTokenAsync(string currentToken)

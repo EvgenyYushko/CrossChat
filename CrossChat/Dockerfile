@@ -39,4 +39,13 @@ RUN dotnet publish "CrossChat.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# --- Выдаём права доступа ---
+USER root
+RUN mkdir -p /app/wwwroot/temp_audio
+RUN chown -R app:app /app/wwwroot
+RUN chmod -R 777 /app/wwwroot
+USER $APP_UID
+# --------------------------------------------------
+
 ENTRYPOINT ["dotnet", "CrossChat.dll"]

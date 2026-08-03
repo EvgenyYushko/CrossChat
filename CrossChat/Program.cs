@@ -4,6 +4,7 @@ using CrossChat.Helpers;
 using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
 using CrossChat.Models;
 using CrossChat.Services;
@@ -110,6 +111,17 @@ builder.Services.AddQuartz(q =>
         .ForJob(jobFaceBookbKey)
         .WithIdentity("FaceBookAnswerJob-Trigger")
         .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
+
+	// 4
+	var postKey = new JobKey("PostPublishingJob");
+    q.AddJob<PostPublishingJob>(opts => opts.WithIdentity(postKey));
+
+    q.AddTrigger(opts => opts
+        .ForJob(postKey)
+        .WithIdentity("PostPublishingJob-Trigger")
+        .WithSimpleSchedule(x => x
+            .WithIntervalInSeconds(120) // скекунд
+            .RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
@@ -149,7 +161,14 @@ builder.Services.AddMassTransit(x =>
 	var geminiToken = GetConfigOrThrow(GEMINI_API_KEY);
 	GetConfigOrThrow(TELEGRAM_API_ID);
 	GetConfigOrThrow(TELEGRAM_API_HASH);
-	x.AddWorkerServices(geminiToken);
+
+	var env = builder.Environment;
+	string webRootPath = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+	string tempFolder = Path.Combine(webRootPath, "temp_media");
+
+	var settings = new SiteSettings{TempFolder = tempFolder, AppUrl = APP_URL};
+
+	x.AddWorkerServices(geminiToken, settings);
 	x.AddQuartzConsumers();
 	x.AddPublishMessageScheduler();
 
