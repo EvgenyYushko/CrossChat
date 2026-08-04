@@ -15,6 +15,7 @@ namespace CrossChat.Worker.Facades
 		private readonly IBlueSkyService _blueSkyService;
 		private readonly ITelegramService _telegramService;
 		private readonly IXService _xService;
+		private readonly IThreadsService _threadsService;
 		private readonly ILogger<SocialPublicationFacade> _logger;
 		private AppDbContext _appDbContext;
 		public SocialPublicationFacade(IPostService postService
@@ -23,6 +24,7 @@ namespace CrossChat.Worker.Facades
 			, IBlueSkyService blueSkyService
 			, ITelegramService telegramService
 			, IXService xService
+			, IThreadsService threadsService
 			, ILogger<SocialPublicationFacade> logger
 			, AppDbContext appDbContext)
 		{
@@ -33,6 +35,7 @@ namespace CrossChat.Worker.Facades
 			_blueSkyService = blueSkyService;
 			_telegramService = telegramService;
 			_xService = xService;
+			_threadsService = threadsService;
 			_logger = logger;
 		}
 
@@ -148,7 +151,11 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки для Threads (BotId: {state.BotId})");
 					}
 
-					// TODO: Вызов вашего _threadsService
+					var threadsSuccess = await ThreadsPost(caption, files, threadsSettings.AccessToken);
+					if (!threadsSuccess)
+					{
+						throw new Exception($"Ошибка при публикации поста в Threads )");
+					}
 					break;
 
 				default:
@@ -197,6 +204,11 @@ namespace CrossChat.Worker.Facades
 			{
 				return _xService.CreateTextPostAsync(caption, accessToken);
 			}
+		}
+
+		public async Task<bool> ThreadsPost(string caption, List<string> base64Image, string accessToken)
+		{
+			return await _threadsService.CreatePostAsync(caption, base64Image, accessToken);
 		}
 	}
 }

@@ -2,19 +2,22 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using CrossChat.Integrations.Models.Site;
 using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Integrations.Services;
 
-public class ThreadsService : IThreadsService
+public partial class ThreadsService : IThreadsService
 {
 	private readonly HttpClient _httpClient;
+	private readonly SiteSettings _siteSettings;
 	private readonly ILogger<ThreadsService> _logger;
 
-	public ThreadsService(ILogger<ThreadsService> logger, HttpClient httpClient)
+	public ThreadsService(ILogger<ThreadsService> logger, HttpClient httpClient, SiteSettings siteSettings)
 	{
 		_logger = logger;
 		_httpClient = httpClient;
+		_siteSettings = siteSettings;
 	}
 
 	public async Task<ThreadsUserProfile?> GetThreadsUserProfileAsync(string accessToken)

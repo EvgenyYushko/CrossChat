@@ -17,6 +17,8 @@ public interface IThreadsService
 	Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60);
 
 	Task<string> GetContainerStatusAsync(string containerId, string accessToken);
+
+	Task<bool> CreatePostAsync(string caption, List<string> imageUrls, string accessToken);
 }
 
 public record ThreadsUserProfile(string Id, string Username, string? ProfilePictureUrl);
