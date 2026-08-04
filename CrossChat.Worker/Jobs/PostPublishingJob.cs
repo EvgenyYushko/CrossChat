@@ -33,8 +33,8 @@ namespace CrossChat.Worker.Jobs
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 pendingStateIds = await db.NetworkStates
-                   // .Where(ns => ns.Status == (int)SocialStatus.Pending && ns.Post.ShowDate <= now)
-                   .Where(ns => ns.NetworkType == 2)
+                    .Where(ns => ns.Status == (int)SocialStatus.Pending && ns.Post.ShowDate <= now)
+                   //.Where(ns => ns.NetworkType == 2)
                     .Select(ns => ns.Id) // Берем только простые числа ID
                     .ToListAsync();
             }

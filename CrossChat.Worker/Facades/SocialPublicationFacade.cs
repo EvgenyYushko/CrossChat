@@ -70,21 +70,21 @@ namespace CrossChat.Worker.Facades
 					}
 
 					// 3. Публикуем историю (если есть картинки)
-					if (files != null && files.Any())
-					{
-						try
-						{
-							string? storyId = await InstagramStory(files, instaSettings.AccessToken);
-							if (storyId is not null)
-							{
-								_logger.LogInformation("✅ Instagram Story успешно опубликована (StoryId: {StoryId})", storyId);
-							}
-						}
-						catch (Exception ex)
-						{
-							_logger.LogError(ex, "Ошибка при отправке Instagram Story для бота {BotId}", state.BotId);
-						}
-					}
+					//if (files != null && files.Any())
+					//{
+					//	try
+					//	{
+					//		string? storyId = await InstagramStory(files, instaSettings.AccessToken);
+					//		if (storyId is not null)
+					//		{
+					//			_logger.LogInformation("✅ Instagram Story успешно опубликована (StoryId: {StoryId})", storyId);
+					//		}
+					//	}
+					//	catch (Exception ex)
+					//	{
+					//		_logger.LogError(ex, "Ошибка при отправке Instagram Story для бота {BotId}", state.BotId);
+					//	}
+					//}
 					break;
 
 				case NetworkType.Facebook:
@@ -98,6 +98,7 @@ namespace CrossChat.Worker.Facades
 					}
 
 					await FaceBookPostImages(caption, files, fbSettings.PageAccessToken, fbSettings.PageId);
+					//await FaceBookStory(files, fbSettings.PageAccessToken, fbSettings.PageId);
 					break;
 
 				case NetworkType.BlueSky:

@@ -7,7 +7,7 @@ namespace CrossChat.Integrations.Services
 	{
 		public async Task<bool> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null)
 		{
-			string pageAccessToken = acessToken;//await GetPageAccessTokenAsync(pageIdToPublish, acessToken);
+			string pageAccessToken = acessToken;
 
 			try
 			{
@@ -54,7 +54,7 @@ namespace CrossChat.Integrations.Services
 			string pageAccessToken;
 			try
 			{
-				pageAccessToken = acessToken;//await GetPageAccessTokenAsync(pageIdToPublish);
+				pageAccessToken = acessToken;
 			}
 			catch (Exception ex)
 			{
@@ -116,7 +116,7 @@ namespace CrossChat.Integrations.Services
 			string pageAccessToken;
 			try
 			{
-				pageAccessToken = acessToken;//await GetPageAccessTokenAsync(pageIdToPublish);
+				pageAccessToken = acessToken;
 			}
 			catch (Exception ex)
 			{
@@ -394,30 +394,6 @@ namespace CrossChat.Integrations.Services
 				}
 			}
 		}
-
-		//private async Task<string> GetPageAccessTokenAsync(string pageIdToPublish, string _longLivedUserToken)
-		//{
-		//	string accountsUrl = $"https://graph.facebook.com/v24.0/me/accounts?access_token={_longLivedUserToken}";
-
-		//	using (var httpClient = new HttpClient())
-		//	{
-		//		var response = await httpClient.GetAsync(accountsUrl);
-		//		response.EnsureSuccessStatusCode();
-		//		string result = await response.Content.ReadAsStringAsync();
-
-		//		var accountsData = JsonSerializer.Deserialize<AccountsResponse>(result);
-		//		var targetPage = accountsData?.data.FirstOrDefault(p => p.id == pageIdToPublish);
-
-		//		if (targetPage != null)
-		//		{
-		//			return targetPage.access_token;
-		//		}
-		//		else
-		//		{
-		//			throw new Exception($"Страница с ID {pageIdToPublish} не найдена или нет прав.");
-		//		}
-		//	}
-		//}
 
 		// Возвращает ID загруженной фотографии (media_fbid)
 		private async Task<string> UploadImageAsync(string pageAccessToken, string pageId, string base64Image, HttpClient httpClient)
