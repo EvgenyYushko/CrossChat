@@ -234,6 +234,54 @@ namespace CrossChat.Controllers
 			_logger.LogInformation($"Facebook Page {pageName} ({pageId}) saved for User {userId}");
 		}
 
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
+		{
+			// 1. Получаем ID текущего авторизованного пользователя
+			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+			var userId = int.Parse(userIdClaim);
+
+			// 2. Ищем настройки конкретной страницы Facebook в БД, проверяя владельца
+			var settings = await _db.FacebookSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"[Facebook] Попытка удаления ненайденной или чужой страницы {botId} пользователем {userId}");
+				return RedirectToAction("Index");
+			}
+
+			try
+			{
+				// 3. Очищаем запланированные публикации в NetworkStates для этого бота,
+				// чтобы фоновая джоба (PostPublishingJob) не пыталась слать посты на удаленный аккаунт
+				int facebookNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.Facebook;
+				var orphanStates = await _db.NetworkStates
+					.Where(ns => ns.NetworkType == facebookNetTypeId && ns.BotId == botId)
+					.ToListAsync();
+
+				if (orphanStates.Any())
+				{
+					_db.NetworkStates.RemoveRange(orphanStates);
+				}
+
+				// 4. Удаляем саму интеграцию из базы данных
+				_db.FacebookSettings.Remove(settings);
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation($"[Facebook] Страница '{settings.PageName}' (BotId: {botId}) успешно отключена пользователем {userId}");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"[Facebook] Ошибка при отключении страницы {botId} пользователя {userId}");
+			}
+
+			// Возвращаемся на главную страницу управления Facebook без выбранного botId
+			return RedirectToAction("Index");
+		}
+
 		private async Task<string?> DownloadImageAsBase64(string imageUrl)
 		{
 			if (string.IsNullOrEmpty(imageUrl)) return null;
