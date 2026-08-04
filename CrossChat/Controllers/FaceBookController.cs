@@ -97,7 +97,7 @@ namespace CrossChat.Controllers
 				.ToListAsync();
 
 			// Ссылка на авторизацию (если нужно подключить новую страницу)
-			var fbScopes = "pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
+			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
 			ViewBag.FbLoginUrl = $"https://www.facebook.com/v21.0/dialog/oauth?client_id={_settings.AppId}&redirect_uri={Url.Action("Callback", "Facebook", null, Request.Scheme)}&scope={fbScopes}&response_type=code";
 
 			return View(settings);

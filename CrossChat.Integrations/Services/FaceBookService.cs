@@ -3,7 +3,7 @@ using CrossChat.Integrations.Interfaces;
 
 namespace CrossChat.Integrations.Services
 {
-	public class FaceBookService : IFaceBookService
+	public partial class FaceBookService : IFaceBookService
 	{
 		public async Task<FbUser> GetMeAsync(string token)
 		{
@@ -159,6 +159,6 @@ namespace CrossChat.Integrations.Services
 					return false;
 				}
 			}
-		}
+		}		
 	}
 }

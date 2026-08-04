@@ -13,7 +13,7 @@ public partial class InstagramService
 		if (base64Strings == null || base64Strings.Count == 0)
 			throw new ArgumentException("Список изображений не может быть пустым");
 
-		Console.WriteLine("CreateMediaAsync - Start");
+		_logger.LogInformation("CreateMediaAsync - Start");
 
 		// Запускаем фоновую чистку старого мусора (на случай прошлых падений)
 		CleanupOldTempFiles();
@@ -43,7 +43,7 @@ public partial class InstagramService
 			if (containerResult == null || string.IsNullOrEmpty(containerResult.Id))
 				throw new Exception("Не удалось создать контейнер");
 
-			Console.WriteLine($"Контейнер создан: {containerResult.Id}");
+			_logger.LogInformation($"Контейнер создан: {containerResult.Id}");
 
 			// ЖДЕМ пока медиа станет готовым к публикации
 			var isReady = await WaitForMediaReadyAsync(containerResult.Id, accessToken);
@@ -52,7 +52,7 @@ public partial class InstagramService
 				throw new Exception($"Медиа {containerResult.Id} не готово к публикации после ожидания");
 			}
 
-			Console.WriteLine($"Медиа {containerResult.Id} готово к публикации");
+			_logger.LogInformation($"Медиа {containerResult.Id} готово к публикации");
 
 			// Публикуем
 			var container = await PublishContainerAsync(containerResult.Id, accessToken);
@@ -70,12 +70,12 @@ public partial class InstagramService
 					if (File.Exists(localPath))
 					{
 						File.Delete(localPath);
-						Console.WriteLine($"Удален временный файл: {localPath}");
+						_logger.LogInformation($"Удален временный файл: {localPath}");
 					}
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Не удалось удалить файл {localPath}: {ex.Message}");
+					_logger.LogError($"Не удалось удалить файл {localPath}: {ex.Message}");
 				}
 			}
 		}
@@ -83,7 +83,7 @@ public partial class InstagramService
 
 	private async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60)
 	{
-		Console.WriteLine($"Ожидаем готовности медиа {containerId}...");
+		_logger.LogInformation($"Ожидаем готовности медиа {containerId}...");
 
 		var startTime = DateTime.Now;
 
@@ -95,7 +95,7 @@ public partial class InstagramService
 				var response = await _httpClient.GetAsync(statusUrl);
 				var json = await response.Content.ReadAsStringAsync();
 
-				Console.WriteLine($"Статус ответ: {json}");
+				_logger.LogInformation($"Статус ответ: {json}");
 
 				if (response.IsSuccessStatusCode)
 				{
@@ -104,39 +104,39 @@ public partial class InstagramService
 					var statusCode = doc.RootElement.TryGetProperty("status_code", out var sc) ? sc.GetString() : null;
 					var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
 
-					Console.WriteLine($"Статус: {status}, Status Code: {statusCode}");
+					_logger.LogInformation($"Статус: {status}, Status Code: {statusCode}");
 
 					if (statusCode == "FINISHED" || status == "FINISHED")
 					{
 						// ДОПОЛНИТЕЛЬНАЯ ЗАДЕРЖКА после FINISHED
-						Console.WriteLine($"✅ Получен статус FINISHED, ждем 15 секунд перед публикацией...");
+						_logger.LogInformation($"✅ Получен статус FINISHED, ждем 15 секунд перед публикацией...");
 						await Task.Delay(15000);
-						Console.WriteLine($"✅ Медиа {containerId} готово к публикации!");
+						_logger.LogInformation($"✅ Медиа {containerId} готово к публикации!");
 						return true;
 					}
 					else if (statusCode == "ERROR" || status == "ERROR")
 					{
-						Console.WriteLine($"❌ Медиа {containerId} завершилось с ошибкой");
+						_logger.LogError($"❌ Медиа {containerId} завершилось с ошибкой");
 						return false;
 					}
 
-					Console.WriteLine($"⏳ Медиа {containerId} еще обрабатывается...");
+					_logger.LogInformation($"⏳ Медиа {containerId} еще обрабатывается...");
 				}
 				else
 				{
-					Console.WriteLine($"Ошибка запроса статуса: {json}");
+					_logger.LogError($"Ошибка запроса статуса: {json}");
 				}
 
 				await Task.Delay(3000);
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"Ошибка при проверке статуса: {ex.Message}");
+				_logger.LogError($"Ошибка при проверке статуса: {ex.Message}");
 				await Task.Delay(3000);
 			}
 		}
 
-		Console.WriteLine($"⏰ Таймаут ожидания медиа {containerId}");
+		_logger.LogInformation($"⏰ Таймаут ожидания медиа {containerId}");
 		return false;
 	}
 
@@ -147,13 +147,13 @@ public partial class InstagramService
 	{
 		try
 		{
-			Console.WriteLine($"Публикуем контейнер: {containerId}");
+			_logger.LogInformation($"Публикуем контейнер: {containerId}");
 
 			var publishUrl = $"me/media_publish?creation_id={containerId}&access_token={accessToken}";
 			var response = await _httpClient.PostAsync(publishUrl, null);
 			var json = await response.Content.ReadAsStringAsync();
 
-			Console.WriteLine($"Ответ публикации: {json}");
+			_logger.LogInformation($"Ответ публикации: {json}");
 
 			if (!response.IsSuccessStatusCode)
 			{
@@ -163,7 +163,7 @@ public partial class InstagramService
 			using var doc = JsonDocument.Parse(json);
 			var mediaId = doc.RootElement.GetProperty("id").GetString();
 
-			Console.WriteLine($"✅ Пост успешно опубликован! ID: {mediaId}");
+			_logger.LogInformation($"✅ Пост успешно опубликован! ID: {mediaId}");
 
 			return new CreateMediaResult
 			{
@@ -173,7 +173,7 @@ public partial class InstagramService
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"❌ Ошибка в PublishContainerAsync: {ex.Message}");
+			_logger.LogError($"❌ Ошибка в PublishContainerAsync: {ex.Message}");
 			throw;
 		}
 	}
@@ -182,13 +182,13 @@ public partial class InstagramService
 	{
 		try
 		{
-			Console.WriteLine("CreateSingleMediaContainerAsync - Start");
+			_logger.LogInformation("CreateSingleMediaContainerAsync - Start");
 
 			// Сохраняем на свой сервер
 			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64String);
 			tempFilesTracker.Add(localPath); // Добавляем в трекер для последующего удаления
 
-			Console.WriteLine($"Медиа доступно по ссылке: {mediaUrl}");
+			_logger.LogInformation($"Медиа доступно по ссылке: {mediaUrl}");
 
 			// Учитываем тип: для видео нужен параметр media_type=VIDEO, для фото по умолчанию IMAGE
 			string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
@@ -211,7 +211,7 @@ public partial class InstagramService
 			var response = await _httpClient.PostAsync(containerUrl, null);
 			var json = await response.Content.ReadAsStringAsync();
 
-			Console.WriteLine($"Ответ от Instagram API: {json}");
+			_logger.LogInformation($"Ответ от Instagram API: {json}");
 
 			if (!response.IsSuccessStatusCode)
 			{
@@ -227,7 +227,7 @@ public partial class InstagramService
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Ошибка в CreateSingleMediaContainerAsync: {ex.Message}");
+			_logger.LogError($"Ошибка в CreateSingleMediaContainerAsync: {ex.Message}");
 			throw;
 		}
 	}
@@ -266,7 +266,7 @@ public partial class InstagramService
 				}
 				else
 				{
-					Console.WriteLine($"Ошибка создания child: {childJson}");
+					_logger.LogError($"Ошибка создания child: {childJson}");
 					throw new Exception($"Не удалось создать дочерний контейнер: {childJson}");
 				}
 			}
@@ -301,7 +301,7 @@ public partial class InstagramService
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Ошибка в CreateCarouselContainerAsync: {ex.Message}");
+			_logger.LogError($"Ошибка в CreateCarouselContainerAsync: {ex.Message}");
 			throw;
 		}
 	}
@@ -552,13 +552,13 @@ public partial class InstagramService
 				foreach (var file in oldFiles)
 				{
 					file.Delete();
-					Console.WriteLine($"[Очистка] Удален старый временный файл: {file.Name}");
+					_logger.LogInformation($"[Очистка] Удален старый временный файл: {file.Name}");
 				}
 			}
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Ошибка при очистке старых файлов: {ex.Message}");
+			_logger.LogError($"Ошибка при очистке старых файлов: {ex.Message}");
 		}
 	}
 

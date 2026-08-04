@@ -97,7 +97,7 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки или PageAccessToken для Facebook страницы (BotId: {state.BotId})");
 					}
 
-					// TODO: Вызов вашего _facebookService с передачей fbSettings.PageAccessToken
+					await FaceBookPostImages(caption, files, fbSettings.PageAccessToken, fbSettings.PageId);
 					break;
 
 				case NetworkType.BlueSky:
@@ -165,6 +165,21 @@ namespace CrossChat.Worker.Facades
 		public async Task<string?> InstagramStory(List<string> files, string accessToken)
 		{
 			return await _instagramService.PublishStoryFromBase64(files.FirstOrDefault(), accessToken);
+		}
+
+		public async Task<bool> FaceBookPostImages(string caption, List<string> files, string pageAcessToken, string pageId)
+		{
+			return await _faceBookService.PublishToPageAsync(caption, pageAcessToken, pageId, files);
+		}
+
+		public async Task<bool> FaceBookStory(List<string> files, string pageAcessToken, string pageId)
+		{
+			return await _faceBookService.PublishStoryAsync(files.FirstOrDefault(), pageAcessToken, pageId);
+		}
+
+		public async Task<bool> FaceBookPostReels(string caption, string base64Video, string pageAcessToken, string pageId)
+		{
+			return await _faceBookService.PublishReelAsync(caption, base64Video, pageAcessToken, pageId);
 		}
 	}
 }
