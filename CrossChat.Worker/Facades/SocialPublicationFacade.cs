@@ -136,7 +136,7 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки для X (Twitter) (BotId: {state.BotId})");
 					}
 
-					// TODO: Вызов вашего _xService
+					await XPost(caption, xSettings.AccessToken, files);
 					break;
 
 				case NetworkType.Threads:
@@ -181,6 +181,22 @@ namespace CrossChat.Worker.Facades
 		public async Task<bool> FaceBookPostReels(string caption, string base64Video, string pageAcessToken, string pageId)
 		{
 			return await _faceBookService.PublishReelAsync(caption, base64Video, pageAcessToken, pageId);
+		}
+
+		public Task<bool> XPost(string caption, string accessToken, List<string> files = null, string videoBase64 = null)
+		{
+			if (files is not null && files.Count > 0)
+			{
+				return _xService.CreateImagePost(caption, files, accessToken);
+			}
+			else if (!string.IsNullOrEmpty(videoBase64))
+			{
+				return _xService.CreateVideoPost(caption, videoBase64, accessToken);
+			}
+			else
+			{
+				return _xService.CreateTextPostAsync(caption, accessToken);
+			}
 		}
 	}
 }

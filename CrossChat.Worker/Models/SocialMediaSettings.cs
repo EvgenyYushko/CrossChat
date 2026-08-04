@@ -14,5 +14,9 @@ namespace CrossChat.Worker.Models
 
 		public string XClientId { get; set; }
 		public string XClientSecret { get; set; }
+		public string XConsumerKey { get; set; }
+		public string XConsumerApiSecret { get; set; }
+		public string XAccessToken { get; set; }
+		public string XAccessTokenSecret { get; set; }
 	}
 }

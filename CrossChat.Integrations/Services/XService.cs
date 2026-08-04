@@ -4,16 +4,27 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.Extensions.Logging;
+using Tweetinvi;
 
 namespace CrossChat.Integrations.Services
 {
-	public class XService : IXService
+	public partial class XService : IXService
 	{
 		private readonly ILogger<XService> _logger;
+		private readonly TwitterClient _twitterClient;
+		private HttpClient _httpClient;
 
-		public XService(ILogger<XService> logger)
+		public XService(ILogger<XService> logger, TwitterClient twitterClient)
 		{
 			_logger = logger;
+			_twitterClient = twitterClient;
+			_httpClient = new HttpClient();
+
+			// ОБЯЗАТЕЛЬНО: Притворяемся браузером, чтобы Cloudflare Bot Management не блокировал запросы
+			if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
+			{
+				_httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+			}
 		}
 
 		public async Task<bool> CreateTextPostAsync(string text, string accessToken)

@@ -76,7 +76,7 @@ namespace CrossChat.Controllers
 			// tweet.write - чтобы бот мог постить
 			// users.read - чтобы получить имя и аватарку профиля
 			// offline.access - ЧТОБЫ ПОЛУЧИТЬ REFRESH TOKEN (Обязательно!)
-			var scopes = "tweet.read tweet.write users.read offline.access";
+			var scopes = "tweet.read tweet.write users.read media.write offline.access";
 
 			var url = $"https://x.com/i/oauth2/authorize?" +
 					  $"response_type=code&" +

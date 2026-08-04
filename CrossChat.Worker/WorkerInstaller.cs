@@ -6,12 +6,16 @@ using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
 using CrossChat.Worker.Facades;
+using CrossChat.Worker.Models;
 using CrossChat.Worker.Services;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Protos.GoogleGeminiService;
+using Tweetinvi;
 
 namespace CrossChat.Worker
 {
@@ -45,7 +49,22 @@ namespace CrossChat.Worker
 			});
 
 			services.AddSingleton<IBlueSkyService, BlueSkyService>();
-			services.AddSingleton<IXService, XService>();
+
+			services.AddSingleton<IXService>(provider =>
+			{
+				var logger = provider.GetService<ILogger<XService>>();
+				var options = provider.GetService<IOptions<SocialMediaSettings>>();
+
+				var consumerKey = options.Value.XConsumerKey;
+				var consumerApiSecret = options.Value.XConsumerApiSecret;
+				var accessToken = options.Value.XAccessToken;
+				var accessTokenSecret = options.Value.XAccessTokenSecret;
+
+				var client = new TwitterClient(consumerKey, consumerApiSecret, accessToken, accessTokenSecret);
+
+				return new XService(logger, client);
+			});
+
 			services.AddSingleton<IFaceBookService, FaceBookService>();
 			services.AddSingleton<ITelegramUserBotService, TelegramUserBotService>();
 

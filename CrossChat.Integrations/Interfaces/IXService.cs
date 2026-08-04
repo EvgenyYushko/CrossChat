@@ -8,5 +8,10 @@ namespace CrossChat.Integrations.Interfaces
 		Task<bool> CreateTextPostAsync(string text, string accessToken);
 
 		Task<(string AccessToken, string RefreshToken, int ExpiresIn)?> RefreshTokenAsync(string refreshToken, string xClientId, string xClientSecret);
+
+		// MediaPart
+		Task<bool> CreateImagePost(string caption, List<string> base64Files, string accessToken);
+
+		Task<bool> CreateVideoPost(string caption, string base64Video, string accessToken);
 	}
 }
