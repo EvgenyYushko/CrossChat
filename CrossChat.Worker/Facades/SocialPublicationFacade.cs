@@ -206,9 +206,9 @@ namespace CrossChat.Worker.Facades
 			}
 		}
 
-		public async Task<bool> ThreadsPost(string caption, List<string> base64Image, string accessToken)
+		public Task<bool> ThreadsPost(string caption, List<string> base64Image, string accessToken)
 		{
-			return await _threadsService.CreatePostAsync(caption, base64Image, accessToken);
+			return _threadsService.CreatePostAsync(caption, base64Image, accessToken);
 		}
 	}
 }
