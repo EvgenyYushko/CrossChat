@@ -11,16 +11,12 @@ namespace CrossChat.Integrations.Services
 		/// </summary>
 		public async Task<bool> CreatePostAsync(string caption, List<string> imagesBase64, string accessToken)
 		{
-			_logger.LogInformation($"[Threads] CreatePostAsync - start");
-
 			// Запускаем фоновую чистку старого мусора (на случай прошлых падений)
 			CleanupOldTempFiles();
 
 			var tempFilesTracker = new List<string>();
 			try
 			{
-				_logger.LogInformation($"[Threads] CreatePostAsync - 1");
-
 				string creationId;
 
 				// 1. СЦЕНАРИЙ: ТЕКСТОВЫЙ ПОСТ (без фото)
@@ -33,7 +29,6 @@ namespace CrossChat.Integrations.Services
 						text = caption
 					};
 
-					_logger.LogInformation($"[Threads] CreatePostAsync - 2");
 
 					var textResp = await _httpClient.PostAsJsonAsync(textUrl, textPayload);
 					if (!textResp.IsSuccessStatusCode)
@@ -49,8 +44,6 @@ namespace CrossChat.Integrations.Services
 				// 2. СЦЕНАРИЙ: ПОСТ С ОДНИМ ФОТО
 				else if (imagesBase64.Count == 1)
 				{
-					_logger.LogInformation($"[Threads] CreatePostAsync - 3");
-
 					var (mediaUrl, localPath) = await SaveMediaLocallyAsync(imagesBase64.First());
 					tempFilesTracker.Add(localPath); // Добавляем в трекер для последующего удаления
 
@@ -69,8 +62,6 @@ namespace CrossChat.Integrations.Services
 						_logger.LogError($"[Threads] Ошибка создания фото-контейнера: {error}");
 						return false;
 					}
-
-					_logger.LogInformation($"[Threads] CreatePostAsync - 3");
 
 					var imageJson = await imageResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = imageJson.GetProperty("id").GetString()!;
@@ -143,9 +134,6 @@ namespace CrossChat.Integrations.Services
 					if (!isCarouselReady) return false;
 				}
 
-				_logger.LogInformation($"[Threads] CreatePostAsync - 4");
-
-
 				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ ГОТОВОГО КОНТЕЙНЕРА
 				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
 				var publishResp = await _httpClient.PostAsync(publishUrl, null);
@@ -155,8 +143,6 @@ namespace CrossChat.Integrations.Services
 					_logger.LogInformation($"[Threads] ✅ Пост успешно опубликован в Threads (ID контейнера: {creationId})");
 					return true;
 				}
-
-				_logger.LogInformation($"[Threads] CreatePostAsync - 5");
 
 				var publishError = await publishResp.Content.ReadAsStringAsync();
 				_logger.LogError($"[Threads] ❌ Ошибка финальной публикации в Threads: {publishError}");
