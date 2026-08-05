@@ -14,6 +14,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using static CrossChat.Constants.AppConstants;
 using static CrossChat.Worker.Helpers.HttpHelper;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -182,7 +183,7 @@ namespace CrossChat.Controllers
 			var accessToken = data.GetProperty("access_token").GetString();
 			var refreshToken = data.GetProperty("refresh_token").GetString();
 			var expiresIn = data.GetProperty("expires_in").GetInt32();
-			var tokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
+			var tokenExpiresAt = DateTimeNow.AddSeconds(expiresIn);
 
 			// 2. Получаем данные профиля пользователя из X API v2
 			string? xUserId = null;

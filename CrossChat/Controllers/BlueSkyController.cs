@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using static CrossChat.Constants.AppConstants;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -72,7 +73,7 @@ namespace CrossChat.Controllers
 				record = new
 				{
 					text = "Проверка связи! Бот CrossChat теперь умеет работать с DPoP Nonce 🛡️ #atproto",
-					createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 				}
 			};
 
@@ -205,7 +206,7 @@ namespace CrossChat.Controllers
 				await _db.SaveChangesAsync();
 			}
 
-			return RedirectToAction("Profile", "Auth");
+			return RedirectToAction("Index");
 		}
 
 		// ==========================================================
@@ -280,7 +281,7 @@ namespace CrossChat.Controllers
 				var accessToken = data.GetProperty("access_token").GetString()!;
 				var refreshToken = data.GetProperty("refresh_token").GetString()!;
 				int expiresIn = data.GetProperty("expires_in").GetInt32();
-				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
+				var expireDate = DateTimeNow.AddSeconds(expiresIn);
 
 				// --- НОВОЕ: Получаем данные профиля (аватарку) ---
 				string? avatarUrl = null;

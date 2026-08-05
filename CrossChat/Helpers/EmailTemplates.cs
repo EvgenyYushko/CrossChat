@@ -1,3 +1,5 @@
+using static CrossChat.Helpers.TimeZoneHelper;
+
 namespace CrossChat.Helpers
 {
 	public static class EmailTemplates
@@ -217,7 +219,7 @@ namespace CrossChat.Helpers
                 <tr>
                     <td style=""background-color: #0f172a; padding: 40px; text-align: center;"">
                         <p style=""color: #94a3b8; font-size: 13px; margin: 0 0 16px 0; font-weight: 500;"">
-                            © {System.DateTime.Now.Year} CrossChat. Все права защищены.
+                            © {DateTimeNow.Year} CrossChat. Все права защищены.
                         </p>
                         <div style=""font-size: 16px; letter-spacing: 12px; margin-bottom: 16px; opacity: 0.8;"">
                             🔄 🔌 ⚡ 📊

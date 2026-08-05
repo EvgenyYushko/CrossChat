@@ -6,6 +6,7 @@ using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Modules.Instagram.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Mvc;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -190,7 +191,7 @@ namespace CrossChat.Controllers
 				SenderId = messaging.Sender.Id,
 				RecipientId = messaging.Recipient.Id, // владелец аккаунта
 				MessageId = messaging.Message.MessageId,
-				ReceivedAt = DateTime.UtcNow,
+				ReceivedAt = DateTimeNow,
 				AttachmentCount = messaging.Message.Attachments?.Count ?? 0
 			});
 		}

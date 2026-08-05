@@ -34,28 +34,29 @@ namespace CrossChat.Worker.Jobs
 		public async Task Execute(IJobExecutionContext context)
 		{
 			var activeBots = await _db.BlueSkySettings
-				.Where(s => s.IsActive && s.AccessToken != null)
+				.Where(s => s.AccessToken != null)
 				.ToListAsync();
 
 			foreach (var bot in activeBots)
 			{
 				try
 				{
-					// Проверяем: если дата истечения не задана ИЛИ до конца жизни токена осталось меньше 5 минут
+					// Учитываем интервал запуска джобы (30 мин) + 5 минут запаса.
+					// Если токен истечет в течение ближайших 35 минут (до следующего захода джобы), 
+					// обновляем его прямо сейчас!
 					bool isTokenExpired = !bot.TokenExpiresAt.HasValue ||
-										  bot.TokenExpiresAt.Value <= DateTimeNow.AddMinutes(5);
+										  bot.TokenExpiresAt.Value <= DateTimeNow.AddMinutes(35);
 
 					if (isTokenExpired)
 					{
-						await _console.Log($"Токен для @{bot.Handle} истек или скоро истечет. Обновляем...", bot.UserId, bot.Id);
+						await _console.Log($"Токен для @{bot.Handle} истекает в ближайшие 35 мин. Обновляем заранее...", bot.UserId, bot.Id);
 
 						if (string.IsNullOrEmpty(bot.RefreshToken))
 						{
 							await _console.LogError($"[BlueSky] Ошибка: отсутствует RefreshToken для @{bot.Handle}", bot.UserId, bot.Id);
-							continue; // Пропускаем бота, так как без RefreshToken обновить токен невозможно
+							continue;
 						}
 
-						// Запрашиваем новый токен через сервис
 						var result = await _bskyService.RefreshTokenAsync(bot.RefreshToken, bot.PrivateKeyJson!);
 
 						if (result == null)
@@ -64,15 +65,13 @@ namespace CrossChat.Worker.Jobs
 							continue;
 						}
 
-						// ОБНОВЛЯЕМ поля в БД сущности
 						bot.AccessToken = result.Value.AccessToken;
 						bot.RefreshToken = result.Value.RefreshToken;
-						bot.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
+						bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
-						// ЯВНО сохраняем обновленный токен в PostgreSQL!
 						await _db.SaveChangesAsync();
 
-						await _console.Log($"Токен успешно обновлен. Новый срок: {bot.TokenExpiresAt}", bot.UserId, bot.Id);
+						await _console.Log($"Токен успешно обновлен. Новый срок истечения: {bot.TokenExpiresAt}", bot.UserId, bot.Id);
 					}
 
 					// Собираем свежую модель с актуальным токеном

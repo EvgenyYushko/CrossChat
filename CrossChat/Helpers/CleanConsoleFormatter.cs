@@ -11,7 +11,7 @@ namespace CrossChat.Helpers
 		public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider scopeProvider, TextWriter textWriter)
 		{
 			// 1. Пишем время
-			//textWriter.Write($"[{DateTime.Now:HH:mm:ss}] ");
+			//textWriter.Write($"[{DateTimeNow.Now:HH:mm:ss}] ");
 
 			// 2. (Опционально) Красим ошибки в красный
 			if (logEntry.LogLevel >= LogLevel.Error)

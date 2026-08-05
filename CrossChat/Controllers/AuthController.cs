@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers;
 
@@ -133,7 +134,7 @@ public class AuthController : Controller
 				Email = email,
 				Name = name ?? "User",
 				AvatarUrl = base64Avatar ?? avatarUrl,
-				CreatedAt = DateTime.UtcNow
+				CreatedAt = DateTimeNow
 			};
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
@@ -170,7 +171,7 @@ public class AuthController : Controller
 		var authProperties = new AuthenticationProperties
 		{
 			IsPersistent = true, // Запомнить меня
-			ExpiresUtc = DateTime.UtcNow.AddDays(7)
+			ExpiresUtc = DateTimeNow.AddDays(7)
 		};
 
 		// Перезаписываем временную куку Гугла на нашу постоянную

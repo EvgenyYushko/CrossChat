@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using static CrossChat.Constants.AppConstants;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -266,7 +267,7 @@ namespace CrossChat.Controllers
 			// 3. Обновляем данные (и для новых, и для существующих)
 			settings.AccessToken = token;
 			settings.Username = username;
-			settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
+			settings.TokenExpiresAt = DateTimeNow.AddSeconds(expiresIn);
 			settings.IsActive = true;
 
 			// Рекомендую здесь тоже использовать скачивание в Base64, как мы делали для Инсты

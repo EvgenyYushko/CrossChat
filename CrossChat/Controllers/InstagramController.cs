@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using static CrossChat.Constants.AppConstants;
 using static CrossChat.Worker.Helpers.HttpHelper;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -289,7 +290,7 @@ namespace CrossChat.Controllers
 				using var longDoc = JsonDocument.Parse(await longResp.Content.ReadAsStringAsync());
 				var longAccessToken = longDoc.RootElement.GetProperty("access_token").GetString();
 				var expiresIn = longDoc.RootElement.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 5184000;
-				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
+				var expireDate = DateTimeNow.AddSeconds(expiresIn);
 
 				// 3. Получаем данные пользователя (ID, Username, Avatar)
 				(string? username, string? instagramScopedUserId, string? profilePicUrl) = await _instagramService.GetMeInfo(longAccessToken);
@@ -423,7 +424,7 @@ namespace CrossChat.Controllers
 						<h1 style='color: green;'>Данные успешно удалены</h1>
 						<p>Ваш запрос на удаление данных был обработан.</p>
 						<p>Код подтверждения: <strong>{code}</strong></p>
-						<p>Дата: {DateTime.UtcNow:g} (UTC)</p>
+						<p>Дата: {DateTimeNow:g} (UTC)</p>
 					</body>
 				</html>";
 			return Content(html, "text/html");
