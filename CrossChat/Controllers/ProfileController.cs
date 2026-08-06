@@ -51,6 +51,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.FacebookSettingsList)
 				.Include(p => p.TelegramUserBotSettingsList)
 				.Include(p => p.TelegramSettings)
+				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.BlueSkySettingsList)
 				.FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);
 

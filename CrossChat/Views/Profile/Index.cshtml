@@ -743,6 +743,74 @@
 
     <br/>
 
+    <!-- Карточка Telegram Каналы -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <div style="display:flex; align-items:center;">
+                <!-- Иконка Telegram -->
+                <div class="service-icon icon-tg">
+                    <svg viewBox="0 0 24 24" style="margin-left:-2px;">
+                        <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.441z" />
+                    </svg>
+                </div>
+                <h3 style="margin:0; font-size:1.2rem;">Telegram (Каналы)</h3>
+            </div>
+
+            <!-- Плюс-кнопка перехода к подключению нового канала -->
+            <a href="/telegram-channel" style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #10b981, #059669); display:flex; align-items:center; justify-content:center; text-decoration:none; animation: pulse-plus 2s infinite; flex-shrink:0; transition: transform 0.2s ease;"
+               onmouseover="this.style.transform='scale(1.15)'; this.style.animation='none';"
+               onmouseout="this.style.transform='scale(1)'; this.style.animation='pulse-plus 2s infinite';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </a>
+        </div>
+
+        @if (Model.TelegramChannelSettingsList != null && Model.TelegramChannelSettingsList.Any())
+        {
+            @foreach (var channel in Model.TelegramChannelSettingsList)
+            {
+                <!-- Обертка-ссылка для всей карточки конкретного канала -->
+                <a href="/telegram-channel?botId=@channel.Id" class="bot-link-wrapper">
+                    <div class="card" style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+
+                            <!-- Аватарка-заглушка с первой буквой названия канала -->
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.3rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
+                                @(channel.ChannelTitle?.Length > 0 ? channel.ChannelTitle.Substring(0, 1).ToUpper() : "📢")
+                            </div>
+
+                            <!-- Информация о канале -->
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@channel.ChannelTitle</div>
+                                <div style="font-size:0.85rem; margin-top:2px;">
+                                    @if (channel.IsActive)
+                                    {
+                                        <span style='color:#10b981;'>● Канал активен</span>
+                                    }
+                                    else
+                                    {
+                                        <span style='color:#fbbf24;'>⚠️ Отключен</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Иконка шеврона (стрелочка вправо) -->
+                            <div style="opacity: 0.3; color: var(--text-main);">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            }
+        }
+    </div>
+
+    <br />
+
     <!-- Карточка bluesky -->
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">

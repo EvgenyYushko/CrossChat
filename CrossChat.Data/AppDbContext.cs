@@ -13,6 +13,7 @@ namespace CrossChat.Data
 		public DbSet<FacebookSettings> FacebookSettings { get; set; }
 		public DbSet<TelegramSettings> TelegramSettings { get; set; }
 		public DbSet<TelegramUserBotSettings> TelegramUsersBotSettings { get; set; }
+		public DbSet<TelegramChannelSettings> TelegramChannelSettings { get; set; }
 		public DbSet<ThreadsSettings> ThreadsSettings { get; set; }
 		public DbSet<BlueSkySettings> BlueSkySettings { get; set; }
 		public DbSet<XSettings> XSettings { get; set; }

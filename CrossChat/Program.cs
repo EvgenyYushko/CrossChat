@@ -1,4 +1,5 @@
 using CrossChat.BackgroundServices;
+using CrossChat.Controllers;
 using CrossChat.Data;
 using CrossChat.Helpers;
 using CrossChat.Hubs;
@@ -21,10 +22,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using Quartz;
 using StackExchange.Redis;
+using Telegram.Bot;
 using static CrossChat.Constants.AppConstants;
 using static CrossChat.Worker.WorkerInstaller;
 
 string GEMINI_API_KEY = "GEMINI_API_KEY";
+string TELEGRAM_BOT_TOKEN = "TELEGRAM_BOT_TOKEN";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,10 +77,17 @@ var redisMultiplexer = ConnectionMultiplexer.Connect(redisConnString);
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
 builder.Services.AddSingleton<TelegramUserBotRegistry>();
+builder.Services.AddSingleton<ITelegramBotClient>(provider =>
+{
+	var token = GetConfigOrThrow(TELEGRAM_BOT_TOKEN);
+	return new TelegramBotClient(token);
+});
+
+builder.Services.AddScoped<TelegramSystemWebhookController>();
 
 builder.Services.AddDataProtection()
-    .PersistKeysToStackExchangeRedis(() => redisMultiplexer.GetDatabase(), "DataProtection-Keys")
-    .SetApplicationName("CrossChat");
+	.PersistKeysToStackExchangeRedis(() => redisMultiplexer.GetDatabase(), "DataProtection-Keys")
+	.SetApplicationName("CrossChat");
 
 var rabbitMqUrl = GetConfigOrThrow("ExternalHostingsSettings:RabbitMq");
 
@@ -87,41 +97,41 @@ builder.Services.AddQuartz(q =>
 	q.UseMicrosoftDependencyInjectionJobFactory();
 
 	var jobKey = new JobKey("TokenRefreshJob");
-    q.AddJob<TokenRefreshJob>(opts => opts.WithIdentity(jobKey));
+	q.AddJob<TokenRefreshJob>(opts => opts.WithIdentity(jobKey));
 
-    q.AddTrigger(opts => opts
-        .ForJob(jobKey)
-        .WithIdentity("TokenRefreshJob-Trigger")
-        .WithCronSchedule("0 32 * * * ?"));
+	q.AddTrigger(opts => opts
+		.ForJob(jobKey)
+		.WithIdentity("TokenRefreshJob-Trigger")
+		.WithCronSchedule("0 32 * * * ?"));
 
 	// 2
 	var joBlueSkybKey = new JobKey("BluesSkyAnswerJob");
-    q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));
+	q.AddJob<BluesSkyAnswerJob>(opts => opts.WithIdentity(joBlueSkybKey));
 
-	 q.AddTrigger(opts => opts
-        .ForJob(joBlueSkybKey)
-        .WithIdentity("BluesSkyAnswerJob-Trigger")
-        .WithCronSchedule("0 15,45 * * * ?"));
+	q.AddTrigger(opts => opts
+	   .ForJob(joBlueSkybKey)
+	   .WithIdentity("BluesSkyAnswerJob-Trigger")
+	   .WithCronSchedule("0 15,45 * * * ?"));
 
 	// 3
 	var jobFaceBookbKey = new JobKey("FaceBookAnswerJob");
-    q.AddJob<FaceBookAnswerJob>(opts => opts.WithIdentity(jobFaceBookbKey));
+	q.AddJob<FaceBookAnswerJob>(opts => opts.WithIdentity(jobFaceBookbKey));
 
-	 q.AddTrigger(opts => opts
-        .ForJob(jobFaceBookbKey)
-        .WithIdentity("FaceBookAnswerJob-Trigger")
-        .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
+	q.AddTrigger(opts => opts
+	   .ForJob(jobFaceBookbKey)
+	   .WithIdentity("FaceBookAnswerJob-Trigger")
+	   .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
 
 	// 4
 	var postKey = new JobKey("PostPublishingJob");
-    q.AddJob<PostPublishingJob>(opts => opts.WithIdentity(postKey));
+	q.AddJob<PostPublishingJob>(opts => opts.WithIdentity(postKey));
 
-    q.AddTrigger(opts => opts
-        .ForJob(postKey)
-        .WithIdentity("PostPublishingJob-Trigger")
-        .WithSimpleSchedule(x => x
-            .WithIntervalInSeconds(120) // скекунд
-            .RepeatForever()));
+	q.AddTrigger(opts => opts
+		.ForJob(postKey)
+		.WithIdentity("PostPublishingJob-Trigger")
+		.WithSimpleSchedule(x => x
+			.WithIntervalInSeconds(120) // скекунд
+			.RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
@@ -146,12 +156,12 @@ builder.Services.AddAuthentication(options =>
 	options.ClaimActions.MapJsonKey("urn:google:picture", "picture", "url");
 
 	options.Events.OnRemoteFailure = context =>
-    {
-        // Если произошла ошибка (нажали "Назад", протух токен и т.д.)
-        context.Response.Redirect("/auth/login"); // Редиректим обратно на вход
-        context.HandleResponse(); // Говорим "Я обработал ошибку, не падай"
-        return Task.CompletedTask;
-    };
+	{
+		// Если произошла ошибка (нажали "Назад", протух токен и т.д.)
+		context.Response.Redirect("/auth/login"); // Редиректим обратно на вход
+		context.HandleResponse(); // Говорим "Я обработал ошибку, не падай"
+		return Task.CompletedTask;
+	};
 });
 
 // === НАСТРОЙКА MASSTRANSIT (RABBITMQ) ===
@@ -166,9 +176,10 @@ builder.Services.AddMassTransit(x =>
 	string webRootPath = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
 	string tempFolder = Path.Combine(webRootPath, "temp_media");
 
-	var settings = new SiteSettings{TempFolder = tempFolder, AppUrl = APP_URL};
+	var settings = new SiteSettings { TempFolder = tempFolder, AppUrl = APP_URL };
 
 	x.AddWorkerServices(geminiToken, settings);
+
 	x.AddQuartzConsumers();
 	x.AddPublishMessageScheduler();
 
@@ -188,16 +199,16 @@ builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 
 builder.Logging.ClearProviders(); // Удаляем стандартные провайдеры
-// Регистрируем наш форматтер и говорим консоли использовать его
+								  // Регистрируем наш форматтер и говорим консоли использовать его
 builder.Logging.AddConsole(options => options.FormatterName = "clean")
-    .AddConsoleFormatter<CleanConsoleFormatter, ConsoleFormatterOptions>();
+	.AddConsoleFormatter<CleanConsoleFormatter, ConsoleFormatterOptions>();
 
 builder.Services.AddDistributedMemoryCache(); // Нужно для сессий
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(10);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
+	options.IdleTimeout = TimeSpan.FromMinutes(10);
+	options.Cookie.HttpOnly = true;
+	options.Cookie.IsEssential = true;
 });
 
 // Добавляем SignalR в систему
@@ -218,6 +229,13 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
 	var services = scope.ServiceProvider;
+
+	if (app.Environment.IsDevelopment())
+	{
+		var controller = services.GetRequiredService<TelegramSystemWebhookController>();
+		Task.Run(async () => await controller.RunLocalBotListener());
+	}
+
 	var logger = services.GetRequiredService<ILogger<Program>>();
 	try
 	{
