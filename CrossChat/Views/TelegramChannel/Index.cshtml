@@ -318,7 +318,7 @@
                 <div class="switch-container">
                     <div>
                         <label style="margin:0; font-size: 1.1rem; color: white;">Активность</label>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Автопостинг в канал разрешен</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Разрешить автопостинг в этот канал</div>
                     </div>
                     <label class="switch">
                         <input type="hidden" name="isActive" value="false" />
@@ -348,10 +348,11 @@
                 <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
             </form>
 
-            <form action="/telegram-channel/disconnect" method="post" onsubmit="return confirm('Отключить канал?');" style="margin-top: 1rem;">
-                <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger">Удалить интеграцию</button>
-            </form>
+            <!-- ПОНЯТНАЯ ИНФОРМАЦИЯ ВМЕСТО КНОПКИ УДАЛЕНИЯ -->
+            <div style="margin-top: 2.5rem; padding: 1rem; border-radius: 12px; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--glass-border); text-align: center; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5;">
+                ℹ️ <strong>Как отключить канал?</strong><br>
+                Чтобы удалить этот канал с сайта, просто откройте настройки канала в Telegram и удалите бота <strong style="color: #2AABEE;">@@Croshub_bot</strong> из списка Администраторов. Канал удалится автоматически.
+            </div>
         }
         else
         {

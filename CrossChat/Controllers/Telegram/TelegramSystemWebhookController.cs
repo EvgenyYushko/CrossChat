@@ -118,58 +118,83 @@ namespace CrossChat.Controllers
 				}
 
 				// ===================================================================
-				// 2. СЦЕНАРИЙ: Бота добавили Администратором в Канал (MyChatMember)
+				// СЦЕНАРИЙ: Изменение статуса бота в Канале (MyChatMember)
 				// ===================================================================
 				if (update.Type == UpdateType.MyChatMember && update.MyChatMember != null)
 				{
 					var chatMember = update.MyChatMember;
 
-					// Проверяем, что это Канал и бота назначили Администратором
-					if (chatMember.Chat.Type == ChatType.Channel && 
-					    chatMember.NewChatMember.Status == ChatMemberStatus.Administrator)
+					// Проверяем, что событие происходит в Канале
+					if (chatMember.Chat.Type == ChatType.Channel)
 					{
 						var channelId = chatMember.Chat.Id;
 						var channelTitle = chatMember.Chat.Title ?? "Telegram Канал";
-						var channelUsername = chatMember.Chat.Username;
-						var addedByTgUserId = chatMember.From.Id; // Кто именно добавил бота в админы
+						var newStatus = chatMember.NewChatMember.Status;
 
-						// Ищем пользователя на нашем сайте по его TelegramUserId
-						var user = await _db.Users
-							.Include(u => u.Profile)
-							.FirstOrDefaultAsync(u => u.TelegramUserId == addedByTgUserId);
-
-						if (user != null)
+						// 1. БОТА НАЗНАЧИЛИ АДМИНИСТРАТОРОМ -> Добавляем/Активируем канал на сайте
+						if (newStatus == ChatMemberStatus.Administrator)
 						{
-							// Берем активный профиль пользователя
-							var activeProfile = user.Profile.FirstOrDefault();
-							if (activeProfile != null)
+							var addedByTgUserId = chatMember.From.Id;
+
+							var user = await _db.Users
+								.Include(u => u.Profile)
+								.FirstOrDefaultAsync(u => u.TelegramUserId == addedByTgUserId);
+
+							if (user != null)
 							{
-								// Проверяем, не добавлен ли уже этот канал
-								var existingChannel = await _db.TelegramChannelSettings
-									.FirstOrDefaultAsync(c => c.ChannelId == channelId);
-
-								if (existingChannel == null)
+								var activeProfile = user.Profile.FirstOrDefault();
+								if (activeProfile != null)
 								{
-									var newChannel = new TelegramChannelSettings
+									var existingChannel = await _db.TelegramChannelSettings
+										.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+									if (existingChannel == null)
 									{
-										UserId = user.Id,
-										ProfileId = activeProfile.Id,
-										ChannelId = channelId,
-										ChannelTitle = channelTitle,
-										ChannelUsername = channelUsername,
-										IsActive = true
-									};
+										var newChannel = new TelegramChannelSettings
+										{
+											UserId = user.Id,
+											ProfileId = activeProfile.Id,
+											ChannelId = channelId,
+											ChannelTitle = channelTitle,
+											ChannelUsername = chatMember.Chat.Username,
+											IsActive = true
+										};
 
-									_db.TelegramChannelSettings.Add(newChannel);
-									await _db.SaveChangesAsync();
+										_db.TelegramChannelSettings.Add(newChannel);
+										await _db.SaveChangesAsync();
 
-									_logger.LogInformation($"[Telegram Channel] Канал '{channelTitle}' ({channelId}) успешно привязан к пользователю {user.Id}");
+										_logger.LogInformation($"[Telegram Channel] Канал '{channelTitle}' ({channelId}) автоматически ДОБАВЛЕН для пользователя {user.Id}");
+									}
 								}
 							}
 						}
-						else
+						// 2. БОТА УДАЛИЛИ ИЛИ РАЗЖАЛОВАЛИ ИЗ АДМИНОВ -> Автоматически удаляем канал с сайта!
+						else if (newStatus == ChatMemberStatus.Kicked || 
+						         newStatus == ChatMemberStatus.Left || 
+						         newStatus == ChatMemberStatus.Member)
 						{
-							_logger.LogWarning($"[Telegram Channel] Бот добавлен в канал {channelTitle}, но пользователь с TgUserId {addedByTgUserId} не привязан на сайте!");
+							var existingChannel = await _db.TelegramChannelSettings
+								.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+							if (existingChannel != null)
+							{
+								// Очищаем запланированные публикации для этого канала в NetworkStates
+								int channelNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.TelegramPublic;
+								var orphanStates = await _db.NetworkStates
+									.Where(ns => ns.NetworkType == channelNetTypeId && ns.BotId == existingChannel.Id)
+									.ToListAsync();
+
+								if (orphanStates.Any())
+								{
+									_db.NetworkStates.RemoveRange(orphanStates);
+								}
+
+								// Удаляем сам канал из базы данных
+								_db.TelegramChannelSettings.Remove(existingChannel);
+								await _db.SaveChangesAsync();
+
+								_logger.LogInformation($"[Telegram Channel] Канал '{channelTitle}' ({channelId}) автоматически УДАЛЕН из БД, так как бот был убран из админов.");
+							}
 						}
 					}
 				}
