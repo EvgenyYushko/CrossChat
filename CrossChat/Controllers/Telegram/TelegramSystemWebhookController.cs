@@ -8,6 +8,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace CrossChat.Controllers
 {
@@ -85,13 +86,39 @@ namespace CrossChat.Controllers
 			try
 			{
 				// ===================================================================
-				// 1. СЦЕНАРИЙ: Пользователь привязывает свой Telegram аккаунт (/start link_xxx)
+				// 1. СЦЕНАРИЙ: Сообщения боту (/start или /start link_xxxx)
 				// ===================================================================
 				if (update.Type == UpdateType.Message && update.Message?.Text != null)
 				{
 					var text = update.Message.Text.Trim();
 					var tgUserId = update.Message.From!.Id;
 
+					// А. Обычный вызов /start (если бота нашли через поиск)
+					if (text == "/start")
+					{
+
+						// Создаем красивую кнопку-ссылку на ваш сайт
+						var inlineKeyboard = new InlineKeyboardMarkup(new[]
+						{
+							InlineKeyboardButton.WithUrl("🌐 Перейти на сайт CrossChat", "https://crosschat.ru")
+						});
+
+						await _telegramBotClient.SendMessage(
+							chatId: tgUserId,
+							text: "👋 <b>Приветствуем в CrossChat!</b>\n\n" +
+							      "Я системный бот платформы кроссплатформенного автопостинга и нейро-автоответов.\n\n" +
+							      "<b>Как подключить ваш Telegram-канал:</b>\n" +
+							      "1. Зайдите в личный кабинет на нашем сайте.\n" +
+							      "2. Нажмите кнопку <b>«Привязать Telegram»</b>.\n" +
+							      "3. Добавьте меня администратором в ваш канал с правом публикации сообщений.",
+							parseMode: ParseMode.Html,
+							replyMarkup: inlineKeyboard
+						);
+
+						return Ok();
+					}
+
+					// Б. Запуск по специальной ссылке с кодом привязки (/start link_xxxx)
 					if (text.StartsWith("/start link_"))
 					{
 						var code = text.Replace("/start link_", "").Trim();
@@ -105,36 +132,46 @@ namespace CrossChat.Controllers
 								user.TelegramUserId = tgUserId;
 								await _db.SaveChangesAsync();
 
-								// Удаляем использованный код из кэша
 								await _cache.RemoveAsync($"tg_link:{code}");
 
-								// Отправляем ответ в Telegram пользователю
-								//var bot = new TelegramBotClient("ВАШ_ТОКЕН_CROS_HUB_BOT");
-								await _telegramBotClient.SendMessage(tgUserId, "✅ Ваш Telegram-аккаунт успешно привязан к CrossChat!\n\nТеперь вы можете добавить бота администратором в ваш канал.");
+								await SendBotMessageAsync(tgUserId, 
+									"✅ <b>Ваш Telegram-аккаунт успешно привязан к CrossChat!</b>\n\nТеперь добавьте бота <b>@cros_hub_bot</b> администратором в ваш канал с правом публикации сообщений.");
 								return Ok();
 							}
+						}
+						else
+						{
+							// Если код устарел (прошло больше 15 минут)
+							await SendBotMessageAsync(tgUserId, 
+								"⚠️ <b>Ссылка привязки устарела или недействительна.</b>\n\nПожалуйста, сгенерируйте новую ссылку в личном кабинете на сайте.");
+							return Ok();
 						}
 					}
 				}
 
 				// ===================================================================
-				// СЦЕНАРИЙ: Изменение статуса бота в Канале (MyChatMember)
+				// 2. СЦЕНАРИЙ: Изменение прав или статуса бота в Канале (MyChatMember)
 				// ===================================================================
 				if (update.Type == UpdateType.MyChatMember && update.MyChatMember != null)
 				{
 					var chatMember = update.MyChatMember;
 
-					// Проверяем, что событие происходит в Канале
 					if (chatMember.Chat.Type == ChatType.Channel)
 					{
 						var channelId = chatMember.Chat.Id;
 						var channelTitle = chatMember.Chat.Title ?? "Telegram Канал";
+						var channelUsername = chatMember.Chat.Username;
+						var addedByTgUserId = chatMember.From.Id; // TgUserId владельца
 						var newStatus = chatMember.NewChatMember.Status;
 
-						// 1. БОТА НАЗНАЧИЛИ АДМИНИСТРАТОРОМ -> Добавляем/Активируем канал на сайте
-						if (newStatus == ChatMemberStatus.Administrator)
+						// -------------------------------------------------------------
+						// А. БОТА НАЗНАЧИЛИ АДМИНИСТРАТОРОМ ИЛИ ИЗМЕНИЛИ ЕГО ПРАВА
+						// -------------------------------------------------------------
+						if (newStatus == ChatMemberStatus.Administrator &&
+							chatMember.NewChatMember is ChatMemberAdministrator adminMember)
 						{
-							var addedByTgUserId = chatMember.From.Id;
+							// Проверяем главное обязательное право — Публикация сообщений (CanPostMessages)
+							bool hasPostingRights = adminMember.CanPostMessages;
 
 							var user = await _db.Users
 								.Include(u => u.Profile)
@@ -150,35 +187,76 @@ namespace CrossChat.Controllers
 
 									if (existingChannel == null)
 									{
+										// --- СОЗДАЕМ НОВЫЙ КАНАЛ ---
 										var newChannel = new TelegramChannelSettings
 										{
 											UserId = user.Id,
 											ProfileId = activeProfile.Id,
 											ChannelId = channelId,
 											ChannelTitle = channelTitle,
-											ChannelUsername = chatMember.Chat.Username,
-											IsActive = true
+											ChannelUsername = channelUsername,
+											IsActive = hasPostingRights // Активен ТОЛЬКО если даны права на посты
 										};
 
 										_db.TelegramChannelSettings.Add(newChannel);
 										await _db.SaveChangesAsync();
 
-										_logger.LogInformation($"[Telegram Channel] Канал '{channelTitle}' ({channelId}) автоматически ДОБАВЛЕН для пользователя {user.Id}");
+										if (hasPostingRights)
+										{
+											await SendBotMessageAsync(addedByTgUserId,
+												$"✅ <b>Канал «{channelTitle}» успешно подключен!</b>\n\nВсе необходимые права выданы. Вы можете настроить автопостинг в личном кабинете CrossChat.");
+										}
+										else
+										{
+											await SendBotMessageAsync(addedByTgUserId,
+												$"⚠️ <b>Канал «{channelTitle}» добавлен, но боту НЕ ХВАТАЕТ ПРАВ!</b>\n\nПожалуйста, откройте настройки канала и выдайте боту право: <b>«Публикация сообщений»</b> (Can Post Messages).");
+										}
+									}
+									else
+									{
+										// --- ОБНОВЛЯЕМ ПРАВА СУЩЕСТВУЮЩЕГО КАНАЛА ---
+										bool wasActive = existingChannel.IsActive;
+										existingChannel.IsActive = hasPostingRights;
+										existingChannel.ChannelTitle = channelTitle;
+										existingChannel.ChannelUsername = channelUsername;
+
+										await _db.SaveChangesAsync();
+
+										if (!wasActive && hasPostingRights)
+										{
+											// Права довыдали!
+											await SendBotMessageAsync(addedByTgUserId,
+												$"✅ <b>Права в канале «{channelTitle}» успешно обновлены!</b>\n\nРазрешение на публикацию сообщений получено. Автопостинг снова активен.");
+										}
+										else if (wasActive && !hasPostingRights)
+										{
+											// Права забрали!
+											await SendBotMessageAsync(addedByTgUserId,
+												$"⚠️ <b>В канале «{channelTitle}» урезаны права бота!</b>\n\nУ бота забрали право на публикацию сообщений. Автопостинг приостановлен до восстановления прав.");
+										}
 									}
 								}
 							}
+							else
+							{
+								// Пользователь еще не связал свой аккаунт на сайте
+								await SendBotMessageAsync(addedByTgUserId,
+									$"⚠️ <b>Бот добавлен в канал «{channelTitle}», но ваш Telegram-аккаунт еще не привязан к сайту!</b>\n\nСначала зайдите в личный кабинет CrossChat и нажмите «Привязать Telegram».");
+							}
 						}
-						// 2. БОТА УДАЛИЛИ ИЛИ РАЗЖАЛОВАЛИ ИЗ АДМИНОВ -> Автоматически удаляем канал с сайта!
-						else if (newStatus == ChatMemberStatus.Kicked || 
-						         newStatus == ChatMemberStatus.Left || 
-						         newStatus == ChatMemberStatus.Member)
+						// -------------------------------------------------------------
+						// Б. БОТА УДАЛИЛИ ИЛИ РАЗЖАЛОВАЛИ ИЗ АДМИНОВ В ОБЫЧНЫЕ ПОДПИСЧИКИ
+						// -------------------------------------------------------------
+						else if (newStatus == ChatMemberStatus.Kicked ||
+								 newStatus == ChatMemberStatus.Left ||
+								 newStatus == ChatMemberStatus.Member)
 						{
 							var existingChannel = await _db.TelegramChannelSettings
 								.FirstOrDefaultAsync(c => c.ChannelId == channelId);
 
 							if (existingChannel != null)
 							{
-								// Очищаем запланированные публикации для этого канала в NetworkStates
+								// Очищаем привязанные отложенные посты
 								int channelNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.TelegramPublic;
 								var orphanStates = await _db.NetworkStates
 									.Where(ns => ns.NetworkType == channelNetTypeId && ns.BotId == existingChannel.Id)
@@ -189,11 +267,11 @@ namespace CrossChat.Controllers
 									_db.NetworkStates.RemoveRange(orphanStates);
 								}
 
-								// Удаляем сам канал из базы данных
 								_db.TelegramChannelSettings.Remove(existingChannel);
 								await _db.SaveChangesAsync();
 
-								_logger.LogInformation($"[Telegram Channel] Канал '{channelTitle}' ({channelId}) автоматически УДАЛЕН из БД, так как бот был убран из админов.");
+								await SendBotMessageAsync(addedByTgUserId,
+									$"❌ <b>Канал «{channelTitle}» был отсоединен.</b>\n\nБот убран из администраторов. Канал и его настройки удалены с сайта.");
 							}
 						}
 					}
@@ -205,6 +283,19 @@ namespace CrossChat.Controllers
 			}
 
 			return Ok();
+		}
+
+		// Вспомогательный метод отправки сообщений в ЛС через системного бота
+		private async Task SendBotMessageAsync(long tgUserId, string textHtml)
+		{
+			try
+			{
+				await _telegramBotClient.SendMessage(tgUserId, textHtml, parseMode: ParseMode.Html);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, $"Не удалось отправить ЛС пользователю {tgUserId} в Telegram");
+			}
 		}
 	}
 
