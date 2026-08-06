@@ -4,15 +4,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
-//using static CrossChat.Constants.AppConstants;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CrossChat.Integrations.Services
 {
-	public class BlueSkyService : IBlueSkyService
+	public partial class BlueSkyService : IBlueSkyService
 	{
 		private readonly HttpClient _httpClient;
 		private readonly ILogger<BlueSkyService> _logger;
@@ -177,8 +175,7 @@ namespace CrossChat.Integrations.Services
 
 		private async Task<HttpResponseMessage> SendWithDPoPAsync(HttpMethod method, string url, BlueSkyModel settings, object? body)
 		{
-			var chatServiceDid = "did:web:api.bsky.chat";
-			// Функция для создания запроса
+			// Функция генерации HTTP-запроса
 			async Task<HttpRequestMessage> CreateRequest(string? nonce = null)
 			{
 				var (proof, _) = CreateDPoPProof(method.Method, url, settings.PrivateKeyJson, nonce, settings.AccessToken, null);
@@ -188,20 +185,31 @@ namespace CrossChat.Integrations.Services
 				req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
 
 				if (body != null)
-					req.Content = JsonContent.Create(body);
+				{
+					// ИСПРАВЛЕНИЕ: Если передали готовый HttpContent (байты картинки) — используем его.
+					// Если передали анонимный объект (для чатов/постов) — упаковываем в JsonContent!
+					if (body is HttpContent httpContent)
+					{
+						req.Content = httpContent;
+					}
+					else
+					{
+						req.Content = JsonContent.Create(body);
+					}
+				}
 
 				return req;
 			}
 
-			// 1. Первая попытка
+			// 1. Первая попытка отправки
 			var request = await CreateRequest();
 			var response = await _httpClient.SendAsync(request);
 
-			// 2. Если сервер просит Nonce — повторяем
+			// 2. Если сервер просит Nonce — запрашиваем новый Nonce и повторяем
 			if (!response.IsSuccessStatusCode)
 			{
-				var content = await response.Content.ReadAsStringAsync();
-				if (content.Contains("use_dpop_nonce") && response.Headers.TryGetValues("DPoP-Nonce", out var nonces))
+				var responseContent = await response.Content.ReadAsStringAsync();
+				if (responseContent.Contains("use_dpop_nonce") && response.Headers.TryGetValues("DPoP-Nonce", out var nonces))
 				{
 					var retryRequest = await CreateRequest(nonces.First());
 					response = await _httpClient.SendAsync(retryRequest);
@@ -373,7 +381,7 @@ namespace CrossChat.Integrations.Services
 		public string? RefreshToken { get; set; }
 		public string Did { get; set; }
 		public string PdsUrl { get; set; }
-		public string SystemPrompt {get;set; }
+		public string SystemPrompt { get; set; }
 	}
 
 	public class BlueSkyKeyDto

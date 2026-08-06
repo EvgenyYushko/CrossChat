@@ -1,7 +1,9 @@
 using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Data.Entities.Posting;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -113,7 +115,8 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки для BlueSky аккаунта (BotId: {state.BotId})");
 					}
 
-					// TODO: Вызов вашего _blueSkyService с передачей bskySettings.AccessToken
+					await BlueSkyPost(caption, files, null, bskySettings);
+
 					break;
 
 				case NetworkType.TelegramPublic:
@@ -210,5 +213,36 @@ namespace CrossChat.Worker.Facades
 		{
 			return _threadsService.CreatePostAsync(caption, base64Image, accessToken);
 		}
+
+		public async Task BlueSkyPost(string caption, List<string> files, VideoModel videoModel, BlueSkySettings bot)
+		{
+			var botModel = new BlueSkyModel()
+			{
+				AccessToken = bot.AccessToken,
+				RefreshToken = bot.RefreshToken,
+				Handle = bot.Handle,
+				PrivateKeyJson = bot.PrivateKeyJson,
+				TokenExpiresAt = bot.TokenExpiresAt,
+				Did = bot.Did,
+				PdsUrl = bot.PdsUrl,
+				SystemPrompt = bot.SystemPrompt
+			};
+
+			await _blueSkyService.PublishPostWithImagesAsync(caption, files, botModel);
+
+			//if (videoModel is not null)
+			//{
+			//	var videoBlob = await _blueSkyService.UploadVideoFromBase64Async(videoModel.Base64Video, videoModel.MimeType);
+			//	var ratio = new AspectRatio { Width = 9, Height = 16 };
+			//	success = await _blueSkyService.CreatePostWithVideoAsync(description, videoBlob, ratio);
+			//}
+			//else 
+		}
+	}
+
+	public class VideoModel
+	{
+		public string Base64Video { get; set; }
+		public string MimeType { get; set; }
 	}
 }
