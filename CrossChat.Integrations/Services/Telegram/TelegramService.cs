@@ -1,7 +1,7 @@
 using CrossChat.Integrations.Interfaces;
 using Telegram.Bot;
 
-namespace CrossChat.Integrations.Services
+namespace CrossChat.Integrations.Services.Telegram
 {
 	public class TelegramService : ITelegramService
 	{

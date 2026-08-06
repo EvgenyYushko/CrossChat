@@ -5,7 +5,7 @@ using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
-using CrossChat.Integrations.Services;
+using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Models;
 using CrossChat.Services;
 using CrossChat.Services.Base;

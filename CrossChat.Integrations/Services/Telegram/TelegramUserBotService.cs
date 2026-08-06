@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using WTelegram;
 
-namespace CrossChat.Integrations.Services
+namespace CrossChat.Integrations.Services.Telegram
 {
 	public class TelegramUserBotService : ITelegramUserBotService
 	{
@@ -45,7 +45,7 @@ namespace CrossChat.Integrations.Services
 				"api_hash" => ApiHash,
 				"session_pathname" => path,
 				// Если это первый запуск (Inject), указываем адрес сервера
-				"server_address" => (dto.SessionBytes == null || dto.SessionBytes.Length == 0)
+				"server_address" => dto.SessionBytes == null || dto.SessionBytes.Length == 0
 									? "1>149.154.175.53:443" : null,
 				_ => null
 			});

@@ -1,6 +1,7 @@
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
+using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Worker.Consumers.BlueSky;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;

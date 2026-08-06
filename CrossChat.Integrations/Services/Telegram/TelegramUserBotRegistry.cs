@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using WTelegram;
 
-namespace CrossChat.Integrations.Services
+namespace CrossChat.Integrations.Services.Telegram
 {
 	public class TelegramUserBotRegistry
 	{
