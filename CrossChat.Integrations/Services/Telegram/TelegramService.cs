@@ -181,6 +181,58 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
+		public async Task<string?> GetChannelAvatarBase64Async(long channelId)
+		{
+			try
+			{
+				// 1. Запрашиваем информацию о канале
+				var chat = await _telegramBotClient.GetChat(channelId);
+
+				if (chat.Photo != null && !string.IsNullOrEmpty(chat.Photo.BigFileId))
+				{
+					// 2. Получаем объект файла с путем FilePath
+					var file = await _telegramBotClient.GetFile(chat.Photo.BigFileId);
+
+					if (file.FilePath != null)
+					{
+						// 3. Используем метод библиотеки DownloadFile напрямую в MemoryStream!
+						using var ms = new MemoryStream();
+						await _telegramBotClient.DownloadFile(file.FilePath, ms);
+
+						// 4. Переводим байты из памяти в готовую для HTML Base64-строку
+						var base64String = Convert.ToBase64String(ms.ToArray());
+						return $"data:image/jpeg;base64,{base64String}";
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram Channel] Не удалось скачать аватарку для канала {channelId}" + ex);
+			}
+
+			return null;
+		}
+
+		public async Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId)
+		{
+			try
+			{
+				var file = await _telegramBotClient.GetFile(fileId);
+				if (file.FilePath != null)
+				{
+					using var ms = new MemoryStream();
+					await _telegramBotClient.DownloadFile(file.FilePath, ms);
+					return $"data:image/jpeg;base64,{Convert.ToBase64String(ms.ToArray())}";
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram Webhook] Не удалось скачать фото по FileId {fileId} {ex}");
+			}
+
+			return null;
+		}
+
 		public async Task SetWebhookAsync(string token, string webhookUrl)
 		{
 			var bot = new TelegramBotClient(token);
@@ -198,5 +250,6 @@ namespace CrossChat.Integrations.Services.Telegram
 			var bot = new TelegramBotClient(token);
 			await bot.SendMessage(chatId, text);
 		}
+		
 	}
 }

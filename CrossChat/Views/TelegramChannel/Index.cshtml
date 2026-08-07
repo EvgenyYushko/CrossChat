@@ -281,9 +281,17 @@
         {
             /* === РЕЖИМ НАСТРОЕК КАНАЛА === */
             <div class="connected-header">
-                <div class="big-avatar">
-                    📢
-                </div>
+
+                <!-- ВЫВОД СКАЧАННОЙ АВАТАРКИ ИЛИ ЗАГЛУШКИ -->
+                @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+                {
+                    <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+                }
+                else
+                {
+                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2.5rem;border-color:#2AABEE;color:white;">📢</div>
+                }
+
                 <div class="username">@Model.ChannelTitle</div>
                 @if (!string.IsNullOrEmpty(Model.ChannelUsername))
                 {

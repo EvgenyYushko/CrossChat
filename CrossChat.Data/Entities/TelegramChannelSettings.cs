@@ -21,6 +21,7 @@ namespace CrossChat.Data.Entities
 		public long ChannelId { get; set; }         // ID канала в Telegram (например, -100123456789)
 		public string ChannelTitle { get; set; } = string.Empty; // Название канала
 		public string? ChannelUsername { get; set; } // @channel_name (если публичный)
+		public string? ProfilePictureUrl { get; set; }
 
 		public bool IsActive { get; set; } = true;
 		public string SystemPrompt { get; set; } = "Ты ассистент публикаций в Telegram канале.";

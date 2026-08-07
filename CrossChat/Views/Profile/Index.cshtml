@@ -776,10 +776,17 @@
                     <div class="card" style="margin-bottom: 15px; background: rgba(255,255,255,0.02); padding: 1.2rem;">
                         <div style="display: flex; align-items: center; gap: 15px;">
 
-                            <!-- Аватарка-заглушка с первой буквой названия канала -->
-                            <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.3rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
-                                @(channel.ChannelTitle?.Length > 0 ? channel.ChannelTitle.Substring(0, 1).ToUpper() : "📢")
-                            </div>
+                            <!-- ВЫВОД СКАЧАННОЙ АВАТАРКИ ИЛИ ЗАГЛУШКИ КАНАЛА -->
+                            @if (!string.IsNullOrEmpty(channel.ProfilePictureUrl))
+                            {
+                                <img src="@channel.ProfilePictureUrl" style="width: 52px; height: 52px; border-radius: 50%; border: 2px solid #2AABEE; object-fit: cover; flex-shrink: 0;">
+                            }
+                            else
+                            {
+                                <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.3rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
+                                    📢
+                                </div>
+                            }
 
                             <!-- Информация о канале -->
                             <div style="flex-grow: 1;">

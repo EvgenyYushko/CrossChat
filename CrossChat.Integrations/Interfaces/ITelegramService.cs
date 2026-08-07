@@ -1,3 +1,4 @@
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -22,5 +23,8 @@ namespace CrossChat.Integrations.Interfaces
 		Task<Message[]> SendPhotoAlbumAsync(long senderId, List<string> base64Images, string caption = "");
 
 		Task<Message> SendPaidPhotosAsync(long senderId, IEnumerable<string> base64Images, int starCount, string caption = "", ParseMode parseMode = ParseMode.None);
+		Task<string?> GetChannelAvatarBase64Async(long channelId);
+
+		Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId);
 	}
 }

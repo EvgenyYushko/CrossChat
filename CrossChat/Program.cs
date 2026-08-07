@@ -132,6 +132,15 @@ builder.Services.AddQuartz(q =>
 		.WithSimpleSchedule(x => x
 			.WithIntervalInSeconds(120) // скекунд
 			.RepeatForever()));
+
+	// 5
+	var tgKey = new JobKey(nameof(TelegramChanelMaintanensJob));
+	q.AddJob<TelegramChanelMaintanensJob>(opts => opts.WithIdentity(tgKey));
+
+	q.AddTrigger(opts => opts
+		.ForJob(tgKey)
+		.WithIdentity($"{nameof(TelegramChanelMaintanensJob)}-Trigger")
+		.WithCronSchedule("0 0 0 * * ?"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

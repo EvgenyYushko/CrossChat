@@ -1,11 +1,11 @@
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -21,19 +21,23 @@ namespace CrossChat.Controllers
 		private readonly ILogger<TelegramSystemWebhookController> _logger;
 		private readonly ITelegramBotClient _telegramBotClient;
 		private readonly IServiceScopeFactory _serviceScopeFactory;
+		private readonly ITelegramService _telegramService;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
 			IDistributedCache cache,
 			ILogger<TelegramSystemWebhookController> logger,
 			ITelegramBotClient telegramBotClient,
-			IServiceScopeFactory serviceScopeFactory)
+			IServiceScopeFactory serviceScopeFactory,
+			ITelegramService telegramService
+			)
 		{
 			_db = db;
 			_cache = cache;
 			_logger = logger;
 			_telegramBotClient = telegramBotClient;
 			_serviceScopeFactory = serviceScopeFactory;
+			_telegramService = telegramService;
 		}
 
 		public async Task RunLocalBotListener()
@@ -198,7 +202,8 @@ namespace CrossChat.Controllers
 											ChannelId = channelId,
 											ChannelTitle = channelTitle,
 											ChannelUsername = channelUsername,
-											IsActive = hasPostingRights // Активен ТОЛЬКО если даны права на посты
+											IsActive = hasPostingRights, // Активен ТОЛЬКО если даны права на посты
+											ProfilePictureUrl = await _telegramService.GetChannelAvatarBase64Async(channelId)
 										};
 
 										_db.TelegramChannelSettings.Add(newChannel);
@@ -260,7 +265,7 @@ namespace CrossChat.Controllers
 							if (existingChannel != null)
 							{
 								// Очищаем привязанные отложенные посты
-								int channelNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.TelegramPublic;
+								int channelNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.TelegramChannel;
 								var orphanStates = await _db.NetworkStates
 									.Where(ns => ns.NetworkType == channelNetTypeId && ns.BotId == existingChannel.Id)
 									.ToListAsync();
@@ -276,6 +281,62 @@ namespace CrossChat.Controllers
 								await SendBotMessageAsync(addedByTgUserId,
 									$"❌ <b>Канал «{channelTitle}» был отсоединен.</b>\n\nБот убран из администраторов. Канал и его настройки удалены с сайта.");
 							}
+						}
+					}
+				}
+
+				// ===================================================================
+				// 3. СЦЕНАРИЙ: Мгновенное обновление названия или фото Канала (ChannelPost)
+				// ===================================================================
+				if (update.Type == UpdateType.ChannelPost && update.ChannelPost != null)
+				{
+					var post = update.ChannelPost;
+					var channelId = post.Chat.Id;
+
+					// Находим канал в базе данных
+					var channel = await _db.TelegramChannelSettings
+						.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+					if (channel != null)
+					{
+						bool isUpdated = false;
+
+						// А. МГНОВЕННОЕ ОБНОВЛЕНИЕ НАЗВАНИЯ КАНАЛА
+						if (!string.IsNullOrEmpty(post.NewChatTitle) && channel.ChannelTitle != post.NewChatTitle)
+						{
+							channel.ChannelTitle = post.NewChatTitle;
+							isUpdated = true;
+							_logger.LogInformation($"[Telegram Webhook] Мгновенно обновлено название канала {channelId}: '{post.NewChatTitle}'");
+						}
+
+						// Б. МГНОВЕННОЕ ОБНОВЛЕНИЕ АВАТАРКИ КАНАЛА
+						if (post.NewChatPhoto != null && post.NewChatPhoto.Length > 0)
+						{
+							// Берем самое большое разрешение загруженного фото (последний элемент массива)
+							var biggestPhoto = post.NewChatPhoto[^1];
+
+							// Скачиваем аватарку через ваш метод с DownloadFile
+							var newBase64 = await _telegramService.GetChannelAvatarBase64ByFileIdAsync(biggestPhoto.FileId);
+
+							if (!string.IsNullOrEmpty(newBase64))
+							{
+								channel.ProfilePictureUrl = newBase64;
+								isUpdated = true;
+								_logger.LogInformation($"[Telegram Webhook] Мгновенно обновлена аватарка канала {channelId}");
+							}
+						}
+						// В. МГНОВЕННОЕ УДАЛЕНИЕ АВАТАРКИ КАНАЛА
+						else if (post.DeleteChatPhoto == true)
+						{
+							channel.ProfilePictureUrl = null;
+							isUpdated = true;
+							_logger.LogInformation($"[Telegram Webhook] Мгновенно удалена аватарка канала {channelId}");
+						}
+
+						// Сохраняем изменения в БД
+						if (isUpdated)
+						{
+							await _db.SaveChangesAsync();
 						}
 					}
 				}
@@ -300,14 +361,5 @@ namespace CrossChat.Controllers
 				_logger.LogWarning(ex, $"Не удалось отправить ЛС пользователю {tgUserId} в Telegram");
 			}
 		}
-	}
-
-	public class GetMeRequest : IRequest<Telegram.Bot.Types.User>
-	{
-		public HttpMethod HttpMethod => HttpMethod.Get;
-		public string MethodName => "getMe";
-		public bool IsWebhookResponse { get; set; }
-
-		public HttpContent? ToHttpContent() => null;
 	}
 }
