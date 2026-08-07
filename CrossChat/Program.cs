@@ -230,6 +230,7 @@ builder.Services.AddSingleton<IFaceBookConsole, FaceBookConsole>();
 builder.Services.AddSingleton<IThreadsConsole, ThreadsConsole>();
 builder.Services.AddSingleton<IXConsole, XConsole>();
 builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
+builder.Services.AddSingleton<ITelegramChannelConsole, TelegramChannelConsole>();
 
 builder.Services.AddSingleton<IEmailService, EmailService>();
 

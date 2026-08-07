@@ -18,6 +18,7 @@ namespace CrossChat.Worker.Facades
 		private readonly ITelegramService _telegramService;
 		private readonly IXService _xService;
 		private readonly IThreadsService _threadsService;
+		private readonly ITelegramChannelConsole _telegramChannelConsole;
 		private readonly ILogger<SocialPublicationFacade> _logger;
 		private AppDbContext _appDbContext;
 		public SocialPublicationFacade(IPostService postService
@@ -27,6 +28,7 @@ namespace CrossChat.Worker.Facades
 			, ITelegramService telegramService
 			, IXService xService
 			, IThreadsService threadsService
+			, ITelegramChannelConsole telegramChannelConsole
 			, ILogger<SocialPublicationFacade> logger
 			, AppDbContext appDbContext)
 		{
@@ -38,6 +40,7 @@ namespace CrossChat.Worker.Facades
 			_telegramService = telegramService;
 			_xService = xService;
 			_threadsService = threadsService;
+			_telegramChannelConsole = telegramChannelConsole;
 			_logger = logger;
 		}
 
@@ -141,7 +144,10 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Telegram channel (BotId: {state.BotId}) не найден или отключен.");
 					}
 
+					await _telegramChannelConsole.Log($"Начало отправки поста в канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
 					await TelegramPost(caption, files, channel);
+					await _telegramChannelConsole.Log($"Пост успешно опубликованв канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
+
 					break;
 				case NetworkType.X:
 					var xSettings = await _appDbContext.XSettings

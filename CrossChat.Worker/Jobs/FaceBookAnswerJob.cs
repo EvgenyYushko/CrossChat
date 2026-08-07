@@ -3,7 +3,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Quartz;
 using StackExchange.Redis;
 
@@ -16,26 +16,33 @@ namespace CrossChat.Worker.Jobs
 		private readonly AppDbContext _db;
 		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly IFaceBookConsole _console;
+		private readonly IHostEnvironment _env;
 		private readonly IDatabase _redis;
 
 		public FaceBookAnswerJob(IFaceBookService fbService, AppDbContext db
-			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint, IFaceBookConsole console)
+			, IConnectionMultiplexer redis, IPublishEndpoint publishEndpoint, IFaceBookConsole console, IHostEnvironment env)
 		{
 			_fbService = fbService;
 			_db = db;
 			_publishEndpoint = publishEndpoint;
 			_console = console;
+			_env = env;
 			_redis = redis.GetDatabase();
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			try
 			{
 				var activeBots = await _db.FacebookSettings
 					.Where(s => s.IsActive)
 					.ToListAsync();
-				
+
 				foreach (var bot in activeBots)
 				{
 					await _console.Log($"Проверка аккаунта @{bot.PageName}", bot.UserId, bot.Id);

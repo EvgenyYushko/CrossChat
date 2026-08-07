@@ -192,9 +192,9 @@
         const terminal = document.getElementById('terminal');
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
-        const provider = "@ViewBag.Provider";
-        const botId = "@ViewBag.BotId";
-        const userName = "@ViewBag.UserName";
+        const provider = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.Provider ?? ""));
+        const botId = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.BotId?.ToString() ?? ""));
+        const userName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.UserName ?? ""));
 
         function appendLogLine(timestamp, type, message) {
             const line = document.createElement('div');

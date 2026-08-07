@@ -4,6 +4,7 @@ using CrossChat.Integrations.Services;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Quartz;
 using StackExchange.Redis;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
@@ -16,23 +17,31 @@ namespace CrossChat.Worker.Jobs
 		private readonly IBlueSkyService _bskyService;
 		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly IBlueSkyConsole _console;
+		private readonly IHostEnvironment _env;
 		private readonly IDatabase _redis;
 
 		public BluesSkyAnswerJob(AppDbContext db,
 			IBlueSkyService blueSkyService,
 			IPublishEndpoint publishEndpoint,
 			IConnectionMultiplexer redis,
-			IBlueSkyConsole consoleService)
+			IBlueSkyConsole consoleService,
+			IHostEnvironment env)
 		{
 			_db = db;
 			_bskyService = blueSkyService;
 			_redis = redis.GetDatabase();
 			_publishEndpoint = publishEndpoint;
 			_console = consoleService;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			var activeBots = await _db.BlueSkySettings
 				.Where(s => s.AccessToken != null)
 				.ToListAsync();

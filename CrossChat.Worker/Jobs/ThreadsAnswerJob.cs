@@ -3,6 +3,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using StackExchange.Redis;
@@ -19,12 +20,14 @@ public class ThreadsAutoReplyJob : IJob
 	private readonly IDatabase _redis;
 	private readonly IPublishEndpoint _publishEndpoint;
 	private readonly IThreadsConsole _console;
+	private readonly IHostEnvironment _env;
 
 	public ThreadsAutoReplyJob(AppDbContext db, IThreadsService threadsService, IAiService aiService
 		, ILogger<ThreadsAutoReplyJob> logger
 		, IConnectionMultiplexer redis
 		, IPublishEndpoint publishEndpoint
-		, IThreadsConsole console)
+		, IThreadsConsole console
+		, IHostEnvironment env)
 	{
 		_db = db;
 		_threadsService = threadsService;
@@ -33,10 +36,16 @@ public class ThreadsAutoReplyJob : IJob
 		_redis = redis.GetDatabase();
 		_publishEndpoint = publishEndpoint;
 		_console = console;
+		_env = env;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
 	{
+		if (_env.IsDevelopment())
+		{
+			return;
+		}
+
 		// 1. Берем ОДНОГО бота, которого дольше всего не проверяли
 		var bot = await _db.ThreadsSettings
 			.Where(s => s.IsActive && s.AccessToken != null)

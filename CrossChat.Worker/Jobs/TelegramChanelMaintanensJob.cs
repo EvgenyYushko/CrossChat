@@ -1,5 +1,6 @@
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot;
@@ -13,12 +14,17 @@ namespace CrossChat.Worker.Jobs
 		private readonly AppDbContext _db;
 		private readonly ILogger<TelegramChanelMaintanensJob> _logger;
 		private readonly ITelegramBotClient _telegramBotClient;
+		private readonly IHostEnvironment _env;
 
-		public TelegramChanelMaintanensJob(AppDbContext db, ILogger<TelegramChanelMaintanensJob> logger, ITelegramBotClient telegramBotClient)
+		public TelegramChanelMaintanensJob(AppDbContext db, ILogger<TelegramChanelMaintanensJob> logger
+			, ITelegramBotClient telegramBotClient
+			, IHostEnvironment env
+		)
 		{
 			_db = db;
 			_logger = logger;
 			_telegramBotClient = telegramBotClient;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -28,6 +34,11 @@ namespace CrossChat.Worker.Jobs
 
 		private async Task RefreshTelegramChannels()
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			_logger.LogInformation($"Run {nameof(TelegramChanelMaintanensJob)}");
 
 			try

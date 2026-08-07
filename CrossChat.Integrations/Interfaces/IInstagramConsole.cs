@@ -5,6 +5,7 @@ namespace CrossChat.Integrations.Interfaces
 	public interface IThreadsConsole : IConsoleService{}
 	public interface IXConsole : IConsoleService{}
 	public interface IBlueSkyConsole : IConsoleService{}
+	public interface ITelegramChannelConsole : IConsoleService{}
 	
 	public interface IConsoleService
 	{

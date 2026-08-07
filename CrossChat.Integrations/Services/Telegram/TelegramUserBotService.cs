@@ -4,6 +4,7 @@ using CrossChat.Integrations.Helpers;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WTelegram;
 
@@ -17,19 +18,26 @@ namespace CrossChat.Integrations.Services.Telegram
 		private readonly ILogger<TelegramUserBotService> _logger;
 		private readonly int ApiId;
 		private readonly string ApiHash;
+		private readonly IHostEnvironment _env;
 
-		public TelegramUserBotService(ILogger<TelegramUserBotService> logger, IConfiguration configuration)
+		public TelegramUserBotService(ILogger<TelegramUserBotService> logger, IConfiguration configuration, IHostEnvironment env)
 		{
 			_logger = logger;
 			var apiId = configuration[TELEGRAM_API_ID] ?? Environment.GetEnvironmentVariable(TELEGRAM_API_ID);
 			ApiId = int.Parse(apiId);
 			ApiHash = configuration[TELEGRAM_API_HASH] ?? Environment.GetEnvironmentVariable(TELEGRAM_API_HASH);
+			_env = env;
 		}
 
 		private string GetSessionPath(int id) => $"userbot_{id}.session";
 
 		public async Task<Client> CreateAndConnectAsync(UserBotDto dto)
 		{
+			if (_env.IsDevelopment())
+			{
+				return null;
+			}
+
 			string path = GetSessionPath(dto.Id);
 
 			// 1. Восстанавливаем файл сессии, если есть байты

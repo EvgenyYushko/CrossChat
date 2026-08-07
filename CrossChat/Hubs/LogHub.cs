@@ -19,7 +19,10 @@ namespace CrossChat.Hubs
 		public override async Task OnConnectedAsync()
 		{
 			var httpContext = Context.GetHttpContext();
-			var provider = httpContext?.Request.Query["provider"].ToString().ToLower();
+			var rawProvider = httpContext?.Request.Query["provider"].ToString();
+
+			// Нормализуем строку
+			var provider = rawProvider?.ToLower();
 			var botIdStr = httpContext?.Request.Query["botId"].ToString();
 
 			// 1. Получаем ID текущего пользователя из куки
@@ -32,9 +35,11 @@ namespace CrossChat.Hubs
 				// 2. ПРОВЕРКА ВЛАДЕНИЯ (Security Check)
 				bool isOwner = false;
 
-				// Проверяем в нужной таблице, принадлежит ли бот этому юзеру
+				// Все строки сравнения теперь строго в НИЖНЕМ РЕГИСТРЕ!
 				if (provider == "instagram")
 					isOwner = await _db.InstagramSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
+				else if (provider == "telegramchannel")
+					isOwner = await _db.TelegramChannelSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
 				else if (provider == "telegram")
 					isOwner = await _db.TelegramUsersBotSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
 				else if (provider == "threads")
@@ -53,7 +58,7 @@ namespace CrossChat.Hubs
 				}
 				else
 				{
-					// Если не владелец — просто ничего не шлем или обрываем связь
+					// Если не владелец — обрываем связь
 					Context.Abort();
 				}
 			}

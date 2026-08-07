@@ -24,7 +24,7 @@ namespace CrossChat.Worker.Jobs
 		public async Task Execute(IJobExecutionContext context)
 		{
 			var now = DateTimeNow;
-			List<int> pendingStateIds;
+			List<int> pendingStateIds;     
 
 			_logger.LogInformation($"Стард джобы PostPublishingJob. Ищем посты меньше даты  {now}");
 

@@ -48,13 +48,15 @@ public class AuthController : Controller
 		var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
 		if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
 
-		// Приводим к нижнему регистру для надежности сравнения
+		// Приводим к нижнему регистру 
 		var providerKey = provider?.ToLower();
 		bool isOwner = false;
 
 		// 2. ПРОВЕРКА ВЛАДЕНИЯ
 		if (providerKey == "instagram")
 			isOwner = await _db.InstagramSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
+		else if (providerKey == "telegramchannel")
+			isOwner = await _db.TelegramChannelSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
 		else if (providerKey == "telegram")
 			isOwner = await _db.TelegramUsersBotSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
 		else if (providerKey == "threads")
@@ -68,11 +70,10 @@ public class AuthController : Controller
 
 		if (!isOwner)
 		{
-			// Вместо Exception возвращаем 403 Forbidden
 			return Forbid();
 		}
 
-		// 3. ПОЛУЧЕНИЕ ДАННЫХ
+		// 3. ПОЛУЧЕНИЕ ДАННЫХ ИЗ REDIS
 		var historyKey = $"log_history:{providerKey}:{botId}";
 
 		// Получаем записи (последние 100)

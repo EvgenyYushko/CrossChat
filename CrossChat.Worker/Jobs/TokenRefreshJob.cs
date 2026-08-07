@@ -2,6 +2,7 @@ using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
@@ -23,6 +24,7 @@ public class TokenRefreshJob : IJob
 	private readonly IThreadsConsole _threadsConsole;
 	private readonly IXConsole _xConsole;
 	private readonly IEmailService _emailService;
+	private readonly IHostEnvironment _env;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly SocialMediaSettings _settings;
 
@@ -39,7 +41,8 @@ public class TokenRefreshJob : IJob
 		IFaceBookConsole faceBookConsole,
 		IThreadsConsole threadsConsole,
 		IXConsole xConsole,
-		IEmailService emailService
+		IEmailService emailService,
+		IHostEnvironment env
 		)
 	{
 		_db = db;
@@ -53,12 +56,18 @@ public class TokenRefreshJob : IJob
 		_threadsConsole = threadsConsole;
 		_xConsole = xConsole;
 		_emailService = emailService;
+		_env = env;
 		_logger = logger;
 		_settings = options.Value;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
 	{
+		if (_env.IsDevelopment())
+		{
+			return;
+		}
+
 		_logger.LogInformation("🔄 [TokenRefreshJob] Начало комплексной проверки токенов...");
 		var thresholdDate = DateTime.UtcNow.AddDays(10);
 
