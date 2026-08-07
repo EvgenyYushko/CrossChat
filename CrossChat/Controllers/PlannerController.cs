@@ -40,6 +40,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.XSettingsList)
 				.Include(p => p.TelegramUserBotSettingsList)
 				.Include(p => p.TelegramSettings)
+				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.BlueSkySettingsList)
 				.FirstOrDefaultAsync(p => p.Id == profileId);
 
@@ -431,6 +432,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.TelegramUserBotSettingsList)
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.BlueSkySettingsList)
+				.Include(p => p.TelegramChannelSettingsList)
 				.FirstOrDefault(p => p.Id == profileId);
 
 			if (profile == null) return 0;
@@ -447,6 +449,8 @@ namespace CrossChat.Controllers
 					return profile.XSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				case NetworkType.TelegramPublic:
 					return profile.TelegramUserBotSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.TelegramChannel:
+					return profile.TelegramChannelSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				//case NetworkType.TelegramP:
 				//	return (profile.TelegramSettings != null && profile.TelegramSettings.IsActive) ? profile.TelegramSettings.UserId : 0;
 				case NetworkType.BlueSky:

@@ -20,34 +20,34 @@ namespace CrossChat.Controllers
 		private readonly IDistributedCache _cache;
 		private readonly ILogger<TelegramSystemWebhookController> _logger;
 		private readonly ITelegramBotClient _telegramBotClient;
+		private readonly IServiceScopeFactory _serviceScopeFactory;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
 			IDistributedCache cache,
 			ILogger<TelegramSystemWebhookController> logger,
-			ITelegramBotClient telegramBotClient)
+			ITelegramBotClient telegramBotClient,
+			IServiceScopeFactory serviceScopeFactory)
 		{
 			_db = db;
 			_cache = cache;
 			_logger = logger;
 			_telegramBotClient = telegramBotClient;
+			_serviceScopeFactory = serviceScopeFactory;
 		}
 
 		public async Task RunLocalBotListener()
 		{
 			try
 			{
-				// Получаем информацию о боте
 				var stoppingToken = CancellationToken.None;
-				var me = await _telegramBotClient.SendRequest(new GetMeRequest(), stoppingToken);
 
-				// Минимальная настройка ReceiverOptions
 				var receiverOptions = new ReceiverOptions
 				{
-					AllowedUpdates = []
+					AllowedUpdates = [] // Получать все типы обновлений
 				};
 
-				// Базовая версия StartReceiving
+				// Запускаем прослушивание с помощью нашего исправленного HandleUpdateAsync
 				_telegramBotClient.StartReceiving(
 					HandleUpdateAsync,
 					HandleErrorAsync,
@@ -55,9 +55,9 @@ namespace CrossChat.Controllers
 					stoppingToken
 				);
 
-				Console.WriteLine("Бот начал работу");
+				Console.WriteLine("✅ Локальный Telegram-слушатель успешно запущен!");
 
-				// Бесконечное ожидание
+				// Бесконечное ожидание работы
 				while (!stoppingToken.IsCancellationRequested)
 				{
 					await Task.Delay(1000, stoppingToken);
@@ -69,9 +69,13 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		private Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
+		private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
 		{
-			return Receive(update);
+			using (var scope = _serviceScopeFactory.CreateScope())
+			{
+				var s = scope.ServiceProvider.GetRequiredService<TelegramSystemWebhookController>();
+				await s.Receive(update);
+			}
 		}
 
 		private Task HandleErrorAsync(ITelegramBotClient botClient, Exception error, CancellationToken ct)
@@ -96,7 +100,6 @@ namespace CrossChat.Controllers
 					// А. Обычный вызов /start (если бота нашли через поиск)
 					if (text == "/start")
 					{
-
 						// Создаем красивую кнопку-ссылку на ваш сайт
 						var inlineKeyboard = new InlineKeyboardMarkup(new[]
 						{
@@ -106,11 +109,11 @@ namespace CrossChat.Controllers
 						await _telegramBotClient.SendMessage(
 							chatId: tgUserId,
 							text: "👋 <b>Приветствуем в CrossChat!</b>\n\n" +
-							      "Я системный бот платформы кроссплатформенного автопостинга и нейро-автоответов.\n\n" +
-							      "<b>Как подключить ваш Telegram-канал:</b>\n" +
-							      "1. Зайдите в личный кабинет на нашем сайте.\n" +
-							      "2. Нажмите кнопку <b>«Привязать Telegram»</b>.\n" +
-							      "3. Добавьте меня администратором в ваш канал с правом публикации сообщений.",
+								  "Я системный бот платформы кроссплатформенного автопостинга и нейро-автоответов.\n\n" +
+								  "<b>Как подключить ваш Telegram-канал:</b>\n" +
+								  "1. Зайдите в личный кабинет на нашем сайте.\n" +
+								  "2. Нажмите кнопку <b>«Привязать Telegram»</b>.\n" +
+								  "3. Добавьте меня администратором в ваш канал с правом публикации сообщений.",
 							parseMode: ParseMode.Html,
 							replyMarkup: inlineKeyboard
 						);
@@ -134,7 +137,7 @@ namespace CrossChat.Controllers
 
 								await _cache.RemoveAsync($"tg_link:{code}");
 
-								await SendBotMessageAsync(tgUserId, 
+								await SendBotMessageAsync(tgUserId,
 									"✅ <b>Ваш Telegram-аккаунт успешно привязан к CrossChat!</b>\n\nТеперь добавьте бота <b>@cros_hub_bot</b> администратором в ваш канал с правом публикации сообщений.");
 								return Ok();
 							}
@@ -142,7 +145,7 @@ namespace CrossChat.Controllers
 						else
 						{
 							// Если код устарел (прошло больше 15 минут)
-							await SendBotMessageAsync(tgUserId, 
+							await SendBotMessageAsync(tgUserId,
 								"⚠️ <b>Ссылка привязки устарела или недействительна.</b>\n\nПожалуйста, сгенерируйте новую ссылку в личном кабинете на сайте.");
 							return Ok();
 						}

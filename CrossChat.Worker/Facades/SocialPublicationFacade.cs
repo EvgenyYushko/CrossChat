@@ -132,7 +132,17 @@ namespace CrossChat.Worker.Facades
 
 					// TODO: Вызов вашего _telegramService
 					break;
+				case NetworkType.TelegramChannel:
+					var channel = await _appDbContext.TelegramChannelSettings
+						.FirstOrDefaultAsync(x => x.Id == state.BotId);
 
+					if (channel == null || !channel.IsActive)
+					{
+						throw new Exception($"Telegram channel (BotId: {state.BotId}) не найден или отключен.");
+					}
+
+					await TelegramPost(caption, files, channel);
+					break;
 				case NetworkType.X:
 					var xSettings = await _appDbContext.XSettings
 						.FirstOrDefaultAsync(x => x.Id == state.BotId);
@@ -163,6 +173,25 @@ namespace CrossChat.Worker.Facades
 
 				default:
 					throw new NotImplementedException($"Публикация в {network} не реализована.");
+			}
+		}
+
+		private async Task TelegramPost(string caption, List<string> files, TelegramChannelSettings channel)
+		{
+			if (files?.Count() > 0)
+			{
+				if (files.Count == 1)
+				{
+					await _telegramService.SendSinglePhotoAsync(channel.ChannelId, files.First(), caption);
+				}
+				else
+				{
+					await _telegramService.SendPhotoAlbumAsync(channel.ChannelId, files, caption);
+				}
+			}
+			else
+			{
+				await _telegramService.SendMessage(channel.ChannelId, caption);
 			}
 		}
 

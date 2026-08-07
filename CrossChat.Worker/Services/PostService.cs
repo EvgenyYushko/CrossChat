@@ -494,6 +494,7 @@ namespace CrossChat.Worker.Services
 				.Include(p => p.ThreadsSettingsList)
 				.Include(p => p.XSettingsList)
 				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.BlueSkySettingsList)
 				.FirstOrDefault(p => p.Id == profileId);
@@ -512,6 +513,8 @@ namespace CrossChat.Worker.Services
 					return profile.XSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				case NetworkType.TelegramPublic:
 					return profile.TelegramUserBotSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.TelegramChannel:
+					return profile.TelegramChannelSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				//case NetworkType.TelegramP:
 				//	return (profile.TelegramSettings != null && profile.TelegramSettings.IsActive) ? profile.TelegramSettings.UserId : 0;
 				case NetworkType.BlueSky:

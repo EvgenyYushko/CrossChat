@@ -37,6 +37,11 @@ namespace CrossChat.Integrations.Enums
 		TelegramPrivate,
 
 		/// <summary>
+		/// Telegram канал
+		/// </summary>
+		TelegramChannel,
+
+		/// <summary>
 		/// X (Twiter)
 		/// </summary>
 		X,
