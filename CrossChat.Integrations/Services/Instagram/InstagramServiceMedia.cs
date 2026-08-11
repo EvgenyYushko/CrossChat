@@ -184,8 +184,10 @@ public partial class InstagramService
 		{
 			_logger.LogInformation("CreateSingleMediaContainerAsync - Start");
 
+			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+
 			// Сохраняем на свой сервер
-			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64String);
+			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
 			tempFilesTracker.Add(localPath); // Добавляем в трекер для последующего удаления
 
 			_logger.LogInformation($"Медиа доступно по ссылке: {mediaUrl}");
@@ -241,8 +243,10 @@ public partial class InstagramService
 			// Сначала создаем все дочерние контейнеры
 			foreach (var base64String in base64Strings)
 			{
+				string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+
 				// Сохраняем на свой сервер
-				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64String);
+				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
 				tempFilesTracker.Add(localPath); // Добавляем в трекер
 
 				string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
@@ -345,9 +349,9 @@ public partial class InstagramService
 		return (publicUrl, localPath);
 	}
 
-	public async Task<string> PublishStoryFromBase64(string base64Img, string accessToken)
+	public async Task<string> PublishStoryFromBase64(string base64String, string accessToken)
 	{
-		if (string.IsNullOrEmpty(base64Img))
+		if (string.IsNullOrEmpty(base64String))
 		{
 			_logger.LogWarning("❌ No media provided for story");
 			return null;
@@ -360,8 +364,10 @@ public partial class InstagramService
 
 		try
 		{
+			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+
 			// 1. Сохраняем файл на свой сервер (вместо ImgBB)
-			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64Img);
+			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
 			localFilePath = localPath; // Запоминаем путь, чтобы удалить в finally
 
 			if (string.IsNullOrEmpty(mediaUrl))
