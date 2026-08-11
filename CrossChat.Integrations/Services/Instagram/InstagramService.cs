@@ -8,7 +8,7 @@ using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
-using Polly;
+using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Integrations.Services;
 
@@ -450,78 +450,5 @@ public partial class InstagramService : IInstagramService
 		}
 
 		return resultText;
-	}
-
-	private async Task<string> DownloadImageAsBase64(string imageUrl)
-	{
-		// 1. Создаем политику повторов: 3 попытки, если Инста вернула 404 или упала сеть
-		// Паузы: 1 сек, 2 сек, 4 сек. Это даст время CDN Фейсбука обновить кэш.
-		var retryPolicy = Policy
-			.Handle<HttpRequestException>() // Ловим 404, 403, 500 и обрывы сети
-			.Or<TaskCanceledException>()    // Ловим таймауты
-			.WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt - 1)),
-				(exception, timeSpan, retryCount, context) =>
-				{
-					_logger.LogWarning($"[Download Image] Попытка {retryCount} провалилась: {exception.Message}. Ждем {timeSpan.TotalSeconds} сек...");
-				});
-
-		try
-		{
-			// 2. Оборачиваем скачивание в retryPolicy
-			return await retryPolicy.ExecuteAsync(async () =>
-			{
-				using var httpClient = new HttpClient();
-
-				// Делаем запрос более похожим на настоящий браузер
-				httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-				httpClient.DefaultRequestHeaders.Add("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-				httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
-
-				var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
-
-				if (imageBytes == null || imageBytes.Length == 0)
-				{
-					throw new HttpRequestException("Скачался пустой файл");
-				}
-
-				return Convert.ToBase64String(imageBytes);
-			});
-		}
-		catch (Exception ex)
-		{
-			_logger.LogError(ex, $"[Download Image] Критическая ошибка при скачивании после всех попыток: {imageUrl}");
-			return null;
-		}
-	}
-
-	private async Task<string> DownloadAudioFileAsBase64(string audioUrl)
-	{
-		try
-		{
-			using var httpClient = new HttpClient();
-			// Добавляем заголовки для успешного скачивания
-			httpClient.DefaultRequestHeaders.Add("User-Agent",
-				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-			var response = await httpClient.GetAsync(audioUrl);
-			if (response.IsSuccessStatusCode)
-			{
-				var audioBytes = await response.Content.ReadAsByteArrayAsync();
-
-				// Конвертируем в base64 строку
-				var base64String = Convert.ToBase64String(audioBytes);
-
-				_logger.LogInformation($"Audio converted to base64, length: {base64String.Length} chars");
-				return base64String;
-			}
-
-			_logger.LogInformation($"Failed to download audio: {response.StatusCode}");
-			return null;
-		}
-		catch (Exception ex)
-		{
-			_logger.LogError(ex, "Error downloading audio file");
-			return null;
-		}
 	}
 }

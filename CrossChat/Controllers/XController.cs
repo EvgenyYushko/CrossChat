@@ -220,7 +220,7 @@ namespace CrossChat.Controllers
 			{
 				// Twitter часто присылает маленькие картинки _normal. 
 				// Если хочешь побольше, можно заменить: profilePicUrl = profilePicUrl.Replace("_normal", "_400x400");
-				var base64Avatar = await DownloadImageAsBase64(profilePicUrl);
+				var base64Avatar = await DownloadImageAsBase64ForHtml(profilePicUrl);
 				if (base64Avatar != null)
 				{
 					settings.ProfilePictureUrl = base64Avatar;

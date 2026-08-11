@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
-using static CrossChat.Worker.Helpers.HttpHelper;
+using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Worker.Jobs;
 
@@ -114,7 +114,7 @@ public class TokenRefreshJob : IJob
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))
 					{
-						base64Icon = await DownloadImageAsBase64(userInfo.profilePicUrl);
+						base64Icon = await DownloadImageAsBase64ForHtml(userInfo.profilePicUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
 				}
@@ -150,7 +150,7 @@ public class TokenRefreshJob : IJob
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.ProfilePicUrl))
 					{
-						base64Icon = await DownloadImageAsBase64(userInfo.ProfilePicUrl);
+						base64Icon = await DownloadImageAsBase64ForHtml(userInfo.ProfilePicUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
 					settings.PageName = userInfo.Name;
@@ -191,7 +191,7 @@ public class TokenRefreshJob : IJob
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
 					{
-						base64Icon = await DownloadImageAsBase64(profile.ProfilePictureUrl);
+						base64Icon = await DownloadImageAsBase64ForHtml(profile.ProfilePictureUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
 				}
@@ -267,7 +267,7 @@ public class TokenRefreshJob : IJob
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
 					{
-						base64Icon = await DownloadImageAsBase64(profile.ProfilePictureUrl);
+						base64Icon = await DownloadImageAsBase64ForHtml(profile.ProfilePictureUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
 				}
