@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using static CrossChat.Constants.AppConstants;
-using static CrossChat.Worker.Helpers.HttpHelper;
+using static CrossChat.Integrations.Helpers.HttpHelper;
 using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers

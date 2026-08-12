@@ -121,7 +121,7 @@ public class TokenRefreshJob : IJob
 			}
 			catch (Exception ex)
 			{
-                await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.Username, "Instagram");
+				await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.Username, "Instagram");
 				await _instagramConsole.LogError($"❌ Ошибка Instagram User {settings.UserId}, {ex}", settings.UserId, settings.Id);
 			}
 		}
@@ -158,7 +158,7 @@ public class TokenRefreshJob : IJob
 			}
 			catch (Exception ex)
 			{
-                await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.PageName, "FaceBook");
+				await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.PageName, "FaceBook");
 				await _faceBookConsole.LogError($"❌ Ошибка FaceBook User {settings.UserId}, {ex}", settings.UserId, settings.Id);
 			}
 		}
@@ -249,6 +249,13 @@ public class TokenRefreshJob : IJob
 
 		_logger.LogInformation($"[TokenRefreshJob] X: найдено {xBots.Count} токенов для обновления.");
 
+		// 1. Проверяем, заданы ли настройки XClientId и XClientSecret в воркере
+		if (string.IsNullOrEmpty(_settings.XClientId) || string.IsNullOrEmpty(_settings.XClientSecret))
+		{
+			_logger.LogError("❌ [X Refresh] Ошибка: _settings.XClientId или _settings.XClientSecret пустые! Проверьте appsettings.json в проекте Worker.");
+			return;
+		}
+
 		foreach (var settings in xBots)
 		{
 			try
@@ -258,30 +265,53 @@ public class TokenRefreshJob : IJob
 				if (result != null)
 				{
 					settings.AccessToken = result.Value.AccessToken;
-					settings.RefreshToken = result.Value.RefreshToken; // ОБЯЗАТЕЛЬНО сохраняем новый рефреш-токен
+					settings.RefreshToken = result.Value.RefreshToken; // Сохраняем новый рефреш-токен
 					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
 					await _xConsole.Log($"✅ X токен обновлен для @{settings.ScreenName}", settings.UserId, settings.Id);
 
-					var profile = await _xService.GetXUserProfileAsync(result.Value.AccessToken);
-					string? base64Icon = null;
-					if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
+					try
 					{
-						base64Icon = await DownloadImageAsBase64ForHtml(profile.ProfilePictureUrl);
+						var profile = await _xService.GetXUserProfileAsync(result.Value.AccessToken);
+						if (!string.IsNullOrEmpty(profile.ProfilePictureUrl))
+						{
+							settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(profile.ProfilePictureUrl);
+						}
 					}
-					settings.ProfilePictureUrl = base64Icon;
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "[X Refresh] Не удалось обновить аватарку профиля после рефреша");
+					}
 				}
 				else
 				{
-					await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+					_logger.LogWarning($"⚠️ [X Refresh] Не удалось обновить токен для @{settings.ScreenName}");
 					await _xConsole.LogWarning($"⚠️ Не удалось обновить X для @{settings.ScreenName}. Возможно, доступ отозван.", settings.UserId, settings.Id);
-					// settings.IsActive = false; // Опционально: выключаем бота при ошибке
+
+					// Безопасный вызов отправки email (таймаут почты не упустит джобу!)
+					try
+					{
+						await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+					}
+					catch (Exception mailEx)
+					{
+						_logger.LogError(mailEx, "❌ Не удалось отправить email-уведомление (Таймаут SMTP)");
+					}
 				}
 			}
 			catch (Exception ex)
 			{
-				await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
-				await _xConsole.LogError($"❌ Ошибка X Refresh для {settings.ScreenName}, {ex}", settings.UserId, settings.Id);
+				_logger.LogError(ex, $"❌ Ошибка X Refresh для {settings.ScreenName}");
+
+				// Безопасный вызов отправки email в блоке исключений
+				try
+				{
+					await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+				}
+				catch (Exception mailEx)
+				{
+					_logger.LogError(mailEx, "❌ Не удалось отправить email-уведомление (Таймаут SMTP)");
+				}
 			}
 		}
 	}
