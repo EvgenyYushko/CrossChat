@@ -1,3 +1,4 @@
+using System;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Data.Entities.Posting;
@@ -20,6 +21,10 @@ namespace CrossChat.Worker.Facades
 		private readonly IThreadsService _threadsService;
 		private readonly ITelegramChannelConsole _telegramChannelConsole;
 		private readonly IInstagramConsole _instagramConsole;
+		private readonly IFaceBookConsole _faceBookConsole;
+		private readonly IBlueSkyConsole _blueSkyConsole;
+		private readonly IXConsole _xConsole;
+		private readonly IThreadsConsole _threadsConsole;
 		private readonly ILogger<SocialPublicationFacade> _logger;
 		private AppDbContext _appDbContext;
 		public SocialPublicationFacade(IPostService postService
@@ -31,6 +36,10 @@ namespace CrossChat.Worker.Facades
 			, IThreadsService threadsService
 			, ITelegramChannelConsole telegramChannelConsole
 			, IInstagramConsole instagramConsole
+			, IFaceBookConsole faceBookConsole
+			, IBlueSkyConsole blueSkyConsole
+			, IXConsole xConsole
+			, IThreadsConsole threadsConsole
 			, ILogger<SocialPublicationFacade> logger
 			, AppDbContext appDbContext)
 		{
@@ -44,6 +53,10 @@ namespace CrossChat.Worker.Facades
 			_threadsService = threadsService;
 			_telegramChannelConsole = telegramChannelConsole;
 			_instagramConsole = instagramConsole;
+			_faceBookConsole = faceBookConsole;
+			_blueSkyConsole = blueSkyConsole;
+			_xConsole = xConsole;
+			_threadsConsole = threadsConsole;
 			_logger = logger;
 		}
 
@@ -107,8 +120,13 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки или PageAccessToken для Facebook страницы (BotId: {state.BotId})");
 					}
 
+					await _faceBookConsole.Log($"Начало отправки поста в профиль {fbSettings.PageName}.", fbSettings.UserId, state.BotId);
+
 					await FaceBookPostImages(caption, files, fbSettings.PageAccessToken, fbSettings.PageId);
 					//await FaceBookStory(files, fbSettings.PageAccessToken, fbSettings.PageId);
+
+					await _faceBookConsole.Log($"Пост успешно опубликован в профиль {fbSettings.PageName}.", fbSettings.UserId, state.BotId);
+
 					break;
 
 				case NetworkType.BlueSky:
@@ -120,7 +138,11 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки для BlueSky аккаунта (BotId: {state.BotId})");
 					}
 
+					await _blueSkyConsole.Log($"Начало отправки поста в {bskySettings.Handle}.", bskySettings.UserId, state.BotId);
+
 					await BlueSkyPost(caption, files, null, bskySettings);
+
+					await _blueSkyConsole.Log($"Пост успешно опубликован в {bskySettings.Handle}.", bskySettings.UserId, state.BotId);
 
 					break;
 
@@ -130,9 +152,9 @@ namespace CrossChat.Worker.Facades
 					var tgUserBot = await _appDbContext.TelegramUsersBotSettings
 						.FirstOrDefaultAsync(x => x.Id == state.BotId);
 
-					if (tgUserBot == null || !tgUserBot.IsActive)
+					if (tgUserBot == null)
 					{
-						throw new Exception($"Telegram UserBot (BotId: {state.BotId}) не найден или отключен.");
+						throw new Exception($"Telegram UserBot (BotId: {state.BotId}) не найден.");
 					}
 
 					// TODO: Вызов вашего _telegramService
@@ -141,9 +163,9 @@ namespace CrossChat.Worker.Facades
 					var channel = await _appDbContext.TelegramChannelSettings
 						.FirstOrDefaultAsync(x => x.Id == state.BotId);
 
-					if (channel == null || !channel.IsActive)
+					if (channel == null)
 					{
-						throw new Exception($"Telegram channel (BotId: {state.BotId}) не найден или отключен.");
+						throw new Exception($"Telegram channel (BotId: {state.BotId}) не найден.");
 					}
 
 					await _telegramChannelConsole.Log($"Начало отправки поста в канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
@@ -160,7 +182,12 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки для X (Twitter) (BotId: {state.BotId})");
 					}
 
+					
+					await _xConsole.Log($"Начало отправки поста в {xSettings.ScreenName}.", xSettings.UserId, state.BotId);
+
 					await XPost(caption, xSettings.AccessToken, files);
+
+					await _xConsole.Log($"Пост успешно опубликован в {xSettings.ScreenName}.", xSettings.UserId, state.BotId);
 					break;
 
 				case NetworkType.Threads:
@@ -171,12 +198,17 @@ namespace CrossChat.Worker.Facades
 					{
 						throw new Exception($"Не найдены настройки для Threads (BotId: {state.BotId})");
 					}
+					
+					await _threadsConsole.Log($"Начало отправки поста в в {threadsSettings.Username}.", threadsSettings.UserId, state.BotId);
 
 					var threadsSuccess = await ThreadsPost(caption, files, threadsSettings.AccessToken);
 					if (!threadsSuccess)
 					{
 						throw new Exception($"Ошибка при публикации поста в Threads )");
 					}
+
+					await _threadsConsole.Log($"Пост успешно опубликован в {threadsSettings.Username}.", threadsSettings.UserId, state.BotId);
+
 					break;
 
 				default:
