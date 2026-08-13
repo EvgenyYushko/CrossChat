@@ -356,6 +356,41 @@
             }
 
         }
+
+        /* Контейнер кнопок управления отзывом */
+        .review-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        /* Адаптация кнопок управления для мобилок */
+        @@media (max-width: 600px) {
+            /* Складываем кнопки вертикально и задаем единую ширину контейнера */
+            .review-actions {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 5px !important;
+                min-width: 92px !important; /* Единая фиксированная ширина блока кнопок */
+            }
+
+            /* Растягиваем форму и кнопки на 100% ширины контейнера */
+            .review-actions form {
+                display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+            }
+
+            .btn-edit-inline, .btn-delete-inline {
+                width: 100% !important; /* Обе кнопки становятся строго одинаковой ширины */
+                padding: 5px 8px !important;
+                font-size: 0.75rem !important;
+                text-align: center !important;
+                justify-content: center !important;
+                box-sizing: border-box !important;
+            }
+        }
     </style>
 }
 
@@ -511,7 +546,7 @@
                         <!-- Кнопки управления (Изменить / Удалить) только для владельца -->
                         @if (isMyReview)
                         {
-                            <div style="display: flex; gap: 6px; align-items: center;">
+                            <div class="review-actions">
                                 <button type="button" class="btn-edit-inline" onclick="toggleEditReview(@item.Id)">
                                     ✏️ Изменить
                                 </button>

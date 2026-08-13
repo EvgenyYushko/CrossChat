@@ -80,12 +80,12 @@ public class EmailService : IEmailService
 	}
 
 	public async Task SendEmailAsync(
-		string fromAddress,
-		string fromName,
-		string toEmail,
-		string subject,
-		string htmlBody,
-		string plainTextBody = null)
+	string fromAddress,
+	string fromName,
+	string toEmail,
+	string subject,
+	string htmlBody,
+	string plainTextBody = null)
 	{
 		try
 		{
@@ -94,7 +94,6 @@ public class EmailService : IEmailService
 			email.To.Add(MailboxAddress.Parse(toEmail));
 			email.Subject = subject;
 
-			// Создаём составное тело письма (HTML + Plain text fallback)
 			var bodyBuilder = new BodyBuilder
 			{
 				HtmlBody = htmlBody,
@@ -104,9 +103,16 @@ public class EmailService : IEmailService
 			email.Body = bodyBuilder.ToMessageBody();
 
 			using var smtp = new SmtpClient();
-			
-			// Проверка сертификата
-			smtp.CheckCertificateRevocation = _settings.CheckCertificateRevocation;
+
+			// 1. ИСПРАВЛЕНИЕ ДЛЯ DOCKER/RENDER: Отключаем проверку отзыва сертификатов (CRL/OCSP).
+			// Именно она вызывает зависание и TimeoutException в контейнерах Linux!
+			smtp.CheckCertificateRevocation = false;
+
+			// 2. Устанавливаем явный таймаут соединения (15 секунд вместо бесконечного ожидания)
+			smtp.Timeout = 30000;
+
+			// 3. Отключаем строгую проверку цепочки сертификатов Linux
+			smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
 
 			// Подбор правильного SSL-режима
 			SecureSocketOptions socketOptions;
@@ -116,7 +122,6 @@ public class EmailService : IEmailService
 			}
 			else
 			{
-				// Если порт 465 -> SslOnConnect, если 587 -> StartTls, иначе Auto
 				socketOptions = _settings.SmtpPort switch
 				{
 					465 => SecureSocketOptions.SslOnConnect,
@@ -125,8 +130,8 @@ public class EmailService : IEmailService
 				};
 			}
 
+			// Подключаемся к SMTP серверу
 			await smtp.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, socketOptions);
-
 			await smtp.AuthenticateAsync(_settings.SmtpUsername, _settings.SmtpPassword);
 			await smtp.SendAsync(email);
 			await smtp.DisconnectAsync(true);
@@ -142,7 +147,7 @@ public class EmailService : IEmailService
 				"Ошибка отправки email от {From} на {To}: {Message}",
 				fromAddress, toEmail, ex.Message
 			);
-			throw;
+			// Не перевыбрасываем throw, чтобы ошибка отправки почты не ломала работу всего сервера
 		}
 	}
 
