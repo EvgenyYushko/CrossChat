@@ -1,0 +1,576 @@
+@model List<CrossChat.Data.Entities.ReviewEntity>
+@{
+    ViewData["Title"] = "Отзывы пользователей";
+    int? currentUserId = ViewBag.CurrentUserId as int?;
+    bool isAuth = User.Identity?.IsAuthenticated == true;
+
+    // Восстанавливаем введенный текст, если была ошибка
+    string preservedComment = TempData["PreservedComment"] as string;
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+            box-sizing: border-box;
+        }
+
+        .page-title {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+            .page-title h1 {
+                font-size: 2.2rem;
+                font-weight: 800;
+                color: var(--text-main);
+            }
+
+            .page-title p {
+                color: var(--text-secondary);
+                margin-top: 0.5rem;
+                font-size: 1rem;
+            }
+
+        /* Форма оставления отзыва */
+        .add-review-card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+            .add-review-card h3 {
+                margin-bottom: 1rem;
+                color: var(--text-main);
+                font-size: 1.2rem;
+            }
+
+        .rating-picker-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .rating-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .star-rating-picker {
+            display: inline-flex;
+            flex-direction: row-reverse;
+            justify-content: flex-end;
+            gap: 4px;
+            font-size: 1.8rem;
+            line-height: 1;
+        }
+
+            .star-rating-picker input {
+                position: absolute;
+                opacity: 0;
+                width: 0;
+                height: 0;
+                pointer-events: none;
+            }
+
+            .star-rating-picker label {
+                color: #4b5563;
+                cursor: pointer;
+                transition: color 0.2s, transform 0.1s;
+            }
+
+                .star-rating-picker label:hover,
+                .star-rating-picker label:hover ~ label,
+                .star-rating-picker input:checked ~ label {
+                    color: #f59e0b;
+                }
+
+                .star-rating-picker label:hover {
+                    transform: scale(1.15);
+                }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 1rem;
+            border-radius: 12px;
+            resize: vertical;
+            min-height: 110px;
+            font-family: inherit;
+            margin-bottom: 0.4rem;
+        }
+
+            textarea:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
+
+        .char-counter-wrapper {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 1.25rem;
+        }
+
+        .char-counter {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+
+        .btn-submit-review {
+            background: var(--accent-color);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .btn-submit-review:hover:not(:disabled) {
+                opacity: 0.9;
+                transform: translateY(-1px);
+            }
+
+            .btn-submit-review:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+        .reviews-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .review-card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: transform 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+            gap: 10px;
+        }
+
+        .review-user-info {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            flex-grow: 1;
+        }
+
+        .review-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+
+        .review-avatar-placeholder {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .review-user-details {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .review-username {
+            font-weight: 700;
+            color: var(--text-main);
+            font-size: 1rem;
+            line-height: 1.2;
+        }
+
+        .review-date {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .stars-display {
+            font-size: 1.15rem;
+            letter-spacing: 1px;
+            margin: 2px 0;
+            line-height: 1;
+        }
+
+        .star-filled {
+            color: #f59e0b;
+        }
+
+        .star-empty {
+            color: #4b5563;
+        }
+
+        .review-comment {
+            color: var(--text-main);
+            line-height: 1.5;
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* Кнопка "Изменить" */
+        .btn-edit-inline {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+            .btn-edit-inline:hover {
+                color: var(--text-main);
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+        /* Кнопка "Удалить" */
+        .btn-delete-inline {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #ef4444;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+            .btn-delete-inline:hover {
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
+
+        .btn-cancel-edit {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .btn-cancel-edit:hover {
+                color: var(--text-main);
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+        .unauth-note {
+            text-align: center;
+            background: var(--glass-bg);
+            border: 1px dashed var(--glass-border);
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 2.5rem;
+            color: var(--text-secondary);
+        }
+
+            .unauth-note a {
+                color: var(--accent-color);
+                text-decoration: none;
+                font-weight: 600;
+            }
+
+        @@media (max-width: 600px) {
+            .container
+
+        {
+            margin-top: 5rem;
+            padding: 0 0.75rem;
+        }
+
+        .page-title h1 {
+            font-size: 1.75rem;
+        }
+
+        .page-title p {
+            font-size: 0.9rem;
+        }
+
+        .add-review-card, .review-card {
+            padding: 1.25rem;
+            border-radius: 16px;
+        }
+
+        .star-rating-picker {
+            font-size: 1.8rem;
+        }
+
+        .edit-buttons-group {
+            flex-direction: column;
+            gap: 8px !important;
+        }
+
+            .edit-buttons-group .btn-submit-review,
+            .edit-buttons-group .btn-cancel-edit {
+                width: 100%;
+                text-align: center;
+                box-sizing: border-box;
+            }
+
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        function toggleEditReview(reviewId) {
+            const editDiv = document.getElementById(`review-edit-${reviewId}`);
+            if (editDiv) {
+                editDiv.style.display = (editDiv.style.display === 'none') ? 'block' : 'none';
+            }
+        }
+
+        function updateCharCounter(textarea, counterId, buttonId) {
+            const normalizedText = textarea.value.replace(/\r\n/g, "\n");
+            const count = normalizedText.length;
+
+            const counterEl = document.getElementById(counterId);
+            const submitBtn = document.getElementById(buttonId);
+
+            if (counterEl) {
+                counterEl.textContent = `${count} / 500 символов (мин. 10)`;
+
+                if (count > 0 && count < 10) {
+                    counterEl.style.color = '#ef4444';
+                } else if (count >= 470 && count <= 500) {
+                    counterEl.style.color = '#fbbf24';
+                } else if (count > 500) {
+                    counterEl.style.color = '#ef4444';
+                } else {
+                    counterEl.style.color = 'var(--text-secondary)';
+                }
+            }
+
+            if (submitBtn) {
+                if (count < 10 || count > 500) {
+                    submitBtn.disabled = true;
+                } else {
+                    submitBtn.disabled = false;
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const createTextarea = document.getElementById('createCommentInput');
+            if (createTextarea) {
+                updateCharCounter(createTextarea, 'createCharCounter', 'btnSubmitCreate');
+            }
+        });
+    </script>
+}
+
+<div class="container">
+    <div class="page-title">
+        <h1>💬 Отзывы о CrossChat</h1>
+        <p>Узнайте, что говорят пользователи о нашем сервисе автопостинга и нейро-автоответов</p>
+    </div>
+
+    <!-- ФОРМА СОЗДАНИЯ НОВОГО ОТЗЫВА -->
+    @if (isAuth)
+    {
+        <div class="add-review-card">
+            <h3>⭐ Оставить новый отзыв</h3>
+
+            <form action="/reviews/add" method="post">
+                <div class="rating-picker-row">
+                    <span class="rating-label">ВАША ОЦЕНКА:</span>
+
+                    <div class="star-rating-picker">
+                        <input type="radio" id="star5" name="rating" value="5" checked required />
+                        <label for="star5" title="5 звезд">★</label>
+
+                        <input type="radio" id="star4" name="rating" value="4" />
+                        <label for="star4" title="4 звезды">★</label>
+
+                        <input type="radio" id="star3" name="rating" value="3" />
+                        <label for="star3" title="3 звезды">★</label>
+
+                        <input type="radio" id="star2" name="rating" value="2" />
+                        <label for="star2" title="2 звезды">★</label>
+
+                        <input type="radio" id="star1" name="rating" value="1" />
+                        <label for="star1" title="1 звезда">★</label>
+                    </div>
+                </div>
+
+                <textarea name="comment"
+                      id="createCommentInput"
+                      required
+                      minlength="10"
+                      maxlength="500"
+                      placeholder="Поделитесь вашим впечатлением от использования CrossChat (от 10 до 500 символов)..."
+                      oninput="updateCharCounter(this, 'createCharCounter', 'btnSubmitCreate')">@(preservedComment)</textarea>
+
+                <div class="char-counter-wrapper">
+                    <span id="createCharCounter" class="char-counter">0 / 500 символов (мин. 10)</span>
+                </div>
+
+                <button type="submit" id="btnSubmitCreate" class="btn-submit-review">
+                    Опубликовать отзыв
+                </button>
+            </form>
+        </div>
+    }
+    else
+    {
+        <div class="unauth-note">
+            Чтобы оставить собственный отзыв, пожалуйста, <a href="/auth/login">войдите в аккаунт</a>.
+        </div>
+    }
+
+    <!-- СПИСОК ВСЕХ ОТЗЫВОВ -->
+    <div class="reviews-list">
+        @if (Model != null && Model.Any())
+        {
+            @foreach (var item in Model)
+            {
+                bool isMyReview = currentUserId.HasValue && item.UserId == currentUserId.Value;
+
+                <div class="review-card" id="review-card-@item.Id">
+                    <div class="review-header">
+                        <div class="review-user-info">
+                            @if (!string.IsNullOrEmpty(item.User.AvatarUrl))
+                            {
+                                <img src="@item.User.AvatarUrl" class="review-avatar" alt="Avatar">
+                            }
+                            else
+                            {
+                                <div class="review-avatar-placeholder">
+                                    @(item.User.Name?.Length > 0 ? item.User.Name.Substring(0, 1).ToUpper() : "U")
+                                </div>
+                            }
+
+                            <div class="review-user-details">
+                                <div class="review-username">
+                                    @item.User.Name
+                                    @if (isMyReview)
+                                    {
+                                        <span style="font-size: 0.75rem; color: var(--accent-color); margin-left: 4px;">(Вы)</span>
+                                    }
+                                </div>
+
+                                <div class="stars-display">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <span class="@(i <= item.Rating ? "star-filled" : "star-empty")">★</span>
+                                    }
+                                </div>
+
+                                <div class="review-date">@item.CreatedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                            </div>
+                        </div>
+
+                        <!-- Кнопки управления (Изменить / Удалить) только для владельца -->
+                        @if (isMyReview)
+                        {
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <button type="button" class="btn-edit-inline" onclick="toggleEditReview(@item.Id)">
+                                    ✏️ Изменить
+                                </button>
+
+                                <form action="/reviews/delete/@item.Id" method="post" style="display: inline;" onsubmit="return confirm('Вы уверены, что хотите полностью удалить свой отзыв?');">
+                                    <button type="submit" class="btn-delete-inline">
+                                        🗑️ Удалить
+                                    </button>
+                                </form>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="review-comment">@item.Comment</div>
+
+                    <!-- РЕДАКТИРОВАНИЕ -->
+                    @if (isMyReview)
+                    {
+                        <div id="review-edit-@item.Id" style="display: none; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px dashed var(--glass-border);">
+                            <form action="/reviews/update/@item.Id" method="post">
+                                <div class="rating-picker-row">
+                                    <span class="rating-label">НОВАЯ ОЦЕНКА:</span>
+
+                                    <div class="star-rating-picker">
+                                        @for (int i = 5; i >= 1; i--)
+                                        {
+                                            <input type="radio" id="star-edit-@item.Id-@i" name="rating" value="@i" required @(item.Rating == i ? "checked" : "") />
+                                            <label for="star-edit-@item.Id-@i" title="@i звезд">★</label>
+                                        }
+                                    </div>
+                                </div>
+
+                                <textarea name="comment"
+                              id="editCommentInput_@item.Id"
+                              required
+                              minlength="10"
+                              maxlength="500"
+                              placeholder="Введите новый текст отзыва..."
+                              oninput="updateCharCounter(this, 'editCharCounter_@item.Id', 'btnSubmitEdit_@item.Id')">@item.Comment</textarea>
+
+                                <div class="char-counter-wrapper">
+                                    <span id="editCharCounter_@item.Id" class="char-counter">@item.Comment.Length / 500 символов (мин. 10)</span>
+                                </div>
+
+                                <div class="edit-buttons-group" style="display: flex; gap: 10px;">
+                                    <button type="submit" id="btnSubmitEdit_@item.Id" class="btn-submit-review">Сохранить правки</button>
+                                    <button type="button" class="btn-cancel-edit" onclick="toggleEditReview(@item.Id)">Отмена</button>
+                                </div>
+                            </form>
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div style="text-align: center; color: var(--text-secondary); padding: 3rem;">
+                Пока нет ни одного отзыва. Будьте первыми!
+            </div>
+        }
+    </div>
+</div>

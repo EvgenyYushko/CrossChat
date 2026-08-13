@@ -6,5 +6,7 @@ namespace CrossChat.Constants
 
 		public const string TELEGRAM_API_ID = "TELEGRAM_API_ID";
 		public const string TELEGRAM_API_HASH = "TELEGRAM_API_HASH";
+		public const string TELEGRAM_ADMIN_ID = "TELEGRAM_ADMIN_ID";
+
 	}
 }

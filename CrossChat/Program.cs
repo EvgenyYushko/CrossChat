@@ -40,6 +40,8 @@ builder.Services.Configure<SocialMediaSettings>(builder.Configuration.GetSection
 builder.Services.Configure<ExternalHostingsSettings>(builder.Configuration.GetSection("ExternalHostingsSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 
+GetConfigOrThrow(TELEGRAM_ADMIN_ID);
+
 var connectionString = Environment.GetEnvironmentVariable("DB_URL_POSTGRESQL");
 if (string.IsNullOrEmpty(connectionString))
 {

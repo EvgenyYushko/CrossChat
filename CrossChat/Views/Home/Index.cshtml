@@ -1,12 +1,12 @@
 @{
     ViewData["Title"] = "Connect. Prompt. Respond.";
     string platformImageUrl = "/images/CrossChatPng.png";
+    string platformImageSmal = "/images/favicon.png";
+    var topReviews = ViewBag.TopReviews as List<CrossChat.Data.Entities.ReviewEntity>;
 }
 
 @section Styles {
     <style>
-        /* Специфичные стили ТОЛЬКО для Главной */
-
         .container {
             flex: 1;
             display: flex;
@@ -17,16 +17,8 @@
             max-width: 1200px;
             margin: 0 auto;
             width: 100%;
+            box-sizing: border-box;
         }
-
-        /* Hero Image */
-        .preview-wrapper {
-            position: relative;
-            width: 100%;
-            max-width: 900px;
-            margin-bottom: 3rem;
-        }
-
 
         /* Hero Image Container */
         .preview-wrapper {
@@ -36,19 +28,17 @@
             margin-bottom: 3rem;
         }
 
-        /* ИСПРАВЛЕНИЕ: Убрали рамку, фон и тень. Оставили только позиционирование */
         .platform-preview {
-            position: relative; /* Чтобы свечение было точно под ним */
-            z-index: 1; /* Картинка поверх свечения */
+            position: relative;
+            z-index: 1;
             width: 100%;
         }
 
-            /* Картинка теперь не сжимается рамкой */
             .platform-preview img {
                 width: 100%;
                 height: auto;
                 display: block;
-                margin: 0 auto; /* Центрируем, если картинка меньше контейнера */
+                margin: 0 auto;
             }
 
         /* Hero Text */
@@ -104,6 +94,141 @@
                 transform: translateY(-2px);
             }
 
+        .btn-secondary {
+            background: var(--glass-bg);
+            color: var(--text-main);
+            border: 1px solid var(--glass-border);
+        }
+
+            .btn-secondary:hover {
+                background: rgba(255, 255, 255, 0.1);
+                transform: translateY(-2px);
+            }
+
+        /* --- СТИЛИ АНИМИРОВАННОГО ВИДЖЕТА ОТЗЫВОВ --- */
+        .reviews-widget-card {
+            display: block;
+            text-decoration: none;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.25rem 1.75rem;
+            max-width: 650px;
+            width: 100%;
+            margin: 3.5rem auto 0 auto;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+            text-align: left;
+            box-sizing: border-box;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+            .reviews-widget-card:hover {
+                transform: translateY(-3px);
+                border-color: var(--accent-color);
+                box-shadow: 0 15px 30px rgba(99, 102, 241, 0.2);
+            }
+
+        .reviews-widget-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 0.5rem;
+        }
+
+        .reviews-widget-badge {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #f59e0b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .reviews-widget-link {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent-color);
+            transition: color 0.2s;
+        }
+
+        .review-slide-container {
+            position: relative;
+            min-height: 75px;
+        }
+
+        /* Анимация сменяющихся слайдов */
+        .review-slide {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.6s ease-in-out;
+        }
+
+            .review-slide.active {
+                display: block;
+                opacity: 1;
+            }
+
+        .review-slide-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 0.5rem;
+        }
+
+        .review-slide-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--glass-border);
+        }
+
+        .review-slide-avatar-placeholder {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .review-slide-name {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+        }
+
+        .review-slide-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.4;
+            font-style: italic;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .star-filled {
+            color: #f59e0b;
+        }
+
+        .star-empty {
+            color: #4b5563;
+        }
+
         /* Features */
         .features {
             display: grid;
@@ -122,7 +247,7 @@
         }
 
             .feature h3 {
-                color: white;
+                color: var(--text-main);
                 margin-bottom: 0.5rem;
                 font-size: 1.2rem;
             }
@@ -140,54 +265,76 @@
         }
 
         @@media (max-width: 768px) {
-            .hero h1
+            .hero h1 {
+                font-size: 2.2rem;
+            }
 
-        {
-            font-size: 2.2rem;
+            .container {
+                padding-top: 6rem;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .reviews-widget-card {
+                padding: 1rem 1.25rem;
+            }
         }
 
-        .container {
-            padding-top: 6rem;
-        }
-
-        .btn {
-            width: 100%;
-        }
-
-        }
-       
-        /* === КНОПКА В СВЕТЛОЙ ТЕМЕ === */
+        /* Светлая тема */
         [data-theme="light"] .btn-primary {
-            background: #0f172a; /* Темно-синий/почти черный цвет */
-            color: #ffffff; /* Белый текст */
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background: #0f172a;
+            color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        
-        [data-theme="light"] .btn-primary:hover {
-            background: #1e293b; /* Чуть светлее при наведении */
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
+
+            [data-theme="light"] .btn-primary:hover {
+                background: #1e293b;
+                transform: translateY(-2px);
+            }
     </style>
 }
 
+@section Scripts {
+    <script>
+        // Скрипт авто-поочередной смены отзывов каждые 4 секунды
+        document.addEventListener('DOMContentLoaded', function () {
+            const slides = document.querySelectorAll('.review-slide');
+            if (slides.length > 1) {
+                let currentIndex = 0;
+                setInterval(() => {
+                    // Плавно скрываем текущий
+                    slides[currentIndex].classList.remove('active');
+
+                    // Вычисляем следующий индекс
+                    currentIndex = (currentIndex + 1) % slides.length;
+
+                    // Плавно показываем следующий
+                    slides[currentIndex].classList.add('active');
+                }, 4000); // Интервал смены: 4000 мс (4 секунды)
+            }
+        });
+    </script>
+}
+
 <div class="container">
-    <!-- 1. Картинка -->
+    <!-- 1. Картинка дашборда -->
     <div class="preview-wrapper">
         <div class="platform-preview">
             <img src="@platformImageUrl" alt="CrossChat Dashboard">
         </div>
     </div>
 
-    <!-- 2. Текст -->
+    <!-- 2. Текст Hero -->
     <div class="hero">
         <h1>
             Единый центр <br>
             <span class="gradient-text">управления диалогами</span>
         </h1>
         <p>
-            Подключите Instagram Business API за секунды.
-            Автоответы, аналитика и управление контентом в одном месте.
+            Подключите Instagram, Telegram и другие соцсети за секунды.
+            Автоответы ИИ, аналитика и умный автопостинг в одном месте.
         </p>
 
         <div class="buttons">
@@ -199,15 +346,73 @@
             {
                 <a href="/auth/login" class="btn btn-primary">Начать бесплатно</a>
             }
+@* 
+            <a href="/reviews" class="btn btn-secondary">💬 Отзывы</a> *@
         </div>
     </div>
 
-    <!-- 3. Фичи -->
+    <!-- 3. ИНТЕРАКТИВНЫЙ АНИМИРОВАННЫЙ ВИДЖЕТ ОТЗЫВОВ -->
+    <a href="/reviews" class="reviews-widget-card" title="Нажмите, чтобы просмотреть все отзывы">
+        <div class="reviews-widget-header">
+            <span class="reviews-widget-badge">Отзывы наших клиентов</span>
+            <span class="reviews-widget-link">Все отзывы</span>
+        </div>
+
+        <div class="review-slide-container">
+            @if (topReviews != null && topReviews.Any())
+            {
+                @for (int i = 0; i < topReviews.Count; i++)
+                {
+                    var rev = topReviews[i];
+                    <div class="review-slide @(i == 0 ? "active" : "")">
+                        <div class="review-slide-user">
+                            @if (!string.IsNullOrEmpty(rev.User.AvatarUrl))
+                            {
+                                <img src="@rev.User.AvatarUrl" class="review-slide-avatar" alt="Avatar">
+                            }
+                            else
+                            {
+                                <div class="review-slide-avatar-placeholder">
+                                    @(rev.User.Name?.Length > 0 ? rev.User.Name.Substring(0, 1).ToUpper() : "U")
+                                </div>
+                            }
+                            <div>
+                                <div class="review-slide-name">@rev.User.Name</div>
+                                <div style="font-size: 0.8rem; letter-spacing: 1px;">
+                                    @for (int s = 1; s <= 5; s++)
+                                    {
+                                        <span class="@(s <= rev.Rating ? "star-filled" : "star-empty")">★</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <p class="review-slide-text">«@rev.Comment»</p>
+                    </div>
+                }
+            }
+            else
+            {
+                /* Заглушка с логотипом CrossChat, если отзывов еще нет в БД */
+                <div class="review-slide active">
+                    <div class="review-slide-user">
+                        <img src="@platformImageSmal" class="review-slide-avatar" alt="CrossChat Logo">
+                        <div>
+                            <div class="review-slide-name">CrossChat Команда</div>
+                            <div style="font-size: 0.8rem; color: #f59e0b;">★★★★★</div>
+                        </div>
+                    </div>
+                    <p class="review-slide-text">«Присоединяйтесь к сервису и будьте первыми, кто оставит отзыв!»</p>
+                </div>
+            }
+        </div>
+    </a>
+
+    <!-- 4. Фичи -->
     <div class="features">
         <div class="feature">
             <span class="feature-icon">⚡</span>
             <h3>Быстрый старт</h3>
-            <p>Официальный API Meta. Никаких банов, полная безопасность.</p>
+            <p>Официальные API соцсетей. Никаких банов, полная безопасность.</p>
         </div>
         <div class="feature">
             <span class="feature-icon">🤖</span>
@@ -215,9 +420,9 @@
             <p>Gemini отвечает клиентам по вашему сценарию 24/7.</p>
         </div>
         <div class="feature">
-            <span class="feature-icon">📈</span>
-            <h3>Аналитика</h3>
-            <p>Следите за вовлеченностью и ростом аудитории.</p>
+            <span class="feature-icon">📅</span>
+            <h3>Умный автопостинг</h3>
+            <p>Планируйте и публикуйте посты во все соцсети одновременно.</p>
         </div>
     </div>
 </div>

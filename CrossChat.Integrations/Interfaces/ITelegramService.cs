@@ -10,6 +10,7 @@ namespace CrossChat.Integrations.Interfaces
 		Task SetWebhookAsync(string token, string webhookUrl);
 		Task DeleteWebhookAsync(string token);
 		Task SendMessageAsync(string token, long chatId, string text);
+		Task<Message> SendMessageToAdmin(string text, ReplyMarkup replyMarkup = null);
 
 		//
 		Task<Message> SendMessage(long senderId, string text, ReplyMarkup replyMarkup);

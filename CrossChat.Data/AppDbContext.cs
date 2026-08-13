@@ -26,6 +26,8 @@ namespace CrossChat.Data
 		public DbSet<PostImageEntity> PostImages { get; set; }
 		public DbSet<NetworkStateEntity> NetworkStates { get; set; }
 
+		public DbSet<ReviewEntity> Reviews { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			// Ускоряем поиск при входе

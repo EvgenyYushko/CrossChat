@@ -1,4 +1,5 @@
 using CrossChat.Integrations.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -9,10 +10,14 @@ namespace CrossChat.Integrations.Services.Telegram
 	public class TelegramService : ITelegramService
 	{
 		private readonly ITelegramBotClient _telegramBotClient;
+		private readonly long ADMIN_ID;
+		private const string TELEGRAM_ADMIN_ID = "TELEGRAM_ADMIN_ID";
 
-		public TelegramService(ITelegramBotClient telegramBotClient)
+		public TelegramService(ITelegramBotClient telegramBotClient, IConfiguration configuration)
 		{
 			_telegramBotClient = telegramBotClient;
+			var adminId = configuration[TELEGRAM_ADMIN_ID] ?? Environment.GetEnvironmentVariable(TELEGRAM_ADMIN_ID);
+			ADMIN_ID = long.Parse(adminId); ;
 		}
 
 		public Task<Message> SendMessage(long senderId, string text, ReplyMarkup replyMarkup)
@@ -23,6 +28,11 @@ namespace CrossChat.Integrations.Services.Telegram
 		public Task<Message> SendMessage(long senderId, string text)
 		{
 			return _telegramBotClient.SendMessage(senderId, text);
+		}
+
+		public Task<Message> SendMessageToAdmin(string text, ReplyMarkup replyMarkup = null)
+		{
+			return SendMessage(text, ADMIN_ID, replyMarkup: replyMarkup);
 		}
 
 		public Task<Message> SendMessage(string text
@@ -250,6 +260,6 @@ namespace CrossChat.Integrations.Services.Telegram
 			var bot = new TelegramBotClient(token);
 			await bot.SendMessage(chatId, text);
 		}
-		
+
 	}
 }

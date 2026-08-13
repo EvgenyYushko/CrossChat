@@ -115,7 +115,7 @@ public class AuthController : Controller
 		var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
 		var avatarUrl = claims?.FirstOrDefault(c => c.Type == "urn:google:picture")?.Value;
 
-		var base64Avatar = await DownloadImageAsBase64(avatarUrl);
+		var base64Avatar = await DownloadImageAsBase64ForHtml(avatarUrl);
 
 		if (string.IsNullOrEmpty(googleId) || string.IsNullOrEmpty(email))
 		{
