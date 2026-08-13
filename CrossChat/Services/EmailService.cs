@@ -1,6 +1,6 @@
 using CrossChat.Helpers;
 using CrossChat.Integrations.Interfaces;
-using  CrossChat.Integrations.Models;
+using CrossChat.Integrations.Models;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
@@ -68,7 +68,7 @@ public class EmailService : IEmailService
 
 	public async Task SendWelcomeEmailAsync(string userName, string userEmail, string loginUrl, string logoPath = "/images/CrossChatPng.png")
 	{
-		var logoUrl = $"{APP_URL}{logoPath}"; 
+		var logoUrl = $"{APP_URL}{logoPath}";
 
 		var html = EmailTemplates.GetHtml(userName, userEmail, loginUrl, logoUrl);
 
@@ -104,15 +104,28 @@ public class EmailService : IEmailService
 			email.Body = bodyBuilder.ToMessageBody();
 
 			using var smtp = new SmtpClient();
-
+			
 			// Проверка сертификата
 			smtp.CheckCertificateRevocation = _settings.CheckCertificateRevocation;
 
-			await smtp.ConnectAsync(
-				_settings.SmtpHost,
-				_settings.SmtpPort,
-				_settings.UseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None
-			);
+			// Подбор правильного SSL-режима
+			SecureSocketOptions socketOptions;
+			if (!_settings.UseSsl)
+			{
+				socketOptions = SecureSocketOptions.None;
+			}
+			else
+			{
+				// Если порт 465 -> SslOnConnect, если 587 -> StartTls, иначе Auto
+				socketOptions = _settings.SmtpPort switch
+				{
+					465 => SecureSocketOptions.SslOnConnect,
+					587 => SecureSocketOptions.StartTls,
+					_ => SecureSocketOptions.Auto
+				};
+			}
+
+			await smtp.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, socketOptions);
 
 			await smtp.AuthenticateAsync(_settings.SmtpUsername, _settings.SmtpPassword);
 			await smtp.SendAsync(email);
@@ -136,8 +149,8 @@ public class EmailService : IEmailService
 	public async Task SendErrorRefreshToken(string toEmail, string userName, int botId, string botName, string socialType)
 	{
 		var loginUrl = $"{APP_URL}/{socialType}?botId={botId}"; // Ссылка на страницу подключения
-        var emailBody = EmailTemplates.GetReauthEmailHtml(userName, botName, socialType, loginUrl);
-        await SendFromNoReplyAsync(toEmail, $"⚠️ Бот {botName} ({socialType}) требует внимания", emailBody);
+		var emailBody = EmailTemplates.GetReauthEmailHtml(userName, botName, socialType, loginUrl);
+		await SendFromNoReplyAsync(toEmail, $"⚠️ Бот {botName} ({socialType}) требует внимания", emailBody);
 	}
 
 	/// <summary>

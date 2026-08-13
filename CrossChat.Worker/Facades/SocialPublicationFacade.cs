@@ -19,6 +19,7 @@ namespace CrossChat.Worker.Facades
 		private readonly IXService _xService;
 		private readonly IThreadsService _threadsService;
 		private readonly ITelegramChannelConsole _telegramChannelConsole;
+		private readonly IInstagramConsole _instagramConsole;
 		private readonly ILogger<SocialPublicationFacade> _logger;
 		private AppDbContext _appDbContext;
 		public SocialPublicationFacade(IPostService postService
@@ -29,6 +30,7 @@ namespace CrossChat.Worker.Facades
 			, IXService xService
 			, IThreadsService threadsService
 			, ITelegramChannelConsole telegramChannelConsole
+			, IInstagramConsole instagramConsole
 			, ILogger<SocialPublicationFacade> logger
 			, AppDbContext appDbContext)
 		{
@@ -41,6 +43,7 @@ namespace CrossChat.Worker.Facades
 			_xService = xService;
 			_threadsService = threadsService;
 			_telegramChannelConsole = telegramChannelConsole;
+			_instagramConsole = instagramConsole;
 			_logger = logger;
 		}
 
@@ -65,10 +68,7 @@ namespace CrossChat.Worker.Facades
 						throw new Exception($"Не найдены настройки или AccessToken для Instagram аккаунта (BotId: {state.BotId})");
 					}
 
-					if (!instaSettings.IsActive)
-					{
-						throw new Exception($"Instagram бот (BotId: {state.BotId}) отключен в настройках.");
-					}
+					await _instagramConsole.Log($"Начало отправки поста в профиль {instaSettings.Username}.", instaSettings.UserId, state.BotId);
 
 					// 2. Публикуем пост в ленту
 					var instaResult = await InstagramPost(caption, files, instaSettings.AccessToken);
@@ -76,6 +76,8 @@ namespace CrossChat.Worker.Facades
 					{
 						throw new Exception($"Ошибка API при публикации поста в Instagram (BotId: {state.BotId})");
 					}
+
+					await _instagramConsole.Log($"Пост успешно опубликован в профиль {instaSettings.Username}.", instaSettings.UserId, state.BotId);
 
 					// 3. Публикуем историю (если есть картинки)
 					//if (files != null && files.Any())
@@ -146,7 +148,7 @@ namespace CrossChat.Worker.Facades
 
 					await _telegramChannelConsole.Log($"Начало отправки поста в канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
 					await TelegramPost(caption, files, channel);
-					await _telegramChannelConsole.Log($"Пост успешно опубликованв канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
+					await _telegramChannelConsole.Log($"Пост успешно опубликован в канал {channel.ChannelUsername}.", channel.UserId, state.BotId);
 
 					break;
 				case NetworkType.X:

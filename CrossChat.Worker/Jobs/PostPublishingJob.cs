@@ -26,8 +26,6 @@ namespace CrossChat.Worker.Jobs
 			var now = DateTimeNow;
 			List<int> pendingStateIds;     
 
-			_logger.LogInformation($"Стард джобы PostPublishingJob. Ищем посты меньше даты  {now}");
-
 			// 1. В первом коротком скоупе достаем только ID всех состояний, готовых к публикации
             using (var scope = _scopeFactory.CreateScope())
             {

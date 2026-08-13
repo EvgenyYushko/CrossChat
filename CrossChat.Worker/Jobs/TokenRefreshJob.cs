@@ -295,7 +295,8 @@ public class TokenRefreshJob : IJob
 					}
 					catch (Exception mailEx)
 					{
-						_logger.LogError(mailEx, "❌ Не удалось отправить email-уведомление (Таймаут SMTP)");
+						_logger.LogError("❌ Не удалось отправить email-уведомление (Таймаут SMTP)" + mailEx);
+						await _xConsole.LogWarning("❌ Не удалось отправить email-уведомление (Таймаут SMTP)", settings.UserId, settings.Id);
 					}
 				}
 			}
@@ -310,7 +311,7 @@ public class TokenRefreshJob : IJob
 				}
 				catch (Exception mailEx)
 				{
-					_logger.LogError(mailEx, "❌ Не удалось отправить email-уведомление (Таймаут SMTP)");
+					await _xConsole.LogWarning("❌ Не удалось отправить email-уведомление (Таймаут SMTP)" + mailEx, settings.UserId, settings.Id);
 				}
 			}
 		}

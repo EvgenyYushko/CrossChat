@@ -10,7 +10,9 @@ namespace CrossChat.Integrations.Helpers
 
 			try
 			{
-				var base64String = DownloadImageAsBase64(imageUrl);
+				var base64String = await DownloadImageAsBase64(imageUrl);
+
+				if (string.IsNullOrEmpty(base64String)) return null;
 
 				// ВАЖНО: Возвращаем сразу готовый для HTML формат!
 				// Тогда во View ничего менять не придется.
