@@ -5,6 +5,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using Resend;
 using static CrossChat.Constants.AppConstants;
 
 namespace CrossChat.Services;
@@ -13,11 +14,13 @@ public class EmailService : IEmailService
 {
 	private readonly EmailSettings _settings;
 	private readonly ILogger<EmailService> _logger;
+	private readonly IResend _resend;
 
-	public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger)
+	public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger, IResend resend)
 	{
 		_settings = settings.Value;
 		_logger = logger;
+		_resend = resend;
 	}
 
 	public async Task SendFromNoReplyAsync(string toEmail, string subject, string htmlBody)
@@ -80,61 +83,23 @@ public class EmailService : IEmailService
 	}
 
 	public async Task SendEmailAsync(
-	string fromAddress,
-	string fromName,
-	string toEmail,
-	string subject,
-	string htmlBody,
-	string plainTextBody = null)
+		string fromAddress,
+		string fromName,
+		string toEmail,
+		string subject,
+		string htmlBody,
+		string plainTextBody = null)
 	{
 		try
 		{
-			var email = new MimeMessage();
-			email.From.Add(new MailboxAddress(fromName, fromAddress));
-			email.To.Add(MailboxAddress.Parse(toEmail));
-			email.Subject = subject;
-
-			var bodyBuilder = new BodyBuilder
+			if(true)
 			{
-				HtmlBody = htmlBody,
-				TextBody = plainTextBody ?? StripHtml(htmlBody)
-			};
-
-			email.Body = bodyBuilder.ToMessageBody();
-
-			using var smtp = new SmtpClient();
-
-			// 1. ИСПРАВЛЕНИЕ ДЛЯ DOCKER/RENDER: Отключаем проверку отзыва сертификатов (CRL/OCSP).
-			// Именно она вызывает зависание и TimeoutException в контейнерах Linux!
-			smtp.CheckCertificateRevocation = false;
-
-			// 2. Устанавливаем явный таймаут соединения (15 секунд вместо бесконечного ожидания)
-			smtp.Timeout = 30000;
-
-			// 3. Отключаем строгую проверку цепочки сертификатов Linux
-			smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
-
-			// Подбор правильного SSL-режима
-			SecureSocketOptions socketOptions;
-			if (!_settings.UseSsl)
-			{
-				socketOptions = SecureSocketOptions.None;
+				await SendResend(fromAddress, fromName, toEmail, subject, htmlBody);
 			}
 			else
 			{
-				socketOptions = _settings.SmtpPort switch
-				{
-					465 => SecureSocketOptions.SslOnConnect,
-					587 => SecureSocketOptions.StartTls,
-					_ => SecureSocketOptions.Auto
-				};
+				await SendMailKit(fromAddress, fromName, toEmail, subject, htmlBody, plainTextBody);
 			}
-
-			// Подключаемся к SMTP серверу
-			await smtp.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, socketOptions);
-			await smtp.AuthenticateAsync(_settings.SmtpUsername, _settings.SmtpPassword);
-			await smtp.SendAsync(email);
-			await smtp.DisconnectAsync(true);
 
 			_logger.LogInformation(
 				"Письмо успешно отправлено от {From} на {To} с темой '{Subject}'",
@@ -147,9 +112,80 @@ public class EmailService : IEmailService
 				"Ошибка отправки email от {From} на {To}: {Message}",
 				fromAddress, toEmail, ex.Message
 			);
-			// Не перевыбрасываем throw, чтобы ошибка отправки почты не ломала работу всего сервера
 		}
 	}
+
+	private async Task SendMailKit(string fromAddress, string fromName, string toEmail, string subject, string htmlBody, string plainTextBody)
+	{
+		var email = new MimeMessage();
+		email.From.Add(new MailboxAddress(fromName, fromAddress));
+		email.To.Add(MailboxAddress.Parse(toEmail));
+		email.Subject = subject;
+
+		var bodyBuilder = new BodyBuilder
+		{
+			HtmlBody = htmlBody,
+			TextBody = plainTextBody ?? StripHtml(htmlBody)
+		};
+
+		email.Body = bodyBuilder.ToMessageBody();
+		var smtp = new SmtpClient();
+
+		// 1. ИСПРАВЛЕНИЕ ДЛЯ DOCKER/RENDER: Отключаем проверку отзыва сертификатов (CRL/OCSP).
+		// Именно она вызывает зависание и TimeoutException в контейнерах Linux!
+		smtp.CheckCertificateRevocation = false;
+
+		// 2. Устанавливаем явный таймаут соединения (15 секунд вместо бесконечного ожидания)
+		smtp.Timeout = 30000;
+
+		// 3. Отключаем строгую проверку цепочки сертификатов Linux
+		smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
+
+		// Подбор правильного SSL-режима
+		SecureSocketOptions socketOptions;
+		if (!_settings.UseSsl)
+		{
+			socketOptions = SecureSocketOptions.None;
+		}
+		else
+		{
+			socketOptions = _settings.SmtpPort switch
+			{
+				465 => SecureSocketOptions.SslOnConnect,
+				587 => SecureSocketOptions.StartTls,
+				_ => SecureSocketOptions.Auto
+			};
+		}
+
+		// Подключаемся к SMTP серверу
+		await smtp.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, socketOptions);
+		await smtp.AuthenticateAsync(_settings.SmtpUsername, _settings.SmtpPassword);
+		await smtp.SendAsync(email);
+		await smtp.DisconnectAsync(true);
+	}
+
+	private async Task SendResend(string fromAddress, string fromName, string toEmail, string subject, string htmlBody)
+    {
+        var message = new EmailMessage
+        {
+            From = $"{fromName} <{fromAddress}>", // Ваш домен: "CrossChat <noreply@crosschat.ru>"
+            To = toEmail,                         // Кому отправляем
+            Subject = subject,
+            HtmlBody = htmlBody
+        };
+
+        // Официальный асинхронный метод библиотеки Resend
+        var response = await _resend.EmailSendAsync(message);
+
+        if (response.Success)
+        {
+            Console.WriteLine($"✅ Письмо успешно отправлено! ID: {response.Content.Version}");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Ошибка Resend: {response.Exception?.Message}");
+        }
+    }
 
 	public async Task SendErrorRefreshToken(string toEmail, string userName, int botId, string botName, string socialType)
 	{

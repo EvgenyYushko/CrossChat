@@ -21,6 +21,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using Quartz;
+using Resend;
 using StackExchange.Redis;
 using Telegram.Bot;
 using static CrossChat.Constants.AppConstants;
@@ -28,6 +29,7 @@ using static CrossChat.Worker.WorkerInstaller;
 
 string GEMINI_API_KEY = "GEMINI_API_KEY";
 string TELEGRAM_BOT_TOKEN = "TELEGRAM_BOT_TOKEN";
+string RESEND_API_TOKEN = "RESEND_API_TOKEN";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -235,6 +237,14 @@ builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
 builder.Services.AddSingleton<ITelegramChannelConsole, TelegramChannelConsole>();
 
 builder.Services.AddSingleton<IEmailService, EmailService>();
+
+builder.Services.Configure<ResendClientOptions>(options =>
+{
+	//https://resend.com/domains
+    options.ApiToken = GetConfigOrThrow(RESEND_API_TOKEN);
+});
+builder.Services.AddHttpClient<IResend, ResendClient>();
+builder.Services.AddTransient<IEmailService, EmailService>();
 
 var app = builder.Build();
 

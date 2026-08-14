@@ -101,13 +101,12 @@ namespace CrossChat.Controllers
 				// Передаем кнопку в метод SendMessageToAdmin
 				await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
 
-				await _emailService.SendFromNoReplyAsync("jeka-krut@mail.ru", "Test send comment", adminMessage);
+				await _emailService.SendFromNoReplyAsync("yushkoevgeny@gmail.com", "test", adminMessage);
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "[Reviews] Не удалось отправить уведомление о новом отзыве в Telegram админу");
 			}
-
 
 			TempData["Success"] = "Спасибо! Ваш отзыв успешно опубликован.";
 			return RedirectToAction("Index");
