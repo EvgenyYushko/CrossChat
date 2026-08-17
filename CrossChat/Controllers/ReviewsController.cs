@@ -101,6 +101,7 @@ namespace CrossChat.Controllers
 				// Передаем кнопку в метод SendMessageToAdmin
 				await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
 
+				//https://gravatar.com/profile/avatars
 				await _emailService.SendFromNoReplyAsync("yushkoevgeny@gmail.com", "test", adminMessage);
 			}
 			catch (Exception ex)

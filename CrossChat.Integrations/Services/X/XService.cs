@@ -75,16 +75,21 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<(string AccessToken, string RefreshToken, int ExpiresIn)?> RefreshTokenAsync(string refreshToken, string xClientId, string xClientSecret)
 		{
-			var tokenUrl = "https://api.twitter.com/2/oauth2/token";
+			var tokenUrl = "https://api.x.com/2/oauth2/token";
 
-			// X требует Basic Auth заголовок: Base64(ClientId:ClientSecret)
-			var authHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{xClientId}:{xClientSecret}"));
+			// 1. Очищаем от случайных пробелов
+			var cleanClientId = xClientId.Trim();
+			var cleanClientSecret = xClientSecret.Trim();
 
+			// 2. Для Confidential Client авторизация передается через Basic Auth с URL-экранированием
+			var credentials = $"{Uri.EscapeDataString(cleanClientId)}:{Uri.EscapeDataString(cleanClientSecret)}";
+			var authHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials));
+
+			// 3. ИСПРАВЛЕНИЕ: В теле запроса НЕ ДОЛЖНО быть "client_id", если используется Basic Auth!
 			var values = new Dictionary<string, string>
 			{
 				{ "grant_type", "refresh_token" },
-				{ "refresh_token", refreshToken },
-				{ "client_id", xClientId }
+				{ "refresh_token", refreshToken }
 			};
 
 			var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
@@ -92,6 +97,9 @@ namespace CrossChat.Integrations.Services
 				Content = new FormUrlEncodedContent(values)
 			};
 			request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authHeader);
+
+			// User-Agent для защиты от блокировок Cloudflare
+			request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
 			try
 			{
