@@ -8,7 +8,6 @@
     <style>
         /* Уникальные стили для страницы X */
 
-        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
             max-width: 800px;
             width: 100%;
@@ -17,13 +16,12 @@
         }
 
         .card {
-            background: var(--glass-bg);
+            background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
         }
 
-        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
         .connected-header {
             display: flex;
             flex-direction: column;
@@ -37,7 +35,7 @@
             height: 120px;
             border-radius: 50%;
             object-fit: cover;
-            border: 4px solid var(--text-main); /* ИСПРАВЛЕНИЕ: Адаптивная рамка (белая в темной теме, черная в светлой) */
+            border: 4px solid var(--text-main);
             padding: 4px;
             background: transparent;
             margin-bottom: 1rem;
@@ -117,7 +115,7 @@
             box-sizing: border-box;
         }
 
-        /* Стилизация кнопки консоли бота (стеклянный стиль) */
+        /* Стилизация кнопки консоли бота */
         .btn-console {
             background: rgba(15, 23, 42, 0.4) !important;
             border: 1px solid var(--glass-border) !important;
@@ -131,7 +129,7 @@
                 transform: translateY(-1px);
             }
 
-        /* Стилизация кнопки автопостинга (Индиго-градиент) */
+        /* Стилизация кнопки автопостинга */
         .btn-autoposting {
             background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
             color: #ffffff !important;
@@ -276,7 +274,6 @@
             padding: 1.5rem;
         }
 
-        /* Складываем кнопки управления в один ряд вертикально на мобилках */
         .action-buttons-group {
             grid-template-columns: 1fr !important;
             gap: 10px !important;
@@ -296,7 +293,6 @@
                 border-color: #94a3b8 !important;
             }
 
-        /* В светлой теме кнопка авторизации X */
         [data-theme="light"] .btn-x {
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
@@ -316,14 +312,24 @@
                 <img src="@Model.ProfilePictureUrl" class="big-avatar" onerror="this.src='/images/default-avatar.png'">
                 <div class="username">@@@Model.ScreenName</div>
 
+                <!-- ИСПРАВЛЕНИЕ: Динамический статус активности бота в шапке -->
                 <div style="margin-top: 10px;">
-                    <span class="status-badge status-active">
-                        <span class="dot"></span> Бот активен
-                    </span>
+                    @if (Model.IsActive)
+                    {
+                        <span class="status-badge status-active">
+                            <span class="dot"></span> Бот активен
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-paused">
+                            ⚠️ Отключен
+                        </span>
+                    }
                 </div>
             </div>
 
-            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <!-- ГРУППА КНОПОК ДЕЙСТВИЯ -->
             <div class="action-buttons-group">
                 <a href="/auth/console?provider=x&botId=@Model.Id&username=@Model.ScreenName" class="btn btn-console">
                     💻 Консоль бота
@@ -336,9 +342,22 @@
             <form action="/x/update-settings" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id">
 
+                <!-- ИСПРАВЛЕНИЕ: Добавлен блок переключателя автоответов -->
+                <div class="switch-container">
+                    <div>
+                        <label style="margin:0; font-size: 1.1rem; color: white;">Автоответы в X</label>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Генерировать ответы и реплаи с помощью ИИ</div>
+                    </div>
+                    <label class="switch">
+                        <input type="hidden" name="isActive" value="false" />
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
                 <div class="form-group">
-                    <label>Системный промпт (Для генерации постов)</label>
-                    <textarea name="systemPrompt" required placeholder="Опишите инструкции для генерации постов...">@Model.SystemPrompt</textarea>
+                    <label>Системный промпт (Инструкция для ИИ)</label>
+                    <textarea name="systemPrompt" required placeholder="Опишите поведение бота при ответах в X...">@Model.SystemPrompt</textarea>
                 </div>
 
                 <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
@@ -368,7 +387,6 @@
             /* === РЕЖИМ ПОДКЛЮЧЕНИЯ === */
             <div style="text-align: center;">
                 <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
-                    <!-- Иконка X -->
                     <svg width="45" height="40" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-main); filter: drop-shadow(0 4px 12px rgba(255,255,255,0.03));">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                     </svg>

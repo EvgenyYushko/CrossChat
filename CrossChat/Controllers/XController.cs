@@ -156,7 +156,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, bool isActive, int profileId)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -165,13 +165,16 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
-				settings.SystemPrompt = systemPrompt;
+				// Безопасно считываем состояние тумблера из формы
+				var isActiveRaw = Request.Form["isActive"].ToString();
+				bool isActive = isActiveRaw.Contains("true");
+
+				settings.SystemPrompt = systemPrompt ?? "";
 				settings.IsActive = isActive;
 				settings.ProfileId = profileId;
 
-				// Можно добавить сохранение лимитов, если ты их ввел в БД
-
 				await _db.SaveChangesAsync();
+				_logger.LogInformation($"[X] Настройки аккаунта @{settings.ScreenName} обновлены. Активность: {isActive}");
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
