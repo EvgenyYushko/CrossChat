@@ -1,3 +1,4 @@
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
@@ -8,6 +9,8 @@ using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
 using CrossChat.Worker.Facades;
 using CrossChat.Worker.Models;
+using CrossChat.Worker.Publishers;
+using CrossChat.Worker.Publishers.Interfaces;
 using CrossChat.Worker.Services;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
@@ -82,9 +85,17 @@ namespace CrossChat.Worker
 			});
 
 			services.AddSingleton<ITelegramService, TelegramService>();
-			services.AddScoped<SocialPublicationFacade>();
 
 			services.AddScoped<IPostService, PostService>();
+
+			services.AddScoped<SocialPublicationFacade>();
+
+			services.AddKeyedScoped<ISocialPublisher, InstagramPublisher>(NetworkType.Instagram);
+			services.AddKeyedScoped<ISocialPublisher, FacebookPublisher>(NetworkType.Facebook);
+			services.AddKeyedScoped<ISocialPublisher, TelegramChannelPublisher>(NetworkType.TelegramChannel);
+			services.AddKeyedScoped<ISocialPublisher, ThreadsPublisher>(NetworkType.Threads);
+			services.AddKeyedScoped<ISocialPublisher, XPublisher>(NetworkType.X);
+			services.AddKeyedScoped<ISocialPublisher, BlueSkyPublisher>(NetworkType.BlueSky);
 		}
 	}
 }
