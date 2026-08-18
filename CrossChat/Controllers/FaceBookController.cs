@@ -96,7 +96,7 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
-			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,public_profile,email";
+			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,business_management,public_profile,email";
 
 			// ИСПРАВЛЕНИЕ: Используем RedirectUri напрямую, чтобы он на 100% совпадал с Callback!
 			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={AppId}&redirect_uri={Uri.EscapeDataString(RedirectUri)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
