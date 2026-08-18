@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using static CrossChat.Data.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Data.Entities
 {
@@ -21,6 +22,6 @@ namespace CrossChat.Data.Entities
 		[Required]
 		public string Comment { get; set; } = string.Empty; // Текст отзыва
 
-		public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+		public DateTime CreatedAt { get; set; } = DateTimeNow;
 	}
 }

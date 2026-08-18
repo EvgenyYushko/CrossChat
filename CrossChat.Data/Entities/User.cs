@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using static CrossChat.Data.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Data.Entities;
 
@@ -15,7 +16,7 @@ public class User
 	public string Name { get; set; } = string.Empty;
 	public string? AvatarUrl { get; set; }
 
-	public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+	public DateTime CreatedAt { get; set; } = DateTimeNow;
 
 	public long? TelegramUserId { get; set; } // Хранит Telegram ID владельца аккаунта
 

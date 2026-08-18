@@ -5,9 +5,9 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Consumers.Instagram.MediaCashe;
-
 
 public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 {
@@ -76,7 +76,7 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 				// 4. ПРОВЕРКА ЛИМИТОВ (Делаем только если customer != null)
 				if (customer != null)
 				{
-					var today = DateTime.UtcNow.AddDays(-1);
+					var today = DateTimeNow.AddDays(-1);
 					var recentResponsesCount = await _db.BotResponseLogs
 						.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= today);
 

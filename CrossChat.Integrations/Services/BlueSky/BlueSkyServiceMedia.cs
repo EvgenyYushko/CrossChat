@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CrossChat.Integrations.Exceptions.BlueSky;
 using Microsoft.Extensions.Logging;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
 {
@@ -123,7 +124,7 @@ namespace CrossChat.Integrations.Services
 			{
 				Text = postText,
 				Facets = facets.Any() ? facets : null,
-				CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
 				Embed = embedPayload
 			};
 
@@ -168,7 +169,7 @@ namespace CrossChat.Integrations.Services
 			{
 				Text = postText,
 				Facets = facets.Any() ? facets : null,
-				CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 			};
 
 			var payload = new

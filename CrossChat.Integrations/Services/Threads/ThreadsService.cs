@@ -4,6 +4,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
 using Microsoft.Extensions.Logging;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services;
 
@@ -107,9 +108,9 @@ public partial class ThreadsService : IThreadsService
 	{
 		Console.WriteLine($"Ожидаем готовности медиа {containerId}...");
 
-		var startTime = DateTime.Now;
+		var startTime = DateTimeNow;
 
-		while (DateTime.Now - startTime < TimeSpan.FromSeconds(maxWaitSeconds))
+		while (DateTimeNow - startTime < TimeSpan.FromSeconds(maxWaitSeconds))
 		{
 			try
 			{

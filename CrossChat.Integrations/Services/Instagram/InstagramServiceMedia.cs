@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using File = System.IO.File;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services;
 
@@ -85,9 +86,9 @@ public partial class InstagramService
 	{
 		_logger.LogInformation($"Ожидаем готовности медиа {containerId}...");
 
-		var startTime = DateTime.Now;
+		var startTime = DateTimeNow;
 
-		while (DateTime.Now - startTime < TimeSpan.FromSeconds(maxWaitSeconds))
+		while (DateTimeNow - startTime < TimeSpan.FromSeconds(maxWaitSeconds))
 		{
 			try
 			{
@@ -552,7 +553,7 @@ public partial class InstagramService
 			{
 				var oldFiles = Directory.GetFiles(tempFolder)
 					.Select(f => new FileInfo(f))
-					.Where(f => f.CreationTime < DateTime.Now.AddMinutes(-15)) // Удаляем все, что старше 15 минут
+					.Where(f => f.CreationTime < DateTimeNow.AddMinutes(-15)) // Удаляем все, что старше 15 минут
 					.ToList();
 
 				foreach (var file in oldFiles)

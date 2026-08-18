@@ -76,7 +76,7 @@ namespace CrossChat.Worker.Jobs
 
 						bot.AccessToken = result.Value.AccessToken;
 						bot.RefreshToken = result.Value.RefreshToken;
-						bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+						bot.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 
 						await _db.SaveChangesAsync();
 

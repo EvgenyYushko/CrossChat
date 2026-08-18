@@ -1,5 +1,6 @@
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Models.Posting;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Models
 {
@@ -11,7 +12,7 @@ namespace CrossChat.Integrations.Models
 		public int ProfileId { get; set; }
 
 		public List<string> Images { get; set; } = new();
-		public DateTime CreatedAt { get; set; } = DateTime.Now;
+		public DateTime CreatedAt { get; set; } = DateTimeNow;
 		public DateTime ShowDate { get; set; }
 
 		public AccessLevel Access { get; set; } = AccessLevel.Public; // Пост публичный или приватный?

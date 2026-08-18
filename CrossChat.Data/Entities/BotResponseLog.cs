@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using static CrossChat.Data.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Data.Entities;
 
@@ -20,5 +21,5 @@ public class BotResponseLog
 	public int TokensSpent { get; set; } = 0;
 
 	// Дата ответа (по ней будем считать лимит в сутки)
-	public DateTime RespondedAt { get; set; } = DateTime.UtcNow;
+	public DateTime RespondedAt { get; set; } = DateTimeNow;
 }

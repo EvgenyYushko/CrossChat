@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
 {
@@ -138,7 +139,7 @@ namespace CrossChat.Integrations.Services
 				{ "jti", Guid.NewGuid().ToString("N") },
 				{ "htm", method.ToUpper() },
 				{ "htu", url },
-				{ "iat", EpochTime.GetIntDate(DateTime.UtcNow) }
+				{ "iat", EpochTime.GetIntDate(DateTimeNow) }
 			};
 
 			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
@@ -222,7 +223,7 @@ namespace CrossChat.Integrations.Services
 		public async Task<string> GetValidTokenAsync(BlueSkyModel settings)
 		{
 			// 1. Проверяем, не истек ли токен (с запасом в 2 минуты)
-			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTime.UtcNow.AddMinutes(2))
+			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTimeNow.AddMinutes(2))
 			{
 				return settings.AccessToken!;
 			}
@@ -237,7 +238,7 @@ namespace CrossChat.Integrations.Services
 				// 3. ОБЯЗАТЕЛЬНО обновляем объект в памяти
 				settings.AccessToken = result.Value.AccessToken;
 				settings.RefreshToken = result.Value.RefreshToken;
-				settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+				settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 
 				// 4. Сохраняем в БД (нужно будет вызвать _db.SaveChangesAsync() в вызывающем коде)
 				// Но лучше передать сюда callback или сделать метод сохранения

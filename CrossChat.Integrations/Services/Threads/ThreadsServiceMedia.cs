@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
 {
@@ -227,7 +228,7 @@ namespace CrossChat.Integrations.Services
 				{
 					var oldFiles = Directory.GetFiles(tempFolder)
 						.Select(f => new FileInfo(f))
-						.Where(f => f.CreationTime < DateTime.Now.AddMinutes(-15)) // Удаляем все, что старше 15 минут
+						.Where(f => f.CreationTime < DateTimeNow.AddMinutes(-15)) // Удаляем все, что старше 15 минут
 						.ToList();
 
 					foreach (var file in oldFiles)

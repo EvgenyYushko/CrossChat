@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using StackExchange.Redis;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Jobs;
 
@@ -122,7 +123,7 @@ public class ThreadsAutoReplyJob : IJob
 		finally
 		{
 			// 7. Обновляем время обработки, чтобы в следующий раз джоба взяла ДРУГОГО бота
-			bot.LastProcessedAt = DateTime.UtcNow;
+			bot.LastProcessedAt = DateTimeNow;
 			await _db.SaveChangesAsync();
 		}
 	}

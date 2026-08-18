@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
 using static CrossChat.Integrations.Helpers.HttpHelper;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Jobs;
 
@@ -69,7 +70,7 @@ public class TokenRefreshJob : IJob
 		}
 
 		_logger.LogInformation("🔄 [TokenRefreshJob] Начало комплексной проверки токенов...");
-		var thresholdDate = DateTime.UtcNow.AddDays(10);
+		var thresholdDate = DateTimeNow.AddDays(10);
 
 		// --- БЛОК 1: INSTAGRAM ---
 		await RefreshInstagramTokens(thresholdDate);
@@ -78,9 +79,9 @@ public class TokenRefreshJob : IJob
 		await RefreshThreadsTokens(thresholdDate);
 
 		// --- БЛОК 3: BLUESKY ---
-		//await RefreshBlueSkyTokens(DateTime.UtcNow.AddHours(1));
+		//await RefreshBlueSkyTokens(DateTimeNow.AddHours(1));
 
-		await RefreshXTokens(DateTime.UtcNow.AddMinutes(20));
+		await RefreshXTokens(DateTimeNow.AddHours(1));
 
 		await RefreshFaceBookData();
 
@@ -108,7 +109,7 @@ public class TokenRefreshJob : IJob
 				if (result != null)
 				{
 					settings.AccessToken = result.Value.NewToken;
-					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 					await _instagramConsole.Log($"✅ Instagram токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
 					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
 					string? base64Icon = null;
@@ -184,7 +185,7 @@ public class TokenRefreshJob : IJob
 				if (result != null)
 				{
 					settings.AccessToken = result.Value.NewToken;
-					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 					await _threadsConsole.Log($"токен обновлен для {settings.Username} UserId={settings.UserId}", settings.UserId, settings.Id);
 
 					var profile = await _threadsService.GetThreadsUserProfileAsync(result.Value.NewToken);
@@ -225,7 +226,7 @@ public class TokenRefreshJob : IJob
 				{
 					bot.AccessToken = result.Value.AccessToken;
 					bot.RefreshToken = result.Value.RefreshToken;
-					bot.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+					bot.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 					_logger.LogInformation($"✅ BlueSky токен обновлен для @{bot.Handle}");
 				}
 				else
@@ -266,7 +267,7 @@ public class TokenRefreshJob : IJob
 				{
 					settings.AccessToken = result.Value.AccessToken;
 					settings.RefreshToken = result.Value.RefreshToken; // Сохраняем новый рефреш-токен
-					settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
+					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 
 					await _xConsole.Log($"✅ X токен обновлен для @{settings.ScreenName}", settings.UserId, settings.Id);
 

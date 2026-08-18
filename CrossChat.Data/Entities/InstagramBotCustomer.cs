@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using static CrossChat.Data.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Data.Entities;
 
@@ -24,7 +25,7 @@ public class InstagramBotCustomer
 	public bool IsIgnored { get; set; } = false; // Галочка "Игнорировать"
 	public string? CustomPrompt { get; set; }    // Персональный промпт
 
-	public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+	public DateTime CreatedAt { get; set; } = DateTimeNow;
 
 	// Навигационное свойство для логов
 	public ICollection<BotResponseLog> ResponseLogs { get; set; } = new List<BotResponseLog>();

@@ -7,6 +7,7 @@ using CrossChat.Integrations.Models.Posting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Services
 {
@@ -39,7 +40,7 @@ namespace CrossChat.Worker.Services
 				.Where(p => p.ProfileId == profileId)
 				.Where(p => p.AccessLevel == (int)accessLevel)
 				.Where(p => p.NetworkStates.Any(ns => ns.Status == (int)SocialStatus.Pending))
-				.Where(p => p.ShowDate <= DateTime.UtcNow)
+				.Where(p => p.ShowDate <= DateTimeNow)
 				.OrderBy(p => p.CreatedAt)    // Сначала старые (очередь)
 				.Take(count)
 				.ToListAsync();

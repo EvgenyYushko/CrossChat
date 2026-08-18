@@ -11,6 +11,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Consumers.Instagram;
 
@@ -142,7 +143,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			// Б) Проверяем лимит (например, 100 ответов в сутки)
 			// 1. Проверка по количеству сообщений
-			var startOfPeriod = DateTime.UtcNow.AddDays(-1); // Сутки
+			var startOfPeriod = DateTimeNow.AddDays(-1); // Сутки
 			var messageCount = await _db.BotResponseLogs
 				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
@@ -332,7 +333,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				CustomerId = id,
 				MessageId = replyId, // ID последнего сообщения Инсты
 				TokensSpent = 0, // Пока 0
-				RespondedAt = DateTime.UtcNow
+				RespondedAt = DateTimeNow
 			};
 			_db.BotResponseLogs.Add(responseLog);
 			await _db.SaveChangesAsync();
