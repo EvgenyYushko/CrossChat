@@ -97,9 +97,9 @@ namespace CrossChat.Controllers
 				.ToListAsync();
 
 			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,public_profile,email";
-			
-			// 2. Добавили auth_type=rerequest и обновили версию до v22.0
-			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={_settings.AppId}&redirect_uri={Url.Action("Callback", "Facebook", null, Request.Scheme)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
+
+			// ИСПРАВЛЕНИЕ: Используем RedirectUri напрямую, чтобы он на 100% совпадал с Callback!
+			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={AppId}&redirect_uri={Uri.EscapeDataString(RedirectUri)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
 
 			return View(settings);
 		}
@@ -108,64 +108,126 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string? code, string? error, string? error_description)
 		{
-			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
+			_logger.LogInformation("=== [Facebook Callback] СТАРТ ОБРАБОТКИ АВТОРИЗАЦИИ ===");
+
+			// 1. Проверяем ошибки от Facebook
+			if (!string.IsNullOrEmpty(error))
 			{
-				_logger.LogWarning($"FB Auth Error: {error_description}");
+				_logger.LogError("❌ [Facebook Callback] Ошибка авторизации от Facebook: {Error} - {Description}", error, error_description);
 				return RedirectToAction("Index");
 			}
+
+			if (string.IsNullOrEmpty(code))
+			{
+				_logger.LogError("❌ [Facebook Callback] Код авторизации (code) пуст или отсутствует в запросе!");
+				return RedirectToAction("Index");
+			}
+
+			_logger.LogInformation("🔑 [Facebook Callback] Код авторизации получен: {CodePrefix}...", code.Substring(0, Math.Min(15, code.Length)));
 
 			try
 			{
 				// STEP 1: Получаем Short-Lived User Token (2 часа)
+				_logger.LogInformation("⏳ [Facebook Callback] ШАГ 1: Запрос Short-Lived User Token...");
 				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 									$"client_id={AppId}&" +
 									$"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 									$"client_secret={AppSecret}&" +
 									$"code={code}";
 
-				var shortResp = await _httpClient.GetFromJsonAsync<JsonElement>(shortTokenUrl);
-				var shortUserToken = shortResp.GetProperty("access_token").GetString();
+				using var shortReq = await _httpClient.GetAsync(shortTokenUrl);
+				var shortJson = await shortReq.Content.ReadAsStringAsync();
+
+				if (!shortReq.IsSuccessStatusCode)
+				{
+					_logger.LogError("❌ [Facebook Callback] Ошибка получения Short Token (HTTP {StatusCode}): {Response}", shortReq.StatusCode, shortJson);
+					return RedirectToAction("Index");
+				}
+
+				using var shortDoc = JsonDocument.Parse(shortJson);
+				var shortUserToken = shortDoc.RootElement.GetProperty("access_token").GetString()!;
+				_logger.LogInformation("✅ [Facebook Callback] Short Token успешно получен!");
 
 				// STEP 2: Обмениваем на Long-Lived User Token (60 дней)
+				_logger.LogInformation("⏳ [Facebook Callback] ШАГ 2: Обмен на 60-дневный Long-Lived User Token...");
 				var longTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 								   $"grant_type=fb_exchange_token&" +
 								   $"client_id={AppId}&" +
 								   $"client_secret={AppSecret}&" +
 								   $"fb_exchange_token={shortUserToken}";
 
-				var longResp = await _httpClient.GetFromJsonAsync<JsonElement>(longTokenUrl);
-				var longUserToken = longResp.GetProperty("access_token").GetString();
+				using var longReq = await _httpClient.GetAsync(longTokenUrl);
+				var longJson = await longReq.Content.ReadAsStringAsync();
 
-				// STEP 3: Получаем список СТРАНИЦ и их бессрочные токены
-				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,picture{{url}}&access_token={longUserToken}";
-				var accountsResp = await _httpClient.GetFromJsonAsync<JsonElement>(accountsUrl);
-				var pages = accountsResp.GetProperty("data");
-
-				// Для сохранения нам нужен внутренний UserId, но в Callback мы анонимны. 
-				// ВАЖНО: Ты можешь использовать state для передачи UserId или убедиться, что кука жива.
-				// Если ты используешь мой прошлый фикс с Redis для BlueSky, примени его и здесь.
-				var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-				if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
-				var userId = int.Parse(userIdStr);
-
-				List<FacebookSettings> settings = new();
-
-				foreach (var page in pages.EnumerateArray())
+				if (!longReq.IsSuccessStatusCode)
 				{
-					settings.Add(await SaveFacebookPage(userId, page));
+					_logger.LogError("❌ [Facebook Callback] Ошибка обмена на Long Token (HTTP {StatusCode}): {Response}", longReq.StatusCode, longJson);
+					return RedirectToAction("Index");
 				}
 
-				// 1. Берем ID первой подключенной страницы (если она есть)
-				var firstPageId = settings.FirstOrDefault()?.Id;
+				using var longDoc = JsonDocument.Parse(longJson);
+				var longUserToken = longDoc.RootElement.GetProperty("access_token").GetString()!;
+				_logger.LogInformation("✅ [Facebook Callback] Long Token получен!");
 
-				// 2. Если страница добавлена — открываем её настройки по botId, иначе просто открываем Index
+				// STEP 3: Получаем список СТРАНИЦ и их бессрочные токены
+				_logger.LogInformation("⏳ [Facebook Callback] ШАГ 3: Запрос списка страниц через /me/accounts...");
+				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,picture{{url}}&access_token={longUserToken}";
+
+				using var accountsReq = await _httpClient.GetAsync(accountsUrl);
+				var accountsJson = await accountsReq.Content.ReadAsStringAsync();
+
+				if (!accountsReq.IsSuccessStatusCode)
+				{
+					_logger.LogError("❌ [Facebook Callback] Ошибка получения страниц (HTTP {StatusCode}): {Response}", accountsReq.StatusCode, accountsJson);
+					return RedirectToAction("Index");
+				}
+
+				using var accountsDoc = JsonDocument.Parse(accountsJson);
+				var pages = accountsDoc.RootElement.GetProperty("data");
+				int pagesCount = pages.GetArrayLength();
+
+				_logger.LogInformation("📄 [Facebook Callback] Найдено страниц для подключения: {Count}", pagesCount);
+
+				if (pagesCount == 0)
+				{
+					_logger.LogWarning("⚠️ [Facebook Callback] В этом аккаунте нет доступных страниц Facebook для подключения.");
+					return RedirectToAction("Index");
+				}
+
+				// STEP 4: Проверяем авторизацию пользователя на сайте
+				var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+				_logger.LogInformation("👤 [Facebook Callback] Проверка авторизации на сайте: UserId = {UserId}", userIdStr ?? "NULL (Сессия не передалась!)");
+
+				if (string.IsNullOrEmpty(userIdStr))
+				{
+					_logger.LogError("❌ [Facebook Callback] Сбой: Кука авторизации потеряна при редиректе с Facebook! Возврат 401.");
+					return Unauthorized();
+				}
+
+				var userId = int.Parse(userIdStr);
+				List<FacebookSettings> settings = new();
+
+				// STEP 5: Сохраняем страницы в БД
+				foreach (var page in pages.EnumerateArray())
+				{
+					var pageName = page.GetProperty("name").GetString();
+					var pageId = page.GetProperty("id").GetString();
+					_logger.LogInformation("💾 [Facebook Callback] Сохранение страницы: '{PageName}' (ID: {PageId})...", pageName, pageId);
+
+					var savedSetting = await SaveFacebookPage(userId, page);
+					settings.Add(savedSetting);
+				}
+
+				var firstPageId = settings.FirstOrDefault()?.Id;
+				_logger.LogInformation("🏁 [Facebook Callback] УСПЕХ! Страницы сохранены. Редирект на botId = {BotId}", firstPageId);
+
 				return firstPageId.HasValue
 					? RedirectToAction("Index", new { botId = firstPageId.Value })
 					: RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Facebook Auth Process Error");
+				_logger.LogError(ex, "❌ [Facebook Callback] Критическое исключение в процессе авторизации");
 				return RedirectToAction("Index");
 			}
 		}

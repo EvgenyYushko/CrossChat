@@ -54,9 +54,10 @@ namespace CrossChat.Integrations.Services
 			// 2. Формируем запрос
 			// Мы просим список диалогов, где unread_count > 0
 			// И берем последнее сообщение из каждого диалога, чтобы понять, кто писал последним
-			string url = $"https://graph.facebook.com/v24.0/me/conversations" +
-						 $"?fields=id,unread_count,messages.limit(1){{from,message}}" +
-						 $"&access_token={token}";
+			string url = $"https://graph.facebook.com/v22.0/{pageId}/conversations" +
+				 $"?platform=messenger" +
+				 $"&fields=id,unread_count,messages.limit(1){{from,message}}" +
+				 $"&access_token={token}";
 
 			var unreadConversation = new List<FbConversation>();
 
@@ -66,7 +67,7 @@ namespace CrossChat.Integrations.Services
 				if (!response.IsSuccessStatusCode)
 				{
 					string error = await response.Content.ReadAsStringAsync();
-					Console.WriteLine($"Ошибка получения диалогов FB: {error}");
+					Console.WriteLine($"Ошибка получения диалогов FB (HTTP {response.StatusCode}): {error}");
 					return unreadConversation;
 				}
 
@@ -75,19 +76,15 @@ namespace CrossChat.Integrations.Services
 
 				if (conversationData?.data == null) return unreadConversation;
 
-				foreach (var convo in conversationData.data/*.Where(c => c.unread_count > 0)*/)
+				foreach (var convo in conversationData.data)
 				{
-					// Нас интересуют диалоги, где есть непрочитанные сообщения
-					// ИЛИ (для надежности) где последнее сообщение написано НЕ нами (НЕ страницей)
-
 					// Пропускаем пустые диалоги
 					if (convo.messages?.data == null || !convo.messages.data.Any()) continue;
 
 					var lastMsg = convo.messages.data.First();
 
-					// Проверка: ID отправителя последнего сообщения НЕ должен совпадать с ID нашей страницы
-					// (Иначе бот будет бесконечно отвечать сам себе)
-					if (lastMsg.from.id != pageId)
+					// Проверка: отправитель не должен быть самой страницей
+					if (lastMsg.from?.id != pageId)
 					{
 						unreadConversation.Add(convo);
 					}
@@ -159,6 +156,6 @@ namespace CrossChat.Integrations.Services
 					return false;
 				}
 			}
-		}		
+		}
 	}
 }
