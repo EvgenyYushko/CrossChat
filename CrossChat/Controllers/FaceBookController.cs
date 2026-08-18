@@ -22,7 +22,8 @@ namespace CrossChat.Controllers
 		private readonly AppDbContext _db;
 		private string RedirectUri => $"{APP_URL}/facebook/auth/callback";
 
-		public FaceBookController(ILogger<FaceBookController> logger,
+		public FaceBookController(
+			ILogger<FaceBookController> logger,
 			IOptions<SocialMediaSettings> options,
 			AppDbContext db)
 		{
@@ -42,19 +43,14 @@ namespace CrossChat.Controllers
 			[FromQuery(Name = "hub.verify_token")] string token,
 			[FromQuery(Name = "hub.challenge")] string challenge)
 		{
-			_logger.LogInformation($"Webhook verification: mode={mode}, token={token}");
-
-			// Проверяем токен верификации
 			if (mode == "subscribe" && token == "Test")
 			{
-				_logger.LogInformation("Webhook verified successfully");
+				_logger.LogInformation("[Facebook Webhook] Вебхук успешно верифицирован.");
 				return Ok(challenge);
 			}
-			else
-			{
-				_logger.LogWarning("Webhook verification failed");
-				return Forbid();
-			}
+
+			_logger.LogWarning("[Facebook Webhook] Ошибка верификации вебхука.");
+			return Forbid();
 		}
 
 		[AllowAnonymous]
@@ -65,14 +61,12 @@ namespace CrossChat.Controllers
 			{
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
-
-				_logger.LogInformation(body);
-
+				_logger.LogInformation("[Facebook Webhook]: " + body);
 				return Ok();
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Error processing Instagram webhook");
+				_logger.LogError(ex, "[Facebook Webhook] Ошибка обработки входящего вебхука");
 				return StatusCode(500);
 			}
 		}
@@ -96,9 +90,8 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
+			// Полный проверенный набор разрешений для публикации, сообщений и бизнес-страниц
 			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,business_management,public_profile,email";
-
-			// ИСПРАВЛЕНИЕ: Используем RedirectUri напрямую, чтобы он на 100% совпадал с Callback!
 			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={AppId}&redirect_uri={Uri.EscapeDataString(RedirectUri)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
 
 			return View(settings);
@@ -108,150 +101,114 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string? code, string? error, string? error_description)
 		{
-			_logger.LogInformation("=================================================================");
-			_logger.LogInformation("🚀 [Facebook Callback] СТАРТ ПОЛНОГО ДИАГНОСТИЧЕСКОГО ЛОГИРОВАНИЯ");
-			_logger.LogInformation("=================================================================");
-
-			if (!string.IsNullOrEmpty(error))
+			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
 			{
-				_logger.LogError("❌ [Facebook Callback] Ошибка: {Error}", error);
-				_logger.LogError("❌ [Facebook Callback] Описание: {Desc}", error_description);
+				_logger.LogWarning($"[Facebook] Ошибка авторизации: {error_description}");
 				return RedirectToAction("Index");
 			}
-
-			if (string.IsNullOrEmpty(code))
-			{
-				_logger.LogError("❌ [Facebook Callback] Параметр code пустой!");
-				return RedirectToAction("Index");
-			}
-
-			// 0. ВЫВОДИМ ПОЛНЫЙ КОД АВТОРИЗАЦИИ
-			_logger.LogInformation("🔑 [0. ПОЛНЫЙ CODE АВТОРИЗАЦИИ]:\n{Code}", code);
 
 			try
 			{
-				// -------------------------------------------------------------
-				// STEP 1: Запрос Short-Lived User Token (2 часа)
-				// -------------------------------------------------------------
+				// 1. Получаем Short-Lived User Token (2 часа)
 				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 									$"client_id={AppId}&" +
 									$"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 									$"client_secret={AppSecret}&" +
 									$"code={code}";
 
-				_logger.LogInformation("📡 [1. URL ЗАПРОСА SHORT TOKEN]:\n{Url}", shortTokenUrl);
+				var shortResp = await _httpClient.GetFromJsonAsync<JsonElement>(shortTokenUrl);
+				var shortUserToken = shortResp.GetProperty("access_token").GetString();
 
-				using var shortReq = await _httpClient.GetAsync(shortTokenUrl);
-				var shortJson = await shortReq.Content.ReadAsStringAsync();
-
-				_logger.LogInformation("📦 [1. СЫРОЙ ОТВЕТ SHORT TOKEN]:\n{Json}", shortJson);
-
-				if (!shortReq.IsSuccessStatusCode)
-				{
-					_logger.LogError("❌ Ошибка на Шаге 1 (HTTP {Status})", shortReq.StatusCode);
-					return RedirectToAction("Index");
-				}
-
-				using var shortDoc = JsonDocument.Parse(shortJson);
-				var shortUserToken = shortDoc.RootElement.GetProperty("access_token").GetString()!;
-
-				_logger.LogInformation("🟢 [1. ПОЛНЫЙ SHORT USER TOKEN (2 ЧАСА)]:\n{Token}", shortUserToken);
-
-				// -------------------------------------------------------------
-				// STEP 2: Обмен на Long-Lived User Token (60 дней)
-				// -------------------------------------------------------------
+				// 2. Обмениваем на 60-дневный Long-Lived User Token
 				var longTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 								   $"grant_type=fb_exchange_token&" +
 								   $"client_id={AppId}&" +
 								   $"client_secret={AppSecret}&" +
 								   $"fb_exchange_token={shortUserToken}";
 
-				_logger.LogInformation("📡 [2. URL ОБМЕНА LONG TOKEN]:\n{Url}", longTokenUrl);
+				var longResp = await _httpClient.GetFromJsonAsync<JsonElement>(longTokenUrl);
+				var longUserToken = longResp.GetProperty("access_token").GetString();
 
-				using var longReq = await _httpClient.GetAsync(longTokenUrl);
-				var longJson = await longReq.Content.ReadAsStringAsync();
+				// 3. Динамически запрашиваем ВСЕ страницы пользователя (личные и Meta Business Suite)
+				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,picture{{url}}&access_token={longUserToken}";
+				var accountsResp = await _httpClient.GetFromJsonAsync<JsonElement>(accountsUrl);
+				
+				var pagesList = new List<JsonElement>();
 
-				_logger.LogInformation("📦 [2. СЫРОЙ ОТВЕТ LONG TOKEN]:\n{Json}", longJson);
-
-				if (!longReq.IsSuccessStatusCode)
+				if (accountsResp.TryGetProperty("data", out var pagesData))
 				{
-					_logger.LogError("❌ Ошибка на Шаге 2 (HTTP {Status})", longReq.StatusCode);
+					foreach (var page in pagesData.EnumerateArray())
+					{
+						pagesList.Add(page);
+					}
+				}
+
+				// Если в me/accounts пусто, автоматически опрашиваем Meta Business Suite
+				if (pagesList.Count == 0)
+				{
+					try
+					{
+						var bizUrl = $"https://graph.facebook.com/v22.0/me/businesses?fields=id,name,owned_pages{{id,name,access_token,picture{{url}}}},client_pages{{id,name,access_token,picture{{url}}}}&access_token={longUserToken}";
+						var bizResp = await _httpClient.GetFromJsonAsync<JsonElement>(bizUrl);
+
+						if (bizResp.TryGetProperty("data", out var bizData))
+						{
+							foreach (var b in bizData.EnumerateArray())
+							{
+								if (b.TryGetProperty("owned_pages", out var owned) && owned.TryGetProperty("data", out var ownedData))
+								{
+									foreach (var page in ownedData.EnumerateArray())
+									{
+										var pid = page.GetProperty("id").GetString();
+										if (!pagesList.Any(p => p.GetProperty("id").GetString() == pid)) pagesList.Add(page);
+									}
+								}
+								if (b.TryGetProperty("client_pages", out var client) && client.TryGetProperty("data", out var clientData))
+								{
+									foreach (var page in clientData.EnumerateArray())
+									{
+										var pid = page.GetProperty("id").GetString();
+										if (!pagesList.Any(p => p.GetProperty("id").GetString() == pid)) pagesList.Add(page);
+									}
+								}
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "[Facebook] Ошибка при чтении me/businesses");
+					}
+				}
+
+				if (pagesList.Count == 0)
+				{
+					_logger.LogWarning("[Facebook] У пользователя не найдено доступных страниц.");
 					return RedirectToAction("Index");
 				}
 
-				using var longDoc = JsonDocument.Parse(longJson);
-				var longUserToken = longDoc.RootElement.GetProperty("access_token").GetString()!;
-
-				_logger.LogInformation("🟢 [2. ПОЛНЫЙ 60-ДНЕВНЫЙ USER TOKEN]:\n{Token}", longUserToken);
-				_logger.LogInformation("🔍 [ПРОВЕРИТЬ ТОКЕН В META DEBUGGER]:\nhttps://developers.facebook.com/tools/debug/accesstoken/?access_token={Token}", longUserToken);
-
-				// -------------------------------------------------------------
-				// STEP 3: Запрос списка страниц и реальных разрешений
-				// -------------------------------------------------------------
-
-				// 3.1. Проверяем выданные права токена через /me/permissions
-				var permUrl = $"https://graph.facebook.com/v22.0/me/permissions?access_token={longUserToken}";
-				using var permReq = await _httpClient.GetAsync(permUrl);
-				var permJson = await permReq.Content.ReadAsStringAsync();
-				_logger.LogInformation("🛡️ [3.1 РЕАЛЬНЫЕ ВЫДАННЫЕ ПРАВА /me/permissions]:\n{Json}", permJson);
-
-				// 3.2. Запрос страниц через /me/accounts
-				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,tasks,picture{{url}}&access_token={longUserToken}";
-				_logger.LogInformation("📡 [3.2 URL ЗАПРОСА СТРАНИЦ]:\n{Url}", accountsUrl);
-
-				using var accountsReq = await _httpClient.GetAsync(accountsUrl);
-				var accountsJson = await accountsReq.Content.ReadAsStringAsync();
-
-				_logger.LogInformation("📦 [3.2 СЫРОЙ ОТВЕТ СТРАНИЦ /me/accounts]:\n{Json}", accountsJson);
-
-				// -------------------------------------------------------------
-				// STEP 4: Разбор и вывод токенов конкретных страниц
-				// -------------------------------------------------------------
-				using var accountsDoc = JsonDocument.Parse(accountsJson);
-				var pages = accountsDoc.RootElement.GetProperty("data");
-				int pagesCount = pages.GetArrayLength();
-
-				_logger.LogInformation("📄 Найдено страниц: {Count}", pagesCount);
-
+				// 4. Проверяем авторизацию пользователя на нашем сайте
 				var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-				_logger.LogInformation("👤 Авторизованный UserId на сайте: {UserId}", userIdStr ?? "NULL");
-
-				if (string.IsNullOrEmpty(userIdStr))
-				{
-					_logger.LogError("❌ Сбой: кука авторизации сайта отсутствует (User is Anonymous).");
-					return Unauthorized();
-				}
-
+				if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
 				var userId = int.Parse(userIdStr);
+
+				// 5. Сохраняем все найденные страницы
 				List<FacebookSettings> settings = new();
-
-				foreach (var page in pages.EnumerateArray())
+				foreach (var page in pagesList)
 				{
-					var pageName = page.GetProperty("name").GetString();
-					var pageId = page.GetProperty("id").GetString();
-					var pageToken = page.GetProperty("access_token").GetString();
-
-					_logger.LogInformation("-----------------------------------------------------------------");
-					_logger.LogInformation("📄 СТРАНИЦА: '{Name}' (ID: {Id})", pageName, pageId);
-					_logger.LogInformation("🔑 ПОЛНЫЙ PAGE ACCESS TOKEN СТРАНИЦЫ:\n{PageToken}", pageToken);
-					_logger.LogInformation("-----------------------------------------------------------------");
-
-					var savedSetting = await SaveFacebookPage(userId, page);
-					settings.Add(savedSetting);
+					settings.Add(await SaveFacebookPage(userId, page));
 				}
 
-				var firstPageId = settings.FirstOrDefault()?.Id;
-				_logger.LogInformation("🏁 Успешное завершение. Редирект на botId = {BotId}", firstPageId);
-				_logger.LogInformation("=================================================================");
+				_logger.LogInformation($"[Facebook] Успешно подключено страниц: {settings.Count} для пользователя {userId}");
 
+				// Переходим на страницу первой подключенной страницы
+				var firstPageId = settings.FirstOrDefault()?.Id;
 				return firstPageId.HasValue
 					? RedirectToAction("Index", new { botId = firstPageId.Value })
 					: RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "❌ КРИТИЧЕСКОЕ ИСКЛЮЧЕНИЕ В CALLBACK");
-				_logger.LogInformation("=================================================================");
+				_logger.LogError(ex, "[Facebook] Ошибка при обработке Callback");
 				return RedirectToAction("Index");
 			}
 		}
@@ -305,28 +262,55 @@ namespace CrossChat.Controllers
 
 		private async Task<FacebookSettings> SaveFacebookPage(int userId, JsonElement pageData)
 		{
-			var pageId = pageData.GetProperty("id").GetString();
-			var pageName = pageData.GetProperty("name").GetString();
-			var pageToken = pageData.GetProperty("access_token").GetString();
-			var pictureUrl = pageData.GetProperty("picture").GetProperty("data").GetProperty("url").GetString();
+			var pageId = pageData.GetProperty("id").GetString()!;
+			var pageName = pageData.GetProperty("name").GetString()!;
+			var pageToken = pageData.GetProperty("access_token").GetString()!;
+			
+			string? pictureUrl = null;
+			if (pageData.TryGetProperty("picture", out var picProp) && 
+			    picProp.TryGetProperty("data", out var dataProp) &&
+			    dataProp.TryGetProperty("url", out var urlProp))
+			{
+				pictureUrl = urlProp.GetString();
+			}
 
+			// 1. Подписываем страницу на вебхуки Messenger (для автоответов)
+			try
+			{
+				var subscribeUrl = $"https://graph.facebook.com/v22.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks&access_token={pageToken}";
+				await _httpClient.PostAsync(subscribeUrl, null);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, $"[Facebook] Не удалось подписать страницу {pageName} на вебхуки Messenger");
+			}
+
+			// 2. Ищем или создаем запись в БД
 			var settings = await _db.FacebookSettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.PageId == pageId);
 
 			if (settings == null)
 			{
-				settings = new FacebookSettings { UserId = userId, PageId = pageId, ProfileId = GetActiveProfileId().Value };
+				settings = new FacebookSettings 
+				{ 
+					UserId = userId, 
+					PageId = pageId, 
+					ProfileId = GetActiveProfileId().Value 
+				};
 				_db.FacebookSettings.Add(settings);
 			}
 
-			// Скачиваем аватарку в Base64 (как в Инсте)
-			settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(pictureUrl);
+			if (!string.IsNullOrEmpty(pictureUrl))
+			{
+				settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(pictureUrl);
+			}
+
 			settings.PageName = pageName;
-			settings.PageAccessToken = pageToken; // Это уже Long-Lived Page Token
+			settings.PageAccessToken = pageToken;
 			settings.IsActive = true;
 
 			await _db.SaveChangesAsync();
-			_logger.LogInformation($"Facebook Page {pageName} ({pageId}) saved for User {userId}");
+			_logger.LogInformation($"[Facebook] Страница '{pageName}' ({pageId}) сохранена в БД для пользователя {userId}");
 
 			return settings;
 		}
