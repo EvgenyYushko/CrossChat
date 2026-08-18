@@ -148,12 +148,20 @@ namespace CrossChat.Controllers
 				if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
 				var userId = int.Parse(userIdStr);
 
+				List<FacebookSettings> settings = new();
+
 				foreach (var page in pages.EnumerateArray())
 				{
-					await SaveFacebookPage(userId, page);
+					settings.Add(await SaveFacebookPage(userId, page));
 				}
 
-				return RedirectToAction("Index");
+				// 1. Берем ID первой подключенной страницы (если она есть)
+				var firstPageId = settings.FirstOrDefault()?.Id;
+
+				// 2. Если страница добавлена — открываем её настройки по botId, иначе просто открываем Index
+				return firstPageId.HasValue
+					? RedirectToAction("Index", new { botId = firstPageId.Value })
+					: RedirectToAction("Index");
 			}
 			catch (Exception ex)
 			{
@@ -209,7 +217,7 @@ namespace CrossChat.Controllers
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 
-		private async Task SaveFacebookPage(int userId, JsonElement pageData)
+		private async Task<FacebookSettings> SaveFacebookPage(int userId, JsonElement pageData)
 		{
 			var pageId = pageData.GetProperty("id").GetString();
 			var pageName = pageData.GetProperty("name").GetString();
@@ -226,13 +234,15 @@ namespace CrossChat.Controllers
 			}
 
 			// Скачиваем аватарку в Base64 (как в Инсте)
-			settings.ProfilePictureUrl = await DownloadImageAsBase64(pictureUrl);
+			settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(pictureUrl);
 			settings.PageName = pageName;
 			settings.PageAccessToken = pageToken; // Это уже Long-Lived Page Token
 			settings.IsActive = true;
 
 			await _db.SaveChangesAsync();
 			_logger.LogInformation($"Facebook Page {pageName} ({pageId}) saved for User {userId}");
+
+			return settings;
 		}
 
 		[HttpPost("disconnect")]

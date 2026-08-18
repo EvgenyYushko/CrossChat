@@ -139,7 +139,7 @@ namespace CrossChat.Integrations.Services
 				{ "jti", Guid.NewGuid().ToString("N") },
 				{ "htm", method.ToUpper() },
 				{ "htu", url },
-				{ "iat", EpochTime.GetIntDate(DateTimeNow) }
+				{ "iat", EpochTime.GetIntDate(DateTime.Now) }
 			};
 
 			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
