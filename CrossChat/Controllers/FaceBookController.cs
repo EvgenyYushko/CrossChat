@@ -84,7 +84,6 @@ namespace CrossChat.Controllers
 
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// Если botId передан, загружаем конкретную страницу
 			FacebookSettings? settings = null;
 			if (botId.HasValue)
 			{
@@ -97,9 +96,10 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
-			// Ссылка на авторизацию (если нужно подключить новую страницу)
-			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,public_profile,email";
-			ViewBag.FbLoginUrl = $"https://www.facebook.com/v21.0/dialog/oauth?client_id={_settings.AppId}&redirect_uri={Url.Action("Callback", "Facebook", null, Request.Scheme)}&scope={fbScopes}&response_type=code";
+			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,public_profile,email";
+			
+			// 2. Добавили auth_type=rerequest и обновили версию до v22.0
+			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={_settings.AppId}&redirect_uri={Url.Action("Callback", "Facebook", null, Request.Scheme)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
 
 			return View(settings);
 		}
