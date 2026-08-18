@@ -124,7 +124,7 @@ builder.Services.AddQuartz(q =>
 	q.AddTrigger(opts => opts
 	   .ForJob(jobFaceBookbKey)
 	   .WithIdentity("FaceBookAnswerJob-Trigger")
-	   .WithCronSchedule("0 10,20,30,40,50,59 * * * ?"));
+	   .WithCronSchedule("0 5,10,15,20,25,30,35,40,45,50,55,59 * * * ?"));
 
 	// 4
 	var postKey = new JobKey("PostPublishingJob");

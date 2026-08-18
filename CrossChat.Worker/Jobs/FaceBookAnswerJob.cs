@@ -45,7 +45,7 @@ namespace CrossChat.Worker.Jobs
 
 				foreach (var bot in activeBots)
 				{
-					await _console.Log($"Проверка аккаунта @{bot.PageName}", bot.UserId, bot.Id);
+					await _console.Log($"Проверка аккаунта {bot.PageName}", bot.UserId, bot.Id);
 
 					// 1. Получаем диалоги, на которые нужно ответить
 					var incomingDialogs = await _fbService.GetUnreadDialogsAsync(bot.PageAccessToken, bot.PageId);
