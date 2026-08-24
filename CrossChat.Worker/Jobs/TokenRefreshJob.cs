@@ -292,7 +292,7 @@ public class TokenRefreshJob : IJob
 					// Безопасный вызов отправки email (таймаут почты не упустит джобу!)
 					try
 					{
-						await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
+						//await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
 					}
 					catch (Exception mailEx)
 					{
