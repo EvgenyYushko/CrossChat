@@ -8,11 +8,11 @@ namespace CrossChat.Integrations.Services
 	public partial class ThreadsService
 	{
 		/// <summary>
-		/// ГЛАВНЫЙ МЕТОД: Публикация поста в Threads (Текст, 1 фото или Карусель до 10 фото)
+		/// ГЛАВНЫЙ МЕТОД: Публикация поста в Threads (Текст, 1 фото/видео или смешанная Карусель до 10 медиа)
 		/// </summary>
 		public async Task<bool> CreatePostAsync(string caption, List<string> imagesBase64, string accessToken)
 		{
-			// Запускаем фоновую чистку старого мусора (на случай прошлых падений)
+			// Запускаем фоновую чистку старого мусора
 			CleanupOldTempFiles();
 
 			var tempFilesTracker = new List<string>();
@@ -20,7 +20,7 @@ namespace CrossChat.Integrations.Services
 			{
 				string creationId;
 
-				// 1. СЦЕНАРИЙ: ТЕКСТОВЫЙ ПОСТ (без фото)
+				// 1. СЦЕНАРИЙ: ТЕКСТОВЫЙ ПОСТ (без медиа)
 				if (imagesBase64 == null || !imagesBase64.Any())
 				{
 					var textUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
@@ -29,7 +29,6 @@ namespace CrossChat.Integrations.Services
 						media_type = "TEXT",
 						text = caption
 					};
-
 
 					var textResp = await _httpClient.PostAsJsonAsync(textUrl, textPayload);
 					if (!textResp.IsSuccessStatusCode)
@@ -42,53 +41,79 @@ namespace CrossChat.Integrations.Services
 					var textJson = await textResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = textJson.GetProperty("id").GetString()!;
 				}
-				// 2. СЦЕНАРИЙ: ПОСТ С ОДНИМ ФОТО
+				// 2. СЦЕНАРИЙ: ОДИНОЧНОЕ МЕДИА (1 фото ИЛИ 1 видео)
 				else if (imagesBase64.Count == 1)
 				{
 					var (mediaUrl, localPath) = await SaveMediaLocallyAsync(imagesBase64.First());
-					tempFilesTracker.Add(localPath); // Добавляем в трекер для последующего удаления
+					tempFilesTracker.Add(localPath);
 
-					var singleImageUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
-					var imagePayload = new
-					{
-						media_type = "IMAGE",
-						image_url = mediaUrl,
-						text = caption
-					};
+					bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
 
-					var imageResp = await _httpClient.PostAsJsonAsync(singleImageUrl, imagePayload);
-					if (!imageResp.IsSuccessStatusCode)
+					var singleMediaUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
+
+					// Формируем payload в зависимости от типа медиа: IMAGE или VIDEO
+					object mediaPayload = isVideo
+						? new
+						{
+							media_type = "VIDEO",
+							video_url = mediaUrl,
+							text = caption
+						}
+						: new
+						{
+							media_type = "IMAGE",
+							image_url = mediaUrl,
+							text = caption
+						};
+
+					// Пауза 500 мс для фиксации файла веб-сервером
+					await Task.Delay(500);
+
+					var mediaResp = await _httpClient.PostAsJsonAsync(singleMediaUrl, mediaPayload);
+					if (!mediaResp.IsSuccessStatusCode)
 					{
-						var error = await imageResp.Content.ReadAsStringAsync();
-						_logger.LogError($"[Threads] Ошибка создания фото-контейнера: {error}");
+						var error = await mediaResp.Content.ReadAsStringAsync();
+						_logger.LogError($"[Threads] Ошибка создания медиа-контейнера: {error}");
 						return false;
 					}
 
-					var imageJson = await imageResp.Content.ReadFromJsonAsync<JsonElement>();
-					creationId = imageJson.GetProperty("id").GetString()!;
+					var mediaJson = await mediaResp.Content.ReadFromJsonAsync<JsonElement>();
+					creationId = mediaJson.GetProperty("id").GetString()!;
 
-					// Ожидаем обработки изображения сервером Threads
+					// Ожидаем обработки медиа сервером Threads (для видео может занять до 30-60 сек)
 					bool isReady = await WaitForMediaReadyAsync(creationId, accessToken);
 					if (!isReady) return false;
 				}
-				// 3. СЦЕНАРИЙ: ПОСТ-КАРУСЕЛЬ (от 2 до 10 фото)
+				// 3. СЦЕНАРИЙ: КАРУСЕЛЬ (до 10 фото и/или видео)
 				else
 				{
 					var childrenIds = new List<string>();
 
-					// А. Создаем отдельный контейнер для каждого фото в карусели
-					foreach (var base64image in imagesBase64.Take(10))
+					// А. Создаем отдельный контейнер для каждого слайда (фото или видео)
+					foreach (var base64Item in imagesBase64.Take(10))
 					{
-						var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64image);
+						var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64Item);
 						tempFilesTracker.Add(localPath);
 
+						bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
+
 						var itemUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
-						var itemPayload = new
-						{
-							media_type = "IMAGE",
-							image_url = mediaUrl,
-							is_carousel_item = true
-						};
+
+						object itemPayload = isVideo
+							? new
+							{
+								media_type = "VIDEO",
+								video_url = mediaUrl,
+								is_carousel_item = true
+							}
+							: new
+							{
+								media_type = "IMAGE",
+								image_url = mediaUrl,
+								is_carousel_item = true
+							};
+
+						await Task.Delay(500);
 
 						var itemResp = await _httpClient.PostAsJsonAsync(itemUrl, itemPayload);
 						if (!itemResp.IsSuccessStatusCode)
@@ -103,7 +128,7 @@ namespace CrossChat.Integrations.Services
 						childrenIds.Add(itemId);
 					}
 
-					// Б. Ждем полной готовности всех дочерних фото
+					// Б. Ждем готовности всех дочерних слайдов
 					foreach (var childId in childrenIds)
 					{
 						bool isChildReady = await WaitForMediaReadyAsync(childId, accessToken);
@@ -135,7 +160,7 @@ namespace CrossChat.Integrations.Services
 					if (!isCarouselReady) return false;
 				}
 
-				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ ГОТОВОГО КОНТЕЙНЕРА
+				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ
 				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
 				var publishResp = await _httpClient.PostAsync(publishUrl, null);
 
@@ -156,8 +181,7 @@ namespace CrossChat.Integrations.Services
 			}
 			finally
 			{
-				// === ГАРАНТИРОВАННОЕ УДАЛЕНИЕ ФАЙЛОВ ===
-				// Выполняется всегда, даже если произошла ошибка публикации
+				// Удаляем временные файлы с сервера
 				foreach (var localPath in tempFilesTracker)
 				{
 					try
@@ -178,7 +202,6 @@ namespace CrossChat.Integrations.Services
 
 		private async Task<(string PublicUrl, string LocalPath)> SaveMediaLocallyAsync(string base64String)
 		{
-			// Получаем пути
 			string tempFolder = _siteSettings.TempFolder;
 
 			if (!Directory.Exists(tempFolder))
@@ -186,7 +209,6 @@ namespace CrossChat.Integrations.Services
 				Directory.CreateDirectory(tempFolder);
 			}
 
-			// Определяем расширение файла из Base64 (по умолчанию .jpg)
 			string extension = ".jpg";
 			string cleanBase64 = base64String;
 
@@ -200,18 +222,19 @@ namespace CrossChat.Integrations.Services
 				else if (metaInfo.Contains("image/png")) extension = ".png";
 			}
 
-			// Генерируем уникальное имя
 			string fileName = $"{Guid.NewGuid()}{extension}";
 			string localPath = Path.Combine(tempFolder, fileName);
 
-			// Декодируем и сохраняем файл
 			byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 			await File.WriteAllBytesAsync(localPath, fileBytes);
 
-			// Формируем публичную ссылку (убедитесь, что APP_URL доступен в классе)
-			// APP_URL должен быть вашим доменом на Render, например https://my-app.onrender.com
-			string publicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{fileName}";
+			// Очищаем C2PA метку ИИ из видео через FFmpeg
+			if (extension == ".mp4")
+			{
+				await VideoService.StripAiMetadataAsync(localPath, _logger);
+			}
 
+			string publicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{fileName}";
 			return (publicUrl, localPath);
 		}
 

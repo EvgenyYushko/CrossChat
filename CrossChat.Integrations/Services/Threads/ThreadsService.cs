@@ -104,7 +104,7 @@ public partial class ThreadsService : IThreadsService
 		return "";
 	}
 
-	public async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60)
+	public async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 120)
 	{
 		Console.WriteLine($"Ожидаем готовности медиа {containerId}...");
 
