@@ -45,12 +45,12 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# --- Выдаём права доступа (добавили temp_media) ---
+# --- ВЫДАЁМ ПРАВА ДОСТУПА ПОЛЬЗОВАТЕЛЮ APP НА ВСЮ ПАПКУ /app ---
 USER root
-RUN mkdir -p /app/wwwroot/temp_audio /app/wwwroot/temp_media
-RUN chown -R app:app /app/wwwroot
-RUN chmod -R 777 /app/wwwroot
+RUN mkdir -p /app/wwwroot/temp_audio /app/wwwroot/temp_media && \
+    chown -R app:app /app && \
+    chmod -R 775 /app
 USER $APP_UID
-# --------------------------------------------------
+# -------------------------------------------------------------
 
 ENTRYPOINT ["dotnet", "CrossChat.dll"]
