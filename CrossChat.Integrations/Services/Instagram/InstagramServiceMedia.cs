@@ -373,6 +373,12 @@ public partial class InstagramService
 		byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 		await File.WriteAllBytesAsync(localPath, fileBytes);
 
+		// ЕСЛИ ЭТО ВИДЕО — УДАЛЯЕМ МЕТКУ ИИ ЧЕРЕЗ FFMPEG
+		if (extension == ".mp4")
+		{
+			await VideoService.StripAiMetadataAsync(localPath, _logger);
+		}
+
 		// Формируем публичную ссылку (убедитесь, что APP_URL доступен в классе)
 		// APP_URL должен быть вашим доменом на Render, например https://my-app.onrender.com
 		string publicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{fileName}";
