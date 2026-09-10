@@ -19,6 +19,12 @@ public static class InstagramAspectRatioFixer
 	/// </summary>
 	public static string FixAspectRatioIfNeeded(string base64Image)
 	{
+		// Если это видео — пропускаем без обработки, видео нельзя кадрировать через ImageSharp!
+		if (base64Image.Contains("video/mp4") || base64Image.Contains("video/"))
+		{
+			return base64Image;
+		}
+
 		try
 		{
 			string prefix = "";

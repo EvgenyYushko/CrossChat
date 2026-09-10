@@ -27,11 +27,13 @@ namespace CrossChat.Worker.Facades
 		public async Task PublishToSocialNetworkAsync(NetworkStateEntity state)
 		{
 			var network = (NetworkType)state.NetworkType;
-			var mediaList = state.Post.Media
-				.Where(m => m.MediaType == MediaType.Image) // TODO заглушка на ремя разработи!!!!!!
-				.OrderBy(m => m.SortOrder)
-				.ToList();
+			var mediaList = state.Post.Media.OrderBy(m => m.SortOrder).ToList();
 			var mediaPayloads = new List<string>();
+
+			if (!mediaList.Any())
+			{
+				throw new Exception($"У поста {state.PostId} нет медиафайлов для публикации в Instagram.");
+			}
 
 			// Скачиваем каждый файл из Google Drive для публикации
 			foreach (var media in mediaList)

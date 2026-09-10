@@ -193,6 +193,8 @@ public partial class InstagramService
 
 			_logger.LogInformation($"Медиа доступно по ссылке: {mediaUrl}");
 
+			await Task.Delay(500); 
+
 			// Учитываем тип: для видео нужен параметр media_type=VIDEO, для фото по умолчанию IMAGE
 			string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
 
@@ -257,6 +259,8 @@ public partial class InstagramService
 				{
 					childUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}&media_type=VIDEO&access_token={accessToken}";
 				}
+
+				await Task.Delay(500); 
 
 				var childResponse = await _httpClient.PostAsync(childUrl, null);
 				var childJson = await childResponse.Content.ReadAsStringAsync();
