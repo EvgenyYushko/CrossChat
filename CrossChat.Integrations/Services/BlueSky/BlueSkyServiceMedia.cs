@@ -23,27 +23,30 @@ namespace CrossChat.Integrations.Services
 			{
 				caption = await TruncateTextToMaxLength(caption);
 
-				// 1. Если картинок нет — публикуем простой текстовый пост
 				if (base64Images == null || !base64Images.Any())
 				{
 					return await CreatePostAsync(caption, settings);
 				}
 
-				// 2. Загружаем картинки (максимум 4 фото на пост в BlueSky)
 				var attachments = new List<ImageAttachment>();
+
+				// Загружаем до 4 картинок
 				foreach (var base64 in base64Images.Take(4))
 				{
 					string mimeType = "image/jpeg";
 					if (base64.StartsWith("data:image/png") || base64.StartsWith("iVBORw"))
 						mimeType = "image/png";
 
-					var blob = await UploadImageFromBase64Async(base64, mimeType, settings);
+					// Получаем и блоб, и реальные пропорции фото!
+					var (blob, aspectRatio) = await UploadImageFromBase64Async(base64, mimeType, settings);
+
 					if (blob != null)
 					{
 						attachments.Add(new ImageAttachment
 						{
 							Image = blob,
-							AltText = ""
+							AltText = "",
+							AspectRatio = aspectRatio // <-- ПЕРЕДАЕМ РАЗМЕРЫ В BLUESKY!
 						});
 					}
 				}
@@ -54,7 +57,6 @@ namespace CrossChat.Integrations.Services
 					return false;
 				}
 
-				// 3. Публикуем пост с блобами картинок
 				return await CreatePostWithImagesAsync(caption, attachments, settings);
 			}
 			catch (Exception ex)
@@ -64,7 +66,7 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		public async Task<Blob?> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting)
+		public async Task<(Blob? Blob, AspectRatio? AspectRatio)> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting)
 		{
 			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 			var uploadUrl = $"{pdsUrl}/xrpc/com.atproto.repo.uploadBlob";
@@ -74,18 +76,31 @@ namespace CrossChat.Integrations.Services
 				string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
 				byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 
-				// ВАЖНО: Лимит BlueSky для фото — ровно 2 000 000 байт!
-				// Если файл больше 1.95 МБ, оптимизируем его на лету
+				// Если файл больше 1.95 МБ — оптимизируем
 				const int MAX_BLUESKY_BYTES = 1_950_000;
 				if (fileBytes.Length > MAX_BLUESKY_BYTES)
 				{
 					fileBytes = CompressImageForBlueSky(fileBytes, out mimeType);
 				}
 
+				// Считываем точные пропорции изображения для идеального превью в ленте
+				AspectRatio? aspectRatio = null;
+				try
+				{
+					var info = Image.Identify(fileBytes);
+					if (info != null && info.Width > 0 && info.Height > 0)
+					{
+						aspectRatio = new AspectRatio { Width = info.Width, Height = info.Height };
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning("[BlueSky] Не удалось определить размеры фото: {Msg}", ex.Message);
+				}
+
 				var fileContent = new ByteArrayContent(fileBytes);
 				fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
 
-				// Отправка через DPoP
 				var response = await SendWithDPoPAsync(HttpMethod.Post, uploadUrl, setting, fileContent);
 				var jsonResponse = await response.Content.ReadAsStringAsync();
 
@@ -96,7 +111,7 @@ namespace CrossChat.Integrations.Services
 					if (result?.Blob != null)
 					{
 						_logger.LogInformation("✅ Изображение BlueSky успешно загружено.");
-						return result.Blob;
+						return (result.Blob, aspectRatio);
 					}
 				}
 
@@ -106,7 +121,8 @@ namespace CrossChat.Integrations.Services
 			{
 				_logger.LogError(ex, "Ошибка при загрузке картинки в BlueSky");
 			}
-			return null;
+
+			return (null, null);
 		}
 
 		/// <summary>

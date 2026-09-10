@@ -721,10 +721,14 @@ namespace CrossChat.Integrations.Services
 	public class ImageAttachment
 	{
 		[JsonPropertyName("image")]
-		public Blob Image { get; set; }
+		public Blob Image { get; set; } = null!;
 
 		[JsonPropertyName("alt")]
 		public string AltText { get; set; } = string.Empty;
+
+		// ВОТ ЭТО свойство решает проблему с полями в ленте:
+		[JsonPropertyName("aspectRatio")]
+		public AspectRatio? AspectRatio { get; set; }
 	}
 	#endregion
 }

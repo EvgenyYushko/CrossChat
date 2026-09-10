@@ -16,10 +16,11 @@ public interface IBlueSkyService
 	Task MarkConvoAsReadAsync(BlueSkyModel settings, string convoId, string lastMessageId);
 
 	// MediaPart
-	Task<Blob?> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting);
+	Task<(Blob? Blob, AspectRatio? AspectRatio)> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting);
 	Task<string> TruncateTextToMaxLength(string text);
 	Task<bool> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting);
 	Task<bool> CreatePostAsync(string postText, BlueSkyModel setting);
+
 	Task<bool> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings);
 	Task<bool> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings);
 }
