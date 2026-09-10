@@ -112,25 +112,16 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<bool> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish)
 		{
-			// Шаг 1: Получение токена страницы (логика из PublishToPageAsync)
-			string pageAccessToken;
-			try
-			{
-				pageAccessToken = acessToken;
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"Ошибка при получении токена страницы: {ex.Message}");
-				return false;
-			}
-
+			string pageAccessToken = acessToken;
 			if (string.IsNullOrEmpty(pageAccessToken)) return false;
 
-			// Шаг 2: Конвертация Base64 в байты
+			// ВАЖНО: Очищаем data-uri префикс ("data:video/mp4;base64,...")
+			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
+
 			byte[] videoBytes;
 			try
 			{
-				videoBytes = Convert.FromBase64String(base64Video);
+				videoBytes = Convert.FromBase64String(cleanBase64);
 			}
 			catch (FormatException)
 			{
@@ -138,22 +129,18 @@ namespace CrossChat.Integrations.Services
 				return false;
 			}
 
-			// Шаг 3: Выполнение 3-х шагов загрузки Reels
 			using (var httpClient = new HttpClient())
 			{
 				// 1. Инициировать сессию
 				var (videoId, uploadUrl) = await StartReelUploadSessionAsync(pageAccessToken, pageIdToPublish, httpClient);
-
 				if (string.IsNullOrEmpty(videoId) || string.IsNullOrEmpty(uploadUrl)) return false;
 
-				// 2. Загрузить видео (в вашем случае, все сразу, так как Base64 уже в памяти)
+				// 2. Загрузить бинарные данные видео
 				bool uploadSuccess = await TransferReelDataAsync(uploadUrl, videoBytes, pageAccessToken, httpClient);
-
 				if (!uploadSuccess) return false;
 
 				// 3. Завершить и опубликовать
 				bool publishSuccess = await FinishReelUploadSessionAsync(pageAccessToken, pageIdToPublish, videoId, message, httpClient);
-
 				return publishSuccess;
 			}
 		}
@@ -395,34 +382,33 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		// Возвращает ID загруженной фотографии (media_fbid)
 		private async Task<string> UploadImageAsync(string pageAccessToken, string pageId, string base64Image, HttpClient httpClient)
 		{
+			// ВАЖНО: Очищаем data-uri префикс ("data:image/jpeg;base64,...")
+			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
+
 			byte[] imageBytes;
 			try
 			{
-				imageBytes = Convert.FromBase64String(base64Image);
+				imageBytes = Convert.FromBase64String(cleanBase64);
 			}
 			catch (FormatException)
 			{
-				Console.WriteLine("Ошибка: Неверный формат Base64.");
+				Console.WriteLine("Ошибка: Неверный формат Base64 для фото.");
 				return null;
 			}
 
-			// Конечная точка загрузки фото для страницы
-			string url = $"https://graph.facebook.com/v22.0/{pageId}/photos";
+			// Единая версия API v24.0
+			string url = $"https://graph.facebook.com/v24.0/{pageId}/photos";
 
 			using (var content = new MultipartFormDataContent())
 			{
 				var imageContent = new ByteArrayContent(imageBytes);
 				imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
 
-				// "source" - бинарное содержимое фото
 				content.Add(imageContent, "source", "image.jpg");
-
-				// Обязательные параметры передаем в теле multipart формы
 				content.Add(new StringContent(pageAccessToken), "access_token");
-				content.Add(new StringContent("false"), "published"); // published=false закроет немедленную публикацию в ленту
+				content.Add(new StringContent("false"), "published"); // published=false для подготовки к альбому или сторис
 
 				var response = await httpClient.PostAsync(url, content);
 
@@ -432,7 +418,7 @@ namespace CrossChat.Integrations.Services
 					try
 					{
 						var data = JsonSerializer.Deserialize<UploadResponse>(result);
-						return data?.id; // Возвращаем ID загруженного фото
+						return data?.id;
 					}
 					catch (JsonException)
 					{

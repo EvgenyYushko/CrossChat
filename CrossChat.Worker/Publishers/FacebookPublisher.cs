@@ -28,12 +28,67 @@ namespace CrossChat.Worker.Publishers
 			if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
 				throw new Exception($"Не найдены настройки или PageAccessToken для Facebook (BotId: {state.BotId})");
 
-			await _console.Log($"Начало отправки поста в профиль {settings.PageName}.", settings.UserId, state.BotId);
+			await _console.Log($"Начало отправки поста в страницу {settings.PageName}.", settings.UserId, state.BotId);
 
-			await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, images);
-			//await FaceBookStory(files, fbSettings.PageAccessToken, fbSettings.PageId);
+			// Определяем типы файлов: видео или фото
+			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
 
-			await _console.Log($"Пост успешно опубликован в профиль {settings.PageName}.", settings.UserId, state.BotId);
+			var videoItem = images?.FirstOrDefault(isVideo);
+			var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
+
+			bool postSuccess = false;
+
+			// 1. ПУБЛИКАЦИЯ ВИДЕО (REELS)
+			if (videoItem != null)
+			{
+				await _console.Log("Обнаружено видео. Публикация Facebook Reel...", settings.UserId, state.BotId);
+				postSuccess = await _service.PublishReelAsync(caption, videoItem, settings.PageAccessToken, settings.PageId);
+			}
+			// 2. ПУБЛИКАЦИЯ ФОТО / АЛЬБОМА В ЛЕНТУ
+			else if (photoItems.Any())
+			{
+				await _console.Log($"Публикация {photoItems.Count} фото в ленту страницы Facebook...", settings.UserId, state.BotId);
+				postSuccess = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, photoItems);
+			}
+			// 3. ТЕКСТОВЫЙ ПОСТ
+			else
+			{
+				await _console.Log("Публикация текстового поста в Facebook...", settings.UserId, state.BotId);
+				postSuccess = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, null);
+			}
+
+			if (!postSuccess)
+			{
+				throw new Exception($"Ошибка при публикации основного поста на страницу Facebook: {settings.PageName}");
+			}
+
+			await _console.Log($"Основной пост успешно опубликован на странице {settings.PageName}.", settings.UserId, state.BotId);
+
+			// === 4. ПУБЛИКАЦИЯ ИСТОРИИ (STORY) ===
+			// Если в посте есть хотя бы одно фото — берем самое первое и дублируем в Stories страницы!
+			if (photoItems.Any())
+			{
+				try
+				{
+					var firstPhoto = photoItems.First();
+					await _console.Log("Публикация первого фото в истории (Stories) страницы Facebook...", settings.UserId, state.BotId);
+
+					bool storySuccess = await _service.PublishStoryAsync(firstPhoto, settings.PageAccessToken, settings.PageId);
+					if (storySuccess)
+					{
+						await _console.Log("История Facebook успешно опубликована!", settings.UserId, state.BotId);
+					}
+					else
+					{
+						await _console.Log("⚠️ Не удалось опубликовать историю Facebook (основной пост при этом опубликован).", settings.UserId, state.BotId);
+					}
+				}
+				catch (Exception ex)
+				{
+					// Ошибка сторис не должна ломать успешный статус основного поста
+					await _console.Log($"⚠️ Ошибка при создании истории Facebook: {ex.Message}", settings.UserId, state.BotId);
+				}
+			}
 		}
 	}
 }
