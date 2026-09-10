@@ -1,70 +1,91 @@
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 public static class InstagramAspectRatioFixer
 {
-	private const double MIN_ASPECT_RATIO = 0.80;  // 4:5 (минимальное соотношение)
-	private const double MAX_ASPECT_RATIO = 1.91;  // 1.91:1 (максимальное соотношение)
+	private const double MIN_ASPECT_RATIO = 0.80;  // 4:5 (портрет)
+	private const double MAX_ASPECT_RATIO = 1.91;  // 1.91:1 (пейзаж)
+
+	// Доля обрезки сверху для вертикальных фото .
+	// Это оставляет воздух над головой (Headroom) и сохраняет прическу/макушку целыми.
+	// 45% срезаем сверху, 55% снизу (максимально сбалансированный кроп)
+	private const double TOP_CROP_RATIO = 0.45;
 
 	/// <summary>
-	/// Проверяет пропорции Base64-изображения. Если они выходят за рамки правил Instagram (0.80 - 1.91),
-	/// центрирует фото на белом холсте нужного размера, предотвращая ошибку 2207009.
+	/// Проверяет пропорции изображения для ленты Instagram.
+	/// Если фото выходит за рамки [0.80 ... 1.91], аккуратно кадрирует (обрезает) его без добавления белых полей:
+	/// - Вертикальные фото (3:4, 9:16) обрезаются с акцентом на сохранение верхней части (головы).
+	/// - Панорамные фото обрезаются симметрично по бокам.
 	/// </summary>
 	public static string FixAspectRatioIfNeeded(string base64Image)
 	{
 		try
 		{
-			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
-			byte[] imageBytes = Convert.FromBase64String(cleanBase64);
+			string prefix = "";
+			string cleanBase64 = base64Image;
 
+			// Сохраняем data-uri префикс, если он был передан (например "data:image/jpeg;base64,")
+			if (base64Image.Contains(","))
+			{
+				var parts = base64Image.Split(',');
+				prefix = parts[0] + ",";
+				cleanBase64 = parts[1];
+			}
+
+			byte[] imageBytes = Convert.FromBase64String(cleanBase64);
 			using var image = Image.Load(imageBytes);
 
 			double currentRatio = (double)image.Width / image.Height;
 
-			// 1. Если пропорции УЖЕ входят в интервал [0.80 ... 1.91] — возвращаем исходную картинку без изменений!
+			// 1. Если пропорции УЖЕ допустимы в Instagram [0.80 ... 1.91] — не трогаем фото!
 			if (currentRatio >= MIN_ASPECT_RATIO && currentRatio <= MAX_ASPECT_RATIO)
 			{
 				return base64Image;
 			}
 
-			int newWidth = image.Width;
-			int newHeight = image.Height;
+			Rectangle cropArea;
 
-			// 2. Слишком узкое/высокое фото (ratio < 0.80, например 694x1260 = 0.55)
+			// 2. Слишком высокое фото (ratio < 0.80, например 3:4 = 0.75 или 9:16 = 0.56)
 			if (currentRatio < MIN_ASPECT_RATIO)
 			{
-				// Расширяем ширину до соотношения 4:5
-				newWidth = (int)Math.Ceiling(image.Height * MIN_ASPECT_RATIO);
+				// Вычисляем целевую высоту для соотношения ровно 4:5 (0.80)
+				// Math.Floor гарантирует, что итоговое соотношение не станет 0.7999
+				int targetHeight = (int)Math.Floor(image.Width / MIN_ASPECT_RATIO);
+				int excessHeight = image.Height - targetHeight;
+
+				// Срезаем 30% лишнего сверху, 70% снизу
+				int cropTop = (int)Math.Round(excessHeight * TOP_CROP_RATIO);
+
+				// Страховка от выхода за границы изображения
+				cropTop = Math.Clamp(cropTop, 0, excessHeight);
+
+				cropArea = new Rectangle(0, cropTop, image.Width, targetHeight);
 			}
 			// 3. Слишком широкое панорамное фото (ratio > 1.91)
-			else if (currentRatio > MAX_ASPECT_RATIO)
+			else
 			{
-				// Увеличиваем высоту до соотношения 1.91:1
-				newHeight = (int)Math.Ceiling(image.Width / MAX_ASPECT_RATIO);
+				// Вычисляем целевую ширину для соотношения 1.91:1
+				int targetWidth = (int)Math.Floor(image.Height * MAX_ASPECT_RATIO);
+				int excessWidth = image.Width - targetWidth;
+
+				// Для пейзажей центрируем обрезку по бокам (50% слева, 50% справа)
+				int cropLeft = excessWidth / 2;
+
+				cropArea = new Rectangle(cropLeft, 0, targetWidth, image.Height);
 			}
 
-			// 1. Создаем пустой холст нужного размера
-			using var canvas = new Image<Rgba32>(newWidth, newHeight);
+			// Выполняем обрезку прямо на исходном изображении (без создания белых полос)
+			image.Mutate(ctx => ctx.Crop(cropArea));
 
-			int offsetX = (newWidth - image.Width) / 2;
-			int offsetY = (newHeight - image.Height) / 2;
-
-			// 2. Заливаем белым цветом и рисуем поверх исходное фото по центру
-			canvas.Mutate(ctx => ctx
-				.BackgroundColor(Color.White)
-				.DrawImage(image, new Point(offsetX, offsetY), 1f));
-
-			// Сохраняем в JPEG
 			using var ms = new MemoryStream();
-			canvas.SaveAsJpeg(ms);
+			image.SaveAsJpeg(ms);
 
-			return Convert.ToBase64String(ms.ToArray());
+			return prefix + Convert.ToBase64String(ms.ToArray());
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"[Instagram Fixer] Ошибка при проверке пропорций: {ex.Message}");
-			return base64Image; // В случае сбоя возвращаем картинку как есть
+			Console.WriteLine($"[Instagram Fixer] Ошибка при кадрировании: {ex.Message}");
+			return base64Image; // В случае непредвиденного сбоя отдаем исходник
 		}
 	}
 }
