@@ -15,6 +15,7 @@ using CrossChat.Worker.Services;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
 using MassTransit;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -37,7 +38,8 @@ namespace CrossChat.Worker
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 
-		public static void AddWorkerServices(this IServiceCollection services, string token, SiteSettings siteSettings)
+		public static void AddWorkerServices(this IServiceCollection services, string token, SiteSettings siteSettings
+			, IConfiguration configuration)
 		{
 			// Регистрируем HttpClient для Инстаграма
 			services.AddSingleton(siteSettings);

@@ -24,7 +24,7 @@ namespace CrossChat.Data.Entities.Posting
 		public int AccessLevel { get; set; }
 
 		// Связь с картинками (Один пост -> Много картинок)
-		public virtual List<PostImageEntity> Images { get; set; } = new();
+		public virtual List<PostMediaEntity> Media { get; set; } = new();
 
 		// Связь с состояниями сетей (Один пост -> Много состояний)
 		public virtual List<NetworkStateEntity> NetworkStates { get; set; } = new();

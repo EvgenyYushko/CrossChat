@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CrossChat.Data\CrossChat.Data.csproj" />
+    <ProjectReference Include="..\CrossChat.Infrastructure\CrossChat.Infrastructure.csproj" />
     <ProjectReference Include="..\CrossChat.Integrations\CrossChat.Integrations.csproj" />
   </ItemGroup>
 

@@ -53,7 +53,7 @@ namespace CrossChat.Worker.Jobs
                 // Загружаем пост строго для текущего потока
                 var state = await db.NetworkStates
                     .Include(ns => ns.Post)
-                    .ThenInclude(p => p.Images)
+                    .ThenInclude(p => p.Media)
                     .FirstOrDefaultAsync(ns => ns.Id == stateId, ct);
 
                 if (state == null) return;

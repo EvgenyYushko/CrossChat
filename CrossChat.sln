@@ -18,6 +18,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		scripts\refresh-db.sh = scripts\refresh-db.sh
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossChat.Infrastructure", "CrossChat.Infrastructure\CrossChat.Infrastructure.csproj", "{32B2E87A-4354-4148-B65B-0C46F91403B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,6 +42,10 @@ Global
 		{5BEB86A1-6349-4F21-B4D4-BA75574A8841}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5BEB86A1-6349-4F21-B4D4-BA75574A8841}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5BEB86A1-6349-4F21-B4D4-BA75574A8841}.Release|Any CPU.Build.0 = Release|Any CPU
+		{32B2E87A-4354-4148-B65B-0C46F91403B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32B2E87A-4354-4148-B65B-0C46F91403B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32B2E87A-4354-4148-B65B-0C46F91403B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32B2E87A-4354-4148-B65B-0C46F91403B6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

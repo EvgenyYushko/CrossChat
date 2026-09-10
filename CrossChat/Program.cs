@@ -4,8 +4,10 @@ using CrossChat.Data;
 using CrossChat.Helpers;
 using CrossChat.Hubs;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Services.Google;
 using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Models;
 using CrossChat.Services;
@@ -25,6 +27,7 @@ using Resend;
 using StackExchange.Redis;
 using Telegram.Bot;
 using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.EnvConstants;
 using static CrossChat.Worker.WorkerInstaller;
 
 string GEMINI_API_KEY = "GEMINI_API_KEY";
@@ -85,6 +88,12 @@ builder.Services.AddSingleton<ITelegramBotClient>(provider =>
 {
 	var token = GetConfigOrThrow(TELEGRAM_BOT_TOKEN);
 	return new TelegramBotClient(token);
+});
+
+builder.Services.AddScoped<IGoogleDriveUploader>(provider =>
+{
+	var serviceAccountJson = GetConfigOrThrow(GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON);
+	return new GoogleDriveUploader(serviceAccountJson);
 });
 
 builder.Services.AddScoped<TelegramSystemWebhookController>();
@@ -191,7 +200,7 @@ builder.Services.AddMassTransit(x =>
 
 	var settings = new SiteSettings { TempFolder = tempFolder, AppUrl = APP_URL };
 
-	x.AddWorkerServices(geminiToken, settings);
+	x.AddWorkerServices(geminiToken, settings, builder.Configuration);
 
 	x.AddQuartzConsumers();
 	x.AddPublishMessageScheduler();
@@ -241,7 +250,7 @@ builder.Services.AddSingleton<IEmailService, EmailService>();
 builder.Services.Configure<ResendClientOptions>(options =>
 {
 	//https://resend.com/domains
-    options.ApiToken = GetConfigOrThrow(RESEND_API_TOKEN);
+	options.ApiToken = GetConfigOrThrow(RESEND_API_TOKEN);
 });
 builder.Services.AddHttpClient<IResend, ResendClient>();
 builder.Services.AddTransient<IEmailService, EmailService>();

@@ -2,8 +2,10 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CrossChat.Data;
+using CrossChat.Data.Emuns;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
 using Microsoft.AspNetCore.Authorization;
@@ -19,20 +21,26 @@ namespace CrossChat.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly IPostService _postService;
+		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly ILogger<PlannerController> _logger;
-		private const bool SHRIK_IMAGES = false;
 
-		public PlannerController(AppDbContext db, IPostService postService, ILogger<PlannerController> logger)
+		private const string GOOGLE_POSTS_FOLDER_ID = "1BCXzh7k4_eZM3bWVRy8BFmSx6y4fsigu";
+
+		public PlannerController(
+			AppDbContext db,
+			IPostService postService,
+			IGoogleDriveUploader googleDriveUploader,
+			ILogger<PlannerController> logger)
 		{
 			_db = db;
 			_postService = postService;
+			_googleDriveUploader = googleDriveUploader;
 			_logger = logger;
 		}
 
 		[HttpGet]
 		public async Task<IActionResult> Index(int profileId, string network, int? botId)
 		{
-			// Загружаем профиль со всеми его связанными списками настроек соцсетей
 			var profile = await _db.Profile
 				.Include(p => p.InstagramSettingsList)
 				.Include(p => p.FacebookSettingsList)
@@ -46,10 +54,9 @@ namespace CrossChat.Controllers
 
 			if (profile == null) return NotFound();
 
-			// Передаем параметры во View через ViewBag
 			ViewBag.ProfileId = profileId;
 			ViewBag.Network = network;
-			ViewBag.BotId = botId; // <-- ЗАПОМИНАЕМ конкретный ID подключенного аккаунта/бота!
+			ViewBag.BotId = botId;
 
 			return View(profile);
 		}
@@ -61,7 +68,6 @@ namespace CrossChat.Controllers
 
 			if (networkType == "All")
 			{
-				// ОБЩИЙ РЕЖИМ: Выбираем посты, у которых активно хотя бы одно направление
 				var posts = await _db.Posts
 					.Include(p => p.NetworkStates)
 					.Where(p => p.ProfileId == profileId &&
@@ -80,7 +86,6 @@ namespace CrossChat.Controllers
 						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
 						backgroundColor = "#4f46e5",
 						network = "All",
-						// Отдаем массив ключей "{Соцсеть}_{BotId}"
 						activeNetworks = activeStates.Select(ns => $"{((NetworkType)ns.NetworkType).ToString()}_{ns.BotId}").ToList()
 					};
 				});
@@ -89,18 +94,15 @@ namespace CrossChat.Controllers
 			}
 			else
 			{
-				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...): Фильтруем строго по конкретному BotId!
 				var netType = Enum.Parse<NetworkType>(networkType);
 				int netTypeId = (int)netType;
-
-				// Если BotId не передан явно в запросе календаря, находим первого активного бота
 				var finalBotId = botId ?? FindFirstActiveBotId(profileId, netType);
 
 				var posts = await _db.Posts
 					.Include(p => p.NetworkStates)
 					.Where(p => p.ProfileId == profileId &&
 								p.NetworkStates.Any(ns => ns.NetworkType == netTypeId &&
-														  ns.BotId == finalBotId && // <-- Фильтр по BotId!
+														  ns.BotId == finalBotId &&
 														  ns.Status != (int)SocialStatus.None))
 					.ToListAsync();
 
@@ -118,24 +120,19 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("create")]
-		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		[RequestSizeLimit(300 * 1024 * 1024)] // Лимит 300 МБ для поддержки видео
+		[RequestFormLimits(MultipartBodyLengthLimit = 300 * 1024 * 1024)]
 		public async Task<IActionResult> Create(
 			[FromForm] int profileId,
-			[FromForm] string networkType, // Унифицировали: теперь тип string вместо NetworkType
-			[FromForm] List<string> selectedNetworks, // Чекбоксы выбранных сетей из формы
+			[FromForm] string networkType,
+			[FromForm] List<string> selectedNetworks,
 			[FromForm] string caption,
 			[FromForm] DateTime showDate,
 			[FromForm] int? botId,
-			[FromForm] List<string> originalDimensions,
-			[FromForm] List<string> compressedDimensions,
-			[FromForm] List<long> originalSizes,
 			List<IFormFile> images)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 			var utcDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
-			// 1. Создаем BlogPost (Domain Model)
 			var post = new BlogPost
 			{
 				Id = Guid.NewGuid(),
@@ -145,61 +142,217 @@ namespace CrossChat.Controllers
 				Access = AccessLevel.Public
 			};
 
-			// 2. Наполнение и валидация соцсетей (Вызов общего хелпера)
 			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 			{
 				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 			}
 
-			// 3. Обработка и сжатие картинок
-			await UploadMedia(originalDimensions, compressedDimensions, originalSizes, images, post);
+			// Загрузка медиа в Google Drive
+			await UploadMedia(images, post);
 
-			// 4. Сохраняем пост в БД
 			await _postService.AddPostAsync(post);
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 		}
 
 		[HttpPost("update/{id}")]
-		[RequestSizeLimit(100 * 1024 * 1024)] // Устанавливает лимит Kestrel в 100 МБ
-		[RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)] // Устанавливает лимит формы в 100 МБ
+		[RequestSizeLimit(300 * 1024 * 1024)]
+		[RequestFormLimits(MultipartBodyLengthLimit = 300 * 1024 * 1024)]
 		public async Task<IActionResult> Update(
-			Guid id,
-			[FromForm] int profileId,
-			[FromForm] string networkType,
-			[FromForm] string caption,
-			[FromForm] DateTime showDate,
-			[FromForm] int? botId,
-			[FromForm] List<string> keptImages, // Старые сохраненные картинки в Base64
-			[FromForm] List<string> selectedNetworks, // Список выбранных соцсетей (для режима All)
-			[FromForm] List<string> originalDimensions,   // Принимаем разрешение ДО
-			[FromForm] List<string> compressedDimensions,
-			[FromForm] List<long> originalSizes,
-			[FromForm] List<IFormFile> images)   // Новые добавленные файлы
+	Guid id,
+	[FromForm] int profileId,
+	[FromForm] string networkType,
+	[FromForm] string caption,
+	[FromForm] DateTime showDate,
+	[FromForm] int? botId,
+	[FromForm] List<string> keptMediaDriveIds, // ID файлов, которые пользователь оставил
+	[FromForm] List<string> selectedNetworks,
+	[FromForm] List<IFormFile> images)
 		{
-			// 1. Получаем существующий пост из базы данных
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
 
-			// 2. Обновляем базовые данные
 			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
 
-			// 3. Обновление текстов и статусов соцсетей (Вызов общего хелпера)
 			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 			{
 				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 			}
 
-			// 4. Обновляем список картинок поста
-			post.Images = keptImages ?? new List<string>();
+			// === УДАЛЕНИЕ ИЗ GOOGLE DRIVE ТЕХ ФАЙЛОВ, КОТОРЫЕ УДАЛИЛИ ПО КРЕСТИКУ ===
+			var keptSet = keptMediaDriveIds != null
+				? new HashSet<string>(keptMediaDriveIds)
+				: new HashSet<string>();
 
-			// 5. Обработка новых картинок
-			await UploadMedia(originalDimensions, compressedDimensions, originalSizes, images, post);
+			// Находим те медиа, которых нет в списке оставленных (пользователь нажал на них крестик)
+			var removedMedia = post.Media
+				.Where(m => !keptSet.Contains(m.GoogleDriveFileId))
+				.ToList();
 
-			// 6. Сохраняем изменения в базе
+			// Удаляем каждый удаленный файл из Google Диска
+			foreach (var media in removedMedia)
+			{
+				_logger.LogInformation("Удаление файла {FileName} (DriveId: {DriveId}) из Google Drive...",
+					media.FileName, media.GoogleDriveFileId);
+
+				await _googleDriveUploader.DeleteFileByIdAsync(media.GoogleDriveFileId);
+
+				// Если у файла была отдельная превьюшка, удаляем и её
+				if (!string.IsNullOrEmpty(media.ThumbnailDriveFileId))
+				{
+					await _googleDriveUploader.DeleteFileByIdAsync(media.ThumbnailDriveFileId);
+				}
+			}
+
+			// Оставляем в посте только те файлы, которые остались активными
+			post.Media = post.Media.Where(m => keptSet.Contains(m.GoogleDriveFileId)).ToList();
+
+			// Догружаем новые выбранные медиафайлы в Google Drive
+			await UploadMedia(images, post);
+
+			// Сохраняем изменения в базе данных
 			await _postService.UpdatePostAsync(post);
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
+		}
+
+		private async Task UploadMedia(List<IFormFile> files, BlogPost post)
+		{
+			if (files == null || files.Count == 0) return;
+
+			_logger.LogInformation("=== ЗАГРУЗКА МЕДИА В GOOGLE DRIVE ===");
+
+			for (int i = 0; i < files.Count; i++)
+			{
+				var file = files[i];
+				if (file.Length == 0) continue;
+
+				try
+				{
+					// Определяем тип медиа
+					var isVideo = file.ContentType.StartsWith("video/") ||
+								  file.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+								  file.FileName.EndsWith(".mov", StringComparison.OrdinalIgnoreCase);
+
+					var mediaType = isVideo ? MediaType.Video : MediaType.Image;
+
+					// Загружаем напрямую поток файла в Google Drive
+					using var stream = file.OpenReadStream();
+					var driveFileId = await _googleDriveUploader.UploadStreamAsync(
+						stream,
+						file.FileName,
+						GOOGLE_POSTS_FOLDER_ID,
+						file.ContentType);
+
+					post.Media.Add(new PostMediaItem
+					{
+						MediaType = mediaType,
+						GoogleDriveFileId = driveFileId,
+						FileName = file.FileName,
+						MimeType = file.ContentType,
+						FileSizeBytes = file.Length,
+						SortOrder = post.Media.Count
+					});
+
+					_logger.LogInformation("Файл {FileName} ({Size} байт) успешно загружен в Google Drive. FileId: {DriveId}",
+						file.FileName, file.Length, driveFileId);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Ошибка при загрузке медиафайла {FileName} в Google Drive", file.FileName);
+				}
+			}
+
+			_logger.LogInformation("=========================================");
+		}
+
+		/// <summary>
+		/// Эндпоинт для отображения превью фото и видео в календаре прямо из Google Drive
+		/// </summary>
+		[HttpGet("media/{driveFileId}")]
+		public async Task<IActionResult> GetMediaFile(string driveFileId)
+		{
+			if (string.IsNullOrEmpty(driveFileId) || driveFileId == "undefined")
+			{
+				return BadRequest("Некорректный ID файла");
+			}
+
+			try
+			{
+				// Находим медиа в базе, чтобы отдать правильный MimeType (image/jpeg, video/mp4 и т.д.)
+				var media = await _db.PostMedia.AsNoTracking().FirstOrDefaultAsync(m => m.GoogleDriveFileId == driveFileId);
+				var contentType = !string.IsNullOrEmpty(media?.MimeType) ? media.MimeType : "image/jpeg";
+
+				var stream = await _googleDriveUploader.GetFileStreamAsync(driveFileId);
+				return File(stream, contentType, enableRangeProcessing: true);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Не удалось получить файл {DriveFileId} из Google Drive", driveFileId);
+				return NotFound();
+			}
+		}
+
+		[HttpPost("update-date/{id}")]
+		public async Task<IActionResult> UpdateDate(Guid id, [FromForm] DateTime newDate)
+		{
+			var post = await _postService.GetPostByIdAsync(id);
+			if (post == null) return NotFound();
+
+			post.ShowDate = DateTime.SpecifyKind(newDate, DateTimeKind.Utc);
+			await _postService.UpdatePostAsync(post);
+
+			return Ok();
+		}
+
+		[HttpGet("get/{id}")]
+		public async Task<IActionResult> GetPost(Guid id)
+		{
+			var post = await _postService.GetPostByIdAsync(id);
+			var options = new JsonSerializerOptions
+			{
+				Converters = { new JsonStringEnumConverter() },
+				Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+			};
+
+			return post != null ? Json(post, options) : NotFound();
+		}
+
+		[HttpPost("delete/{id}")]
+		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType, [FromQuery] int? botId)
+		{
+			var post = await _postService.GetPostByIdAsync(id);
+			if (post == null) return NotFound();
+
+			var activeNets = post.Networks
+				.Where(n => n.Value.Status != SocialStatus.None)
+				.Select(n => n.Key)
+				.ToList();
+
+			if (networkType == "All" || activeNets.Count <= 1)
+			{
+				// Удаляем файлы из Google Drive перед удалением поста
+				foreach (var media in post.Media)
+				{
+					await _googleDriveUploader.DeleteFileByIdAsync(media.GoogleDriveFileId);
+				}
+
+				await _postService.DeletePostAsync(id);
+			}
+			else
+			{
+				var netType = Enum.Parse<NetworkType>(networkType);
+				var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, netType);
+				var netKey = $"{networkType}_{finalBotId}";
+
+				if (post.Networks.ContainsKey(netKey))
+				{
+					post.Networks[netKey] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+				}
+				await _postService.UpdatePostAsync(post);
+			}
+
+			return Ok();
 		}
 
 		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
@@ -208,10 +361,9 @@ namespace CrossChat.Controllers
 			{
 				if (selectedNetworks == null || selectedNetworks.Count == 0)
 				{
-					return false; // Валидация не прошла
+					return false;
 				}
 
-				// Сбрасываем те сети, у которых сняли галочки
 				foreach (var key in post.Networks.Keys.ToList())
 				{
 					if (!selectedNetworks.Contains(key))
@@ -220,8 +372,7 @@ namespace CrossChat.Controllers
 					}
 				}
 
-				// Наполняем выбранные чекбоксами направления
-				foreach (var netKey in selectedNetworks) // формат: "Instagram_5"
+				foreach (var netKey in selectedNetworks)
 				{
 					var parts = netKey.Split('_');
 					if (Enum.TryParse<NetworkType>(parts[0], out var parsedNet))
@@ -250,11 +401,8 @@ namespace CrossChat.Controllers
 			}
 			else
 			{
-				// ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...):
 				if (Enum.TryParse<NetworkType>(networkType, out var parsedNet))
 				{
-					// Используем переданный botId напрямую!
-					// Метод FindFirstActiveBotId вызовется только как фоллбек, если botId равен null
 					var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, parsedNet);
 					var netKey = $"{networkType}_{finalBotId}";
 
@@ -281,147 +429,6 @@ namespace CrossChat.Controllers
 			return true;
 		}
 
-		private async Task UploadMedia(List<string> originalDimensions, List<string> compressedDimensions, List<long> originalSizes, List<IFormFile> images, BlogPost post)
-		{
-			if (images != null && images.Count > 0)
-			{
-				if (SHRIK_IMAGES)
-				{
-					_logger.LogInformation("=== СЖАТИЕ ИЗОБРАЖЕНИЙ: СОЗДАНИЕ ПОСТА ===");
-					foreach (var file in images)
-					{
-						try
-						{
-							var compressResult = await ImageHelper.CompressAndConvertToBase64Async(file);
-							post.Images.Add(compressResult.Base64);
-
-							// Выводим развернутую статистику до и после
-							_logger.LogInformation(
-								"Файл: {FileName}\n" +
-								"  [ДО]: {OrigWidth}x{OrigHeight} px | Размер: {OrigSize:F3} МБ\n" +
-								"  [ПОСЛЕ]: {CompWidth}x{CompHeight} px | Размер JPEG: {CompSize:F3} МБ\n" +
-								"  [В БД (Base64)]: Символов: {B64Length} | Итоговый вес в БД: {B64DbSize:F3} МБ",
-								file.FileName,
-								compressResult.OriginalWidth, compressResult.OriginalHeight, compressResult.OriginalSizeMb,
-								compressResult.CompressedWidth, compressResult.CompressedHeight, compressResult.CompressedSizeMb,
-								compressResult.Base64.Length, compressResult.Base64DbSizeMb);
-						}
-						catch (Exception ex)
-						{
-							_logger.LogError(ex, "Ошибка при сжатии изображения {FileName}", file.FileName);
-						}
-					}
-					_logger.LogInformation("=========================================");
-				}
-				else
-				{
-					for (int i = 0; i < images.Count; i++)
-					{
-						var file = images[i];
-						try
-						{
-							using var ms = new MemoryStream();
-							await file.CopyToAsync(ms);
-							var base64 = Convert.ToBase64String(ms.ToArray());
-							post.Images.Add(base64);
-
-							double receivedSizeMb = file.Length / (1024.0 * 1024.0);
-							double dbSizeMb = base64.Length / (1024.0 * 1024.0);
-
-							string origDim = (originalDimensions != null && originalDimensions.Count > i) ? originalDimensions[i] : "Неизвестно";
-							string compDim = (compressedDimensions != null && compressedDimensions.Count > i) ? compressedDimensions[i] : "Неизвестно";
-
-							long origSizeBytes = (originalSizes != null && originalSizes.Count > i) ? originalSizes[i] : 0;
-							double origSizeMb = origSizeBytes / (1024.0 * 1024.0);
-
-							_logger.LogInformation(
-							"Файл [{FileName}] успешно получен от клиента:\n" +
-							"  [РАЗРЕШЕНИЕ]: {OrigDim} px ==> уменьшено до ==> {CompDim} px\n" +
-							"  [ВЕС ФАЙЛА]: Исходный: {OrigSize:F3} МБ ==> сжат до ==> {RecSize:F3} МБ\n" +
-							"  [В БД (Base64)]: Длина строки {B64Length} символов | Примерный вес в БД: {DbSize:F3} МБ",
-								file.FileName, origDim, compDim, origSizeMb, receivedSizeMb, base64.Length, dbSizeMb);
-						}
-						catch (Exception ex)
-						{
-							_logger.LogError(ex, "Ошибка при конвертации полученного файла {FileName}", file.FileName);
-						}
-					}
-					_logger.LogInformation("============================================================");
-				}
-			}
-		}
-
-		[HttpPost("update-date/{id}")]
-		public async Task<IActionResult> UpdateDate(Guid id, [FromForm] DateTime newDate)
-		{
-			// 1. Получаем существующий пост
-			var post = await _postService.GetPostByIdAsync(id);
-			if (post == null) return NotFound();
-
-			// 2. Обновляем только дату публикации (приводим ее к UTC)
-			post.ShowDate = DateTime.SpecifyKind(newDate, DateTimeKind.Utc);
-
-			// 3. Сохраняем изменения в БД и обновляем кеш
-			await _postService.UpdatePostAsync(post);
-
-			return Ok();
-		}
-
-		[HttpGet("get/{id}")]
-		public async Task<IActionResult> GetPost(Guid id)
-		{
-			var post = await _postService.GetPostByIdAsync(id);
-			// Настраиваем сериализатор
-			var options = new JsonSerializerOptions
-			{
-				Converters = { new JsonStringEnumConverter() } // ЭТО СДЕЛАЕТ КЛЮЧИ ТЕКСТОВЫМИ
-															   // Отключает агрессивное экранирование Base64, снижая нагрузку на память в разы
-				,
-				Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-			};
-
-			return post != null ? Json(post, options) : NotFound();
-		}
-
-		[HttpPost("delete/{id}")]
-		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType, [FromQuery] int? botId)
-		{
-			var post = await _postService.GetPostByIdAsync(id);
-			if (post == null) return NotFound();
-
-			// Считаем количество активных направлений публикации
-			var activeNets = post.Networks
-				.Where(n => n.Value.Status != SocialStatus.None)
-				.Select(n => n.Key)
-				.ToList();
-
-			// ЕСЛИ удаляем из общей вкладки "All" ИЛИ это была единственная активная сеть поста
-			if (networkType == "All" || activeNets.Count <= 1)
-			{
-				// Удаляем полностью весь BlogPost из базы данных
-				await _postService.DeletePostAsync(id);
-			}
-			else
-			{
-				// ЕСЛИ это мультипостинг, но удаляем из конкретной соцсети
-				var netType = Enum.Parse<NetworkType>(networkType);
-				var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, netType);
-
-				// Находим ключ вида "{Соцсеть}_{BotId}"
-				var netKey = $"{networkType}_{finalBotId}";
-
-				if (post.Networks.ContainsKey(netKey))
-				{
-					// Убираем только это направление (переводим в статус None)
-					post.Networks[netKey] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
-				}
-				await _postService.UpdatePostAsync(post);
-			}
-
-			return Ok();
-		}
-
-		// Вспомогательный метод поиска первого активного BotId в профиле по типу сети
 		private int FindFirstActiveBotId(int profileId, NetworkType netType)
 		{
 			var profile = _db.Profile
@@ -430,9 +437,9 @@ namespace CrossChat.Controllers
 				.Include(p => p.ThreadsSettingsList)
 				.Include(p => p.XSettingsList)
 				.Include(p => p.TelegramUserBotSettingsList)
+				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.BlueSkySettingsList)
-				.Include(p => p.TelegramChannelSettingsList)
 				.FirstOrDefault(p => p.Id == profileId);
 
 			if (profile == null) return 0;
@@ -451,14 +458,11 @@ namespace CrossChat.Controllers
 					return profile.TelegramUserBotSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				case NetworkType.TelegramChannel:
 					return profile.TelegramChannelSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
-				//case NetworkType.TelegramP:
-				//	return (profile.TelegramSettings != null && profile.TelegramSettings.IsActive) ? profile.TelegramSettings.UserId : 0;
 				case NetworkType.BlueSky:
 					return profile.BlueSkySettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				default:
 					return 0;
 			}
 		}
-
 	}
 }

@@ -23,7 +23,7 @@ namespace CrossChat.Data
 
 
 		public DbSet<PostEntity> Posts { get; set; }
-		public DbSet<PostImageEntity> PostImages { get; set; }
+		public DbSet<PostMediaEntity> PostMedia { get; set; }
 		public DbSet<NetworkStateEntity> NetworkStates { get; set; }
 
 		public DbSet<ReviewEntity> Reviews { get; set; }

@@ -11,7 +11,7 @@ namespace CrossChat.Integrations.Models
 		public Guid Id { get; set; } = Guid.NewGuid();
 		public int ProfileId { get; set; }
 
-		public List<string> Images { get; set; } = new();
+		public List<PostMediaItem> Media { get; set; } = new();
 		public DateTime CreatedAt { get; set; } = DateTimeNow;
 		public DateTime ShowDate { get; set; }
 
