@@ -201,6 +201,135 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
+		/// <summary>
+		/// Главный метод публикации поста с видео в BlueSky
+		/// </summary>
+		public async Task<bool> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings)
+		{
+			try
+			{
+				caption = await TruncateTextToMaxLength(caption);
+
+				// 1. Загружаем видео-блоб на PDS через DPoP
+				var videoBlob = await UploadVideoFromBase64Async(base64Video, mimeType, settings);
+				if (videoBlob == null)
+				{
+					_logger.LogError("[BlueSky] Не удалось загрузить видео-б blob в PDS.");
+					return false;
+				}
+
+				// 2. Указываем пропорции (для вертикального видео 9:16, чтобы плеер Bluesky сразу выделил нужный размер)
+				var ratio = new AspectRatio { Width = 9, Height = 16 };
+
+				// 3. Создаем запись поста с видео
+				return await CreatePostWithVideoAsync(caption, videoBlob, ratio, settings);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка публикации поста с видео");
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Загрузка бинарных данных видео в репозиторий AT Protocol (PDS) с DPoP-подписью
+		/// </summary>
+		public async Task<Blob?> UploadVideoFromBase64Async(string base64Video, string mimeType, BlueSkyModel setting)
+		{
+			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
+			var uploadUrl = $"{pdsUrl}/xrpc/com.atproto.repo.uploadBlob";
+
+			try
+			{
+				// Очищаем data-uri префикс, если он есть
+				string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
+				byte[] fileBytes = Convert.FromBase64String(cleanBase64);
+
+				var fileContent = new ByteArrayContent(fileBytes);
+				fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrEmpty(mimeType) ? "video/mp4" : mimeType);
+
+				// Отправляем через DPoP с подписью ключа
+				var response = await SendWithDPoPAsync(HttpMethod.Post, uploadUrl, setting, fileContent);
+				var jsonResponse = await response.Content.ReadAsStringAsync();
+
+				if (response.IsSuccessStatusCode)
+				{
+					var result = JsonSerializer.Deserialize<UploadBlobResponse>(jsonResponse);
+
+					if (result?.Blob != null)
+					{
+						_logger.LogInformation("✅ Видео BlueSky успешно загружено в PDS.");
+						return result.Blob;
+					}
+				}
+
+				_logger.LogError($"❌ Ошибка загрузки видео в BlueSky: {response.StatusCode} - {jsonResponse}");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка при загрузке видео в BlueSky");
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Создание записи поста с прикрепленным видео (app.bsky.embed.video)
+		/// </summary>
+		public async Task<bool> CreatePostWithVideoAsync(string postText, Blob videoBlob, AspectRatio aspectRatio, BlueSkyModel setting)
+		{
+			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl))
+			{
+				return false;
+			}
+
+			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
+			var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
+
+			List<Facet> facets = TryGetFacets(postText);
+
+			// Формируем payload для видео по стандарту ATProto
+			var embedPayload = new VideoEmbedPayload
+			{
+				Video = videoBlob,
+				AspectRatio = aspectRatio
+			};
+
+			var record = new PostRecord
+			{
+				Text = postText,
+				Facets = facets.Any() ? facets : null,
+				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+				Embed = embedPayload
+			};
+
+			var payload = new
+			{
+				repo = setting.Did,
+				collection = "app.bsky.feed.post",
+				record = record
+			};
+
+			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+			{
+				DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+			});
+			var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+			// Отправка через DPoP
+			var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
+
+			if (response.IsSuccessStatusCode)
+			{
+				_logger.LogInformation("✅ Пост с видео успешно опубликован в BlueSky!");
+				return true;
+			}
+
+			var errorContent = await response.Content.ReadAsStringAsync();
+			_logger.LogError($"❌ Ошибка публикации видео-поста в BlueSky: {response.StatusCode} - {errorContent}");
+			return false;
+		}
+
 		private static List<Facet> TryGetFacets(string postText)
 		{
 			var facets = new List<Facet>();

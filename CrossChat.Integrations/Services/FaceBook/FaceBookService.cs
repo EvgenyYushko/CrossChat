@@ -51,44 +51,51 @@ namespace CrossChat.Integrations.Services
 		/// </summary>
 		public async Task<List<FbConversation>> GetUnreadDialogsAsync(string token, string pageId)
 		{
-			// 2. Формируем запрос
-			// Мы просим список диалогов, где unread_count > 0
-			// И берем последнее сообщение из каждого диалога, чтобы понять, кто писал последним
-			string url = $"https://graph.facebook.com/v22.0/{pageId}/conversations" +
-				 $"?platform=messenger" +
-				 $"&fields=id,unread_count,messages.limit(1){{from,message}}" +
-				 $"&access_token={token}";
-
 			var unreadConversation = new List<FbConversation>();
 
-			using (var httpClient = new HttpClient())
+			// Экранируем вложенные поля, чтобы Meta не падала в 500 Internal Server Error
+			string fields = "id,unread_count,messages.limit(1){from,message}";
+
+			// Используем v24.0 единым стандартом
+			string url = $"https://graph.facebook.com/v24.0/{pageId}/conversations" +
+						 $"?platform=messenger" +
+						 $"&fields={Uri.EscapeDataString(fields)}" +
+						 $"&access_token={token}";
+
+			try
 			{
-				var response = await httpClient.GetAsync(url);
-				if (!response.IsSuccessStatusCode)
+				using (var httpClient = new HttpClient())
 				{
-					string error = await response.Content.ReadAsStringAsync();
-					Console.WriteLine($"Ошибка получения диалогов FB (HTTP {response.StatusCode}): {error}");
-					return unreadConversation;
-				}
-
-				var json = await response.Content.ReadAsStringAsync();
-				var conversationData = JsonSerializer.Deserialize<FbConversationResponse>(json);
-
-				if (conversationData?.data == null) return unreadConversation;
-
-				foreach (var convo in conversationData.data)
-				{
-					// Пропускаем пустые диалоги
-					if (convo.messages?.data == null || !convo.messages.data.Any()) continue;
-
-					var lastMsg = convo.messages.data.First();
-
-					// Проверка: отправитель не должен быть самой страницей
-					if (lastMsg.from?.id != pageId)
+					var response = await httpClient.GetAsync(url);
+					if (!response.IsSuccessStatusCode)
 					{
-						unreadConversation.Add(convo);
+						string error = await response.Content.ReadAsStringAsync();
+						Console.WriteLine($"Ошибка получения диалогов FB (HTTP {response.StatusCode}): {error}");
+						return unreadConversation;
+					}
+
+					var json = await response.Content.ReadAsStringAsync();
+					var conversationData = JsonSerializer.Deserialize<FbConversationResponse>(json);
+
+					if (conversationData?.data == null) return unreadConversation;
+
+					foreach (var convo in conversationData.data)
+					{
+						if (convo.messages?.data == null || !convo.messages.data.Any()) continue;
+
+						var lastMsg = convo.messages.data.First();
+
+						// Отправитель не должен быть самой страницей
+						if (lastMsg.from?.id != pageId)
+						{
+							unreadConversation.Add(convo);
+						}
 					}
 				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Исключение при получении диалогов FB: {ex.Message}");
 			}
 
 			return unreadConversation;

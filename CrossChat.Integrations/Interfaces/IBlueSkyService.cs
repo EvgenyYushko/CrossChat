@@ -21,4 +21,5 @@ public interface IBlueSkyService
 	Task<bool> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting);
 	Task<bool> CreatePostAsync(string postText, BlueSkyModel setting);
 	Task<bool> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings);
+	Task<bool> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings);
 }

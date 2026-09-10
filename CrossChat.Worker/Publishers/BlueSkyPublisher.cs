@@ -41,15 +41,39 @@ public class BlueSkyPublisher : ISocialPublisher
 			SystemPrompt = settings.SystemPrompt
 		};
 
-		await _service.PublishPostWithImagesAsync(caption, images, botModel);
+		// Проверяем актуальность токена (обновит через RefreshToken, если истек)
+		await _service.GetValidTokenAsync(botModel);
 
-		//if (videoModel is not null)
-		//{
-		//	var videoBlob = await _blueSkyService.UploadVideoFromBase64Async(videoModel.Base64Video, videoModel.MimeType);
-		//	var ratio = new AspectRatio { Width = 9, Height = 16 };
-		//	success = await _blueSkyService.CreatePostWithVideoAsync(description, videoBlob, ratio);
-		//}
-		//else 
+		// Определяем типы медиа
+		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+		var videoItem = images?.FirstOrDefault(isVideo);
+		var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
+
+		bool success = false;
+
+		// 1. ПУБЛИКАЦИЯ ВИДЕО
+		if (videoItem != null)
+		{
+			await _console.Log("Обнаружено видео. Загрузка ролика в BlueSky...", settings.UserId, state.BotId);
+			success = await _service.PublishPostWithVideoAsync(caption, videoItem, "video/mp4", botModel);
+		}
+		// 2. ПУБЛИКАЦИЯ ФОТО (до 4 шт)
+		else if (photoItems.Any())
+		{
+			await _console.Log($"Публикация {photoItems.Count} фото в BlueSky...", settings.UserId, state.BotId);
+			success = await _service.PublishPostWithImagesAsync(caption, photoItems, botModel);
+		}
+		// 3. ТЕКСТОВЫЙ ПОСТ
+		else
+		{
+			await _console.Log("Публикация текстового поста в BlueSky...", settings.UserId, state.BotId);
+			success = await _service.CreatePostAsync(caption, botModel);
+		}
+
+		if (!success)
+		{
+			throw new Exception($"Ошибка при публикации поста в BlueSky @{settings.Handle}");
+		}
 
 		await _console.Log($"Пост успешно опубликован в BlueSky @{settings.Handle}.", settings.UserId, state.BotId);
 	}
