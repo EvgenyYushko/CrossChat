@@ -82,7 +82,7 @@ public partial class InstagramService
 		}
 	}
 
-	private async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 60)
+	private async Task<bool> WaitForMediaReadyAsync(string containerId, string accessToken, int maxWaitSeconds = 120)
 	{
 		_logger.LogInformation($"Ожидаем готовности медиа {containerId}...");
 
@@ -209,7 +209,8 @@ public partial class InstagramService
 			{
 				containerUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
 							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
-							   "&media_type=VIDEO" +
+							   "&media_type=REELS" +          // <-- Используем REELS вместо устаревшего VIDEO
+							   "&share_to_feed=true" +        // <-- Публикуем и в Reels, и в общую сетку ленты!
 							   $"&access_token={accessToken}";
 			}
 
