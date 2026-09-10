@@ -2,8 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using File = System.IO.File;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
+using File = System.IO.File;
 
 namespace CrossChat.Integrations.Services;
 
@@ -193,7 +193,7 @@ public partial class InstagramService
 
 			_logger.LogInformation($"Медиа доступно по ссылке: {mediaUrl}");
 
-			await Task.Delay(500); 
+			await Task.Delay(500);
 
 			// Учитываем тип: для видео нужен параметр media_type=VIDEO, для фото по умолчанию IMAGE
 			string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
@@ -242,54 +242,79 @@ public partial class InstagramService
 	{
 		try
 		{
+			_logger.LogInformation("CreateCarouselContainerAsync - Start");
 			var childrenIds = new List<string>();
 
-			// Сначала создаем все дочерние контейнеры
+			// 1. Создаем дочерние контейнеры для каждого слайда карусели
 			foreach (var base64String in base64Strings)
 			{
 				string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
 
 				// Сохраняем на свой сервер
 				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
-				tempFilesTracker.Add(localPath); // Добавляем в трекер
+				tempFilesTracker.Add(localPath);
 
-				string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
-				var childUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}{mediaTypeParam}&access_token={accessToken}";
+				bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
 
-				if (mediaUrl.EndsWith(".mp4"))
+				string childUrl;
+
+				if (isVideo)
 				{
-					childUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}&media_type=VIDEO&access_token={accessToken}";
+					// ДЛЯ ВИДЕО В КАРУСЕЛИ: обязательно is_carousel_item=true и media_type=VIDEO
+					childUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
+							   $"&media_type=VIDEO" +
+							   $"&is_carousel_item=true" +
+							   $"&access_token={accessToken}";
+				}
+				else
+				{
+					// ДЛЯ ФОТО В КАРУСЕЛИ: обязательно is_carousel_item=true
+					childUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
+							   $"&is_carousel_item=true" +
+							   $"&access_token={accessToken}";
 				}
 
-				await Task.Delay(500); 
+				// Даем диску зафиксировать файл
+				await Task.Delay(500);
 
 				var childResponse = await _httpClient.PostAsync(childUrl, null);
 				var childJson = await childResponse.Content.ReadAsStringAsync();
 
-				if (childResponse.IsSuccessStatusCode)
-				{
-					using var childDoc = JsonDocument.Parse(childJson);
-					var childId = childDoc.RootElement.GetProperty("id").GetString();
-					childrenIds.Add(childId);
-
-					await Task.Delay(500); // Ждем немного между запросами
-				}
-				else
+				if (!childResponse.IsSuccessStatusCode)
 				{
 					_logger.LogError($"Ошибка создания child: {childJson}");
 					throw new Exception($"Не удалось создать дочерний контейнер: {childJson}");
 				}
+
+				using var childDoc = JsonDocument.Parse(childJson);
+				var childId = childDoc.RootElement.GetProperty("id").GetString();
+				childrenIds.Add(childId);
+
+				// ВАЖНО: Если этот слайд — видео, ждем его готовности (FINISHED) перед сборкой карусели!
+				if (isVideo)
+				{
+					_logger.LogInformation($"Ожидаем готовности дочернего видео-контейнера {childId}...");
+					bool isChildReady = await WaitForMediaReadyAsync(childId, accessToken, 120);
+					if (!isChildReady)
+					{
+						throw new Exception($"Дочернее видео {childId} не успело обработаться серверами Instagram.");
+					}
+				}
+
+				await Task.Delay(500);
 			}
 
 			if (childrenIds.Count == 0)
 				throw new Exception("Не удалось создать ни одного дочернего контейнера");
 
+			// 2. Создаем родительский контейнер карусели
 			var carouselUrl = $"me/media?access_token={accessToken}";
 
 			var formData = new MultipartFormDataContent();
 			formData.Add(new StringContent("CAROUSEL"), "media_type");
 			formData.Add(new StringContent(caption ?? ""), "caption");
 
+			// Передаем массив ID дочерних контейнеров
 			for (int i = 0; i < childrenIds.Count; i++)
 			{
 				formData.Add(new StringContent(childrenIds[i]), $"children[{i}]");
