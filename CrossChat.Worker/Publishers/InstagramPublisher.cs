@@ -4,6 +4,7 @@ using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Publishers.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Telegram.Bot.Types;
 
 namespace CrossChat.Worker.Publishers
 {
@@ -36,22 +37,22 @@ namespace CrossChat.Worker.Publishers
 
 			await _console.Log($"Пост успешно опубликован в профиль {settings.Username}.", settings.UserId, state.BotId);
 
-			// 3. Публикуем историю (если есть картинки)
-			//if (files != null && files.Any())
-			//{
-			//	try
-			//	{
-			//		string? storyId = await InstagramStory(files, instaSettings.AccessToken);
-			//		if (storyId is not null)
-			//		{
-			//			_logger.LogInformation("✅ Instagram Story успешно опубликована (StoryId: {StoryId})", storyId);
-			//		}
-			//	}
-			//	catch (Exception ex)
-			//	{
-			//		_logger.LogError(ex, "Ошибка при отправке Instagram Story для бота {BotId}", state.BotId);
-			//	}
-			//}
+			// Публикуем историю(если есть картинки)
+			if (images != null && images.Any())
+			{
+				try
+				{
+					string? storyId = await _service.PublishStoryFromBase64(images.FirstOrDefault(), settings.AccessToken);
+					if (storyId is not null)
+					{
+						await _console.Log($"✅ Instagram Story успешно опубликована (StoryId: {storyId})", settings.UserId, state.BotId);
+					}
+				}
+				catch (Exception ex)
+				{
+					await _console.LogError($"Ошибка при отправке Instagram Story для бота {state.BotId}:\n{ex}", settings.UserId, state.BotId);
+				}
+			}
 		}
 	}
 }
