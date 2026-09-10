@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CrossChat.Integrations.Exceptions.BlueSky;
 using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
@@ -71,10 +74,18 @@ namespace CrossChat.Integrations.Services
 				string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
 				byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 
+				// ВАЖНО: Лимит BlueSky для фото — ровно 2 000 000 байт!
+				// Если файл больше 1.95 МБ, оптимизируем его на лету
+				const int MAX_BLUESKY_BYTES = 1_950_000;
+				if (fileBytes.Length > MAX_BLUESKY_BYTES)
+				{
+					fileBytes = CompressImageForBlueSky(fileBytes, out mimeType);
+				}
+
 				var fileContent = new ByteArrayContent(fileBytes);
 				fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
 
-				// ИСПРАВЛЕНИЕ: Используем отправку через DPoP с подписью ключа!
+				// Отправка через DPoP
 				var response = await SendWithDPoPAsync(HttpMethod.Post, uploadUrl, setting, fileContent);
 				var jsonResponse = await response.Content.ReadAsStringAsync();
 
@@ -84,7 +95,7 @@ namespace CrossChat.Integrations.Services
 
 					if (result?.Blob != null)
 					{
-						_logger.LogInformation("✅ Изображение BlueSky успешно загружено из Base64.");
+						_logger.LogInformation("✅ Изображение BlueSky успешно загружено.");
 						return result.Blob;
 					}
 				}
@@ -96,6 +107,43 @@ namespace CrossChat.Integrations.Services
 				_logger.LogError(ex, "Ошибка при загрузке картинки в BlueSky");
 			}
 			return null;
+		}
+
+		/// <summary>
+		/// Автоматическая оптимизация фото под жесткий лимит BlueSky (до 2 МБ)
+		/// </summary>
+		private byte[] CompressImageForBlueSky(byte[] imageBytes, out string resultMimeType)
+		{
+			resultMimeType = "image/jpeg";
+			using var image = Image.Load(imageBytes);
+
+			// Ограничиваем максимальную сторону разумными 2048px (для BlueSky этого более чем достаточно)
+			int maxDim = 2048;
+			if (image.Width > maxDim || image.Height > maxDim)
+			{
+				image.Mutate(ctx => ctx.Resize(new ResizeOptions
+				{
+					Mode = ResizeMode.Max,
+					Size = new Size(maxDim, maxDim)
+				}));
+			}
+
+			using var ms = new MemoryStream();
+			int quality = 90;
+
+			// Подбираем качество, чтобы файл гарантированно весил меньше 1.95 МБ
+			while (quality >= 60)
+			{
+				ms.SetLength(0);
+				image.SaveAsJpeg(ms, new JpegEncoder { Quality = quality });
+				if (ms.Length <= 1_950_000)
+				{
+					return ms.ToArray();
+				}
+				quality -= 10;
+			}
+
+			return ms.ToArray();
 		}
 
 		public async Task<bool> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting)
