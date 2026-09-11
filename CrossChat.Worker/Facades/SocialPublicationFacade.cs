@@ -27,10 +27,16 @@ namespace CrossChat.Worker.Facades
 		public async Task PublishToSocialNetworkAsync(NetworkStateEntity state)
 		{
 			var network = (NetworkType)state.NetworkType;
-			var mediaList = state.Post.Media.OrderBy(m => m.SortOrder).ToList();
+			bool isTelegram = network == NetworkType.TelegramChannel || network == NetworkType.TelegramPublic;
+
+			// ВАЖНО: Аудио файлы передаем ТОЛЬКО в Telegram! Для других сетей исключаем аудио
+			var mediaList = state.Post.Media
+				.Where(m => isTelegram || m.MediaType != MediaType.Audio)
+				.OrderBy(m => m.SortOrder)
+				.ToList();
+
 			var mediaPayloads = new List<string>();
 
-			// Скачиваем каждый файл из Google Drive для публикации
 			foreach (var media in mediaList)
 			{
 				try
@@ -40,10 +46,14 @@ namespace CrossChat.Worker.Facades
 					await stream.CopyToAsync(ms);
 					var base64 = Convert.ToBase64String(ms.ToArray());
 
-					// Если видео — добавляем data-url префикс, чтобы InstagramService определил его как mp4
 					if (media.MediaType == MediaType.Video)
 					{
 						var mime = string.IsNullOrEmpty(media.MimeType) ? "video/mp4" : media.MimeType;
+						mediaPayloads.Add($"data:{mime};base64,{base64}");
+					}
+					else if (media.MediaType == MediaType.Audio)
+					{
+						var mime = string.IsNullOrEmpty(media.MimeType) ? "audio/ogg" : media.MimeType;
 						mediaPayloads.Add($"data:{mime};base64,{base64}");
 					}
 					else
@@ -58,15 +68,12 @@ namespace CrossChat.Worker.Facades
 				}
 			}
 
-			// ДОСТАЕМ СЕРВИС НАПРЯМУЮ ПО КЛЮЧУ ENUM (Keyed Service)
 			var publisher = _serviceProvider.GetKeyedService<ISocialPublisher>(network);
-
 			if (publisher == null)
 			{
 				throw new NotImplementedException($"Публикация в соцсеть '{network}' не зарегистрирована в Keyed Services.");
 			}
 
-			// Вызываем публикацию
 			await publisher.PublishAsync(state, state.Caption, mediaPayloads);
 		}
 	}

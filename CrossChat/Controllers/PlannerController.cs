@@ -234,7 +234,13 @@ namespace CrossChat.Controllers
 								  file.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
 								  file.FileName.EndsWith(".mov", StringComparison.OrdinalIgnoreCase);
 
-					var mediaType = isVideo ? MediaType.Video : MediaType.Image;
+					var isAudio = file.ContentType.StartsWith("audio/") ||
+						  file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+						  file.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
+						  file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
+						  file.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase);
+
+					var mediaType = isVideo ? MediaType.Video : (isAudio ? MediaType.Audio : MediaType.Image);
 
 					// Загружаем напрямую поток файла в Google Drive
 					using var stream = file.OpenReadStream();

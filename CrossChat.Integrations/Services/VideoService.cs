@@ -65,5 +65,55 @@ namespace CrossChat.Integrations.Services
 				}
 			}
 		}
+
+		/// <summary>
+		/// Конвертирует любой аудиофайл (mp3, wav, m4a) в эталонный формат Telegram Voice (OGG Opus 32k)
+		/// </summary>
+		public static async Task<byte[]> ConvertToTelegramVoiceOggAsync(byte[] inputAudioBytes)
+		{
+			string tempInput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_input.tmp");
+			string tempOutput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_voice.ogg");
+
+			try
+			{
+				await File.WriteAllBytesAsync(tempInput, inputAudioBytes);
+
+				// -c:a libopus -b:a 32k -vbr on : параметры нативного Telegram Voice
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -i \"{tempInput}\" -c:a libopus -b:a 32k -vbr on -vn \"{tempOutput}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(tempOutput))
+				{
+					return await File.ReadAllBytesAsync(tempOutput);
+				}
+
+				Console.WriteLine("FFmpeg не смог конвертировать аудио в Voice: {Err}", errorOutput);
+				return inputAudioBytes; // В случае сбоя отдаем как есть
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Ошибка при конвертации аудио в Telegram Voice через FFmpeg {ex}");
+				return inputAudioBytes;
+			}
+			finally
+			{
+				if (File.Exists(tempInput)) try { File.Delete(tempInput); } catch { }
+				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
+			}
+		}
 	}
 }

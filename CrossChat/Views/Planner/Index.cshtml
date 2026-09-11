@@ -1059,7 +1059,7 @@
                     <label>Добавить фото/видео</label>
                     <div class="file-upload-zone" id="dropZone">
                         <span class="upload-text">📁 Нажмите для выбора файлов или перетащите их сюда</span>
-                        <input type="file" id="fileInput" name="images" multiple accept="image/*,video/*">
+                        <input type="file" id="fileInput" name="images" multiple accept="image/*,video/*,audio/*">
                     </div>
                 </div>
 
@@ -1232,6 +1232,7 @@
                     const driveId = media.googleDriveFileId || media.GoogleDriveFileId;
                     const mediaType = media.mediaType !== undefined ? media.mediaType : media.MediaType;
                     const isVideo = mediaType === 1 || mediaType === "Video";
+                    const isAudio = mediaType === 2 || mediaType === "Audio";
 
                     if (!driveId || driveId === "undefined") return;
 
@@ -1250,6 +1251,16 @@
                         badge.className = 'video-badge';
                         badge.innerHTML = '▶ Видео';
                         wrapper.appendChild(badge);
+                    } else if (isAudio) {
+                        const audioCard = document.createElement('div');
+                        audioCard.className = 'thumb';
+                        audioCard.style.display = 'flex';
+                        audioCard.style.flexDirection = 'column';
+                        audioCard.style.alignItems = 'center';
+                        audioCard.style.justifyContent = 'center';
+                        audioCard.style.background = 'rgba(15, 23, 42, 0.7)';
+                        audioCard.innerHTML = `<span style="font-size: 24px;">🎙️</span><span style="font-size: 9px; font-weight: bold; color: #38bdf8;">Голосовое</span>`;
+                        wrapper.appendChild(audioCard);
                     } else {
                         const img = document.createElement('img');
                         img.className = 'thumb';
@@ -1287,6 +1298,7 @@
                     wrapper.className = 'thumb-wrapper';
 
                     const isVideo = file.type.startsWith('video/');
+                    const isAudio = file.type.startsWith('audio/') || file.name.endsWith('.mp3') || file.name.endsWith('.ogg') || file.name.endsWith('.wav') || file.name.endsWith('.m4a');
                     const blobUrl = URL.createObjectURL(file);
 
                     if (isVideo) {
@@ -1302,6 +1314,16 @@
                         badge.className = 'video-badge';
                         badge.innerHTML = '▶ Видео';
                         wrapper.appendChild(badge);
+                    } else if (isAudio) {
+                        const audioCard = document.createElement('div');
+                        audioCard.className = 'thumb';
+                        audioCard.style.display = 'flex';
+                        audioCard.style.flexDirection = 'column';
+                        audioCard.style.alignItems = 'center';
+                        audioCard.style.justifyContent = 'center';
+                        audioCard.style.background = 'rgba(15, 23, 42, 0.7)';
+                        audioCard.innerHTML = `<span style="font-size: 24px;">🎙️</span><span style="font-size: 9px; font-weight: bold; color: #38bdf8;">Голосовое</span>`;
+                        wrapper.appendChild(audioCard);
                     } else {
                         const img = document.createElement('img');
                         img.className = 'thumb';

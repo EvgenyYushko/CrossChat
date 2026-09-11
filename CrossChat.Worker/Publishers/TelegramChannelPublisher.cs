@@ -28,46 +28,70 @@ public class TelegramChannelPublisher : ISocialPublisher
 
 		await _console.Log($"Начало отправки поста в канал {settings.ChannelUsername}.", settings.UserId, state.BotId);
 
+		// Определяем типы медиафайлов
+		bool isAudio(string s) => s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) || s.Contains("audio/");
 		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+		bool isImage(string s) => !isAudio(s) && !isVideo(s);
+
+		var audioItem = images?.FirstOrDefault(isAudio);
+		var visualMedia = images?.Where(s => !isAudio(s)).ToList() ?? new List<string>();
 
 		// === 1. СЦЕНАРИЙ: ПЛАТНЫЙ ПОСТ (TELEGRAM STARS) ===
 		if (state.IsPaid && state.Price > 0)
 		{
-			if (images == null || !images.Any())
+			if (!visualMedia.Any())
 			{
-				throw new Exception("Telegram не поддерживает платные посты без медиафайлов. Прикрепите хотя бы одно фото или видео.");
+				throw new Exception("Платный пост в Telegram требует хотя бы одно фото или видео.");
 			}
 
-			await _console.Log($"Отправка платного поста ({state.Price} ⭐) из {images.Count} медиафайлов в Telegram...", settings.UserId, state.BotId);
-			await _service.SendPaidMediaGroupAsync(settings.ChannelId, state.Price, images, caption);
-		}
-		// === 2. СЦЕНАРИЙ: ОБЫЧНЫЙ БЕСПЛАТНЫЙ МЕДИА-ПОСТ ===
-		else if (images != null && images.Any())
-		{
-			if (images.Count == 1)
+			await _console.Log($"Отправка платного поста ({state.Price} ⭐) в Telegram...", settings.UserId, state.BotId);
+			await _service.SendPaidMediaGroupAsync(settings.ChannelId, state.Price, visualMedia, caption);
+
+			// Если к платному посту прикрепили еще и голосовое — шлем его следом
+			if (audioItem != null)
 			{
-				if (isVideo(images[0]))
+				await Task.Delay(500);
+				await _console.Log("Отправка голосового сообщения к платному посту...", settings.UserId, state.BotId);
+				await _service.SendVoiceAsync(settings.ChannelId, audioItem, "");
+			}
+		}
+		// === 2. СЦЕНАРИЙ: ВИЗУАЛЬНЫЕ МЕДИА (ФОТО / ВИДЕО) ===
+		else if (visualMedia.Any())
+		{
+			if (visualMedia.Count == 1)
+			{
+				if (isVideo(visualMedia[0]))
 				{
 					await _console.Log("Отправка видео в Telegram канал...", settings.UserId, state.BotId);
-					await _service.SendSingleVideoAsync(settings.ChannelId, images[0], caption);
+					await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption);
 				}
 				else
 				{
 					await _console.Log("Отправка фото в Telegram канал...", settings.UserId, state.BotId);
-					await _service.SendSinglePhotoAsync(settings.ChannelId, images[0], caption);
+					await _service.SendSinglePhotoAsync(settings.ChannelId, visualMedia[0], caption);
 				}
 			}
 			else
 			{
-				await _console.Log($"Отправка альбома из {images.Count} медиафайлов в Telegram канал...", settings.UserId, state.BotId);
-				var result = await _service.SendMediaAlbumAsync(settings.ChannelId, images, caption);
-				if (result == null || result.Length == 0)
-				{
-					throw new Exception("Не удалось отправить медиа-альбом в Telegram канал.");
-				}
+				await _console.Log($"Отправка альбома из {visualMedia.Count} медиафайлов в Telegram...", settings.UserId, state.BotId);
+				await _service.SendMediaAlbumAsync(settings.ChannelId, visualMedia, caption);
+			}
+
+			// БЛОГЕРСКИЙ СТИЛЬ: если к фото/видео прикрепили аудио — отправляем войс вторым сообщением следом!
+			if (audioItem != null)
+			{
+				await Task.Delay(1000);
+				await _console.Log("Отправка голосового сообщения следом за постом...", settings.UserId, state.BotId);
+				await _service.SendVoiceAsync(settings.ChannelId, audioItem, "");
 			}
 		}
-		// === 3. СЦЕНАРИЙ: ТОЛЬКО ТЕКСТ ===
+		// === 3. СЦЕНАРИЙ: ТОЛЬКО ГОЛОСОВОЕ СООБЩЕНИЕ ===
+		else if (audioItem != null)
+		{
+			await _console.Log("Отправка голосового сообщения (Voice) в Telegram канал...", settings.UserId, state.BotId);
+			await _service.SendVoiceAsync(settings.ChannelId, audioItem, caption);
+		}
+		// === 4. СЦЕНАРИЙ: ТОЛЬКО ТЕКСТ ===
 		else
 		{
 			await _console.Log("Отправка текстового сообщения в Telegram канал...", settings.UserId, state.BotId);

@@ -28,6 +28,7 @@ namespace CrossChat.Integrations.Interfaces
 		Task<string?> GetChannelAvatarBase64Async(long channelId);
 
 		Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId);
+		Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html);
 
 		Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null);
 		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "");

@@ -380,6 +380,35 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
+		public async Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html)
+		{
+			string cleanBase64 = base64Audio.Contains(",") ? base64Audio.Split(',')[1] : base64Audio;
+			var rawBytes = Convert.FromBase64String(cleanBase64);
+
+			// Конвертируем любое аудио в эталонный Telegram Voice (OGG Opus) через наш FFmpeg
+			var voiceOggBytes = await VideoService.ConvertToTelegramVoiceOggAsync(rawBytes);
+
+			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+			string? voiceCaption = isCaptionTooLong ? null : caption;
+
+			using var stream = new MemoryStream(voiceOggBytes);
+
+			var voiceMsg = await _telegramBotClient.SendVoice(
+				chatId: senderId,
+				voice: InputFile.FromStream(stream, "voice.ogg"),
+				caption: string.IsNullOrEmpty(voiceCaption) ? null : voiceCaption,
+				parseMode: parseMode
+			);
+
+			// Если подпись длиннее 1024 символов — отправляем текст следом
+			if (isCaptionTooLong)
+			{
+				await _telegramBotClient.SendMessage(senderId, caption, parseMode: parseMode);
+			}
+
+			return voiceMsg;
+		}
+
 		public async Task<string?> GetChannelAvatarBase64Async(long channelId)
 		{
 			try

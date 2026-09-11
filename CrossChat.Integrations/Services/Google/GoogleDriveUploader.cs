@@ -151,6 +151,13 @@ namespace CrossChat.Integrations.Services.Google
 				".mkv" => "video/x-matroska",
 				".webm" => "video/webm",
 
+				// Аудио (голосовые)
+				".mp3" => "audio/mpeg",
+				".ogg" or ".oga" => "audio/ogg",
+				".wav" => "audio/wav",
+				".m4a" => "audio/mp4",
+				".aac" => "audio/aac",
+
 				// Бэкапы
 				".sql" => "application/sql",
 				".gz" => "application/gzip",
