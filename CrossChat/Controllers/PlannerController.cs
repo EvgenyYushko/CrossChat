@@ -443,6 +443,7 @@ namespace CrossChat.Controllers
 						{
 							post.Networks[netKey].IsPaid = isPaidTelegram;
 							post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
+							post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
 						}
 
 						if (post.Networks[netKey].Status == SocialStatus.None)
@@ -457,7 +458,8 @@ namespace CrossChat.Controllers
 							Status = SocialStatus.Pending,
 							Caption = safeCaption, // <-- Используем safeCaption
 							IsPaid = isTg && isPaidTelegram,
-							Price = (isTg && isPaidTelegram) ? priceTelegram : 0
+							Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
+							IsVideoNote = isVideoNoteTelegram
 						};
 					}
 				}
