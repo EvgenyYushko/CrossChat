@@ -1070,6 +1070,24 @@
                     </label>
                 </div>
 
+                <!-- Блок платного контента (Telegram Stars) -->
+                <div class="form-group" id="telegramPaidGroup" style="display: none; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 1.25rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
+                        <input type="checkbox" id="isPaidTelegramCheckbox" name="isPaidTelegram" value="true" onchange="togglePaidTelegramMode()" style="width: 18px; height: 18px; accent-color: #eab308;">
+                        ⭐ Платный контент (Telegram Stars)
+                    </label>
+                    <div id="telegramPriceContainer" style="display: none; margin-top: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label for="priceTelegramInput" style="font-size: 0.85rem; color: var(--text-secondary); text-transform: none; margin: 0;">Стоимость в звёздах:</label>
+                            <input type="number" id="priceTelegramInput" name="priceTelegram" min="1" max="2500" value="50" class="text-input" style="width: 110px; padding: 6px 10px; font-weight: 700; color: #eab308;" />
+                            <span style="font-size: 0.9rem; color: #eab308; font-weight: bold;">⭐ Stars</span>
+                        </div>
+                        <small style="display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
+                            Медиафайлы будут скрыты блюром до оплаты. В Instagram, Facebook и других сетях этот же пост выйдет бесплатно.
+                        </small>
+                    </div>
+                </div>
+
                 <!-- Контейнер для динамического текста постов -->
                 <div id="captionContainer">
                     <div class="form-group" id="defaultCaptionGroup">
@@ -1569,7 +1587,6 @@
                                 document.querySelector('.file-upload-zone').style.opacity = '1';
 
                                 // УМНОЕ ОПРЕДЕЛЕНИЕ ЕДИНОГО ТЕКСТА:
-                                // Проверяем, одинаковые ли текста во всех активных соцсетях поста
                                 let isUnified = true;
                                 let firstActiveCaption = null;
                                 activeNets.forEach(net => {
@@ -1577,34 +1594,32 @@
                                     if (firstActiveCaption === null) {
                                         firstActiveCaption = text;
                                     } else if (text !== firstActiveCaption) {
-                                        isUnified = false; // Текстовки отличаются!
+                                        isUnified = false;
                                     }
                                 });
                                 if (firstActiveCaption === null) firstActiveCaption = "";
 
-                                // Выставляем статус чекбокса "Один текст для всех"
                                 document.getElementById('unifiedTextCheckbox').checked = isUnified;
 
                                 if (isUnified) {
                                     if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
                                     if (defaultCaptionInput) {
                                         defaultCaptionInput.value = firstActiveCaption;
-                                        defaultCaptionInput.required = true;
+                                        defaultCaptionInput.required = false; // Текст не обязателен
                                     }
                                 } else {
                                     if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
                                     if (defaultCaptionInput) defaultCaptionInput.required = false;
                                 }
 
-                             // Выставляем чекбоксы соцсетей и заполняем их текстареа
-                             document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                                // Выставляем чекбоксы соцсетей и заполняем их текстареа
+                                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
                                     const netKey = cb.value; // формат: "Instagram_5"
                                     const isActive = activeNets.includes(netKey);
                                     cb.checked = isActive;
 
                                     if (isActive) {
                                         if (!isUnified) {
-                                            // Если мы в раздельном режиме — динамически создаем текстовое поле!
                                             const groupId = `captionGroup_${netKey}`;
                                             const inputId = `captionInput_${netKey}`;
 
@@ -1624,10 +1639,8 @@
                                                 const textarea = document.createElement('textarea');
                                                 textarea.name = `caption_${netKey}`;
                                                 textarea.id = inputId;
-                                                textarea.required = true;
+                                                textarea.required = false; // Текст не обязателен
                                                 textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
-
-                                                // Заполняем персональным текстом из базы данных!
                                                 textarea.value = networks[netKey].caption || networks[netKey].Caption || "";
 
                                                 groupDiv.appendChild(label);
@@ -1637,73 +1650,87 @@
                                         }
                                     }
                                 });
-                        } else {
-                            // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
-                            if (netSelectGroup) netSelectGroup.style.display = 'none';
-                            document.getElementById('unifiedTextGroup').style.display = 'none';
-                            if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
-
-                            // ИСПРАВЛЕНИЕ: Включаем обязательность видимого поля
-                            if (defaultCaptionInput) defaultCaptionInput.required = true;
-
-                            //  Безопасный поиск текста с приоритетом точного совпадения по BotId
-                            const currentBotId = "@ViewBag.BotId";
-                            const targetKey = `${currentNetwork}_${currentBotId}`;
-                            let netData = null;
-
-                            if (currentBotId && currentBotId !== "0" && networks[targetKey]) {
-                                // 1. ПРИОРИТЕТ: Берем текст строго для текущего открытого BotId (например, "Instagram_6")
-                                netData = networks[targetKey];
                             } else {
-                                // 2. ЗАПАСНОЙ ВАРИАНТ: Если BotId не передан, берем первую запись этого типа
-                                for (let key in networks) {
-                                    if (key.startsWith(currentNetwork + "_")) {
-                                        netData = networks[key];
+                                // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
+                                if (netSelectGroup) netSelectGroup.style.display = 'none';
+                                document.getElementById('unifiedTextGroup').style.display = 'none';
+                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+
+                                if (defaultCaptionInput) defaultCaptionInput.required = false; // Текст не обязателен
+
+                                const currentBotId = "@ViewBag.BotId";
+                                const targetKey = `${currentNetwork}_${currentBotId}`;
+                                let netData = null;
+
+                                if (currentBotId && currentBotId !== "0" && networks[targetKey]) {
+                                    netData = networks[targetKey];
+                                } else {
+                                    for (let key in networks) {
+                                        if (key.startsWith(currentNetwork + "_")) {
+                                            netData = networks[key];
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (defaultCaptionInput) {
+                                    defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                                }
+
+                                if (isMultiPost) {
+                                    const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
+                                    if (warningDiv) {
+                                        warningDiv.style.display = 'block';
+                                        warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
+                                    }
+
+                                    isImageEditingLocked = true;
+                                    dateInput.disabled = true;
+                                    document.getElementById('fileInput').disabled = true;
+
+                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                    if (fileUploadGroup) fileUploadGroup.style.display = 'none';
+                                } else {
+                                    isImageEditingLocked = false;
+                                    dateInput.disabled = false;
+                                    document.getElementById('fileInput').disabled = false;
+                                    if (warningDiv) warningDiv.style.display = 'none';
+
+                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                    if (fileUploadGroup) fileUploadGroup.style.display = 'block';
+                                }
+                            }
+
+                            // === [НОВОЕ] ПОДГРУЗКА ПЛАТНОГО СТАТУСА TELEGRAM STARS ===
+                            let isPaidPost = false;
+                            let postPrice = 50;
+
+                            for (let key in networks) {
+                                if (key.includes("Telegram") && networks[key]) {
+                                    if (networks[key].isPaid || networks[key].IsPaid) {
+                                        isPaidPost = true;
+                                        postPrice = networks[key].price || networks[key].Price || 50;
                                         break;
                                     }
                                 }
                             }
 
-                            // Заполняем дефолтное текстовое поле найденным текстом
-                            if (defaultCaptionInput) {
-                                defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
-                            }
+                            const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
+                            if (isPaidCb) isPaidCb.checked = isPaidPost;
 
-                            // Заполняем дефолтное текстовое поле найденным текстом
-                            if (defaultCaptionInput) {
-                                defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
-                            }
+                            const priceInput = document.getElementById('priceTelegramInput');
+                            if (priceInput) priceInput.value = postPrice;
 
-                            if (isMultiPost) {
-                                const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
-                                if (warningDiv) {
-                                    warningDiv.style.display = 'block';
-                                    warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
-                                }
-
-                                isImageEditingLocked = true;
-                                dateInput.disabled = true;
-                                document.getElementById('fileInput').disabled = true;
-
-                                const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                if (fileUploadGroup) fileUploadGroup.style.display = 'none';
-                            } else {
-                                isImageEditingLocked = false;
-                                dateInput.disabled = false;
-                                document.getElementById('fileInput').disabled = false;
-                                if (warningDiv) warningDiv.style.display = 'none';
-
-                                const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                if (fileUploadGroup) fileUploadGroup.style.display = 'block';
-                            }
-                        }
+                            if (typeof togglePaidTelegramMode === 'function') togglePaidTelegramMode();
+                            if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
+                            // ========================================================
 
                             deleteBtn.style.display = 'block';
                             postForm.action = `/planner/update/${postId}`;
                             postFormOk.textContent = "Изменить";
 
                             existingMedia = [];
-                            selectedFiles = []; // Обязательно сбрасываем новые локальные файлы
+                            selectedFiles = [];
 
                             const media = post.media || post.Media;
                             if (media && media.length > 0) {
@@ -1745,7 +1772,7 @@
                         if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
                         const defCapInput = document.getElementById('captionInput');
                         if (defCapInput) {
-                            defCapInput.required = true;
+                            defCapInput.required = false;
                             defCapInput.value = "";
                         }
 
@@ -1759,7 +1786,7 @@
 
                         const defCapInput = document.getElementById('captionInput');
                         if (defCapInput) {
-                            defCapInput.required = true;
+                        defCapInput.required = false;
                             defCapInput.value = "";
                         }
                     }
@@ -1769,6 +1796,7 @@
 
                     dateInput.value = formatToInput(selectedDate);
                     modal.style.display = 'flex';
+                    updateTelegramPaidVisibility();
                 }
                 });
                 calendar.render();
@@ -1947,6 +1975,18 @@
                     defCaption.required = false;
                     defCaption.value = '';
                 }
+
+                const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
+                if (isPaidCb) isPaidCb.checked = false;
+
+                const priceInput = document.getElementById('priceTelegramInput');
+                if (priceInput) priceInput.value = '50';
+
+                const priceCont = document.getElementById('telegramPriceContainer');
+                if (priceCont) priceCont.style.display = 'none';
+
+                const paidGroup = document.getElementById('telegramPaidGroup');
+                if (paidGroup) paidGroup.style.display = 'none';
             }
 
             /// Функция включения/выключения режима "Один текст для всех"
@@ -1958,7 +1998,7 @@
 
                 if (isUnified) {
                     if (defaultGroup) defaultGroup.style.display = 'block';
-                    if (defaultTextarea) defaultTextarea.required = true;
+                    if (defaultTextarea) defaultTextarea.required = false;
                     dynamicContainer.innerHTML = ''; // Стираем все динамические поля
                 } else {
                     if (defaultGroup) defaultGroup.style.display = 'none';
@@ -2002,7 +2042,7 @@
                         const textarea = document.createElement('textarea');
                         textarea.name = `caption_${netValue}`;
                         textarea.id = inputId;
-                        textarea.required = true;
+                        textarea.required = false;
                         textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
                     
                         // Копируем дефолтный текст
@@ -2026,6 +2066,7 @@
             document.addEventListener('change', function(e) {
                 if (e.target && e.target.name === 'selectedNetworks') {
                     toggleCaptionField(e.target.value);
+                    updateTelegramPaidVisibility(); // <-- Обновляем видимость блока со звездами!
                 }
             });
 
@@ -2151,6 +2192,11 @@
                     alert('Произошла сетевая ошибка.');
                     resetUploadProgress();
                 };
+
+                // Добавляем параметры Telegram Stars
+                const isPaidChecked = document.getElementById('isPaidTelegramCheckbox').checked;
+                formData.append('isPaidTelegram', isPaidChecked ? 'true' : 'false');
+                formData.append('priceTelegram', document.getElementById('priceTelegramInput').value);
 
                 xhr.send(formData);
             }
@@ -2323,5 +2369,28 @@
                     }
                 });
             }
+
+         // Переключение отображения поля с ценой
+        function togglePaidTelegramMode() {
+            const isChecked = document.getElementById('isPaidTelegramCheckbox').checked;
+            document.getElementById('telegramPriceContainer').style.display = isChecked ? 'block' : 'none';
+        }
+
+                // Проверка, активен ли Telegram (показываем блок звезд только если выбран Telegram)
+        function updateTelegramPaidVisibility() {
+            const currentNetwork = "@ViewBag.Network";
+            const paidGroup = document.getElementById('telegramPaidGroup');
+            if (!paidGroup) return;
+
+            if (currentNetwork.includes("Telegram")) {
+                paidGroup.style.display = 'block';
+            } else if (currentNetwork === "All") {
+                // В режиме All проверяем, выбрана ли хотя бы одна галочка Telegram
+                const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+                paidGroup.style.display = tgCheckboxes.length > 0 ? 'block' : 'none';
+            } else {
+                paidGroup.style.display = 'none';
+            }
+        }
         </script>
 }

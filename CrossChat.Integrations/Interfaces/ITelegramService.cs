@@ -24,6 +24,7 @@ namespace CrossChat.Integrations.Interfaces
 		Task<Message[]> SendPhotoAlbumAsync(long senderId, List<string> base64Images, string caption = "");
 
 		Task<Message> SendPaidPhotosAsync(long senderId, IEnumerable<string> base64Images, int starCount, string caption = "", ParseMode parseMode = ParseMode.None);
+		Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "");
 		Task<string?> GetChannelAvatarBase64Async(long channelId);
 
 		Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId);

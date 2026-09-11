@@ -295,21 +295,27 @@ namespace CrossChat.Worker.Services
 						}
 						else
 						{
+							// Обновляем существующую запись
 							dbState.Status = newStatus;
 							dbState.Caption = newCaption;
+							dbState.IsPaid = kvp.Value.IsPaid;
+							dbState.Price = kvp.Value.Price;
 						}
 					}
 					else
 					{
 						if (kvp.Value.Status != SocialStatus.None)
 						{
+							// Создаем новую запись (теперь с сохранением IsPaid и Price!)
 							entity.NetworkStates.Add(new NetworkStateEntity
 							{
 								PostId = entity.Id,
 								NetworkType = netType,
 								BotId = botId,
 								Caption = newCaption,
-								Status = newStatus
+								Status = newStatus,
+								IsPaid = kvp.Value.IsPaid, // <-- ИСПРАВЛЕНО
+								Price = kvp.Value.Price    // <-- ИСПРАВЛЕНО
 							});
 						}
 					}
@@ -410,7 +416,9 @@ namespace CrossChat.Worker.Services
 				model.Networks[key] = new NetworkPostData
 				{
 					Status = (SocialStatus)state.Status,
-					Caption = state.Caption
+					Caption = state.Caption,
+					IsPaid = state.IsPaid,
+					Price = state.Price
 				};
 			}
 
@@ -460,7 +468,9 @@ namespace CrossChat.Worker.Services
 					NetworkType = netType,
 					BotId = botId,
 					Caption = kvp.Value.Caption,
-					Status = (int)kvp.Value.Status
+					Status = (int)kvp.Value.Status,
+					IsPaid = kvp.Value.IsPaid,
+					Price = kvp.Value.Price
 				});
 			}
 

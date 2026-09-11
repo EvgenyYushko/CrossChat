@@ -163,6 +163,83 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
+		/// <summary>
+		/// Публикация платного контента (Telegram Stars) — от 1 до 10 фото и/или видео, скрытых блюром
+		/// </summary>
+		public async Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "")
+		{
+			if (base64MediaList == null || !base64MediaList.Any())
+				throw new ArgumentException("Для платного поста в Telegram требуется хотя бы одно фото или видео.");
+
+			// Лимит Telegram: от 1 до 2500 звезд
+			starCount = Math.Clamp(starCount, 1, 2500);
+
+			var streams = new List<MemoryStream>();
+			var paidMediaItems = new List<InputPaidMedia>();
+
+			try
+			{
+				bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+				string? mediaCaption = isCaptionTooLong ? null : caption;
+
+				for (int i = 0; i < Math.Min(base64MediaList.Count, 10); i++)
+				{
+					var item = base64MediaList[i];
+					bool isVideo = item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || item.Contains("video/");
+					string cleanBase64 = item.Contains(",") ? item.Split(',')[1] : item;
+
+					var bytes = Convert.FromBase64String(cleanBase64);
+					var stream = new MemoryStream(bytes);
+					streams.Add(stream);
+
+					if (isVideo)
+					{
+						paidMediaItems.Add(new InputPaidMediaVideo
+						{
+							Media = InputFile.FromStream(stream, $"paid_video_{i}.mp4"),
+							SupportsStreaming = true
+						});
+					}
+					else
+					{
+						paidMediaItems.Add(new InputPaidMediaPhoto
+						{
+							Media = InputFile.FromStream(stream, $"paid_image_{i}.jpg")
+						});
+					}
+				}
+
+				// Отправляем платный альбом/медиа
+				var message = await _telegramBotClient.SendPaidMedia(
+					chatId: senderId,
+					starCount: starCount,
+					media: paidMediaItems,
+					caption: mediaCaption,
+					parseMode: ParseMode.Html
+				);
+
+				// Если описание было длиннее 1024 символов — отправляем следом
+				if (isCaptionTooLong)
+				{
+					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html);
+				}
+
+				return message;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram] Ошибка отправки платного медиа: {ex.Message}");
+				throw;
+			}
+			finally
+			{
+				foreach (var stream in streams)
+				{
+					stream?.Dispose();
+				}
+			}
+		}
+
 		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
 		{
 			// Очищаем префикс Base64, если он есть

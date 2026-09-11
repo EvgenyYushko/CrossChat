@@ -357,6 +357,11 @@ namespace CrossChat.Controllers
 
 		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
 		{
+			// Читаем параметры платного поста для Telegram
+			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
+			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
+			if (priceTelegram <= 0) priceTelegram = 50; // значение по умолчанию
+
 			if (networkType == "All")
 			{
 				if (selectedNetworks == null || selectedNetworks.Count == 0)
@@ -380,9 +385,17 @@ namespace CrossChat.Controllers
 						var specificCaption = Request.Form[$"caption_{netKey}"].ToString();
 						var finalCaption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
 
+						// Проверяем, является ли эта соцсеть Telegram
+						bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
+
 						if (post.Networks.ContainsKey(netKey))
 						{
 							post.Networks[netKey].Caption = finalCaption;
+							if (isTg)
+							{
+								post.Networks[netKey].IsPaid = isPaidTelegram;
+								post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
+							}
 							if (post.Networks[netKey].Status == SocialStatus.None)
 							{
 								post.Networks[netKey].Status = SocialStatus.Pending;
@@ -393,7 +406,9 @@ namespace CrossChat.Controllers
 							post.Networks[netKey] = new NetworkPostData
 							{
 								Status = SocialStatus.Pending,
-								Caption = finalCaption
+								Caption = finalCaption,
+								IsPaid = isTg && isPaidTelegram,
+								Price = (isTg && isPaidTelegram) ? priceTelegram : 0
 							};
 						}
 					}
@@ -406,9 +421,16 @@ namespace CrossChat.Controllers
 					var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, parsedNet);
 					var netKey = $"{networkType}_{finalBotId}";
 
+					bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
+
 					if (post.Networks.ContainsKey(netKey))
 					{
 						post.Networks[netKey].Caption = caption;
+						if (isTg)
+						{
+							post.Networks[netKey].IsPaid = isPaidTelegram;
+							post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
+						}
 
 						if (post.Networks[netKey].Status == SocialStatus.None)
 						{
@@ -420,7 +442,9 @@ namespace CrossChat.Controllers
 						post.Networks[netKey] = new NetworkPostData
 						{
 							Status = SocialStatus.Pending,
-							Caption = caption
+							Caption = caption,
+							IsPaid = isTg && isPaidTelegram,
+							Price = (isTg && isPaidTelegram) ? priceTelegram : 0
 						};
 					}
 				}

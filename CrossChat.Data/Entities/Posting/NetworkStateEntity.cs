@@ -26,5 +26,11 @@ namespace CrossChat.Data.Entities.Posting
 
 		// ID конкретного подключенного аккаунта/бота (например, InstagramSettings.Id, TelegramUserBotSettings.Id и т.д.)
 		public int? BotId { get; set; }
+
+		// Платный ли пост для этой соцсети
+		public bool IsPaid { get; set; } = false;
+
+		// Стоимость (для Telegram — количество Telegram Stars, от 1 до 2500)
+		public int Price { get; set; } = 0;
 	}
 }
