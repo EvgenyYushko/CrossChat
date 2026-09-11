@@ -297,7 +297,7 @@ namespace CrossChat.Worker.Services
 						{
 							// Обновляем существующую запись
 							dbState.Status = newStatus;
-							dbState.Caption = newCaption;
+							dbState.Caption = newCaption ?? string.Empty;
 							dbState.IsPaid = kvp.Value.IsPaid;
 							dbState.Price = kvp.Value.Price;
 						}
@@ -312,7 +312,7 @@ namespace CrossChat.Worker.Services
 								PostId = entity.Id,
 								NetworkType = netType,
 								BotId = botId,
-								Caption = newCaption,
+								Caption = newCaption ?? string.Empty,
 								Status = newStatus,
 								IsPaid = kvp.Value.IsPaid, // <-- ИСПРАВЛЕНО
 								Price = kvp.Value.Price    // <-- ИСПРАВЛЕНО
@@ -467,7 +467,7 @@ namespace CrossChat.Worker.Services
 					PostId = model.Id,
 					NetworkType = netType,
 					BotId = botId,
-					Caption = kvp.Value.Caption,
+					Caption = kvp.Value.Caption ?? string.Empty,
 					Status = (int)kvp.Value.Status,
 					IsPaid = kvp.Value.IsPaid,
 					Price = kvp.Value.Price

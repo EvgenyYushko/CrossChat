@@ -357,10 +357,13 @@ namespace CrossChat.Controllers
 
 		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
 		{
+			// 1. ЗАЩИТА: Если текст не ввели, заменяем null на пустую строку ""
+			var safeCaption = caption ?? string.Empty;
+
 			// Читаем параметры платного поста для Telegram
 			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
 			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
-			if (priceTelegram <= 0) priceTelegram = 50; // значение по умолчанию
+			if (priceTelegram <= 0) priceTelegram = 50;
 
 			if (networkType == "All")
 			{
@@ -383,9 +386,11 @@ namespace CrossChat.Controllers
 					if (Enum.TryParse<NetworkType>(parts[0], out var parsedNet))
 					{
 						var specificCaption = Request.Form[$"caption_{netKey}"].ToString();
-						var finalCaption = string.IsNullOrEmpty(specificCaption) ? caption : specificCaption;
 
-						// Проверяем, является ли эта соцсеть Telegram
+						// Защита от null для раздельных текстов
+						var finalCaption = string.IsNullOrEmpty(specificCaption) ? safeCaption : specificCaption;
+						finalCaption ??= string.Empty;
+
 						bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
 
 						if (post.Networks.ContainsKey(netKey))
@@ -425,7 +430,7 @@ namespace CrossChat.Controllers
 
 					if (post.Networks.ContainsKey(netKey))
 					{
-						post.Networks[netKey].Caption = caption;
+						post.Networks[netKey].Caption = safeCaption; // <-- Используем safeCaption
 						if (isTg)
 						{
 							post.Networks[netKey].IsPaid = isPaidTelegram;
@@ -442,7 +447,7 @@ namespace CrossChat.Controllers
 						post.Networks[netKey] = new NetworkPostData
 						{
 							Status = SocialStatus.Pending,
-							Caption = caption,
+							Caption = safeCaption, // <-- Используем safeCaption
 							IsPaid = isTg && isPaidTelegram,
 							Price = (isTg && isPaidTelegram) ? priceTelegram : 0
 						};
