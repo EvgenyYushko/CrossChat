@@ -8,6 +8,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
+using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -229,43 +230,100 @@ namespace CrossChat.Controllers
 
 				try
 				{
-					// Определяем тип медиа
 					var isVideo = file.ContentType.StartsWith("video/") ||
 								  file.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
 								  file.FileName.EndsWith(".mov", StringComparison.OrdinalIgnoreCase);
 
 					var isAudio = file.ContentType.StartsWith("audio/") ||
-						  file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-						  file.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
-						  file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
-						  file.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase);
+								  file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+								  file.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
+								  file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
+								  file.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase);
 
 					var mediaType = isVideo ? MediaType.Video : (isAudio ? MediaType.Audio : MediaType.Image);
 
-					// Загружаем напрямую поток файла в Google Drive
-					using var stream = file.OpenReadStream();
-					var driveFileId = await _googleDriveUploader.UploadStreamAsync(
-						stream,
-						file.FileName,
-						GOOGLE_POSTS_FOLDER_ID,
-						file.ContentType);
+					string driveFileId;
+					string? thumbDriveId = null;
+
+					// ЕСЛИ ЭТО ВИДЕО — СОХРАНЯЕМ НА ДИСК ДЛЯ ГЕНЕРАЦИИ ОБЛОЖКИ (THUMBNAIL)
+					if (isVideo)
+					{
+						string tempVideoPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_{file.FileName}");
+
+						try
+						{
+							// Записываем временный файл для быстрой работы FFmpeg
+							using (var fs = new FileStream(tempVideoPath, FileMode.Create))
+							{
+								await file.CopyToAsync(fs);
+							}
+
+							// Загружаем видео в Google Drive
+							using (var videoStream = new FileStream(tempVideoPath, FileMode.Open, FileAccess.Read))
+							{
+								driveFileId = await _googleDriveUploader.UploadStreamAsync(
+									videoStream,
+									file.FileName,
+									GOOGLE_POSTS_FOLDER_ID,
+									file.ContentType);
+							}
+
+							// Генерируем компактный кадр-обложку (20-30 КБ)
+							string? thumbLocalPath = await VideoService.GenerateVideoThumbnailAsync(tempVideoPath);
+
+							if (!string.IsNullOrEmpty(thumbLocalPath) && System.IO.File.Exists(thumbLocalPath))
+							{
+								try
+								{
+									using var thumbStream = new FileStream(thumbLocalPath, FileMode.Open, FileAccess.Read);
+									string thumbName = $"thumb_{Path.GetFileNameWithoutExtension(file.FileName)}.jpg";
+
+									thumbDriveId = await _googleDriveUploader.UploadStreamAsync(
+										thumbStream,
+										thumbName,
+										GOOGLE_POSTS_FOLDER_ID,
+										"image/jpeg");
+
+									_logger.LogInformation("Обложка для видео успешно создана и загружена. ThumbId: {ThumbId}", thumbDriveId);
+								}
+								finally
+								{
+									try { System.IO.File.Delete(thumbLocalPath); } catch { }
+								}
+							}
+						}
+						finally
+						{
+							try { System.IO.File.Delete(tempVideoPath); } catch { }
+						}
+					}
+					else
+					{
+						// Фото и аудио загружаем потоком напрямую в Google Drive
+						using var stream = file.OpenReadStream();
+						driveFileId = await _googleDriveUploader.UploadStreamAsync(
+							stream,
+							file.FileName,
+							GOOGLE_POSTS_FOLDER_ID,
+							file.ContentType);
+					}
 
 					post.Media.Add(new PostMediaItem
 					{
 						MediaType = mediaType,
 						GoogleDriveFileId = driveFileId,
+						ThumbnailDriveFileId = thumbDriveId, // Сохраняем ID легкой обложки!
 						FileName = file.FileName,
 						MimeType = file.ContentType,
 						FileSizeBytes = file.Length,
 						SortOrder = post.Media.Count
 					});
 
-					_logger.LogInformation("Файл {FileName} ({Size} байт) успешно загружен в Google Drive. FileId: {DriveId}",
-						file.FileName, file.Length, driveFileId);
+					_logger.LogInformation("Файл {FileName} ({Size} байт) сохранен. DriveId: {DriveId}", file.FileName, file.Length, driveFileId);
 				}
 				catch (Exception ex)
 				{
-					_logger.LogError(ex, "Ошибка при загрузке медиафайла {FileName} в Google Drive", file.FileName);
+					_logger.LogError(ex, "Ошибка при сохранении медиафайла {FileName}", file.FileName);
 				}
 			}
 

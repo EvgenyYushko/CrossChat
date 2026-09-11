@@ -1241,6 +1241,7 @@
 
                     // Защита от регистра C# / JS:
                     const driveId = media.googleDriveFileId || media.GoogleDriveFileId;
+                    const thumbDriveId = media.thumbnailDriveFileId || media.ThumbnailDriveFileId;
                     const mediaType = media.mediaType !== undefined ? media.mediaType : media.MediaType;
                     const isVideo = mediaType === 1 || mediaType === "Video";
                     const isAudio = mediaType === 2 || mediaType === "Audio";
@@ -1250,13 +1251,24 @@
                     const mediaUrl = `/planner/media/${driveId}`;
 
                     if (isVideo) {
-                        const video = document.createElement('video');
-                        video.className = 'thumb';
-                        video.src = mediaUrl;
-                        video.muted = true;
-                        video.preload = 'metadata';
-                        video.onclick = () => openLightbox(mediaUrl, true);
-                        wrapper.appendChild(video);
+                        // ЕСЛИ ЕСТЬ ОБЛОЖКА: Показываем легкую картинку (20 КБ) вместо тяжелого видеопотока!
+                        if (thumbDriveId && thumbDriveId !== "undefined") {
+                            const thumbUrl = `/planner/media/${thumbDriveId}`;
+                            const img = document.createElement('img');
+                            img.className = 'thumb';
+                            img.src = thumbUrl;
+                            img.onclick = () => openLightbox(mediaUrl, true); // При клике открываем полное видео!
+                            wrapper.appendChild(img);
+                        } else {
+                            // Фоллбек для старых видео: тег video
+                            const video = document.createElement('video');
+                            video.className = 'thumb';
+                            video.src = mediaUrl;
+                            video.muted = true;
+                            video.preload = 'metadata';
+                            video.onclick = () => openLightbox(mediaUrl, true);
+                            wrapper.appendChild(video);
+                        }
 
                         const badge = document.createElement('span');
                         badge.className = 'video-badge';

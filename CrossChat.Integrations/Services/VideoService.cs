@@ -170,5 +170,73 @@ namespace CrossChat.Integrations.Services
 				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
 			}
 		}
+
+		/// <summary>
+		/// Извлекает первый кадр из видеофайла в виде компактного JPEG-изображения (обложки)
+		/// </summary>
+		public static async Task<string?> GenerateVideoThumbnailAsync(string videoPath)
+		{
+			if (!File.Exists(videoPath)) return null;
+
+			string directory = Path.GetDirectoryName(videoPath)!;
+			string thumbPath = Path.Combine(directory, $"{Guid.NewGuid()}_thumb.jpg");
+
+			try
+			{
+				// -ss 00:00:00.500 : берем кадр на полусекунде (чтобы не брать чисто черный экран титров)
+				// -vframes 1 : ровно один кадр
+				// -q:v 2 : высокое качество JPEG
+				// -vf "scale=480:-1" : сжимаем ширину до 480px (для превью больше не нужно)
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -ss 00:00:00.500 -i \"{videoPath}\" -vframes 1 -q:v 2 -vf \"scale=480:-1\" \"{thumbPath}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(thumbPath))
+				{
+					return thumbPath;
+				}
+
+				// Если на 0.5 сек не вышло (видео короче), пробуем самый первый кадр (0 сек)
+				var fallbackInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -i \"{videoPath}\" -vframes 1 -q:v 2 -vf \"scale=480:-1\" \"{thumbPath}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var fallbackProcess = new Process { StartInfo = fallbackInfo };
+				fallbackProcess.Start();
+				await fallbackProcess.WaitForExitAsync();
+
+				if (fallbackProcess.ExitCode == 0 && File.Exists(thumbPath))
+				{
+					return thumbPath;
+				}
+
+				Console.WriteLine("FFmpeg не смог извлечь кадр из видео: {Err}", errorOutput);
+				return null;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"{ex} Ошибка при генерации превью для видео: {videoPath}");
+				return null;
+			}
+		}
 	}
 }
