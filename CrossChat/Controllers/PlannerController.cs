@@ -78,14 +78,30 @@ namespace CrossChat.Controllers
 				var events = posts.Select(p =>
 				{
 					var activeStates = p.NetworkStates.Where(ns => ns.Status != (int)SocialStatus.None).ToList();
-					var mainCaption = activeStates.FirstOrDefault()?.Caption ?? "Пост";
+					var mainCaption = activeStates.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Caption))?.Caption;
+					if (string.IsNullOrWhiteSpace(mainCaption)) mainCaption = "Пост";
+
+					// ЛОГИКА ЦВЕТА ДЛЯ РЕЖИМА "ALL":
+					// 1. Если ХОТЯ БЫ В ОДНОЙ сети ошибка -> КРАСНЫЙ
+					// 2. Если ВО ВСЕХ активных сетях опубликовано -> ЗЕЛЕНЫЙ
+					// 3. Иначе (есть ожидающие) -> ЖЕЛТЫЙ / ОРАНЖЕВЫЙ
+					string color = "#f59e0b"; // Оранжевый (Pending)
+
+					if (activeStates.Any(ns => ns.Status == (int)SocialStatus.Error))
+					{
+						color = "#ef4444"; // Красный (Error)
+					}
+					else if (activeStates.All(ns => ns.Status == (int)SocialStatus.Published))
+					{
+						color = "#10b981"; // Зеленый (Published)
+					}
 
 					return new
 					{
 						id = p.Id,
 						title = mainCaption,
 						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-						backgroundColor = "#4f46e5",
+						backgroundColor = color,
 						network = "All",
 						activeNetworks = activeStates.Select(ns => $"{((NetworkType)ns.NetworkType).ToString()}_{ns.BotId}").ToList()
 					};
@@ -107,13 +123,29 @@ namespace CrossChat.Controllers
 														  ns.Status != (int)SocialStatus.None))
 					.ToListAsync();
 
-				var events = posts.Select(p => new
+				var events = posts.Select(p =>
 				{
-					id = p.Id,
-					title = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId)?.Caption ?? "Пост",
-					start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-					backgroundColor = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId)?.Status == (int)SocialStatus.Published ? "#10b981" : "#fbbf24",
-					network = networkType
+					var state = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId);
+					var status = state?.Status ?? (int)SocialStatus.Pending;
+
+					// ЛОГИКА ЦВЕТА ДЛЯ ОДИНОЧНОЙ СЕТИ:
+					string color = status switch
+					{
+						(int)SocialStatus.Published => "#10b981", // Зеленый
+						(int)SocialStatus.Error => "#ef4444",     // КРАСНЫЙ!
+						_ => "#f59e0b"                           // Оранжевый (Pending)
+					};
+
+					string title = string.IsNullOrWhiteSpace(state?.Caption) ? "Пост" : state.Caption;
+
+					return new
+					{
+						id = p.Id,
+						title = title,
+						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+						backgroundColor = color,
+						network = networkType
+					};
 				});
 
 				return Json(events);
@@ -363,9 +395,22 @@ namespace CrossChat.Controllers
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
 
-			post.ShowDate = DateTime.SpecifyKind(newDate, DateTimeKind.Utc);
-			await _postService.UpdatePostAsync(post);
+			var utcDate = DateTime.SpecifyKind(newDate, DateTimeKind.Utc);
+			post.ShowDate = utcDate;
 
+			// ЕСЛИ ПОСТ ПЕРЕНЕСЕН В БУДУЩЕЕ: Сбрасываем упавшие сети из Error обратно в Pending!
+			if (utcDate > DateTimeNow)
+			{
+				foreach (var net in post.Networks.Values)
+				{
+					if (net.Status == SocialStatus.Error)
+					{
+						net.Status = SocialStatus.Pending;
+					}
+				}
+			}
+
+			await _postService.UpdatePostAsync(post);
 			return Ok();
 		}
 
@@ -471,7 +516,9 @@ namespace CrossChat.Controllers
 								post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
 								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
 							}
-							if (post.Networks[netKey].Status == SocialStatus.None)
+
+							// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
+							if (post.Networks[netKey].Status == SocialStatus.None || post.Networks[netKey].Status == SocialStatus.Error)
 							{
 								post.Networks[netKey].Status = SocialStatus.Pending;
 							}
@@ -513,7 +560,8 @@ namespace CrossChat.Controllers
 							post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
 						}
 
-						if (post.Networks[netKey].Status == SocialStatus.None)
+						// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
+						if (post.Networks[netKey].Status == SocialStatus.None || post.Networks[netKey].Status == SocialStatus.Error)
 						{
 							post.Networks[netKey].Status = SocialStatus.Pending;
 						}
