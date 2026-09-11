@@ -30,11 +30,6 @@ namespace CrossChat.Worker.Facades
 			var mediaList = state.Post.Media.OrderBy(m => m.SortOrder).ToList();
 			var mediaPayloads = new List<string>();
 
-			if (!mediaList.Any())
-			{
-				throw new Exception($"У поста {state.PostId} нет медиафайлов для публикации в Instagram.");
-			}
-
 			// Скачиваем каждый файл из Google Drive для публикации
 			foreach (var media in mediaList)
 			{
