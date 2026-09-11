@@ -428,6 +428,8 @@ namespace CrossChat.Controllers
 			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
 			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
 			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
+			string? tgButtonText = Request.Form["tgButtonText"].ToString();
+			string? tgButtonUrl = Request.Form["tgButtonUrl"].ToString();
 			if (priceTelegram <= 0) priceTelegram = 50;
 
 			if (networkType == "All")
@@ -466,6 +468,8 @@ namespace CrossChat.Controllers
 								post.Networks[netKey].IsPaid = isPaidTelegram;
 								post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
 								post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
+								post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
+								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
 							}
 							if (post.Networks[netKey].Status == SocialStatus.None)
 							{
@@ -479,7 +483,10 @@ namespace CrossChat.Controllers
 								Status = SocialStatus.Pending,
 								Caption = finalCaption,
 								IsPaid = isTg && isPaidTelegram,
-								Price = (isTg && isPaidTelegram) ? priceTelegram : 0
+								Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
+								IsVideoNote = isVideoNoteTelegram,
+								ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
+								ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim()
 							};
 						}
 					}
@@ -502,6 +509,8 @@ namespace CrossChat.Controllers
 							post.Networks[netKey].IsPaid = isPaidTelegram;
 							post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
 							post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
+							post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
+							post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
 						}
 
 						if (post.Networks[netKey].Status == SocialStatus.None)
@@ -517,7 +526,9 @@ namespace CrossChat.Controllers
 							Caption = safeCaption, // <-- Используем safeCaption
 							IsPaid = isTg && isPaidTelegram,
 							Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
-							IsVideoNote = isVideoNoteTelegram
+							IsVideoNote = isVideoNoteTelegram,
+							ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
+							ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim()
 						};
 					}
 				}

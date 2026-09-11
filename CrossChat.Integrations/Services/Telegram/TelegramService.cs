@@ -166,7 +166,7 @@ namespace CrossChat.Integrations.Services.Telegram
 		/// <summary>
 		/// Публикация платного контента (Telegram Stars) — от 1 до 10 фото и/или видео, скрытых блюром
 		/// </summary>
-		public async Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "")
+		public async Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null)
 		{
 			if (base64MediaList == null || !base64MediaList.Any())
 				throw new ArgumentException("Для платного поста в Telegram требуется хотя бы одно фото или видео.");
@@ -215,13 +215,13 @@ namespace CrossChat.Integrations.Services.Telegram
 					starCount: starCount,
 					media: paidMediaItems,
 					caption: mediaCaption,
-					parseMode: ParseMode.Html
+					parseMode: ParseMode.Html,
+					replyMarkup: isCaptionTooLong ? null : replyMarkup
 				);
 
-				// Если описание было длиннее 1024 символов — отправляем следом
 				if (isCaptionTooLong)
 				{
-					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html);
+					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
 				}
 
 				return message;
@@ -307,7 +307,7 @@ namespace CrossChat.Integrations.Services.Telegram
 		/// <summary>
 		/// Универсальная публикация альбома: поддерживает и фото, и видео, и их смесь (до 10 файлов)
 		/// </summary>
-		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "")
+		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null)
 		{
 			if (base64MediaList == null || !base64MediaList.Any()) return null;
 
@@ -364,6 +364,13 @@ namespace CrossChat.Integrations.Services.Telegram
 					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html);
 				}
 
+				// Если к альбому прикреплена кнопка:
+				if (replyMarkup != null && !isCaptionTooLong)
+				{
+					// Альбомы в Telegram не принимают кнопки напрямую, шлем кнопку отдельной плашкой
+					await _telegramBotClient.SendMessage(senderId, "👇 Ссылка к публикации:", replyMarkup: replyMarkup);
+				}
+
 				return messages;
 			}
 			catch (Exception ex)
@@ -380,12 +387,11 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html)
+		public async Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
 			string cleanBase64 = base64Audio.Contains(",") ? base64Audio.Split(',')[1] : base64Audio;
 			var rawBytes = Convert.FromBase64String(cleanBase64);
 
-			// Конвертируем любое аудио в эталонный Telegram Voice (OGG Opus) через наш FFmpeg
 			var voiceOggBytes = await VideoService.ConvertToTelegramVoiceOggAsync(rawBytes);
 
 			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
@@ -397,13 +403,13 @@ namespace CrossChat.Integrations.Services.Telegram
 				chatId: senderId,
 				voice: InputFile.FromStream(stream, "voice.ogg"),
 				caption: string.IsNullOrEmpty(voiceCaption) ? null : voiceCaption,
-				parseMode: parseMode
+				parseMode: parseMode,
+				replyMarkup: isCaptionTooLong ? null : replyMarkup // Если текст длинный, кнопку прикрепим к тексту
 			);
 
-			// Если подпись длиннее 1024 символов — отправляем текст следом
 			if (isCaptionTooLong)
 			{
-				await _telegramBotClient.SendMessage(senderId, caption, parseMode: parseMode);
+				await _telegramBotClient.SendMessage(senderId, caption, parseMode: parseMode, replyMarkup: replyMarkup);
 			}
 
 			return voiceMsg;
@@ -492,6 +498,17 @@ namespace CrossChat.Integrations.Services.Telegram
 			return null;
 		}
 
+		public InlineKeyboardMarkup? BuildInlineButton(string? text, string? url)
+		{
+			if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(url))
+				return null;
+
+			if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+				return null;
+
+			return new InlineKeyboardMarkup(InlineKeyboardButton.WithUrl(text, url));
+		}
+
 		public async Task SetWebhookAsync(string token, string webhookUrl)
 		{
 			var bot = new TelegramBotClient(token);
@@ -509,6 +526,5 @@ namespace CrossChat.Integrations.Services.Telegram
 			var bot = new TelegramBotClient(token);
 			await bot.SendMessage(chatId, text);
 		}
-
 	}
 }

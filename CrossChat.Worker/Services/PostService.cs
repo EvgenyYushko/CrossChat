@@ -301,6 +301,8 @@ namespace CrossChat.Worker.Services
 							dbState.IsVideoNote = kvp.Value.IsVideoNote;
 							dbState.IsPaid = kvp.Value.IsPaid;
 							dbState.Price = kvp.Value.Price;
+							dbState.ButtonText = kvp.Value.ButtonText;
+							dbState.ButtonUrl = kvp.Value.ButtonUrl;
 						}
 					}
 					else
@@ -317,7 +319,9 @@ namespace CrossChat.Worker.Services
 								Status = newStatus,
 								IsVideoNote = kvp.Value.IsVideoNote,
 								IsPaid = kvp.Value.IsPaid, // <-- ИСПРАВЛЕНО
-								Price = kvp.Value.Price    // <-- ИСПРАВЛЕНО
+								Price = kvp.Value.Price,    // <-- ИСПРАВЛЕНО
+								ButtonText = kvp.Value.ButtonText,
+								ButtonUrl = kvp.Value.ButtonUrl,
 							});
 						}
 					}
@@ -421,7 +425,9 @@ namespace CrossChat.Worker.Services
 					Caption = state.Caption,
 					IsVideoNote = state.IsVideoNote,
 					IsPaid = state.IsPaid,
-					Price = state.Price
+					Price = state.Price,
+					ButtonText = state.ButtonText,
+					ButtonUrl = state.ButtonUrl
 				};
 			}
 
@@ -474,7 +480,9 @@ namespace CrossChat.Worker.Services
 					Status = (int)kvp.Value.Status,
 					IsVideoNote = kvp.Value.IsVideoNote,
 					IsPaid = kvp.Value.IsPaid,
-					Price = kvp.Value.Price
+					Price = kvp.Value.Price,
+					ButtonText = kvp.Value.ButtonText,
+					ButtonUrl = kvp.Value.ButtonUrl
 				});
 			}
 

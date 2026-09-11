@@ -35,5 +35,13 @@ namespace CrossChat.Data.Entities.Posting
 
 		// Отправлять ли видео как кружочек (Telegram Video Note)
 		public bool IsVideoNote { get; set; } = false;
+
+		// Текст кнопки-ссылки (например: "Перейти на сайт")
+		[MaxLength(100)]
+		public string? ButtonText { get; set; }
+
+		// URL ссылки (например: "https://mysite.com")
+		[MaxLength(500)]
+		public string? ButtonUrl { get; set; }
 	}
 }

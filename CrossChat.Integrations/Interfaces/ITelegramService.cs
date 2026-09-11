@@ -24,15 +24,16 @@ namespace CrossChat.Integrations.Interfaces
 		Task<Message[]> SendPhotoAlbumAsync(long senderId, List<string> base64Images, string caption = "");
 
 		Task<Message> SendPaidPhotosAsync(long senderId, IEnumerable<string> base64Images, int starCount, string caption = "", ParseMode parseMode = ParseMode.None);
-		Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "");
+		Task<Message> SendPaidMediaGroupAsync(long senderId, int starCount, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null);
 		Task<string?> GetChannelAvatarBase64Async(long channelId);
 
 		Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId);
-		Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html);
+		Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null);
 
 		Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null);
-		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "");
+		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null);
 
 		Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html);
+		InlineKeyboardMarkup? BuildInlineButton(string? text, string? url);
 	}
 }

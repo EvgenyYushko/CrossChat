@@ -11,5 +11,8 @@ namespace CrossChat.Integrations.Models.Posting
 		public int Price { get; set; } = 0;
 
 		public bool IsVideoNote { get; set; } = false;
+
+		public string? ButtonText { get; set; }
+		public string? ButtonUrl { get; set; }
 	}
 }
