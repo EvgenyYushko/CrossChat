@@ -159,15 +159,15 @@ namespace CrossChat.Controllers
 		[RequestSizeLimit(300 * 1024 * 1024)]
 		[RequestFormLimits(MultipartBodyLengthLimit = 300 * 1024 * 1024)]
 		public async Task<IActionResult> Update(
-	Guid id,
-	[FromForm] int profileId,
-	[FromForm] string networkType,
-	[FromForm] string caption,
-	[FromForm] DateTime showDate,
-	[FromForm] int? botId,
-	[FromForm] List<string> keptMediaDriveIds, // ID файлов, которые пользователь оставил
-	[FromForm] List<string> selectedNetworks,
-	[FromForm] List<IFormFile> images)
+			Guid id,
+			[FromForm] int profileId,
+			[FromForm] string networkType,
+			[FromForm] string caption,
+			[FromForm] DateTime showDate,
+			[FromForm] int? botId,
+			[FromForm] List<string> keptMediaDriveIds, // ID файлов, которые пользователь оставил
+			[FromForm] List<string> selectedNetworks,
+			[FromForm] List<IFormFile> images)
 		{
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
@@ -369,6 +369,7 @@ namespace CrossChat.Controllers
 			// Читаем параметры платного поста для Telegram
 			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
 			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
+			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
 			if (priceTelegram <= 0) priceTelegram = 50;
 
 			if (networkType == "All")
@@ -406,6 +407,7 @@ namespace CrossChat.Controllers
 							{
 								post.Networks[netKey].IsPaid = isPaidTelegram;
 								post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
+								post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
 							}
 							if (post.Networks[netKey].Status == SocialStatus.None)
 							{

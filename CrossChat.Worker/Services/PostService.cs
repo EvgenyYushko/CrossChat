@@ -298,6 +298,7 @@ namespace CrossChat.Worker.Services
 							// Обновляем существующую запись
 							dbState.Status = newStatus;
 							dbState.Caption = newCaption ?? string.Empty;
+							dbState.IsVideoNote = kvp.Value.IsVideoNote;
 							dbState.IsPaid = kvp.Value.IsPaid;
 							dbState.Price = kvp.Value.Price;
 						}
@@ -314,6 +315,7 @@ namespace CrossChat.Worker.Services
 								BotId = botId,
 								Caption = newCaption ?? string.Empty,
 								Status = newStatus,
+								IsVideoNote = kvp.Value.IsVideoNote,
 								IsPaid = kvp.Value.IsPaid, // <-- ИСПРАВЛЕНО
 								Price = kvp.Value.Price    // <-- ИСПРАВЛЕНО
 							});
@@ -417,6 +419,7 @@ namespace CrossChat.Worker.Services
 				{
 					Status = (SocialStatus)state.Status,
 					Caption = state.Caption,
+					IsVideoNote = state.IsVideoNote,
 					IsPaid = state.IsPaid,
 					Price = state.Price
 				};
@@ -469,6 +472,7 @@ namespace CrossChat.Worker.Services
 					BotId = botId,
 					Caption = kvp.Value.Caption ?? string.Empty,
 					Status = (int)kvp.Value.Status,
+					IsVideoNote = kvp.Value.IsVideoNote,
 					IsPaid = kvp.Value.IsPaid,
 					Price = kvp.Value.Price
 				});

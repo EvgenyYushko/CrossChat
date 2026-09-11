@@ -9,5 +9,7 @@ namespace CrossChat.Integrations.Models.Posting
 
 		public bool IsPaid { get; set; } = false;
 		public int Price { get; set; } = 0;
+
+		public bool IsVideoNote { get; set; } = false;
 	}
 }

@@ -32,5 +32,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null);
 		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "");
+
+		Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html);
 	}
 }

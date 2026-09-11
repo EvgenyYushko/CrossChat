@@ -115,5 +115,60 @@ namespace CrossChat.Integrations.Services
 				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
 			}
 		}
+
+		/// <summary>
+		/// Автоматически обрезает любое видео в квадрат 1:1 (640x640, YUV420P) для нативного видео-кружочка Telegram
+		/// </summary>
+		public static async Task<byte[]> ConvertToTelegramVideoNoteAsync(byte[] inputVideoBytes)
+		{
+			string tempInput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_circle_in.mp4");
+			string tempOutput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_circle_out.mp4");
+
+			try
+			{
+				await File.WriteAllBytesAsync(tempInput, inputVideoBytes);
+
+				// 1. crop='min(iw,ih)':'min(iw,ih)':(iw-ow)/2:(ih-oh)*0.3 : вырезаем квадрат с легким смещением вверх к лицу (30%)
+				// 2. scale=640:640 : эталонный размер кружочка Telegram
+				// 3. -t 60 : обрезаем максимум до 60 секунд (жесткий лимит Telegram Video Note)
+				// 4. -pix_fmt yuv420p : обязательный цветовой профиль для iOS и Android
+				var filter = "crop='min(iw,ih)':'min(iw,ih)':(iw-ow)/2:(ih-oh)*0.3,scale=640:640";
+
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -i \"{tempInput}\" -vf \"{filter}\" -t 60 -c:v libx264 -profile:v baseline -level 3.0 -pix_fmt yuv420p -preset veryfast -b:v 1500k -c:a aac -b:a 128k -ar 44100 -movflags +faststart \"{tempOutput}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(tempOutput))
+				{
+					return await File.ReadAllBytesAsync(tempOutput);
+				}
+
+				Console.WriteLine("FFmpeg не смог создать VideoNote: {Err}", errorOutput);
+				return inputVideoBytes;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Ошибка при конвертации видео в VideoNote через FFmpeg {ex}");
+				return inputVideoBytes;
+			}
+			finally
+			{
+				if (File.Exists(tempInput)) try { File.Delete(tempInput); } catch { }
+				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
+			}
+		}
 	}
 }

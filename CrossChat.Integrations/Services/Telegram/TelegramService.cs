@@ -441,6 +441,37 @@ namespace CrossChat.Integrations.Services.Telegram
 			return null;
 		}
 
+		public async Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html)
+		{
+			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
+			var rawBytes = Convert.FromBase64String(cleanBase64);
+
+			// На лету нарезаем квадрат 640x640
+			var squareVideoBytes = await VideoService.ConvertToTelegramVideoNoteAsync(rawBytes);
+
+			using var stream = new MemoryStream(squareVideoBytes);
+
+			// Отправляем нативный VideoNote
+			var noteMsg = await _telegramBotClient.SendVideoNote(
+				chatId: senderId,
+				videoNote: InputFile.FromStream(stream, "circle.mp4"),
+				length: 640
+			);
+
+			// Если к кружочку был написан текст — отправляем его следом отдельным сообщением
+			if (!string.IsNullOrWhiteSpace(caption))
+			{
+				await Task.Delay(500);
+				await _telegramBotClient.SendMessage(
+					chatId: senderId,
+					text: caption,
+					parseMode: parseMode
+				);
+			}
+
+			return noteMsg;
+		}
+
 		public async Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId)
 		{
 			try

@@ -1088,6 +1088,17 @@
                     </div>
                 </div>
 
+                <!-- Блок видео-кружочка Telegram -->
+                <div class="form-group" id="telegramVideoNoteGroup" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 1.25rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
+                        <input type="checkbox" id="isVideoNoteTelegramCheckbox" name="isVideoNoteTelegram" value="true" style="width: 18px; height: 18px; accent-color: #38bdf8;">
+                        🔘 Опубликовать как видео-кружочек (Telegram Video Note)
+                    </label>
+                    <small style="display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
+                        Видео будет автоматически обрезано в квадрат 1:1 по центру и отправлено в круглой рамке. В Instagram, Facebook и X оно выйдет обычным полноразмерным видео.
+                    </small>
+                </div>
+
                 <!-- Контейнер для динамического текста постов -->
                 <div id="captionContainer">
                     <div class="form-group" id="defaultCaptionGroup">
@@ -1349,6 +1360,8 @@
 
                     gallery.appendChild(wrapper);
                 });
+
+                updateTelegramVideoNoteVisibility();
             }
 
             document.addEventListener('DOMContentLoaded', function() {
@@ -1547,225 +1560,238 @@
 
                 events: '/planner/events?profileId=@ViewBag.ProfileId&networkType=@ViewBag.Network&botId=@ViewBag.BotId',
 
-                // КЛИК ПО СОБЫТИЮ (РЕДАКТИРОВАНИЕ)
-                eventClick: function(info) {
-                    const postId = info.event.id;
-                    const currentNetwork = "@ViewBag.Network";
-                    isEditMode = true;
+                    // КЛИК ПО СОБЫТИЮ (РЕДАКТИРОВАНИЕ)
+                    eventClick: function(info) {
+                        const postId = info.event.id;
+                        const currentNetwork = "@ViewBag.Network";
+                        isEditMode = true;
 
-                    resetModalFormState();
+                        resetModalFormState();
 
-                    const postIdInput = document.getElementById('postId');
-                    const dateInput = document.getElementById('showDateInput');
-                    const defaultCaptionInput = document.getElementById('captionInput');
-                    const deleteBtn = document.getElementById('deleteBtn');
-                    const postForm = document.getElementById('postForm');
-                    const postFormOk = document.getElementById('postForm-ok');
+                        const postIdInput = document.getElementById('postId');
+                        const dateInput = document.getElementById('showDateInput');
+                        const defaultCaptionInput = document.getElementById('captionInput');
+                        const deleteBtn = document.getElementById('deleteBtn');
+                        const postForm = document.getElementById('postForm');
+                        const postFormOk = document.getElementById('postForm-ok');
 
-                    document.getElementById('modalTitle').textContent = "Редактирование поста";
-                    document.getElementById('imageGallery').innerHTML =
-                        '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
+                        document.getElementById('modalTitle').textContent = "Редактирование поста";
+                        document.getElementById('imageGallery').innerHTML =
+                            '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
 
-                    modal.style.display = 'flex';
+                        modal.style.display = 'flex';
 
-                    fetch(`/planner/get/${postId}`)
-                        .then(res => res.json())
-                        .then(post => {
-                            document.getElementById('imageGallery').innerHTML = '';
+                        fetch(`/planner/get/${postId}`)
+                            .then(res => res.json())
+                            .then(post => {
+                                document.getElementById('imageGallery').innerHTML = '';
 
-                            postIdInput.value = post.id || post.Id;
+                                postIdInput.value = post.id || post.Id;
 
-                            const showDate = post.showDate || post.ShowDate;
-                            if (showDate) {
-                                dateInput.value = showDate.slice(0, 16);
-                            }
+                                const showDate = post.showDate || post.ShowDate;
+                                if (showDate) {
+                                    dateInput.value = showDate.slice(0, 16);
+                                }
 
-                            const networks = post.networks || post.Networks;
+                                const networks = post.networks || post.Networks;
 
-                            // Собираем активные сети
-                            let activeNets = [];
-                            for (let key in networks) {
-                                if (networks[key]) {
-                                    const status = networks[key].status !== undefined ? networks[key].status : networks[key].Status;
-                                    if (status !== undefined && status !== null && status !== "None" && status !== 0) {
-                                        activeNets.push(key);
+                                // Собираем активные сети
+                                let activeNets = [];
+                                for (let key in networks) {
+                                    if (networks[key]) {
+                                        const status = networks[key].status !== undefined ? networks[key].status : networks[key].Status;
+                                        if (status !== undefined && status !== null && status !== "None" && status !== 0) {
+                                            activeNets.push(key);
+                                        }
                                     }
                                 }
-                            }
-                            const isMultiPost = activeNets.length > 1;
+                                const isMultiPost = activeNets.length > 1;
 
-                            const netSelectGroup = document.getElementById('networkSelectGroup');
-                            const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
-                            const warningDiv = document.getElementById('multiPostWarning');
+                                const netSelectGroup = document.getElementById('networkSelectGroup');
+                                const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
+                                const warningDiv = document.getElementById('multiPostWarning');
 
-                            if (currentNetwork === "All") {
-                                // ОБЩИЙ РЕЖИМ
-                                if (netSelectGroup) netSelectGroup.style.display = 'block';
-                                document.getElementById('unifiedTextGroup').style.display = 'block';
-                                if (warningDiv) warningDiv.style.display = 'none';
+                                if (currentNetwork === "All") {
+                                    // ОБЩИЙ РЕЖИМ
+                                    if (netSelectGroup) netSelectGroup.style.display = 'block';
+                                    document.getElementById('unifiedTextGroup').style.display = 'block';
+                                    if (warningDiv) warningDiv.style.display = 'none';
 
-                                dateInput.disabled = false;
-                                document.getElementById('fileInput').disabled = false;
-                                document.querySelector('.file-upload-zone').style.opacity = '1';
+                                    dateInput.disabled = false;
+                                    document.getElementById('fileInput').disabled = false;
+                                    document.querySelector('.file-upload-zone').style.opacity = '1';
 
-                                // УМНОЕ ОПРЕДЕЛЕНИЕ ЕДИНОГО ТЕКСТА:
-                                let isUnified = true;
-                                let firstActiveCaption = null;
-                                activeNets.forEach(net => {
-                                    const text = networks[net].caption || networks[net].Caption || "";
-                                    if (firstActiveCaption === null) {
-                                        firstActiveCaption = text;
-                                    } else if (text !== firstActiveCaption) {
-                                        isUnified = false;
+                                    // УМНОЕ ОПРЕДЕЛЕНИЕ ЕДИНОГО ТЕКСТА:
+                                    let isUnified = true;
+                                    let firstActiveCaption = null;
+                                    activeNets.forEach(net => {
+                                        const text = networks[net].caption || networks[net].Caption || "";
+                                        if (firstActiveCaption === null) {
+                                            firstActiveCaption = text;
+                                        } else if (text !== firstActiveCaption) {
+                                            isUnified = false;
+                                        }
+                                    });
+                                    if (firstActiveCaption === null) firstActiveCaption = "";
+
+                                    document.getElementById('unifiedTextCheckbox').checked = isUnified;
+
+                                    if (isUnified) {
+                                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+                                        if (defaultCaptionInput) {
+                                            defaultCaptionInput.value = firstActiveCaption;
+                                            defaultCaptionInput.required = false; // Текст не обязателен
+                                        }
+                                    } else {
+                                        if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                                        if (defaultCaptionInput) defaultCaptionInput.required = false;
                                     }
-                                });
-                                if (firstActiveCaption === null) firstActiveCaption = "";
 
-                                document.getElementById('unifiedTextCheckbox').checked = isUnified;
+                                    // Выставляем чекбоксы соцсетей и заполняем их текстареа
+                                    document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                                        const netKey = cb.value; // формат: "Instagram_5"
+                                        const isActive = activeNets.includes(netKey);
+                                        cb.checked = isActive;
 
-                                if (isUnified) {
-                                    if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
-                                    if (defaultCaptionInput) {
-                                        defaultCaptionInput.value = firstActiveCaption;
-                                        defaultCaptionInput.required = false; // Текст не обязателен
-                                    }
+                                        if (isActive) {
+                                            if (!isUnified) {
+                                                const groupId = `captionGroup_${netKey}`;
+                                                const inputId = `captionInput_${netKey}`;
+
+                                                if (!document.getElementById(groupId)) {
+                                                    const parts = netKey.split('_');
+                                                    const netName = parts[0];
+                                                    const container = document.getElementById('dynamicCaptions');
+
+                                                    const groupDiv = document.createElement('div');
+                                                    groupDiv.className = 'form-group';
+                                                    groupDiv.id = groupId;
+
+                                                    const label = document.createElement('label');
+                                                    label.style.color = 'var(--accent-color)';
+                                                    label.textContent = `Текст для ${netName} (${cb.parentElement.innerText.trim()})`;
+
+                                                    const textarea = document.createElement('textarea');
+                                                    textarea.name = `caption_${netKey}`;
+                                                    textarea.id = inputId;
+                                                    textarea.required = false;
+                                                    textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
+                                                    textarea.value = networks[netKey].caption || networks[netKey].Caption || "";
+
+                                                    groupDiv.appendChild(label);
+                                                    groupDiv.appendChild(textarea);
+                                                    container.appendChild(groupDiv);
+                                                }
+                                            }
+                                        }
+                                    });
                                 } else {
-                                    if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'none';
+                                    // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
+                                    if (netSelectGroup) netSelectGroup.style.display = 'none';
+                                    document.getElementById('unifiedTextGroup').style.display = 'none';
+                                    if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
+
                                     if (defaultCaptionInput) defaultCaptionInput.required = false;
-                                }
 
-                                // Выставляем чекбоксы соцсетей и заполняем их текстареа
-                                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
-                                    const netKey = cb.value; // формат: "Instagram_5"
-                                    const isActive = activeNets.includes(netKey);
-                                    cb.checked = isActive;
+                                    const currentBotId = "@ViewBag.BotId";
+                                    const targetKey = `${currentNetwork}_${currentBotId}`;
+                                    let netData = null;
 
-                                    if (isActive) {
-                                        if (!isUnified) {
-                                            const groupId = `captionGroup_${netKey}`;
-                                            const inputId = `captionInput_${netKey}`;
-
-                                            if (!document.getElementById(groupId)) {
-                                                const parts = netKey.split('_');
-                                                const netName = parts[0];
-                                                const container = document.getElementById('dynamicCaptions');
-
-                                                const groupDiv = document.createElement('div');
-                                                groupDiv.className = 'form-group';
-                                                groupDiv.id = groupId;
-
-                                                const label = document.createElement('label');
-                                                label.style.color = 'var(--accent-color)';
-                                                label.textContent = `Текст для ${netName} (${cb.parentElement.innerText.trim()})`;
-
-                                                const textarea = document.createElement('textarea');
-                                                textarea.name = `caption_${netKey}`;
-                                                textarea.id = inputId;
-                                                textarea.required = false; // Текст не обязателен
-                                                textarea.placeholder = `Введите уникальный текст для этого аккаунта...`;
-                                                textarea.value = networks[netKey].caption || networks[netKey].Caption || "";
-
-                                                groupDiv.appendChild(label);
-                                                groupDiv.appendChild(textarea);
-                                                container.appendChild(groupDiv);
+                                    if (currentBotId && currentBotId !== "0" && networks[targetKey]) {
+                                        netData = networks[targetKey];
+                                    } else {
+                                        for (let key in networks) {
+                                            if (key.startsWith(currentNetwork + "_")) {
+                                                netData = networks[key];
+                                                break;
                                             }
                                         }
                                     }
-                                });
-                            } else {
-                                // ОДИНОЧНЫЙ РЕЖИМ (Instagram, Telegram...)
-                                if (netSelectGroup) netSelectGroup.style.display = 'none';
-                                document.getElementById('unifiedTextGroup').style.display = 'none';
-                                if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
 
-                                if (defaultCaptionInput) defaultCaptionInput.required = false; // Текст не обязателен
+                                    if (defaultCaptionInput) {
+                                        defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                                    }
 
-                                const currentBotId = "@ViewBag.BotId";
-                                const targetKey = `${currentNetwork}_${currentBotId}`;
-                                let netData = null;
+                                    if (isMultiPost) {
+                                        const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
+                                        if (warningDiv) {
+                                            warningDiv.style.display = 'block';
+                                            warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
+                                        }
 
-                                if (currentBotId && currentBotId !== "0" && networks[targetKey]) {
-                                    netData = networks[targetKey];
-                                } else {
-                                    for (let key in networks) {
-                                        if (key.startsWith(currentNetwork + "_")) {
-                                            netData = networks[key];
-                                            break;
+                                        isImageEditingLocked = true;
+                                        dateInput.disabled = true;
+                                        document.getElementById('fileInput').disabled = true;
+
+                                        const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                        if (fileUploadGroup) fileUploadGroup.style.display = 'none';
+                                    } else {
+                                        isImageEditingLocked = false;
+                                        dateInput.disabled = false;
+                                        document.getElementById('fileInput').disabled = false;
+                                        if (warningDiv) warningDiv.style.display = 'none';
+
+                                        const fileUploadGroup = document.getElementById('fileUploadGroup');
+                                        if (fileUploadGroup) fileUploadGroup.style.display = 'block';
+                                    }
+                                }
+
+                                // === [ОБНОВЛЕНО] ПОДГРУЗКА НАСТРОЕК TELEGRAM (ЗВЁЗДЫ И КРУЖОЧКИ) ===
+                                let isPaidPost = false;
+                                let postPrice = 50;
+                                let isNotePost = false;
+
+                                for (let key in networks) {
+                                    if (key.includes("Telegram") && networks[key]) {
+                                        // Проверяем статус Telegram Stars
+                                        if (networks[key].isPaid || networks[key].IsPaid) {
+                                            isPaidPost = true;
+                                            postPrice = networks[key].price || networks[key].Price || 50;
+                                        }
+                                        // Проверяем флаг видео-кружочка
+                                        if (networks[key].isVideoNote || networks[key].IsVideoNote) {
+                                            isNotePost = true;
                                         }
                                     }
                                 }
 
-                                if (defaultCaptionInput) {
-                                    defaultCaptionInput.value = netData ? (netData.caption || netData.Caption || "") : "";
+                                const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
+                                if (isPaidCb) isPaidCb.checked = isPaidPost;
+
+                                const priceInput = document.getElementById('priceTelegramInput');
+                                if (priceInput) priceInput.value = postPrice;
+
+                                const noteCb = document.getElementById('isVideoNoteTelegramCheckbox');
+                                if (noteCb) noteCb.checked = isNotePost;
+
+                                if (typeof togglePaidTelegramMode === 'function') togglePaidTelegramMode();
+                                if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
+                                // ====================================================================
+
+                                deleteBtn.style.display = 'block';
+                                postForm.action = `/planner/update/${postId}`;
+                                postFormOk.textContent = "Изменить";
+
+                                existingMedia = [];
+                                selectedFiles = [];
+
+                                const media = post.media || post.Media;
+                                if (media && media.length > 0) {
+                                    existingMedia = [...media];
                                 }
 
-                                if (isMultiPost) {
-                                    const otherNets = activeNets.filter(n => n !== currentNetwork).join(', ');
-                                    if (warningDiv) {
-                                        warningDiv.style.display = 'block';
-                                        warningDiv.textContent = `🔗 Этот пост также запланирован в: ${otherNets}. Изменение даты публикации и изображений заблокировано отсюда. Перейдите в общий планировщик ("All") для их редактирования.`;
-                                    }
+                                syncFileInput();
+                                renderGallery();
 
-                                    isImageEditingLocked = true;
-                                    dateInput.disabled = true;
-                                    document.getElementById('fileInput').disabled = true;
-
-                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) fileUploadGroup.style.display = 'none';
-                                } else {
-                                    isImageEditingLocked = false;
-                                    dateInput.disabled = false;
-                                    document.getElementById('fileInput').disabled = false;
-                                    if (warningDiv) warningDiv.style.display = 'none';
-
-                                    const fileUploadGroup = document.getElementById('fileUploadGroup');
-                                    if (fileUploadGroup) fileUploadGroup.style.display = 'block';
+                                // ВАЖНО: Вызываем проверку видимости тумблера кружочка ПОСЛЕ загрузки медиафайлов!
+                                if (typeof updateTelegramVideoNoteVisibility === 'function') {
+                                    updateTelegramVideoNoteVisibility();
                                 }
-                            }
-
-                            // === [НОВОЕ] ПОДГРУЗКА ПЛАТНОГО СТАТУСА TELEGRAM STARS ===
-                            let isPaidPost = false;
-                            let postPrice = 50;
-
-                            for (let key in networks) {
-                                if (key.includes("Telegram") && networks[key]) {
-                                    if (networks[key].isPaid || networks[key].IsPaid) {
-                                        isPaidPost = true;
-                                        postPrice = networks[key].price || networks[key].Price || 50;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
-                            if (isPaidCb) isPaidCb.checked = isPaidPost;
-
-                            const priceInput = document.getElementById('priceTelegramInput');
-                            if (priceInput) priceInput.value = postPrice;
-
-                            if (typeof togglePaidTelegramMode === 'function') togglePaidTelegramMode();
-                            if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
-                            // ========================================================
-
-                            deleteBtn.style.display = 'block';
-                            postForm.action = `/planner/update/${postId}`;
-                            postFormOk.textContent = "Изменить";
-
-                            existingMedia = [];
-                            selectedFiles = [];
-
-                            const media = post.media || post.Media;
-                            if (media && media.length > 0) {
-                                existingMedia = [...media];
-                            }
-
-                            syncFileInput();
-                            renderGallery();
-                        })
-                        .catch(err => {
-                            console.error("Ошибка загрузки поста:", err);
-                        });
-                },
+                            })
+                            .catch(err => {
+                                console.error("Ошибка загрузки поста:", err);
+                            });
+                    },
 
                 // КЛИК ПО ПУСТОМУ ДНЮ (СОЗДАНИЕ)
                 dateClick: function(info) {
@@ -2009,6 +2035,11 @@
 
                 const paidGroup = document.getElementById('telegramPaidGroup');
                 if (paidGroup) paidGroup.style.display = 'none';
+
+                const noteCb = document.getElementById('isVideoNoteTelegramCheckbox');
+                if (noteCb) noteCb.checked = false;
+                const noteGroup = document.getElementById('telegramVideoNoteGroup');
+                if (noteGroup) noteGroup.style.display = 'none';
             }
 
             /// Функция включения/выключения режима "Один текст для всех"
@@ -2220,6 +2251,9 @@
                 formData.append('isPaidTelegram', isPaidChecked ? 'true' : 'false');
                 formData.append('priceTelegram', document.getElementById('priceTelegramInput').value);
 
+                const isNoteChecked = document.getElementById('isVideoNoteTelegramCheckbox')?.checked;
+                formData.append('isVideoNoteTelegram', isNoteChecked ? 'true' : 'false');
+
                 xhr.send(formData);
             }
 
@@ -2413,6 +2447,32 @@
             } else {
                 paidGroup.style.display = 'none';
             }
+
+            updateTelegramVideoNoteVisibility();
         }
+
+        function updateTelegramVideoNoteVisibility() {
+            const noteGroup = document.getElementById('telegramVideoNoteGroup');
+            if (!noteGroup) return;
+
+            const currentNetwork = "@ViewBag.Network";
+            let isTgActive = false;
+
+            if (currentNetwork.includes("Telegram")) {
+                isTgActive = true;
+            } else if (currentNetwork === "All") {
+                const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+                isTgActive = tgCheckboxes.length > 0;
+            }
+
+            // Проверяем, есть ли среди выбранных или сохраненных файлов видео
+            const hasLocalVideo = selectedFiles.some(f => f.type.startsWith('video/') || f.name.endsWith('.mp4') || f.name.endsWith('.mov'));
+            const hasExistingVideo = existingMedia.some(m => m.mediaType === 1 || m.mediaType === "Video" || m.MediaType === 1 || m.MediaType === "Video");
+            const hasVideo = hasLocalVideo || hasExistingVideo;
+
+            // Показываем тумблер только если есть видео И выбран Telegram
+            noteGroup.style.display = (isTgActive && hasVideo) ? 'block' : 'none';
+        }
+
         </script>
 }

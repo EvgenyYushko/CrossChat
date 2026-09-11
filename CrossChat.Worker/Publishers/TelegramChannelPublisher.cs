@@ -62,8 +62,16 @@ public class TelegramChannelPublisher : ISocialPublisher
 			{
 				if (isVideo(visualMedia[0]))
 				{
-					await _console.Log("Отправка видео в Telegram канал...", settings.UserId, state.BotId);
-					await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption);
+					if (state.IsVideoNote)
+					{
+						await _console.Log("Отправка видео как кружочек (Video Note) в Telegram канал...", settings.UserId, state.BotId);
+						await _service.SendVideoNoteAsync(settings.ChannelId, visualMedia[0], caption);
+					}
+					else
+					{
+						await _console.Log("Отправка обычного видео в Telegram канал...", settings.UserId, state.BotId);
+						await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption);
+					}
 				}
 				else
 				{

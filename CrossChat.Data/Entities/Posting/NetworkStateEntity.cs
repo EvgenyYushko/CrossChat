@@ -32,5 +32,8 @@ namespace CrossChat.Data.Entities.Posting
 
 		// Стоимость (для Telegram — количество Telegram Stars, от 1 до 2500)
 		public int Price { get; set; } = 0;
+
+		// Отправлять ли видео как кружочек (Telegram Video Note)
+		public bool IsVideoNote { get; set; } = false;
 	}
 }
