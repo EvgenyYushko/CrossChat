@@ -58,34 +58,6 @@ namespace CrossChat.Integrations.Services.Telegram
 				parseMode: parseMode, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
 		}
 
-		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
-		{
-			var imageBytes = Convert.FromBase64String(base64Image);
-
-			// Проверка длины ДО отправки (1024 - лимит Telegram для caption)
-			bool isCaptionTooLong = caption.Length > 1024;
-
-			using (var stream = new MemoryStream(imageBytes))
-			{
-				if (isCaptionTooLong)
-				{
-					// Сценарий: Длинное описание
-					// 1. Шлем фото пустным
-					var photoMsg = await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"));
-
-					// 2. Шлем текст отдельно
-					await _telegramBotClient.SendMessage(senderId, caption, replyMarkup: replyMarkup, parseMode: parseMode);
-
-					return photoMsg;
-				}
-				else
-				{
-					// Сценарий: Нормальное описание
-					return await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"), caption, replyMarkup: replyMarkup, parseMode: parseMode);
-				}
-			}
-		}
-
 		public async Task<Message[]> SendPhotoAlbumAsync(long senderId, List<string> base64Images, string caption = "")
 		{
 			var media = new List<IAlbumInputMedia>();
@@ -187,6 +159,146 @@ namespace CrossChat.Integrations.Services.Telegram
 				foreach (var stream in streams)
 				{
 					stream.Dispose();
+				}
+			}
+		}
+
+		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
+		{
+			// Очищаем префикс Base64, если он есть
+			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
+			var imageBytes = Convert.FromBase64String(cleanBase64);
+
+			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+
+			using (var stream = new MemoryStream(imageBytes))
+			{
+				if (isCaptionTooLong)
+				{
+					// Если описание длинное: шлем фото без текста, а текст — отдельным сообщением
+					var photoMsg = await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"));
+					await _telegramBotClient.SendMessage(senderId, caption, replyMarkup: replyMarkup, parseMode: parseMode);
+					return photoMsg;
+				}
+				else
+				{
+					return await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"),
+						caption: string.IsNullOrEmpty(caption) ? null : caption,
+						replyMarkup: replyMarkup,
+						parseMode: parseMode);
+				}
+			}
+		}
+
+		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
+		{
+			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
+			var videoBytes = Convert.FromBase64String(cleanBase64);
+
+			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+
+			using (var stream = new MemoryStream(videoBytes))
+			{
+				if (isCaptionTooLong)
+				{
+					var videoMsg = await _telegramBotClient.SendVideo(
+						chatId: senderId,
+						video: InputFile.FromStream(stream, "video.mp4"),
+						supportsStreaming: true);
+
+					await _telegramBotClient.SendMessage(
+						chatId: senderId,
+						text: caption,
+						replyMarkup: replyMarkup,
+						parseMode: parseMode);
+
+					return videoMsg;
+				}
+				else
+				{
+					return await _telegramBotClient.SendVideo(
+						chatId: senderId,
+						video: InputFile.FromStream(stream, "video.mp4"),
+						caption: string.IsNullOrEmpty(caption) ? null : caption,
+						replyMarkup: replyMarkup,
+						parseMode: parseMode,
+						supportsStreaming: true);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Универсальная публикация альбома: поддерживает и фото, и видео, и их смесь (до 10 файлов)
+		/// </summary>
+		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "")
+		{
+			if (base64MediaList == null || !base64MediaList.Any()) return null;
+
+			var media = new List<IAlbumInputMedia>();
+			var streams = new List<MemoryStream>();
+
+			try
+			{
+				bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+				string? albumCaption = isCaptionTooLong ? null : caption;
+
+				for (int i = 0; i < Math.Min(base64MediaList.Count, 10); i++)
+				{
+					var item = base64MediaList[i];
+					bool isVideo = item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || item.Contains("video/");
+					string cleanBase64 = item.Contains(",") ? item.Split(',')[1] : item;
+
+					var bytes = Convert.FromBase64String(cleanBase64);
+					var stream = new MemoryStream(bytes);
+					streams.Add(stream);
+
+					// Задаем описание только для первого элемента альбома
+					string? itemCaption = (i == 0 && !string.IsNullOrEmpty(albumCaption)) ? albumCaption : null;
+					ParseMode itemParseMode = itemCaption != null ? ParseMode.Html : ParseMode.None;
+
+					IAlbumInputMedia inputMedia;
+
+					if (isVideo)
+					{
+						inputMedia = new InputMediaVideo(InputFile.FromStream(stream, $"video_{i}.mp4"))
+						{
+							SupportsStreaming = true,
+							Caption = itemCaption,
+							ParseMode = itemParseMode
+						};
+					}
+					else
+					{
+						inputMedia = new InputMediaPhoto(InputFile.FromStream(stream, $"image_{i}.jpg"))
+						{
+							Caption = itemCaption,
+							ParseMode = itemParseMode
+						};
+					}
+
+					media.Add(inputMedia);
+				}
+
+				var messages = await _telegramBotClient.SendMediaGroup(senderId, media);
+
+				// Если текст не поместился в лимит подписи 1024 — отправляем следом отдельным сообщением
+				if (isCaptionTooLong)
+				{
+					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html);
+				}
+
+				return messages;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram] Ошибка при отправке медиа-альбома: {ex.Message}");
+				return null;
+			}
+			finally
+			{
+				foreach (var stream in streams)
+				{
+					stream?.Dispose();
 				}
 			}
 		}
