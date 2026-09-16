@@ -10,9 +10,8 @@ namespace CrossChat.Integrations.Services
 		/// <summary>
 		/// ГЛАВНЫЙ МЕТОД: Публикация поста в Threads (Текст, 1 фото/видео или смешанная Карусель до 10 медиа)
 		/// </summary>
-		public async Task<bool> CreatePostAsync(string caption, List<string> imagesBase64, string accessToken)
+		public async Task<(bool Success, string? PostId)> CreatePostAsync(string caption, List<string> imagesBase64, string accessToken)
 		{
-			// Запускаем фоновую чистку старого мусора
 			CleanupOldTempFiles();
 
 			var tempFilesTracker = new List<string>();
@@ -20,7 +19,7 @@ namespace CrossChat.Integrations.Services
 			{
 				string creationId;
 
-				// 1. СЦЕНАРИЙ: ТЕКСТОВЫЙ ПОСТ (без медиа)
+				// 1. ТЕКСТОВЫЙ ПОСТ
 				if (imagesBase64 == null || !imagesBase64.Any())
 				{
 					var textUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
@@ -35,13 +34,13 @@ namespace CrossChat.Integrations.Services
 					{
 						var error = await textResp.Content.ReadAsStringAsync();
 						_logger.LogError($"[Threads] Ошибка создания текстового контейнера: {error}");
-						return false;
+						return (false, null);
 					}
 
 					var textJson = await textResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = textJson.GetProperty("id").GetString()!;
 				}
-				// 2. СЦЕНАРИЙ: ОДИНОЧНОЕ МЕДИА (1 фото ИЛИ 1 видео)
+				// 2. ОДИНОЧНОЕ МЕДИА (1 фото или 1 видео)
 				else if (imagesBase64.Count == 1)
 				{
 					var (mediaUrl, localPath) = await SaveMediaLocallyAsync(imagesBase64.First());
@@ -51,7 +50,6 @@ namespace CrossChat.Integrations.Services
 
 					var singleMediaUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
 
-					// Формируем payload в зависимости от типа медиа: IMAGE или VIDEO
 					object mediaPayload = isVideo
 						? new
 						{
@@ -66,7 +64,6 @@ namespace CrossChat.Integrations.Services
 							text = caption
 						};
 
-					// Пауза 500 мс для фиксации файла веб-сервером
 					await Task.Delay(500);
 
 					var mediaResp = await _httpClient.PostAsJsonAsync(singleMediaUrl, mediaPayload);
@@ -74,22 +71,20 @@ namespace CrossChat.Integrations.Services
 					{
 						var error = await mediaResp.Content.ReadAsStringAsync();
 						_logger.LogError($"[Threads] Ошибка создания медиа-контейнера: {error}");
-						return false;
+						return (false, null);
 					}
 
 					var mediaJson = await mediaResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = mediaJson.GetProperty("id").GetString()!;
 
-					// Ожидаем обработки медиа сервером Threads (для видео может занять до 30-60 сек)
 					bool isReady = await WaitForMediaReadyAsync(creationId, accessToken);
-					if (!isReady) return false;
+					if (!isReady) return (false, null);
 				}
-				// 3. СЦЕНАРИЙ: КАРУСЕЛЬ (до 10 фото и/или видео)
+				// 3. КАРУСЕЛЬ
 				else
 				{
 					var childrenIds = new List<string>();
 
-					// А. Создаем отдельный контейнер для каждого слайда (фото или видео)
 					foreach (var base64Item in imagesBase64.Take(10))
 					{
 						var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64Item);
@@ -120,7 +115,7 @@ namespace CrossChat.Integrations.Services
 						{
 							var error = await itemResp.Content.ReadAsStringAsync();
 							_logger.LogError($"[Threads] Ошибка создания элемента карусели: {error}");
-							return false;
+							return (false, null);
 						}
 
 						var itemJson = await itemResp.Content.ReadFromJsonAsync<JsonElement>();
@@ -128,14 +123,12 @@ namespace CrossChat.Integrations.Services
 						childrenIds.Add(itemId);
 					}
 
-					// Б. Ждем готовности всех дочерних слайдов
 					foreach (var childId in childrenIds)
 					{
 						bool isChildReady = await WaitForMediaReadyAsync(childId, accessToken);
-						if (!isChildReady) return false;
+						if (!isChildReady) return (false, null);
 					}
 
-					// В. Создаем родительский контейнер карусели
 					var carouselUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
 					var carouselPayload = new
 					{
@@ -149,15 +142,14 @@ namespace CrossChat.Integrations.Services
 					{
 						var error = await carouselResp.Content.ReadAsStringAsync();
 						_logger.LogError($"[Threads] Ошибка создания родительской карусели: {error}");
-						return false;
+						return (false, null);
 					}
 
 					var carouselJson = await carouselResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = carouselJson.GetProperty("id").GetString()!;
 
-					// Ждем готовности родительской карусели
 					bool isCarouselReady = await WaitForMediaReadyAsync(creationId, accessToken);
-					if (!isCarouselReady) return false;
+					if (!isCarouselReady) return (false, null);
 				}
 
 				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ
@@ -166,37 +158,86 @@ namespace CrossChat.Integrations.Services
 
 				if (publishResp.IsSuccessStatusCode)
 				{
-					_logger.LogInformation($"[Threads] ✅ Пост успешно опубликован в Threads (ID контейнера: {creationId})");
-					return true;
+					// Достаем ID опубликованного поста в Threads
+					var publishJson = await publishResp.Content.ReadFromJsonAsync<JsonElement>();
+					string publishedPostId = publishJson.GetProperty("id").GetString()!;
+
+					_logger.LogInformation($"[Threads] ✅ Пост успешно опубликован в Threads (ID поста: {publishedPostId})");
+					return (true, publishedPostId);
 				}
 
 				var publishError = await publishResp.Content.ReadAsStringAsync();
 				_logger.LogError($"[Threads] ❌ Ошибка финальной публикации в Threads: {publishError}");
-				return false;
+				return (false, null);
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "[Threads] Критическая ошибка при публикации поста");
-				return false;
+				return (false, null);
 			}
 			finally
 			{
-				// Удаляем временные файлы с сервера
 				foreach (var localPath in tempFilesTracker)
 				{
 					try
 					{
-						if (File.Exists(localPath))
-						{
-							File.Delete(localPath);
-							_logger.LogInformation($"Удален временный файл: {localPath}");
-						}
+						if (File.Exists(localPath)) File.Delete(localPath);
 					}
-					catch (Exception ex)
-					{
-						_logger.LogError($"Не удалось удалить файл {localPath}: {ex.Message}");
-					}
+					catch { }
 				}
+			}
+		}
+
+		/// <summary>
+		/// Публикует первый комментарий (ответ/ветку) к посту в Threads
+		/// </summary>
+		public async Task<string?> CreateReplyAsync(string replyToPostId, string text, string accessToken)
+		{
+			if (string.IsNullOrWhiteSpace(replyToPostId) || string.IsNullOrWhiteSpace(text))
+				return null;
+
+			try
+			{
+				// 1. Создаем контейнер ответа с параметром reply_to_id
+				var containerUrl = $"https://graph.threads.net/v1.0/me/threads?access_token={accessToken}";
+				var payload = new
+				{
+					media_type = "TEXT",
+					text = text,
+					reply_to_id = replyToPostId // Связываем комментарий с родительским постом
+				};
+
+				var containerResp = await _httpClient.PostAsJsonAsync(containerUrl, payload);
+				if (!containerResp.IsSuccessStatusCode)
+				{
+					var err = await containerResp.Content.ReadAsStringAsync();
+					_logger.LogError($"[Threads] ❌ Ошибка создания контейнера первого комментария: {err}");
+					return null;
+				}
+
+				var containerJson = await containerResp.Content.ReadFromJsonAsync<JsonElement>();
+				string creationId = containerJson.GetProperty("id").GetString()!;
+
+				// 2. Публикуем готовый ответ
+				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
+				var publishResp = await _httpClient.PostAsync(publishUrl, null);
+
+				if (publishResp.IsSuccessStatusCode)
+				{
+					var publishJson = await publishResp.Content.ReadFromJsonAsync<JsonElement>();
+					string replyId = publishJson.GetProperty("id").GetString()!;
+					_logger.LogInformation($"[Threads] ✅ Первый комментарий успешно опубликован в Threads! ID: {replyId}");
+					return replyId;
+				}
+
+				var publishErr = await publishResp.Content.ReadAsStringAsync();
+				_logger.LogError($"[Threads] ❌ Ошибка публикации первого комментария: {publishErr}");
+				return null;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[Threads] Ошибка при отправке первого комментария");
+				return null;
 			}
 		}
 

@@ -25,10 +25,37 @@ public class ThreadsPublisher : ISocialPublisher
 
 		await _console.Log($"Начало отправки поста в Threads @{settings.Username}.", settings.UserId, state.BotId);
 
-		var success = await _service.CreatePostAsync(caption, images, settings.AccessToken);
+		// 1. Публикуем основной пост
+		var (success, publishedPostId) = await _service.CreatePostAsync(caption, images, settings.AccessToken);
 		if (!success)
 			throw new Exception($"Ошибка при публикации поста в Threads");
 
 		await _console.Log($"Пост успешно опубликован в Threads @{settings.Username}.", settings.UserId, state.BotId);
+
+		// 2. ПЕРВЫЙ КОММЕНТАРИЙ (ВЕТКА В THREADS)
+		if (!string.IsNullOrWhiteSpace(state.FirstComment) && !string.IsNullOrEmpty(publishedPostId))
+		{
+			try
+			{
+				await _console.Log("Публикация первого комментария в Threads...", settings.UserId, state.BotId);
+
+				// Пауза 2 сек для фиксации корневого поста в ленте Threads
+				await Task.Delay(2000);
+
+				var replyId = await _service.CreateReplyAsync(publishedPostId, state.FirstComment.Trim(), settings.AccessToken);
+				if (!string.IsNullOrEmpty(replyId))
+				{
+					await _console.Log("Первый комментарий в Threads успешно опубликован!", settings.UserId, state.BotId);
+				}
+				else
+				{
+					await _console.Log("⚠️ Не удалось опубликовать первый комментарий в Threads (основной пост опубликован).", settings.UserId, state.BotId);
+				}
+			}
+			catch (Exception ex)
+			{
+				await _console.Log($"⚠️ Ошибка при создании первого комментария в Threads: {ex.Message}", settings.UserId, state.BotId);
+			}
+		}
 	}
 }
