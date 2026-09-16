@@ -18,7 +18,7 @@ public partial class InstagramService : IInstagramService
 	private readonly ILogger<InstagramService> _logger;
 	private readonly IAiService _aiService;
 	private readonly SiteSettings _siteSettings;
-	private const string ApiVersion = "v21.0";	
+	private const string ApiVersion = "v21.0";
 
 	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger, IAiService aiService, SiteSettings siteSettings)
 	{
@@ -275,6 +275,43 @@ public partial class InstagramService : IInstagramService
 			var errorContent = await response.Content.ReadAsStringAsync();
 			_logger.LogError($"[Instagram] ❌ Ошибка ответа на коммент: {errorContent}");
 			throw new Exception($"Instagram API Error: {errorContent}");
+		}
+	}
+
+	/// <summary>
+	/// Публикует корневой первый комментарий под созданным постом/Reels в Instagram
+	/// </summary>
+	public async Task<string?> CreateCommentAsync(string mediaId, string text, string accessToken)
+	{
+		if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(mediaId))
+			return null;
+
+		// Endpoint Instagram Graph API для комментариев к посту
+		var url = $"{ApiVersion}/{mediaId}/comments?access_token={accessToken}";
+		var payload = new { message = text };
+
+		try
+		{
+			var response = await _httpClient.PostAsJsonAsync(url, payload);
+			var content = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				using var doc = JsonDocument.Parse(content);
+				var commentId = doc.RootElement.GetProperty("id").GetString();
+				_logger.LogInformation("[Instagram] ✅ Первый комментарий успешно опубликован к посту {MediaId}. ID комментария: {CommentId}", mediaId, commentId);
+				return commentId;
+			}
+			else
+			{
+				_logger.LogError("[Instagram] ❌ Ошибка публикации первого комментария к {MediaId}: {Error}", mediaId, content);
+				return null;
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram] Ошибка запроса при отправке первого комментария к {MediaId}", mediaId);
+			return null;
 		}
 	}
 

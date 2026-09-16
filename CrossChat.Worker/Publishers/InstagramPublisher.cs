@@ -4,7 +4,6 @@ using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Publishers.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using Telegram.Bot.Types;
 
 namespace CrossChat.Worker.Publishers
 {
@@ -31,26 +30,36 @@ namespace CrossChat.Worker.Publishers
 
 			await _console.Log($"Начало отправки поста в профиль {settings.Username}.", settings.UserId, state.BotId);
 
+			// 1. Публикуем основной пост
 			var result = await _service.CreateMediaAsync(images, settings.AccessToken, caption);
-			if (!result.Success)
+			if (!result.Success || string.IsNullOrEmpty(result.Id))
 				throw new Exception($"Ошибка API при публикации поста в Instagram (BotId: {state.BotId})");
 
 			await _console.Log($"Пост успешно опубликован в профиль {settings.Username}.", settings.UserId, state.BotId);
 
-			// Публикуем историю(если есть картинки)
-			if (images != null && images.Any())
+			// 2. ПУБЛИКАЦИЯ ПЕРВОГО КОММЕНТАРИЯ (если задан)
+			if (!string.IsNullOrWhiteSpace(state.FirstComment))
 			{
 				try
 				{
-					string? storyId = await _service.PublishStoryFromBase64(images.FirstOrDefault(), settings.AccessToken);
-					if (storyId is not null)
+					await _console.Log("Публикация первого комментария к посту в Instagram...", settings.UserId, state.BotId);
+
+					// Небольшая задержка, чтобы пост проиндексировался серверами Meta
+					await Task.Delay(2000);
+
+					var commentId = await _service.CreateCommentAsync(result.Id, state.FirstComment.Trim(), settings.AccessToken);
+					if (!string.IsNullOrEmpty(commentId))
 					{
-						await _console.Log($"✅ Instagram Story успешно опубликована (StoryId: {storyId})", settings.UserId, state.BotId);
+						await _console.Log("Первый комментарий в Instagram успешно опубликован!", settings.UserId, state.BotId);
+					}
+					else
+					{
+						await _console.Log("⚠️ Не удалось опубликовать первый комментарий (основной пост при этом опубликован).", settings.UserId, state.BotId);
 					}
 				}
 				catch (Exception ex)
 				{
-					await _console.LogError($"Ошибка при отправке Instagram Story для бота {state.BotId}:\n{ex}", settings.UserId, state.BotId);
+					await _console.Log($"⚠️ Ошибка при отправке первого комментария: {ex.Message}", settings.UserId, state.BotId);
 				}
 			}
 		}

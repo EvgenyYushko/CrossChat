@@ -60,6 +60,8 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task ReplyToCommentAsync(string commentId, string text, string accessToken);
 
+		Task<string?> CreateCommentAsync(string mediaId, string text, string accessToken);
+
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
 
 		Task<string> GetUserContextForAiAsync(string userId, string accessToken);

@@ -303,6 +303,7 @@ namespace CrossChat.Worker.Services
 							dbState.Price = kvp.Value.Price;
 							dbState.ButtonText = kvp.Value.ButtonText;
 							dbState.ButtonUrl = kvp.Value.ButtonUrl;
+							dbState.FirstComment = kvp.Value.FirstComment;
 						}
 					}
 					else
@@ -322,6 +323,7 @@ namespace CrossChat.Worker.Services
 								Price = kvp.Value.Price,    // <-- ИСПРАВЛЕНО
 								ButtonText = kvp.Value.ButtonText,
 								ButtonUrl = kvp.Value.ButtonUrl,
+								FirstComment = kvp.Value.FirstComment,
 							});
 						}
 					}
@@ -427,7 +429,8 @@ namespace CrossChat.Worker.Services
 					IsPaid = state.IsPaid,
 					Price = state.Price,
 					ButtonText = state.ButtonText,
-					ButtonUrl = state.ButtonUrl
+					ButtonUrl = state.ButtonUrl,
+					FirstComment = state.FirstComment,
 				};
 			}
 
@@ -482,7 +485,8 @@ namespace CrossChat.Worker.Services
 					IsPaid = kvp.Value.IsPaid,
 					Price = kvp.Value.Price,
 					ButtonText = kvp.Value.ButtonText,
-					ButtonUrl = kvp.Value.ButtonUrl
+					ButtonUrl = kvp.Value.ButtonUrl,
+					FirstComment = kvp.Value.FirstComment,
 				});
 			}
 

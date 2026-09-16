@@ -1127,6 +1127,20 @@
                     <div id="dynamicCaptions"></div>
                 </div>
 
+                <!-- Блок первого комментария (для Instagram, Facebook, Threads и т.д.) -->
+                <div class="form-group" id="firstCommentGroup" style="display: none; margin-top: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
+                        <input type="checkbox" id="hasFirstCommentCheckbox" onchange="toggleFirstCommentMode()" style="width: 18px; height: 18px; accent-color: var(--accent-color);">
+                        💬 Оставить первый комментарий к публикации
+                    </label>
+                    <div id="firstCommentContainer" style="display: none; margin-top: 8px;">
+                        <textarea id="firstCommentInput" name="firstComment" placeholder="Напишите хештеги, ссылки или промокоды (напр. #smm #отдых #акция)..." style="min-height: 80px;"></textarea>
+                        <small style="display: block; margin-top: 4px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
+                            Комментарий автоматически опубликуется от имени профиля сразу после выхода поста. В Telegram эта опция не используется.
+                        </small>
+                    </div>
+                </div>
+
                 <!-- Предупреждение о коллективном редактировании -->
                 <div id="multiPostWarning" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;"></div>
 
@@ -1765,7 +1779,7 @@
                                     }
                                 }
 
-                                // === [ОБНОВЛЕНО] ПОДГРУЗКА НАСТРОЕК TELEGRAM (ЗВЁЗДЫ И КРУЖОЧКИ) ===
+                                // === 1. ПОДГРУЗКА НАСТРОЕК TELEGRAM (ЗВЁЗДЫ, КРУЖОЧКИ И КНОПКИ) ===
                                 let isPaidPost = false;
                                 let postPrice = 50;
                                 let isNotePost = false;
@@ -1774,17 +1788,16 @@
 
                                 for (let key in networks) {
                                     if (key.includes("Telegram") && networks[key]) {
-                                        // Проверяем статус Telegram Stars
+                                        // Telegram Stars
                                         if (networks[key].isPaid || networks[key].IsPaid) {
                                             isPaidPost = true;
                                             postPrice = networks[key].price || networks[key].Price || 50;
                                         }
-                                        // Проверяем флаг видео-кружочка
+                                        // Видео-кружочек
                                         if (networks[key].isVideoNote || networks[key].IsVideoNote) {
                                             isNotePost = true;
                                         }
-
-                                        // Подгружаем кнопку-ссылку
+                                        // Кнопка-ссылка
                                         const bText = networks[key].buttonText || networks[key].ButtonText;
                                         const bUrl = networks[key].buttonUrl || networks[key].ButtonUrl;
                                         if (bText && bUrl) {
@@ -1794,30 +1807,52 @@
                                     }
                                 }
 
+                                // Выставляем кнопку Telegram
                                 const hasBtnCb = document.getElementById('hasTgButtonCheckbox');
                                 if (hasBtnCb) hasBtnCb.checked = Boolean(savedBtnText && savedBtnUrl);
-
                                 const btnTextInput = document.getElementById('tgButtonTextInput');
                                 if (btnTextInput) btnTextInput.value = savedBtnText;
-
                                 const btnUrlInput = document.getElementById('tgButtonUrlInput');
                                 if (btnUrlInput) btnUrlInput.value = savedBtnUrl;
 
-                                toggleTgButtonMode();
-                                updateTelegramButtonVisibility();
+                                if (typeof toggleTgButtonMode === 'function') toggleTgButtonMode();
+                                if (typeof updateTelegramButtonVisibility === 'function') updateTelegramButtonVisibility();
 
+                                // Выставляем звезды Telegram
                                 const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
                                 if (isPaidCb) isPaidCb.checked = isPaidPost;
-
                                 const priceInput = document.getElementById('priceTelegramInput');
                                 if (priceInput) priceInput.value = postPrice;
 
+                                // Выставляем кружочек Telegram
                                 const noteCb = document.getElementById('isVideoNoteTelegramCheckbox');
                                 if (noteCb) noteCb.checked = isNotePost;
 
                                 if (typeof togglePaidTelegramMode === 'function') togglePaidTelegramMode();
                                 if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
-                                // ====================================================================
+
+                                // === 2. [НОВОЕ] ПОДГРУЗКА ПЕРВОГО КОММЕНТАРИЯ (INSTAGRAM / FB / THREADS) ===
+                                let savedFirstComment = '';
+                                for (let key in networks) {
+                                    // Ищем первый комментарий среди не-Telegram соцсетей
+                                    if (!key.includes("Telegram") && networks[key]) {
+                                        const fc = networks[key].firstComment || networks[key].FirstComment;
+                                        if (fc) {
+                                            savedFirstComment = fc;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                const commentCb = document.getElementById('hasFirstCommentCheckbox');
+                                if (commentCb) commentCb.checked = Boolean(savedFirstComment);
+
+                                const commentInput = document.getElementById('firstCommentInput');
+                                if (commentInput) commentInput.value = savedFirstComment;
+
+                                if (typeof toggleFirstCommentMode === 'function') toggleFirstCommentMode();
+                                if (typeof updateFirstCommentVisibility === 'function') updateFirstCommentVisibility();
+                                // =========================================================================
 
                                 deleteBtn.style.display = 'block';
                                 postForm.action = `/planner/update/${postId}`;
@@ -1834,7 +1869,7 @@
                                 syncFileInput();
                                 renderGallery();
 
-                                // ВАЖНО: Вызываем проверку видимости тумблера кружочка ПОСЛЕ загрузки медиафайлов!
+                                // Проверка видимости тумблера кружочка ПОСЛЕ загрузки медиафайлов
                                 if (typeof updateTelegramVideoNoteVisibility === 'function') {
                                     updateTelegramVideoNoteVisibility();
                                 }
@@ -1897,6 +1932,7 @@
                     modal.style.display = 'flex';
                     updateTelegramPaidVisibility();
                     updateTelegramButtonVisibility();
+                    updateFirstCommentVisibility();
                 }
                 });
                 calendar.render();
@@ -2028,6 +2064,15 @@
                 const progressContainer = document.getElementById('uploadProgressContainer');
                 const progressFill = document.getElementById('uploadProgressFill');
                 const progressText = document.getElementById('uploadProgressText');
+
+                const commentCb = document.getElementById('hasFirstCommentCheckbox');
+                if (commentCb) commentCb.checked = false;
+                const commentCont = document.getElementById('firstCommentContainer');
+                if (commentCont) commentCont.style.display = 'none';
+                const commentInput = document.getElementById('firstCommentInput');
+                if (commentInput) commentInput.value = '';
+                const commentGroup = document.getElementById('firstCommentGroup');
+                if (commentGroup) commentGroup.style.display = 'none';
 
                 if (progressContainer) progressContainer.style.display = 'none';
                 if (progressFill) {
@@ -2184,6 +2229,7 @@
                     toggleCaptionField(e.target.value);
                     updateTelegramPaidVisibility(); // <-- Обновляем видимость блока со звездами!
                     updateTelegramButtonVisibility();
+                    updateFirstCommentVisibility();
                 }
             });
 
@@ -2321,6 +2367,9 @@
                 const hasBtn = document.getElementById('hasTgButtonCheckbox')?.checked;
                 formData.append('tgButtonText', hasBtn ? document.getElementById('tgButtonTextInput').value : '');
                 formData.append('tgButtonUrl', hasBtn ? document.getElementById('tgButtonUrlInput').value : '');
+
+                const hasComment = document.getElementById('hasFirstCommentCheckbox')?.checked;
+                formData.append('firstComment', hasComment ? document.getElementById('firstCommentInput').value : '');
 
                 xhr.send(formData);
             }
@@ -2562,6 +2611,32 @@
                 }
 
                 btnGroup.style.display = isTgActive ? 'block' : 'none';
+            }
+
+            // Переключение видимости поля ввода комментария
+            function toggleFirstCommentMode() {
+                const isChecked = document.getElementById('hasFirstCommentCheckbox').checked;
+                document.getElementById('firstCommentContainer').style.display = isChecked ? 'block' : 'none';
+            }
+
+            // Показываем блок, только если выбрана хотя бы одна НЕ-Telegram соцсеть!
+            function updateFirstCommentVisibility() {
+                const commentGroup = document.getElementById('firstCommentGroup');
+                if (!commentGroup) return;
+
+                const currentNetwork = "@ViewBag.Network";
+                let showComment = false;
+
+                if (currentNetwork === "All") {
+                    // Показываем, если выбрана хотя бы одна галочка, не являющаяся Telegram
+                    const nonTgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"]:not([value*="Telegram"]):checked');
+                    showComment = nonTgCheckboxes.length > 0;
+                } else if (!currentNetwork.includes("Telegram")) {
+                    // В одиночном режиме показываем для всех, кроме Telegram
+                    showComment = true;
+                }
+
+                commentGroup.style.display = showComment ? 'block' : 'none';
             }
 
         </script>

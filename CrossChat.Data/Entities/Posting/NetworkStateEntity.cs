@@ -43,5 +43,8 @@ namespace CrossChat.Data.Entities.Posting
 		// URL ссылки (например: "https://mysite.com")
 		[MaxLength(500)]
 		public string? ButtonUrl { get; set; }
+
+		// Текст первого комментария (для Instagram, Facebook, Threads и т.д.)
+		public string? FirstComment { get; set; }
 	}
 }

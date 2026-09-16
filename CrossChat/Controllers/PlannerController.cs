@@ -475,6 +475,9 @@ namespace CrossChat.Controllers
 			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
 			string? tgButtonText = Request.Form["tgButtonText"].ToString();
 			string? tgButtonUrl = Request.Form["tgButtonUrl"].ToString();
+			string? firstComment = Request.Form["firstComment"].ToString();
+			if (string.IsNullOrWhiteSpace(firstComment)) firstComment = null;
+
 			if (priceTelegram <= 0) priceTelegram = 50;
 
 			if (networkType == "All")
@@ -508,6 +511,7 @@ namespace CrossChat.Controllers
 						if (post.Networks.ContainsKey(netKey))
 						{
 							post.Networks[netKey].Caption = finalCaption;
+							post.Networks[netKey].FirstComment = isTg ? null : firstComment;
 							if (isTg)
 							{
 								post.Networks[netKey].IsPaid = isPaidTelegram;
@@ -533,7 +537,8 @@ namespace CrossChat.Controllers
 								Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
 								IsVideoNote = isVideoNoteTelegram,
 								ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
-								ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim()
+								ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim(),
+								FirstComment = isTg ? null : firstComment,
 							};
 						}
 					}
@@ -550,7 +555,8 @@ namespace CrossChat.Controllers
 
 					if (post.Networks.ContainsKey(netKey))
 					{
-						post.Networks[netKey].Caption = safeCaption; // <-- Используем safeCaption
+						post.Networks[netKey].Caption = safeCaption;
+						post.Networks[netKey].FirstComment = isTg ? null : firstComment;
 						if (isTg)
 						{
 							post.Networks[netKey].IsPaid = isPaidTelegram;
@@ -576,7 +582,8 @@ namespace CrossChat.Controllers
 							Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
 							IsVideoNote = isVideoNoteTelegram,
 							ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
-							ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim()
+							ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim(),
+							FirstComment = isTg ? null : firstComment,
 						};
 					}
 				}

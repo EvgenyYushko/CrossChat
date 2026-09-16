@@ -14,5 +14,7 @@ namespace CrossChat.Integrations.Models.Posting
 
 		public string? ButtonText { get; set; }
 		public string? ButtonUrl { get; set; }
+
+		public string? FirstComment { get; set; }
 	}
 }
