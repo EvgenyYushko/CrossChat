@@ -91,7 +91,7 @@ namespace CrossChat.Controllers
 				.ToListAsync();
 
 			// Полный проверенный набор разрешений для публикации, сообщений и бизнес-страниц
-			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,business_management,public_profile,email";
+			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,business_management,public_profile,email,pages_manage_engagement";
 			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={AppId}&redirect_uri={Uri.EscapeDataString(RedirectUri)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
 
 			return View(settings);
