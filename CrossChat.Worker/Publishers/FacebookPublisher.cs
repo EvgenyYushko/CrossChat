@@ -30,31 +30,36 @@ namespace CrossChat.Worker.Publishers
 
 			await _console.Log($"Начало отправки поста в страницу {settings.PageName}.", settings.UserId, state.BotId);
 
-			// Определяем типы файлов: видео или фото
 			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
-
 			var videoItem = images?.FirstOrDefault(isVideo);
 			var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
 
 			bool postSuccess = false;
+			string? publishedPostId = null;
 
-			// 1. ПУБЛИКАЦИЯ ВИДЕО (REELS)
+			// 1. ВИДЕО (REELS)
 			if (videoItem != null)
 			{
 				await _console.Log("Обнаружено видео. Публикация Facebook Reel...", settings.UserId, state.BotId);
-				postSuccess = await _service.PublishReelAsync(caption, videoItem, settings.PageAccessToken, settings.PageId);
+				var result = await _service.PublishReelAsync(caption, videoItem, settings.PageAccessToken, settings.PageId);
+				postSuccess = result.Success;
+				publishedPostId = result.PostId;
 			}
-			// 2. ПУБЛИКАЦИЯ ФОТО / АЛЬБОМА В ЛЕНТУ
+			// 2. ФОТО / АЛЬБОМ
 			else if (photoItems.Any())
 			{
 				await _console.Log($"Публикация {photoItems.Count} фото в ленту страницы Facebook...", settings.UserId, state.BotId);
-				postSuccess = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, photoItems);
+				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, photoItems);
+				postSuccess = result.Success;
+				publishedPostId = result.PostId;
 			}
-			// 3. ТЕКСТОВЫЙ ПОСТ
+			// 3. ТЕКСТ
 			else
 			{
 				await _console.Log("Публикация текстового поста в Facebook...", settings.UserId, state.BotId);
-				postSuccess = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, null);
+				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, null);
+				postSuccess = result.Success;
+				publishedPostId = result.PostId;
 			}
 
 			if (!postSuccess)
@@ -65,14 +70,12 @@ namespace CrossChat.Worker.Publishers
 			await _console.Log($"Основной пост успешно опубликован на странице {settings.PageName}.", settings.UserId, state.BotId);
 
 			// === 4. ПУБЛИКАЦИЯ ИСТОРИИ (STORY) ===
-			// Если в посте есть хотя бы одно фото — берем самое первое и дублируем в Stories страницы!
 			if (photoItems.Any())
 			{
 				try
 				{
 					var firstPhoto = photoItems.First();
-					await _console.Log("Публикация первого фото в истории (Stories) страницы Facebook...", settings.UserId, state.BotId);
-
+					await _console.Log("Публикация первого фото в истории страницы Facebook...", settings.UserId, state.BotId);
 					bool storySuccess = await _service.PublishStoryAsync(firstPhoto, settings.PageAccessToken, settings.PageId);
 					if (storySuccess)
 					{
@@ -80,13 +83,38 @@ namespace CrossChat.Worker.Publishers
 					}
 					else
 					{
-						await _console.Log("⚠️ Не удалось опубликовать историю Facebook (основной пост при этом опубликован).", settings.UserId, state.BotId);
+						await _console.Log("⚠️ Не удалось опубликовать историю Facebook (основной пост опубликован).", settings.UserId, state.BotId);
 					}
 				}
 				catch (Exception ex)
 				{
-					// Ошибка сторис не должна ломать успешный статус основного поста
 					await _console.Log($"⚠️ Ошибка при создании истории Facebook: {ex.Message}", settings.UserId, state.BotId);
+				}
+			}
+
+			// === 5. [НОВОЕ] ПУБЛИКАЦИЯ ПЕРВОГО КОММЕНТАРИЯ ===
+			if (!string.IsNullOrWhiteSpace(state.FirstComment) && !string.IsNullOrEmpty(publishedPostId))
+			{
+				try
+				{
+					await _console.Log("Публикация первого комментария к публикации Facebook...", settings.UserId, state.BotId);
+
+					// Небольшая задержка 2 сек для индексации поста в ленте Facebook
+					await Task.Delay(2000);
+
+					var commentId = await _service.CreateCommentAsync(publishedPostId, state.FirstComment.Trim(), settings.PageAccessToken);
+					if (!string.IsNullOrEmpty(commentId))
+					{
+						await _console.Log("Первый комментарий в Facebook успешно опубликован!", settings.UserId, state.BotId);
+					}
+					else
+					{
+						await _console.Log("⚠️ Не удалось опубликовать первый комментарий в Facebook (основной пост опубликован).", settings.UserId, state.BotId);
+					}
+				}
+				catch (Exception ex)
+				{
+					await _console.Log($"⚠️ Ошибка при создании первого комментария в Facebook: {ex.Message}", settings.UserId, state.BotId);
 				}
 			}
 		}

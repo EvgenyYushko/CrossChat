@@ -8,9 +8,10 @@ namespace CrossChat.Integrations.Interfaces
 		Task<FbConversation> GetDialogByIdAsync(string token, string dlgId);
 
 		// Media part
-		Task<bool> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null);
+		Task<(bool Success, string? PostId)> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null);
 		Task<bool> PublishStoryAsync(string base64Image, string acessToken, string pageIdToPublish);
-		Task<bool> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish);
+		Task<(bool Success, string? PostId)> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish);
+		Task<string?> CreateCommentAsync(string postId, string text, string pageAccessToken);
 	}
 
 	public class FbUser

@@ -164,5 +164,51 @@ namespace CrossChat.Integrations.Services
 				}
 			}
 		}
+
+		/// <summary>
+		/// Публикует первый комментарий к посту или Reels на странице Facebook
+		/// </summary>
+		public async Task<string?> CreateCommentAsync(string postId, string text, string pageAccessToken)
+		{
+			if (string.IsNullOrWhiteSpace(postId) || string.IsNullOrWhiteSpace(text))
+				return null;
+
+			string url = $"https://graph.facebook.com/v24.0/{postId}/comments";
+
+			var postData = new Dictionary<string, string>
+	{
+		{ "message", text },
+		{ "access_token", pageAccessToken }
+	};
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				using var content = new FormUrlEncodedContent(postData);
+
+				var response = await httpClient.PostAsync(url, content);
+				var responseContent = await response.Content.ReadAsStringAsync();
+
+				if (response.IsSuccessStatusCode)
+				{
+					using var doc = JsonDocument.Parse(responseContent);
+					var commentId = doc.RootElement.TryGetProperty("id", out var idElem) ? idElem.GetString() : null;
+					Console.WriteLine($"[Facebook] ✅ Первый комментарий успешно опубликован к посту {postId}. ID комментария: {commentId}");
+					return commentId;
+				}
+				else
+				{
+					Console.WriteLine($"[Facebook] ❌ Ошибка публикации первого комментария к {postId}: {responseContent}");
+					return null;
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook] Исключение при отправке первого комментария: {ex.Message}");
+				return null;
+			}
+		}
+
+		
 	}
 }

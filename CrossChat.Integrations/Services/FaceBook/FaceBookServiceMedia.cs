@@ -5,7 +5,7 @@ namespace CrossChat.Integrations.Services
 {
 	public partial class FaceBookService
 	{
-		public async Task<bool> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null)
+		public async Task<(bool Success, string? PostId)> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null)
 		{
 			string pageAccessToken = acessToken;
 
@@ -19,23 +19,18 @@ namespace CrossChat.Integrations.Services
 					}
 					else
 					{
-						// 3. ПУБЛИКАЦИЯ С НОВЫМ ТОКЕНОМ СТРАНИЦЫ
 						string publishUrl = $"https://graph.facebook.com/v24.0/{pageIdToPublish}/feed";
 
 						var postData = new Dictionary<string, string>
-						{
-							{ "message", message },
-							// Передаем токен как параметр, используя FormUrlEncodedContent
-							{ "access_token", pageAccessToken }
-						};
+				{
+					{ "message", message ?? "" },
+					{ "access_token", pageAccessToken }
+				};
 
 						using (var content = new FormUrlEncodedContent(postData))
 						{
-							// 4. Отправляем POST-запрос
 							var publishResponse = await httpClient.PostAsync(publishUrl, content);
-							bool success = await ProcessPublishResponseAsync(publishResponse);
-
-							return success;
+							return await ProcessPublishResponseAsync(publishResponse);
 						}
 					}
 				}
@@ -43,39 +38,27 @@ namespace CrossChat.Integrations.Services
 			catch (Exception ex)
 			{
 				Console.WriteLine(ex.ToString());
+				return (false, null);
 			}
-
-			return false;
 		}
 
 		public async Task<bool> PublishStoryAsync(string base64Image, string acessToken, string pageIdToPublish)
 		{
-			// 1. Получаем токен страницы
-			string pageAccessToken;
-			try
-			{
-				pageAccessToken = acessToken;
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"Ошибка при получении токена для сторис: {ex.Message}");
-				return false;
-			}
+			string pageAccessToken = acessToken;
+			if (string.IsNullOrEmpty(pageAccessToken)) return false;
 
 			using (var httpClient = new HttpClient())
 			{
-				// 2. Загружаем изображение (используем твой существующий метод)
-				// Он загружает фото с флагом published=false, что идеально подходит для сторис.
+				// 1. Загружаем фото с published=false
 				string photoId = await UploadImageAsync(pageAccessToken, pageIdToPublish, base64Image, httpClient);
 
 				if (string.IsNullOrEmpty(photoId))
 				{
-					Console.WriteLine("Не удалось загрузить изображение для истории.");
+					Console.WriteLine("Не удалось загрузить изображение для истории Facebook.");
 					return false;
 				}
 
-				// 3. Публикуем загруженное фото как Историю (Story)
-				// Конечная точка для фото-историй: /{page-id}/photo_stories
+				// 2. Публикуем в photo_stories (Graph API v24.0)
 				string publishUrl = $"https://graph.facebook.com/v24.0/{pageIdToPublish}/photo_stories";
 
 				var postData = new Dictionary<string, string>
@@ -86,36 +69,32 @@ namespace CrossChat.Integrations.Services
 
 				try
 				{
-					using (var content = new FormUrlEncodedContent(postData))
+					using var content = new FormUrlEncodedContent(postData);
+					var publishResponse = await httpClient.PostAsync(publishUrl, content);
+
+					// Деструктурируем кортеж (Success, PostId)
+					var (success, storyId) = await ProcessPublishResponseAsync(publishResponse);
+
+					if (success)
 					{
-						var publishResponse = await httpClient.PostAsync(publishUrl, content);
-
-						// Используем твой существующий метод обработки ответа
-						// API вернет ID созданной истории
-						bool success = await ProcessPublishResponseAsync(publishResponse);
-
-						if (success)
-						{
-							Console.WriteLine("История успешно опубликована!");
-						}
-
-						return success;
+						Console.WriteLine($"История Facebook успешно опубликована! ID истории: {storyId}");
 					}
+
+					return success;
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Исключение при публикации истории: {ex.Message}");
+					Console.WriteLine($"Исключение при публикации истории Facebook: {ex.Message}");
 					return false;
 				}
 			}
 		}
 
-		public async Task<bool> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish)
+		public async Task<(bool Success, string? PostId)> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish)
 		{
 			string pageAccessToken = acessToken;
-			if (string.IsNullOrEmpty(pageAccessToken)) return false;
+			if (string.IsNullOrEmpty(pageAccessToken)) return (false, null);
 
-			// ВАЖНО: Очищаем data-uri префикс ("data:video/mp4;base64,...")
 			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
 
 			byte[] videoBytes;
@@ -126,22 +105,18 @@ namespace CrossChat.Integrations.Services
 			catch (FormatException)
 			{
 				Console.WriteLine("Ошибка: Неверный формат Base64 для видео.");
-				return false;
+				return (false, null);
 			}
 
 			using (var httpClient = new HttpClient())
 			{
-				// 1. Инициировать сессию
 				var (videoId, uploadUrl) = await StartReelUploadSessionAsync(pageAccessToken, pageIdToPublish, httpClient);
-				if (string.IsNullOrEmpty(videoId) || string.IsNullOrEmpty(uploadUrl)) return false;
+				if (string.IsNullOrEmpty(videoId) || string.IsNullOrEmpty(uploadUrl)) return (false, null);
 
-				// 2. Загрузить бинарные данные видео
 				bool uploadSuccess = await TransferReelDataAsync(uploadUrl, videoBytes, pageAccessToken, httpClient);
-				if (!uploadSuccess) return false;
+				if (!uploadSuccess) return (false, null);
 
-				// 3. Завершить и опубликовать
-				bool publishSuccess = await FinishReelUploadSessionAsync(pageAccessToken, pageIdToPublish, videoId, message, httpClient);
-				return publishSuccess;
+				return await FinishReelUploadSessionAsync(pageAccessToken, pageIdToPublish, videoId, message, httpClient);
 			}
 		}
 
@@ -234,109 +209,74 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		private async Task<bool> FinishReelUploadSessionAsync(string pageAccessToken, string pageId, string videoId, string description, HttpClient httpClient)
+		private async Task<(bool Success, string? PostId)> FinishReelUploadSessionAsync(string pageAccessToken, string pageId, string videoId, string description, HttpClient httpClient)
 		{
-			// Конечная точка та же, что и на старте
 			string url = $"https://graph.facebook.com/v24.0/{pageId}/video_reels";
 
 			var postData = new Dictionary<string, string>
 			{
-				// Обязательный параметр для завершения
 				{ "upload_phase", "finish" },
 				{ "video_id", videoId },
-				{ "description", description },
-				// Обязательные параметры для публикации
-				{ "video_state", "PUBLISHED" }, // Указывает, что нужно сразу опубликовать
+				{ "description", description ?? "" },
+				{ "video_state", "PUBLISHED" },
 				{ "access_token", pageAccessToken }
 			};
 
 			using (var content = new FormUrlEncodedContent(postData))
 			{
 				var response = await httpClient.PostAsync(url, content);
-
-				// Используем существующий метод для проверки ответа публикации
 				return await ProcessPublishResponseAsync(response);
 			}
 		}
 
-		public async Task<bool> ProcessPublishResponseAsync(HttpResponseMessage publishResponse)
+		public async Task<(bool Success, string? PostId)> ProcessPublishResponseAsync(HttpResponseMessage publishResponse)
 		{
-			// 1. Проверка статуса HTTP
-			// Успешная публикация всегда вернет код 200 OK.
 			if (!publishResponse.IsSuccessStatusCode)
 			{
-				// Если статус не 200 (например, 400 Bad Request, 403 Forbidden), 
-				// это ошибка. Читаем тело для деталей (сообщение об ошибке Facebook)
 				string errorResult = await publishResponse.Content.ReadAsStringAsync();
-				Console.WriteLine($"Ошибка публикации (HTTP {publishResponse.StatusCode}): {errorResult}");
-				return false;
+				Console.WriteLine($"Ошибка публикации Facebook (HTTP {publishResponse.StatusCode}): {errorResult}");
+				return (false, null);
 			}
 
-			// 2. Парсинг тела ответа
 			try
 			{
 				string publishResult = await publishResponse.Content.ReadAsStringAsync();
+				if (string.IsNullOrWhiteSpace(publishResult)) return (false, null);
 
-				// Проверяем, что тело не пустое
-				if (string.IsNullOrWhiteSpace(publishResult))
-				{
-					Console.WriteLine("Ошибка: Успешный HTTP-статус, но пустое тело ответа.");
-					return false;
-				}
-
-				// Десериализуем JSON. Если Facebook вернул {"id":"..."} - это успех.
 				var data = JsonSerializer.Deserialize<PublishResponse>(publishResult);
 
-				// ПЕРВЫМ ДЕЛОМ ПРОВЕРЯЕМ post_id (для Reels), ЗАТЕМ id (для фото/текста)
-				string finalId = data?.post_id ?? data?.id; // Используем post_id или id
+				// post_id для Reels, id для обычных постов
+				string? finalId = data?.post_id ?? data?.id;
 
-				// 3. Проверка наличия ID
 				if (!string.IsNullOrEmpty(finalId))
 				{
-					// УСПЕХ: Пост опубликован, и его ID получен.
-					Console.WriteLine($"Публикация успешна. ID поста: {finalId}");
-					return true;
+					Console.WriteLine($"Публикация Facebook успешна. ID поста: {finalId}");
+					return (true, finalId);
 				}
-				else
+				else if (publishResult.Contains("\"success\":true"))
 				{
-					// УСПЕХ, НО БЕЗ ID: Если пришла {"success": true} без post_id/id (например, на шаге 2 загрузки)
-					if (publishResult.Contains("\"success\":true"))
-					{
-						Console.WriteLine($"Успешная операция, но без ID поста в ответе (возможно, это промежуточный шаг загрузки).");
-						return true;
-					}
-
-					// Тело не содержит ожидаемого ID
-					Console.WriteLine($"Ошибка парсинга: Успешный HTTP-статус, но отсутствует ID в ответе. Ответ: {publishResult}");
-					return false;
+					return (true, null);
 				}
-			}
-			catch (JsonException ex)
-			{
-				// Ошибка, если тело ответа не является валидным JSON
-				Console.WriteLine($"Ошибка десериализации JSON: {ex.Message}");
-				return false;
+
+				return (false, null);
 			}
 			catch (Exception ex)
 			{
-				// Прочие ошибки
-				Console.WriteLine($"Неизвестная ошибка: {ex.Message}");
-				return false;
+				Console.WriteLine($"Ошибка десериализации ответа Facebook: {ex.Message}");
+				return (false, null);
 			}
 		}
 
-		private async Task<bool> PublishAlbumAsync(string pageAccessToken, string pageId, string message, List<string> base64Images)
+		private async Task<(bool Success, string? PostId)> PublishAlbumAsync(string pageAccessToken, string pageId, string message, List<string> base64Images)
 		{
 			var mediaFbidList = new List<string>();
 
 			using (var httpClient = new HttpClient())
 			{
-				// 1. ЗАГРУЗКА ВСЕХ ИЗОБРАЖЕНИЙ
-				Console.WriteLine($"Начинается загрузка {base64Images.Count} изображений...");
+				Console.WriteLine($"Начинается загрузка {base64Images.Count} изображений в Facebook...");
 
 				foreach (var base64Image in base64Images)
 				{
-					// Используем новый метод для загрузки
 					string photoId = await UploadImageAsync(pageAccessToken, pageId, base64Image, httpClient);
 
 					if (!string.IsNullOrEmpty(photoId))
@@ -345,35 +285,26 @@ namespace CrossChat.Integrations.Services
 					}
 					else
 					{
-						// Если хоть одно изображение не загрузилось, прекращаем операцию.
 						Console.WriteLine("Не удалось загрузить одно из изображений. Публикация отменена.");
-						return false;
+						return (false, null);
 					}
 				}
 
-				// 2. ФОРМИРОВАНИЕ ФИНАЛЬНОГО ПОСТА (КАРУСЕЛИ)
-
-				// Конечная точка для публикации альбома - это /feed
 				string publishUrl = $"https://graph.facebook.com/v24.0/{pageId}/feed";
 
 				var postData = new Dictionary<string, string>
-				{
-					{ "message", message },
-					{ "access_token", pageAccessToken }
-				};
+		{
+			{ "message", message ?? "" },
+			{ "access_token", pageAccessToken }
+		};
 
-				// Добавление каждого загруженного ID в формате attached_media[i]
 				for (int i = 0; i < mediaFbidList.Count; i++)
 				{
-					// Формат значения: {"media_fbid": "ID"}
 					var mediaObject = new { media_fbid = mediaFbidList[i] };
 					string jsonMedia = JsonSerializer.Serialize(mediaObject);
-
-					// Ключ: attached_media[0], attached_media[1], и т.д.
 					postData.Add($"attached_media[{i}]", jsonMedia);
 				}
 
-				// 3. ОТПРАВКА ПОСТА С attached_media
 				using (var content = new FormUrlEncodedContent(postData))
 				{
 					var publishResponse = await httpClient.PostAsync(publishUrl, content);
