@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using CrossChat.Integrations.Exceptions.BlueSky;
 using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -17,7 +16,30 @@ namespace CrossChat.Integrations.Services
 	{
 		private const int MAX_GRAPHEME_LENGTH = 300;
 
-		public async Task<bool> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings)
+		public async Task<(bool Success, string? Uri, string? Cid)> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings)
+		{
+			try
+			{
+				caption = await TruncateTextToMaxLength(caption);
+
+				var videoBlob = await UploadVideoFromBase64Async(base64Video, mimeType, settings);
+				if (videoBlob == null)
+				{
+					_logger.LogError("[BlueSky] Не удалось загрузить видео blob.");
+					return (false, null, null);
+				}
+
+				var ratio = new AspectRatio { Width = 9, Height = 16 };
+				return await CreatePostWithVideoAsync(caption, videoBlob, ratio, settings);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка публикации поста с видео");
+				return (false, null, null);
+			}
+		}
+
+		public async Task<(bool Success, string? Uri, string? Cid)> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings)
 		{
 			try
 			{
@@ -30,23 +52,20 @@ namespace CrossChat.Integrations.Services
 
 				var attachments = new List<ImageAttachment>();
 
-				// Загружаем до 4 картинок
 				foreach (var base64 in base64Images.Take(4))
 				{
 					string mimeType = "image/jpeg";
 					if (base64.StartsWith("data:image/png") || base64.StartsWith("iVBORw"))
 						mimeType = "image/png";
 
-					// Получаем и блоб, и реальные пропорции фото!
 					var (blob, aspectRatio) = await UploadImageFromBase64Async(base64, mimeType, settings);
-
 					if (blob != null)
 					{
 						attachments.Add(new ImageAttachment
 						{
 							Image = blob,
 							AltText = "",
-							AspectRatio = aspectRatio // <-- ПЕРЕДАЕМ РАЗМЕРЫ В BLUESKY!
+							AspectRatio = aspectRatio
 						});
 					}
 				}
@@ -54,15 +73,15 @@ namespace CrossChat.Integrations.Services
 				if (!attachments.Any())
 				{
 					_logger.LogError("[BlueSky] Не удалось загрузить ни одно изображение для поста.");
-					return false;
+					return (false, null, null);
 				}
 
 				return await CreatePostWithImagesAsync(caption, attachments, settings);
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[BlueSky] Ошибка в процессе публикации поста с фото");
-				return false;
+				_logger.LogError(ex, "[BlueSky] Ошибка публикации поста с фото");
+				return (false, null, null);
 			}
 		}
 
@@ -162,27 +181,16 @@ namespace CrossChat.Integrations.Services
 			return ms.ToArray();
 		}
 
-		public async Task<bool> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting)
+		public async Task<(bool Success, string? Uri, string? Cid)> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting)
 		{
-			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl))
-			{
-				return false;
-			}
-			if (images == null || images.Count == 0)
-			{
-				_logger.LogWarning("❌ Для данного метода требуется хотя бы одно изображение.");
-				return false;
-			}
+			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl)) return (false, null, null);
 
 			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 			var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
 
 			List<Facet> facets = TryGetFacets(postText);
 
-			var embedPayload = new ImageEmbedPayload
-			{
-				Images = images
-			};
+			var embedPayload = new ImageEmbedPayload { Images = images };
 
 			var record = new PostRecord
 			{
@@ -192,43 +200,34 @@ namespace CrossChat.Integrations.Services
 				Embed = embedPayload
 			};
 
-			var payload = new
-			{
-				repo = setting.Did,
-				collection = "app.bsky.feed.post",
-				record = record
-			};
+			var payload = new { repo = setting.Did, collection = "app.bsky.feed.post", record = record };
 
-			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-			{
-				DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-			});
+			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
 			var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-			// ИСПРАВЛЕНИЕ: Отправляем публикацию через DPoP!
 			var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
 
 			if (response.IsSuccessStatusCode)
 			{
-				_logger.LogInformation("✅ Пост с изображениями успешно опубликован в BlueSky!");
-				return true;
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+				string uri = doc.RootElement.GetProperty("uri").GetString()!;
+				string cid = doc.RootElement.GetProperty("cid").GetString()!;
+
+				_logger.LogInformation("✅ Пост с фото успешно опубликован в BlueSky!");
+				return (true, uri, cid);
 			}
 
-			var errorContent = await response.Content.ReadAsStringAsync();
-			_logger.LogError($"❌ Ошибка публикации поста в BlueSky: {response.StatusCode} - {errorContent}");
-			return false;
+			return (false, null, null);
 		}
 
-		public async Task<bool> CreatePostAsync(string postText, BlueSkyModel setting)
+		public async Task<(bool Success, string? Uri, string? Cid)> CreatePostAsync(string postText, BlueSkyModel setting)
 		{
-			var postEndpoint = $"{setting.PdsUrl}/xrpc/com.atproto.repo.createRecord";
+			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
+			var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
 
 			List<Facet> facets = TryGetFacets(postText);
 
-			// 1. Устанавливаем токен AccessJwt
-			_httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", setting.AccessToken);
-
-			// 2. Создаем тело запроса
 			var record = new PostRecord
 			{
 				Text = postText,
@@ -236,61 +235,91 @@ namespace CrossChat.Integrations.Services
 				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 			};
 
-			var payload = new
-			{
-				repo = setting.Did, // Используем внутренний Did
-				collection = "app.bsky.feed.post",
-				record = record
-			};
+			var payload = new { repo = setting.Did, collection = "app.bsky.feed.post", record = record };
 
-			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-			{
-				WriteIndented = true,
-				DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-			});
+			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
 			var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-			// 3. Отправляем запрос
-			var response = await _httpClient.PostAsync(postEndpoint, content);
+			// Отправляем через надежный DPoP вместо устаревшего Bearer
+			var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
 
 			if (response.IsSuccessStatusCode)
 			{
-				Console.WriteLine("✅ Пост успешно опубликован!");
-				return true;
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+				string uri = doc.RootElement.GetProperty("uri").GetString()!;
+				string cid = doc.RootElement.GetProperty("cid").GetString()!;
+
+				_logger.LogInformation("✅ Текстовый пост успешно опубликован в BlueSky!");
+				return (true, uri, cid);
 			}
-			else
-			{
-				var errorContent = await response.Content.ReadAsStringAsync();
-				throw new BlueSkyCreatePostException(response.StatusCode, errorContent);
-			}
+
+			return (false, null, null);
 		}
 
 		/// <summary>
-		/// Главный метод публикации поста с видео в BlueSky
+		/// Публикует первый комментарий (Reply) к посту в BlueSky с поддержкой кликабельных хештегов (Facets)
 		/// </summary>
-		public async Task<bool> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings)
+		public async Task<bool> CreateReplyAsync(string postText, string rootUri, string rootCid, BlueSkyModel setting)
 		{
+			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl))
+			{
+				return false;
+			}
+
 			try
 			{
-				caption = await TruncateTextToMaxLength(caption);
+				postText = await TruncateTextToMaxLength(postText);
+				var pdsUrl = setting.PdsUrl?.TrimEnd('/');
+				var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
 
-				// 1. Загружаем видео-блоб на PDS через DPoP
-				var videoBlob = await UploadVideoFromBase64Async(base64Video, mimeType, settings);
-				if (videoBlob == null)
+				// 1. Превращаем хештеги в кликабельные фасеты ATProto!
+				List<Facet> facets = TryGetFacets(postText);
+
+				// 2. Объект связи ветки (для первого комментария root и parent совпадают)
+				var replyPayload = new
 				{
-					_logger.LogError("[BlueSky] Не удалось загрузить видео-б blob в PDS.");
-					return false;
+					root = new { uri = rootUri, cid = rootCid },
+					parent = new { uri = rootUri, cid = rootCid }
+				};
+
+				var record = new
+				{
+					text = postText,
+					facets = facets.Any() ? facets : null,
+					reply = replyPayload,
+					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				};
+
+				var payload = new
+				{
+					repo = setting.Did,
+					collection = "app.bsky.feed.post",
+					record = record
+				};
+
+				var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+				{
+					DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+				});
+				var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+				// 3. Отправляем через DPoP
+				var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
+
+				if (response.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("✅ Первый комментарий успешно опубликован в BlueSky!");
+					return true;
 				}
 
-				// 2. Указываем пропорции (для вертикального видео 9:16, чтобы плеер Bluesky сразу выделил нужный размер)
-				var ratio = new AspectRatio { Width = 9, Height = 16 };
-
-				// 3. Создаем запись поста с видео
-				return await CreatePostWithVideoAsync(caption, videoBlob, ratio, settings);
+				var errorContent = await response.Content.ReadAsStringAsync();
+				_logger.LogError($"❌ Ошибка публикации первого комментария в BlueSky: {response.StatusCode} - {errorContent}");
+				return false;
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[BlueSky] Ошибка публикации поста с видео");
+				_logger.LogError(ex, "[BlueSky] Исключение при создании первого комментария");
 				return false;
 			}
 		}
@@ -340,24 +369,16 @@ namespace CrossChat.Integrations.Services
 		/// <summary>
 		/// Создание записи поста с прикрепленным видео (app.bsky.embed.video)
 		/// </summary>
-		public async Task<bool> CreatePostWithVideoAsync(string postText, Blob videoBlob, AspectRatio aspectRatio, BlueSkyModel setting)
+		public async Task<(bool Success, string? Uri, string? Cid)> CreatePostWithVideoAsync(string postText, Blob videoBlob, AspectRatio aspectRatio, BlueSkyModel setting)
 		{
-			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl))
-			{
-				return false;
-			}
+			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl)) return (false, null, null);
 
 			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 			var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
 
 			List<Facet> facets = TryGetFacets(postText);
 
-			// Формируем payload для видео по стандарту ATProto
-			var embedPayload = new VideoEmbedPayload
-			{
-				Video = videoBlob,
-				AspectRatio = aspectRatio
-			};
+			var embedPayload = new VideoEmbedPayload { Video = videoBlob, AspectRatio = aspectRatio };
 
 			var record = new PostRecord
 			{
@@ -367,31 +388,25 @@ namespace CrossChat.Integrations.Services
 				Embed = embedPayload
 			};
 
-			var payload = new
-			{
-				repo = setting.Did,
-				collection = "app.bsky.feed.post",
-				record = record
-			};
+			var payload = new { repo = setting.Did, collection = "app.bsky.feed.post", record = record };
 
-			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-			{
-				DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-			});
+			var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
 			var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-			// Отправка через DPoP
 			var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
 
 			if (response.IsSuccessStatusCode)
 			{
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+				string uri = doc.RootElement.GetProperty("uri").GetString()!;
+				string cid = doc.RootElement.GetProperty("cid").GetString()!;
+
 				_logger.LogInformation("✅ Пост с видео успешно опубликован в BlueSky!");
-				return true;
+				return (true, uri, cid);
 			}
 
-			var errorContent = await response.Content.ReadAsStringAsync();
-			_logger.LogError($"❌ Ошибка публикации видео-поста в BlueSky: {response.StatusCode} - {errorContent}");
-			return false;
+			return (false, null, null);
 		}
 
 		private static List<Facet> TryGetFacets(string postText)

@@ -18,9 +18,9 @@ public interface IBlueSkyService
 	// MediaPart
 	Task<(Blob? Blob, AspectRatio? AspectRatio)> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting);
 	Task<string> TruncateTextToMaxLength(string text);
-	Task<bool> CreatePostWithImagesAsync(string postText, List<ImageAttachment> images, BlueSkyModel setting);
-	Task<bool> CreatePostAsync(string postText, BlueSkyModel setting);
+	Task<(bool Success, string? Uri, string? Cid)> CreatePostAsync(string postText, BlueSkyModel setting);
 
-	Task<bool> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings);
-	Task<bool> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings);
+	Task<(bool Success, string? Uri, string? Cid)> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings);
+	Task<(bool Success, string? Uri, string? Cid)> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings);
+	Task<bool> CreateReplyAsync(string postText, string rootUri, string rootCid, BlueSkyModel setting);
 }
