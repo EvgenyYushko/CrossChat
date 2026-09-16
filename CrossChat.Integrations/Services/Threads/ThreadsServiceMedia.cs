@@ -189,7 +189,7 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Публикует первый комментарий (ответ/ветку) к посту в Threads
+		/// Публикует первый комментарий (ответ/ветку) к посту в Threads с ожиданием готовности контейнера
 		/// </summary>
 		public async Task<string?> CreateReplyAsync(string replyToPostId, string text, string accessToken)
 		{
@@ -204,7 +204,7 @@ namespace CrossChat.Integrations.Services
 				{
 					media_type = "TEXT",
 					text = text,
-					reply_to_id = replyToPostId // Связываем комментарий с родительским постом
+					reply_to_id = replyToPostId
 				};
 
 				var containerResp = await _httpClient.PostAsJsonAsync(containerUrl, payload);
@@ -218,20 +218,41 @@ namespace CrossChat.Integrations.Services
 				var containerJson = await containerResp.Content.ReadFromJsonAsync<JsonElement>();
 				string creationId = containerJson.GetProperty("id").GetString()!;
 
-				// 2. Публикуем готовый ответ
-				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
-				var publishResp = await _httpClient.PostAsync(publishUrl, null);
-
-				if (publishResp.IsSuccessStatusCode)
+				// 2. ВАЖНО: Ждем, пока серверы Meta зафиксируют контейнер (даже для текста)
+				bool isReady = await WaitForMediaReadyAsync(creationId, accessToken, 30);
+				if (!isReady)
 				{
-					var publishJson = await publishResp.Content.ReadFromJsonAsync<JsonElement>();
-					string replyId = publishJson.GetProperty("id").GetString()!;
-					_logger.LogInformation($"[Threads] ✅ Первый комментарий успешно опубликован в Threads! ID: {replyId}");
-					return replyId;
+					_logger.LogWarning($"[Threads] Контейнер комментария {creationId} не ответил статусом готовности, пробуем публикацию с повторами...");
 				}
 
-				var publishErr = await publishResp.Content.ReadAsStringAsync();
-				_logger.LogError($"[Threads] ❌ Ошибка публикации первого комментария: {publishErr}");
+				// 3. Публикуем готовый ответ с механизмом повтора (на случай репликации Meta 4279009)
+				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
+
+				for (int attempt = 1; attempt <= 3; attempt++)
+				{
+					var publishResp = await _httpClient.PostAsync(publishUrl, null);
+					var publishContent = await publishResp.Content.ReadAsStringAsync();
+
+					if (publishResp.IsSuccessStatusCode)
+					{
+						using var doc = JsonDocument.Parse(publishContent);
+						string replyId = doc.RootElement.GetProperty("id").GetString()!;
+						_logger.LogInformation($"[Threads] ✅ Первый комментарий успешно опубликован в Threads! ID: {replyId}");
+						return replyId;
+					}
+
+					// Если сервер Meta еще не синхронизировал контейнер (ошибка 4279009) — ждем 4 секунды и повторяем
+					if (publishContent.Contains("4279009") && attempt < 3)
+					{
+						_logger.LogWarning($"[Threads] Сервер Meta еще синхронизирует контейнер {creationId}. Повтор через 4 сек (попытка {attempt}/3)...");
+						await Task.Delay(4000);
+						continue;
+					}
+
+					_logger.LogError($"[Threads] ❌ Ошибка публикации первого комментария: {publishContent}");
+					return null;
+				}
+
 				return null;
 			}
 			catch (Exception ex)

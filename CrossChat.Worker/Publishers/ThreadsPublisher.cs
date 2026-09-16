@@ -39,8 +39,8 @@ public class ThreadsPublisher : ISocialPublisher
 			{
 				await _console.Log("Публикация первого комментария в Threads...", settings.UserId, state.BotId);
 
-				// Пауза 2 сек для фиксации корневого поста в ленте Threads
-				await Task.Delay(2000);
+				// Пауза 4 сек для фиксации корневого поста в ленте Threads
+				await Task.Delay(4000);
 
 				var replyId = await _service.CreateReplyAsync(publishedPostId, state.FirstComment.Trim(), settings.AccessToken);
 				if (!string.IsNullOrEmpty(replyId))
