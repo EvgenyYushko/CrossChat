@@ -1021,7 +1021,7 @@
                             {
                                 <label>
                                     <input type="checkbox" name="selectedNetworks" value="TelegramChannel_@bot.Id">
-                                    <span>TG User (@bot.ChannelUsername)</span>
+                                    <span>@bot.ChannelTitle</span>
                                 </label>
                             }
                         }
@@ -2593,32 +2593,31 @@
                 return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
             }
 
-            // Функция автоматического преобразования чекбоксов в иконки с сохранением названий
-            function initCheckboxIcons() {
-                document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
-                    const netName = cb.value;
-                    const iconHtml = getNetworkIcon(netName);
-                    const label = cb.parentElement;
+        // Функция автоматического преобразования чекбоксов в иконки с сохранением названий
+        function initCheckboxIcons() {
+            document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
+                const netName = cb.value;
+                const iconHtml = getNetworkIcon(netName);
+                const label = cb.parentElement;
 
-                    if (label && iconHtml) {
-                        const checkbox = cb;
+                if (label && iconHtml) {
+                    const checkbox = cb;
 
-                        // ВАЖНО: Запоминаем исходное имя канала ДО очистки HTML!
-                        const titleText = label.innerText.trim();
-                        checkbox.setAttribute('data-title', titleText);
+                    // Берем data-title из Razor, либо текст из label
+                    const titleText = cb.getAttribute('data-title') || label.innerText.trim();
+                    checkbox.setAttribute('data-title', titleText);
 
-                        label.innerHTML = ''; // Очищаем для иконки
-                        label.appendChild(checkbox);
+                    label.innerHTML = '';
+                    label.appendChild(checkbox);
 
-                        // Создаем иконку с тултипом (теперь показывает реальное имя канала!)
-                        const iconWrapper = document.createElement('span');
-                        iconWrapper.setAttribute('data-tooltip', titleText || netName);
-                        iconWrapper.innerHTML = iconHtml;
+                    const iconWrapper = document.createElement('span');
+                    iconWrapper.setAttribute('data-tooltip', titleText || netName);
+                    iconWrapper.innerHTML = iconHtml;
 
-                        label.appendChild(iconWrapper);
-                    }
-                });
-            }
+                    label.appendChild(iconWrapper);
+                }
+            });
+        }
 
          // Переключение отображения поля с ценой
         function togglePaidTelegramMode() {
@@ -2750,40 +2749,37 @@
                 const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
 
                 tgCheckboxes.forEach(cb => {
-                    const netKey = cb.value; // напр: TelegramChannel_1
+                const netKey = cb.value;
 
-                    // Считываем сохраненное имя канала из data-title
-                    let rawName = cb.getAttribute('data-title')
-                        || cb.parentElement.querySelector('span[data-tooltip]')?.getAttribute('data-tooltip')
-                        || netKey;
+                // Получаем красивое название канала (из data-title)
+                let channelName = cb.getAttribute('data-title')
+                    || cb.parentElement.querySelector('span[data-tooltip]')?.getAttribute('data-tooltip')
+                    || netKey;
 
-                    // Делаем имя красивым (убираем префикс "TG User" и скобки, если они есть)
-                    let channelName = rawName.replace(/^TG\s*User\s*/i, '').replace(/^\(|\)$/g, '').trim();
-                    if (!channelName) channelName = netKey;
+                const row = document.createElement('div');
+                row.className = 'tg-paid-row';
+                row.style.cssText = 'background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;';
 
-                    const row = document.createElement('div');
-                    row.className = 'tg-paid-row';
-                    row.style.cssText = 'background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;';
-
-                    row.innerHTML = `
-                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
-                            <span>📢</span> <span style="color: #38bdf8;">${channelName}</span>
+                row.innerHTML = `
+                    <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                        <span>📢</span> <span style="color: #38bdf8;">${channelName}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 6px; text-transform: none; font-size: 0.85rem; cursor: pointer; margin: 0; color: var(--text-main);">
+                            <input type="checkbox" id="isPaid_${netKey}" onchange="document.getElementById('priceBox_${netKey}').style.display = this.checked ? 'flex' : 'none';" style="accent-color: #eab308; width: 16px; height: 16px;">
+                            Сделать платным
+                        </label>
+                        <div id="priceBox_${netKey}" style="display: none; align-items: center; gap: 6px;">
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">Цена:</span>
+                            <input type="number" id="price_${netKey}" min="1" max="2500" value="50" class="text-input" style="width: 80px; padding: 4px 8px; font-weight: bold; color: #eab308;">
+                            <span style="color: #eab308; font-size: 0.85rem; font-weight: bold;">⭐</span>
                         </div>
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
-                            <label style="display: flex; align-items: center; gap: 6px; text-transform: none; font-size: 0.85rem; cursor: pointer; margin: 0; color: var(--text-main);">
-                                <input type="checkbox" id="isPaid_${netKey}" onchange="document.getElementById('priceBox_${netKey}').style.display = this.checked ? 'flex' : 'none';" style="accent-color: #eab308; width: 16px; height: 16px;">
-                                Сделать платным
-                            </label>
-                            <div id="priceBox_${netKey}" style="display: none; align-items: center; gap: 6px;">
-                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Цена:</span>
-                                <input type="number" id="price_${netKey}" min="1" max="2500" value="50" class="text-input" style="width: 80px; padding: 4px 8px; font-weight: bold; color: #eab308;">
-                                <span style="color: #eab308; font-size: 0.85rem; font-weight: bold;">⭐</span>
-                            </div>
-                        </div>
-                    `;
+                    </div>
+                `;
 
-                    container.appendChild(row);
-                });
+                container.appendChild(row);
+            });
+
             }
 
         </script>
