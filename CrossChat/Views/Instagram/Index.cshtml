@@ -605,6 +605,36 @@
                         </div>
                     </div>
 
+                    <!-- БЛОК ЕЖЕДНЕВНЫХ АВТО-СТОРИС -->
+                    <h4 style="margin-top: 30px; margin-bottom: 15px;">🌟 Ежедневные истории (Stories)</h4>
+                    <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label style="font-weight: 600; margin: 0; color: var(--text-main); cursor: pointer;" for="dailyStoryToggle">
+                                    Автоматические ежедневные сторис
+                                </label>
+                                <small style="display: block; color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px;">
+                                    Бот будет раз в сутки выбирать случайный пост из вашего профиля и публиковать его в Stories.
+                                </small>
+                            </div>
+
+                            <!-- ИСПРАВЛЕНИЕ: здесь должен быть <label>, а не <div> -->
+                            <label class="switch">
+                                <input type="checkbox" id="dailyStoryToggle" name="isDailyStoriesEnabled" value="true"
+                                       @(Model.IsDailyStoriesEnabled ? "checked" : "")
+                                       onchange="document.getElementById('storyTimeBlock').style.display = this.checked ? 'flex' : 'none';">
+                                <span class="slider"></span>
+                            </label>
+                            <input type="hidden" name="isDailyStoriesEnabled" value="false">
+                        </div>
+
+                        <!-- Поле выбора времени -->
+                        <div id="storyTimeBlock" style="display: @(Model.IsDailyStoriesEnabled ? "flex" : "none"); align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
+                            <label style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Время публикации (по Минску):</label>
+                            <input type="time" name="dailyStoryTime" value="@(Model.DailyStoryTime ?? "12:00")" class="text-input" style="width: 120px; padding: 6px 10px; font-weight: bold; margin: 0;">
+                        </div>
+                    </div>
+
                     <!-- Промпты -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">Текстовые инструкции (Промпты)</h4>
                     <div class="form-group">

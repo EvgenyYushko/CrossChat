@@ -72,5 +72,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<string> PublishStoryFromBase64(string base64Img, string accessToken);
 
+		Task<List<InstagramMedia>> GetUserMediaAsync(string accessToken, int limit = 50);
+		Task<DailyStoryResult> PublishDailyStoryAsync(InstagramDailyStoryDto dto);
 	}
 }

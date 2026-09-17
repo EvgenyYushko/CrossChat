@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using static CrossChat.Constants.AppConstants;
-using static CrossChat.Integrations.Helpers.HttpHelper;
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
 {
@@ -115,7 +115,8 @@ namespace CrossChat.Controllers
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, bool isDirectEnabled,
+		public async Task<IActionResult> UpdateSettings(int botId,
+			bool isDirectEnabled,
 			bool isCommentsEnabled,
 			bool processPhotos,
 			bool processVideos,
@@ -125,8 +126,11 @@ namespace CrossChat.Controllers
 			bool isReactionsEnabled,
 			string allowedReactions,
 			int maxAnswerMessagesCount,
-			int maxAnswersTokensCount, 
-			int profileId)
+			int maxAnswersTokensCount,
+			int profileId,
+			// === НОВЫЕ ПАРАМЕТРЫ СТОРИС ===
+			bool isDailyStoriesEnabled,
+			string dailyStoryTime)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -169,6 +173,10 @@ namespace CrossChat.Controllers
 				settings.MaxAnswerMessagesCount = maxAnswerMessagesCount;
 				settings.MaxAnswersTokensCount = maxAnswersTokensCount;
 				settings.ProfileId = profileId;
+
+				// Обновляем настройки авто-сторис:
+				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
+				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
 
 				var reactionList = allowedReactions?.EnumerateRunes()
 					.Select(r => r.ToString())

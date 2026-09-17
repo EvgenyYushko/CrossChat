@@ -42,4 +42,17 @@ public class InstagramSettings
 
 	public int ProfileId { get; set; }
 	public Profile Profile { get; set; } = null!;
+
+	// === ЕЖЕДНЕВНЫЕ СТОРИС ===
+	public bool IsDailyStoriesEnabled { get; set; } = false;
+
+	// Время публикации сторис (в формате "HH:mm", например "12:00")
+	[MaxLength(5)]
+	public string DailyStoryTime { get; set; } = "12:00";
+
+	// Дата последней публикации сторис (для защиты от повторных публикаций в один день)
+	public DateTime? LastDailyStoryDate { get; set; }
+
+	// JSON-массив ID постов, которые уже выкладывались в сторис (["123", "456"])
+	public string? UsedMediaIdsJson { get; set; } = "[]";
 }

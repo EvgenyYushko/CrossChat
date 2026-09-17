@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Logging;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 using File = System.IO.File;
@@ -464,6 +465,138 @@ public partial class InstagramService
 					_logger.LogError(ex, $"⚠️ Не удалось удалить временный файл сторис {localFilePath}");
 				}
 			}
+		}
+	}
+
+	/// <summary>
+	/// Получает список последних медиа-постов пользователя из Instagram (фото и видео)
+	/// </summary>
+	public async Task<List<InstagramMedia>> GetUserMediaAsync(string accessToken, int limit = 50)
+	{
+		var result = new List<InstagramMedia>();
+		string url = $"https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,timestamp&access_token={accessToken}&limit={limit}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogError("[Instagram Media] Ошибка получения постов пользователя: {Err}", err);
+				return result;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+
+			if (doc.RootElement.TryGetProperty("data", out var dataElement))
+			{
+				foreach (var item in dataElement.EnumerateArray())
+				{
+					var mediaType = item.TryGetProperty("media_type", out var mt) ? mt.GetString() : null;
+					var mediaUrl = item.TryGetProperty("media_url", out var mu) ? mu.GetString() : null;
+					var id = item.TryGetProperty("id", out var i) ? i.GetString() : null;
+
+					// Нам подходят только те элементы, у которых есть прямая ссылка media_url (IMAGE или VIDEO)
+					if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(mediaUrl) && (mediaType == "IMAGE" || mediaType == "VIDEO"))
+					{
+						result.Add(new InstagramMedia
+						{
+							Id = id,
+							Media_Type = mediaType,
+							Media_Url = mediaUrl,
+							Caption = item.TryGetProperty("caption", out var c) ? c.GetString() : null
+						});
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram Media] Исключение при получении медиа профиля");
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Выбирает случайный уникальный пост профиля и публикует его в Истории (Stories)
+	/// </summary>
+	public async Task<DailyStoryResult> PublishDailyStoryAsync(InstagramDailyStoryDto dto)
+	{
+		if (string.IsNullOrEmpty(dto.AccessToken))
+			return new DailyStoryResult { Success = false };
+
+		try
+		{
+			_logger.LogInformation("[Daily Story] Запуск публикации ежедневной истории для @{User}...", dto.Username);
+
+			// 1. Получаем посты аккаунта
+			var mediaList = await GetUserMediaAsync(dto.AccessToken, limit: 100);
+			if (mediaList == null || !mediaList.Any())
+			{
+				_logger.LogWarning("[Daily Story] В профиле @{User} не найдено подходящих медиа для сторис.", dto.Username);
+				return new DailyStoryResult { Success = false };
+			}
+
+			// 2. Достаем список уже использованных ID
+			var usedIds = new HashSet<string>();
+			try
+			{
+				if (!string.IsNullOrEmpty(dto.UsedMediaIdsJson))
+				{
+					usedIds = JsonSerializer.Deserialize<HashSet<string>>(dto.UsedMediaIdsJson) ?? new HashSet<string>();
+				}
+			}
+			catch { usedIds = new HashSet<string>(); }
+
+			// 3. Находим посты, которые еще НЕ публиковались в сторис
+			var availableMedia = mediaList.Where(m => !usedIds.Contains(m.Id)).ToList();
+
+			// Если все посты уже были в сторис — сбрасываем цикл
+			if (availableMedia.Count == 0)
+			{
+				_logger.LogInformation("[Daily Story] Все посты уже были в сторис. Сбрасываем цикл постов для @{User}.", dto.Username);
+				usedIds.Clear();
+				availableMedia = mediaList;
+			}
+
+			// 4. Выбираем случайный пост
+			var random = new Random();
+			var selectedMedia = availableMedia[random.Next(availableMedia.Count)];
+
+			_logger.LogInformation("[Daily Story] Выбран пост для истории: ID {Id} ({Type})", selectedMedia.Id, selectedMedia.Media_Type);
+
+			// 5. Публикуем в Stories через твои существующие методы
+			var containerId = await CreateStoryContainer(selectedMedia, dto.AccessToken);
+			if (string.IsNullOrEmpty(containerId))
+			{
+				_logger.LogError("[Daily Story] Не удалось создать контейнер истории для @{User}", dto.Username);
+				return new DailyStoryResult { Success = false };
+			}
+
+			var storyId = await WaitAndPublishContainer(containerId, dto.AccessToken);
+			if (!string.IsNullOrEmpty(storyId))
+			{
+				_logger.LogInformation("🌟 [Daily Story] Ежедневная история успешно опубликована! StoryId: {StoryId}", storyId);
+
+				// Запоминаем ID использованного медиа
+				usedIds.Add(selectedMedia.Id);
+
+				return new DailyStoryResult
+				{
+					Success = true,
+					StoryId = storyId,
+					NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
+				};
+			}
+
+			return new DailyStoryResult { Success = false };
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Daily Story] Ошибка при публикации ежедневной сторис для @{User}", dto.Username);
+			return new DailyStoryResult { Success = false };
 		}
 	}
 

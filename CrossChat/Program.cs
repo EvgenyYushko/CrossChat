@@ -154,6 +154,14 @@ builder.Services.AddQuartz(q =>
 		.ForJob(tgKey)
 		.WithIdentity($"{nameof(TelegramChanelMaintanensJob)}-Trigger")
 		.WithCronSchedule("0 0 0 * * ?"));
+
+	// 6
+	var storyJobKey = new JobKey(nameof(InstagramDailyStoryJob));
+	q.AddJob<InstagramDailyStoryJob>(opts => opts.WithIdentity(storyJobKey));
+	q.AddTrigger(opts => opts
+		.ForJob(storyJobKey)
+		.WithIdentity($"{nameof(InstagramDailyStoryJob)}-Trigger")
+		.WithSimpleSchedule(x => x.WithIntervalInMinutes(2).RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
