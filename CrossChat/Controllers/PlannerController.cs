@@ -482,6 +482,8 @@ namespace CrossChat.Controllers
 
 			// Флаг: одинаковые ли настройки звезд для всех каналов (по умолчанию true)
 			bool isUnifiedTelegramPaid = Request.Form["isUnifiedTelegramPaid"] != "false";
+			// Флаг единого режима для кнопок-ссылок
+			bool isUnifiedTelegramButton = Request.Form["isUnifiedTelegramButton"] != "false";
 
 			if (networkType == "All")
 			{
@@ -535,11 +537,22 @@ namespace CrossChat.Controllers
 							post.Networks[netKey].FirstComment = isTg ? null : firstComment;
 							if (isTg)
 							{
+								// РАСЧЕТ КНОПКИ ДЛЯ КОНКРЕТНОГО КАНАЛА:
+								string? channelButtonText = tgButtonText;
+								string? channelButtonUrl = tgButtonUrl;
+
+								if (!isUnifiedTelegramButton)
+								{
+									// Если включен РАЗДЕЛЬНЫЙ режим, считываем индивидуальные поля этого канала:
+									channelButtonText = Request.Form[$"tgButtonText_{netKey}"].ToString();
+									channelButtonUrl = Request.Form[$"tgButtonUrl_{netKey}"].ToString();
+								}
+
 								post.Networks[netKey].IsPaid = channelIsPaid;
 								post.Networks[netKey].Price = channelIsPaid ? channelPrice : 0;
 								post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
-								post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
-								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
+								post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(channelButtonText) ? null : channelButtonText.Trim();
+								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(channelButtonUrl) ? null : channelButtonUrl.Trim();
 							}
 
 							// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
