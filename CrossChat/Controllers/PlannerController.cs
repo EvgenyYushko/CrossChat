@@ -469,16 +469,19 @@ namespace CrossChat.Controllers
 			// 1. ЗАЩИТА: Если текст не ввели, заменяем null на пустую строку ""
 			var safeCaption = caption ?? string.Empty;
 
-			// Читаем параметры платного поста для Telegram
-			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
-			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
 			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
 			string? tgButtonText = Request.Form["tgButtonText"].ToString();
 			string? tgButtonUrl = Request.Form["tgButtonUrl"].ToString();
 			string? firstComment = Request.Form["firstComment"].ToString();
 			if (string.IsNullOrWhiteSpace(firstComment)) firstComment = null;
 
+			// Читаем параметры платного поста для Telegram
+			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
+			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
 			if (priceTelegram <= 0) priceTelegram = 50;
+
+			// Флаг: одинаковые ли настройки звезд для всех каналов (по умолчанию true)
+			bool isUnifiedTelegramPaid = Request.Form["isUnifiedTelegramPaid"] != "false";
 
 			if (networkType == "All")
 			{
@@ -508,14 +511,32 @@ namespace CrossChat.Controllers
 
 						bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
 
+						// РАСЧЕТ ЗВЕЗД ДЛЯ КОНКРЕТНОГО КАНАЛА:
+						bool channelIsPaid = isPaidTelegram;
+						int channelPrice = priceTelegram;
+
+						if (isTg && !isUnifiedTelegramPaid)
+						{
+							// Если включен РАЗДЕЛЬНЫЙ режим, берем индивидуальные параметры этого канала:
+							channelIsPaid = Request.Form[$"isPaid_{netKey}"] == "true";
+							if (int.TryParse(Request.Form[$"price_{netKey}"], out int p) && p > 0)
+							{
+								channelPrice = Math.Clamp(p, 1, 2500);
+							}
+							else
+							{
+								channelPrice = 50;
+							}
+						}
+
 						if (post.Networks.ContainsKey(netKey))
 						{
 							post.Networks[netKey].Caption = finalCaption;
 							post.Networks[netKey].FirstComment = isTg ? null : firstComment;
 							if (isTg)
 							{
-								post.Networks[netKey].IsPaid = isPaidTelegram;
-								post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
+								post.Networks[netKey].IsPaid = channelIsPaid;
+								post.Networks[netKey].Price = channelIsPaid ? channelPrice : 0;
 								post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
 								post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
 								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
@@ -533,12 +554,12 @@ namespace CrossChat.Controllers
 							{
 								Status = SocialStatus.Pending,
 								Caption = finalCaption,
-								IsPaid = isTg && isPaidTelegram,
-								Price = (isTg && isPaidTelegram) ? priceTelegram : 0,
-								IsVideoNote = isVideoNoteTelegram,
-								ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
-								ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim(),
 								FirstComment = isTg ? null : firstComment,
+								IsPaid = isTg && channelIsPaid,
+								Price = (isTg && channelIsPaid) ? channelPrice : 0,
+								IsVideoNote = isTg && isVideoNoteTelegram,
+								ButtonText = isTg && !string.IsNullOrWhiteSpace(tgButtonText) ? tgButtonText.Trim() : null,
+								ButtonUrl = isTg && !string.IsNullOrWhiteSpace(tgButtonUrl) ? tgButtonUrl.Trim() : null
 							};
 						}
 					}

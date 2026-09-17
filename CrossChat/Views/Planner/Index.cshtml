@@ -1072,20 +1072,35 @@
 
                 <!-- Блок платного контента (Telegram Stars) -->
                 <div class="form-group" id="telegramPaidGroup" style="display: none; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 1.25rem;">
-                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
-                        <input type="checkbox" id="isPaidTelegramCheckbox" name="isPaidTelegram" value="true" onchange="togglePaidTelegramMode()" style="width: 18px; height: 18px; accent-color: #eab308;">
-                        ⭐ Платный контент (Telegram Stars)
-                    </label>
-                    <div id="telegramPriceContainer" style="display: none; margin-top: 10px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label for="priceTelegramInput" style="font-size: 0.85rem; color: var(--text-secondary); text-transform: none; margin: 0;">Стоимость в звёздах:</label>
-                            <input type="number" id="priceTelegramInput" name="priceTelegram" min="1" max="2500" value="50" class="text-input" style="width: 110px; padding: 6px 10px; font-weight: 700; color: #eab308;" />
-                            <span style="font-size: 0.9rem; color: #eab308; font-weight: bold;">⭐ Stars</span>
-                        </div>
-                        <small style="display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
-                            Медиафайлы будут скрыты блюром до оплаты. В Instagram, Facebook и других сетях этот же пост выйдет бесплатно.
-                        </small>
+    
+                    <!-- Чекбокс разделения: виден только если выбрано 2 и более каналов Telegram -->
+                    <div id="unifiedTelegramPaidGroup" style="display: none; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(234, 179, 8, 0.2);">
+                        <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.85rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
+                            <input type="checkbox" id="unifiedTelegramPaidCheckbox" checked onchange="toggleUnifiedTelegramPaidMode()" style="width: 16px; height: 16px; accent-color: #eab308;">
+                            Одинаковые настройки Звёзд для всех каналов Telegram
+                        </label>
                     </div>
+
+                    <!-- ЕДИНЫЙ РЕЖИМ (по умолчанию) -->
+                    <div id="singleTelegramPaidContainer">
+                        <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
+                            <input type="checkbox" id="isPaidTelegramCheckbox" name="isPaidTelegram" value="true" onchange="togglePaidTelegramMode()" style="width: 18px; height: 18px; accent-color: #eab308;">
+                            ⭐ Платный контент (Telegram Stars)
+                        </label>
+                        <div id="telegramPriceContainer" style="display: none; margin-top: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <label for="priceTelegramInput" style="font-size: 0.85rem; color: var(--text-secondary); text-transform: none; margin: 0;">Стоимость в звёздах:</label>
+                                <input type="number" id="priceTelegramInput" name="priceTelegram" min="1" max="2500" value="50" class="text-input" style="width: 110px; padding: 6px 10px; font-weight: 700; color: #eab308;" />
+                                <span style="font-size: 0.9rem; color: #eab308; font-weight: bold;">⭐ Stars</span>
+                            </div>
+                            <small style="display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
+                                Медиафайлы будут скрыты блюром до оплаты. В Instagram, Facebook и других сетях этот же пост выйдет бесплатно.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- РАЗДЕЛЬНЫЙ РЕЖИМ: динамические строки для каждого канала -->
+                    <div id="dynamicTelegramPaidContainer" style="display: none; flex-direction: column; gap: 12px; margin-top: 8px;"></div>
                 </div>
 
                 <!-- Блок видео-кружочка Telegram -->
@@ -1818,11 +1833,62 @@
                                 if (typeof toggleTgButtonMode === 'function') toggleTgButtonMode();
                                 if (typeof updateTelegramButtonVisibility === 'function') updateTelegramButtonVisibility();
 
-                                // Выставляем звезды Telegram
-                                const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
-                                if (isPaidCb) isPaidCb.checked = isPaidPost;
-                                const priceInput = document.getElementById('priceTelegramInput');
-                                if (priceInput) priceInput.value = postPrice;
+                                // === ПОДГРУЗКА НАСТРОЕК TELEGRAM STARS (С ПОДДЕРЖКОЙ РАЗДЕЛЬНЫХ КАНАЛОВ) ===
+                                let tgChannelsData = [];
+
+                                for (let key in networks) {
+                                    if (key.includes("Telegram") && networks[key]) {
+                                        const isPaid = Boolean(networks[key].isPaid || networks[key].IsPaid);
+                                        const price = networks[key].price || networks[key].Price || 50;
+                                        tgChannelsData.push({ key: key, isPaid: isPaid, price: price });
+                                    }
+                                }
+
+                                // Проверяем, одинаковые ли настройки у каналов
+                                let allSame = true;
+                                if (tgChannelsData.length > 1) {
+                                    for (let i = 1; i < tgChannelsData.length; i++) {
+                                        if (tgChannelsData[i].isPaid !== tgChannelsData[0].isPaid || tgChannelsData[i].price !== tgChannelsData[0].price) {
+                                            allSame = false;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                const unifiedTgPaidCb = document.getElementById('unifiedTelegramPaidCheckbox');
+                                if (unifiedTgPaidCb) unifiedTgPaidCb.checked = allSame;
+
+                                if (allSame) {
+                                    // Единый режим
+                                    const isPaid = tgChannelsData.length > 0 ? tgChannelsData[0].isPaid : false;
+                                    const price = tgChannelsData.length > 0 ? tgChannelsData[0].price : 50;
+
+                                    const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
+                                    if (isPaidCb) isPaidCb.checked = isPaid;
+                                    const priceInput = document.getElementById('priceTelegramInput');
+                                    if (priceInput) priceInput.value = price;
+
+                                    if (typeof togglePaidTelegramMode === 'function') togglePaidTelegramMode();
+                                    if (typeof toggleUnifiedTelegramPaidMode === 'function') toggleUnifiedTelegramPaidMode();
+                                } else {
+                                    // Раздельный режим
+                                    if (typeof toggleUnifiedTelegramPaidMode === 'function') toggleUnifiedTelegramPaidMode();
+
+                                    // Заполняем данные для каждого канала
+                                    setTimeout(() => {
+                                        tgChannelsData.forEach(ch => {
+                                            const chIsPaid = document.getElementById(`isPaid_${ch.key}`);
+                                            const chPrice = document.getElementById(`price_${ch.key}`);
+                                            const chBox = document.getElementById(`priceBox_${ch.key}`);
+
+                                            if (chIsPaid) chIsPaid.checked = ch.isPaid;
+                                            if (chPrice) chPrice.value = ch.price;
+                                            if (chBox) chBox.style.display = ch.isPaid ? 'flex' : 'none';
+                                        });
+                                    }, 50);
+                                }
+
+                                if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
 
                                 // Выставляем кружочек Telegram
                                 const noteCb = document.getElementById('isVideoNoteTelegramCheckbox');
@@ -2121,6 +2187,18 @@
                     defCaption.value = '';
                 }
 
+                const unifiedTgPaid = document.getElementById('unifiedTelegramPaidCheckbox');
+                if (unifiedTgPaid) unifiedTgPaid.checked = true;
+
+                const dynTgPaid = document.getElementById('dynamicTelegramPaidContainer');
+                if (dynTgPaid) {
+                    dynTgPaid.innerHTML = '';
+                    dynTgPaid.style.display = 'none';
+                }
+
+                const singleTgPaid = document.getElementById('singleTelegramPaidContainer');
+                if (singleTgPaid) singleTgPaid.style.display = 'block';
+
                 const isPaidCb = document.getElementById('isPaidTelegramCheckbox');
                 if (isPaidCb) isPaidCb.checked = false;
 
@@ -2148,6 +2226,8 @@
                 if (btnUrl) btnUrl.value = '';
                 const btnGroup = document.getElementById('telegramButtonLinkGroup');
                 if (btnGroup) btnGroup.style.display = 'none';
+
+
             }
 
             /// Функция включения/выключения режима "Один текст для всех"
@@ -2294,30 +2374,6 @@
                     formData.append('caption', document.getElementById('captionInput').value);
                 }
 
-                // ПОДГОТОВКА ФАЙЛОВ: Картинки оптимизируем, видео отправляем КАК ЕСТЬ
-                // try {
-                //     progressFill.style.width = '5%';
-                //     for (let i = 0; i < selectedFiles.length; i++) {
-                //         const file = selectedFiles[i];
-
-                //         if (file.type.startsWith('image/')) {
-                //             // Фото сжимаем на клиенте до 1600px для ускорения
-                //             progressText.textContent = `Оптимизация фото ${i + 1} из ${selectedFiles.length}...`;
-                //             const result = await compressImageOnClient(file, 1600, 0.85);
-                //             formData.append('images', result.file);
-                //         } else {
-                //             // Видео добавляем в исходном качестве без сжатия!
-                //             progressText.textContent = `Подготовка видео ${i + 1} из ${selectedFiles.length}...`;
-                //             formData.append('images', file);
-                //         }
-                //     }
-                // } catch (err) {
-                //     console.error('Ошибка подготовки файлов:', err);
-                //     alert('Не удалось подготовить файлы.');
-                //     resetUploadProgress();
-                //     return;
-                // }
-
                 selectedFiles.forEach(file => {
                     formData.append('images', file);
                 });
@@ -2356,10 +2412,27 @@
                     resetUploadProgress();
                 };
 
-                // Добавляем параметры Telegram Stars
-                const isPaidChecked = document.getElementById('isPaidTelegramCheckbox').checked;
-                formData.append('isPaidTelegram', isPaidChecked ? 'true' : 'false');
-                formData.append('priceTelegram', document.getElementById('priceTelegramInput').value);
+                // Отправка настроек Telegram Stars (Единые или Раздельные)
+                const isUnifiedPaid = document.getElementById('unifiedTelegramPaidCheckbox')?.checked ?? true;
+                formData.append('isUnifiedTelegramPaid', isUnifiedPaid ? 'true' : 'false');
+
+                if (isUnifiedPaid) {
+                    // Единый режим
+                    const isPaidChecked = document.getElementById('isPaidTelegramCheckbox').checked;
+                    formData.append('isPaidTelegram', isPaidChecked ? 'true' : 'false');
+                    formData.append('priceTelegram', document.getElementById('priceTelegramInput').value);
+                } else {
+                    // Раздельный режим для каждого выбранного канала
+                    const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+                    tgCheckboxes.forEach(cb => {
+                        const netKey = cb.value;
+                        const chIsPaid = document.getElementById(`isPaid_${netKey}`)?.checked ?? false;
+                        const chPrice = document.getElementById(`price_${netKey}`)?.value ?? '50';
+
+                        formData.append(`isPaid_${netKey}`, chIsPaid ? 'true' : 'false');
+                        formData.append(`price_${netKey}`, chPrice);
+                    });
+                }
 
                 const isNoteChecked = document.getElementById('isVideoNoteTelegramCheckbox')?.checked;
                 formData.append('isVideoNoteTelegram', isNoteChecked ? 'true' : 'false');
@@ -2520,22 +2593,26 @@
                 return `<svg class="net-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>`;
             }
 
-            // Функция автоматического преобразования текстовых меток чекбоксов в SVG-иконки
+            // Функция автоматического преобразования чекбоксов в иконки с сохранением названий
             function initCheckboxIcons() {
                 document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
                     const netName = cb.value;
                     const iconHtml = getNetworkIcon(netName);
-                    const label = cb.parentElement; // Находим <label>
+                    const label = cb.parentElement;
 
                     if (label && iconHtml) {
-                        const checkbox = cb; // Сохраняем ссылку на чекбокс
+                        const checkbox = cb;
 
-                        label.innerHTML = ''; // Очищаем текст внутри label
-                        label.appendChild(checkbox); // Возвращаем скрытый чекбокс назад
+                        // ВАЖНО: Запоминаем исходное имя канала ДО очистки HTML!
+                        const titleText = label.innerText.trim();
+                        checkbox.setAttribute('data-title', titleText);
 
-                        // Создаем круглую подложку с дата-атрибутом мгновенного тултипа
+                        label.innerHTML = ''; // Очищаем для иконки
+                        label.appendChild(checkbox);
+
+                        // Создаем иконку с тултипом (теперь показывает реальное имя канала!)
                         const iconWrapper = document.createElement('span');
-                        iconWrapper.setAttribute('data-tooltip', netName); // Текст всплывает мгновенно!
+                        iconWrapper.setAttribute('data-tooltip', titleText || netName);
                         iconWrapper.innerHTML = iconHtml;
 
                         label.appendChild(iconWrapper);
@@ -2549,23 +2626,33 @@
             document.getElementById('telegramPriceContainer').style.display = isChecked ? 'block' : 'none';
         }
 
-                // Проверка, активен ли Telegram (показываем блок звезд только если выбран Telegram)
+        // Проверка, активен ли Telegram (показываем блок звезд только если выбран Telegram)
         function updateTelegramPaidVisibility() {
             const currentNetwork = "@ViewBag.Network";
             const paidGroup = document.getElementById('telegramPaidGroup');
+            const unifiedGroup = document.getElementById('unifiedTelegramPaidGroup');
             if (!paidGroup) return;
 
             if (currentNetwork.includes("Telegram")) {
                 paidGroup.style.display = 'block';
+                if (unifiedGroup) unifiedGroup.style.display = 'none';
             } else if (currentNetwork === "All") {
-                // В режиме All проверяем, выбрана ли хотя бы одна галочка Telegram
                 const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
                 paidGroup.style.display = tgCheckboxes.length > 0 ? 'block' : 'none';
+
+                // Если выбрано 2 и более каналов — показываем переключатель "Одинаковые настройки"
+                if (unifiedGroup) {
+                    unifiedGroup.style.display = tgCheckboxes.length > 1 ? 'block' : 'none';
+                }
+
+                // Если режим раздельный — перерисовываем список каналов
+                const isUnified = document.getElementById('unifiedTelegramPaidCheckbox')?.checked ?? true;
+                if (!isUnified) {
+                    renderDynamicTelegramPaidRows();
+                }
             } else {
                 paidGroup.style.display = 'none';
             }
-
-            updateTelegramVideoNoteVisibility();
         }
 
         function updateTelegramVideoNoteVisibility() {
@@ -2637,6 +2724,66 @@
                 }
 
                 commentGroup.style.display = showComment ? 'block' : 'none';
+            }
+
+            // Переключение между единым и раздельным режимом звезд
+            function toggleUnifiedTelegramPaidMode() {
+                const isUnified = document.getElementById('unifiedTelegramPaidCheckbox').checked;
+                const singleContainer = document.getElementById('singleTelegramPaidContainer');
+                const dynamicContainer = document.getElementById('dynamicTelegramPaidContainer');
+
+                if (isUnified) {
+                    singleContainer.style.display = 'block';
+                    dynamicContainer.style.display = 'none';
+                } else {
+                    singleContainer.style.display = 'none';
+                    dynamicContainer.style.display = 'flex';
+                    renderDynamicTelegramPaidRows();
+                }
+            }
+
+            // Генерация индивидуальных настроек под каждый выбранный канал Telegram
+            function renderDynamicTelegramPaidRows() {
+                const container = document.getElementById('dynamicTelegramPaidContainer');
+                container.innerHTML = '';
+
+                const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+
+                tgCheckboxes.forEach(cb => {
+                    const netKey = cb.value; // напр: TelegramChannel_1
+
+                    // Считываем сохраненное имя канала из data-title
+                    let rawName = cb.getAttribute('data-title')
+                        || cb.parentElement.querySelector('span[data-tooltip]')?.getAttribute('data-tooltip')
+                        || netKey;
+
+                    // Делаем имя красивым (убираем префикс "TG User" и скобки, если они есть)
+                    let channelName = rawName.replace(/^TG\s*User\s*/i, '').replace(/^\(|\)$/g, '').trim();
+                    if (!channelName) channelName = netKey;
+
+                    const row = document.createElement('div');
+                    row.className = 'tg-paid-row';
+                    row.style.cssText = 'background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;';
+
+                    row.innerHTML = `
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                            <span>📢</span> <span style="color: #38bdf8;">${channelName}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 6px; text-transform: none; font-size: 0.85rem; cursor: pointer; margin: 0; color: var(--text-main);">
+                                <input type="checkbox" id="isPaid_${netKey}" onchange="document.getElementById('priceBox_${netKey}').style.display = this.checked ? 'flex' : 'none';" style="accent-color: #eab308; width: 16px; height: 16px;">
+                                Сделать платным
+                            </label>
+                            <div id="priceBox_${netKey}" style="display: none; align-items: center; gap: 6px;">
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Цена:</span>
+                                <input type="number" id="price_${netKey}" min="1" max="2500" value="50" class="text-input" style="width: 80px; padding: 4px 8px; font-weight: bold; color: #eab308;">
+                                <span style="color: #eab308; font-size: 0.85rem; font-weight: bold;">⭐</span>
+                            </div>
+                        </div>
+                    `;
+
+                    container.appendChild(row);
+                });
             }
 
         </script>
