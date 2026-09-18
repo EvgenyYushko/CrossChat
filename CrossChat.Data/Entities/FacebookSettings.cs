@@ -25,5 +25,9 @@ namespace CrossChat.Data.Entities
 
 		public int ProfileId { get; set; }
 		public Profile Profile { get; set; } = null!;
+
+		// ID привязанного Instagram Business аккаунта (определяется автоматически)
+		[MaxLength(100)]
+		public string? LinkedInstagramBusinessId { get; set; }
 	}
 }

@@ -3,6 +3,7 @@ using System;
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CrossChat.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260918100648_AddTrendRadarTables")]
+    partial class AddTrendRadarTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -635,42 +638,6 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("ThreadsSettings");
                 });
 
-            modelBuilder.Entity("CrossChat.Data.Entities.TrackedHashtag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("InstagramHashtagId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("IsAutoSync")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastSyncedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("Tag")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("TrackedHashtags");
-                });
-
             modelBuilder.Entity("CrossChat.Data.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -709,56 +676,6 @@ namespace CrossChat.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.ViralPost", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Caption")
-                        .HasColumnType("text");
-
-                    b.Property<int>("CommentsCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ExtractedHashtags")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("FetchedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("InstagramMediaId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("LikeCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MediaType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("MediaUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Permalink")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("TrackedHashtagId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TrackedHashtagId");
-
-                    b.ToTable("ViralPosts");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.XSettings", b =>
@@ -1019,28 +936,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("CrossChat.Data.Entities.TrackedHashtag", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.ViralPost", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.TrackedHashtag", "TrackedHashtag")
-                        .WithMany("Posts")
-                        .HasForeignKey("TrackedHashtagId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("TrackedHashtag");
-                });
-
             modelBuilder.Entity("CrossChat.Data.Entities.XSettings", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
@@ -1094,11 +989,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("ThreadsSettingsList");
 
                     b.Navigation("XSettingsList");
-                });
-
-            modelBuilder.Entity("CrossChat.Data.Entities.TrackedHashtag", b =>
-                {
-                    b.Navigation("Posts");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.User", b =>

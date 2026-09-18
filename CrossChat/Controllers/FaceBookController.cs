@@ -132,7 +132,7 @@ namespace CrossChat.Controllers
 				// 3. Динамически запрашиваем ВСЕ страницы пользователя (личные и Meta Business Suite)
 				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,picture{{url}}&access_token={longUserToken}";
 				var accountsResp = await _httpClient.GetFromJsonAsync<JsonElement>(accountsUrl);
-				
+
 				var pagesList = new List<JsonElement>();
 
 				if (accountsResp.TryGetProperty("data", out var pagesData))
@@ -265,11 +265,11 @@ namespace CrossChat.Controllers
 			var pageId = pageData.GetProperty("id").GetString()!;
 			var pageName = pageData.GetProperty("name").GetString()!;
 			var pageToken = pageData.GetProperty("access_token").GetString()!;
-			
+
 			string? pictureUrl = null;
-			if (pageData.TryGetProperty("picture", out var picProp) && 
-			    picProp.TryGetProperty("data", out var dataProp) &&
-			    dataProp.TryGetProperty("url", out var urlProp))
+			if (pageData.TryGetProperty("picture", out var picProp) &&
+				picProp.TryGetProperty("data", out var dataProp) &&
+				dataProp.TryGetProperty("url", out var urlProp))
 			{
 				pictureUrl = urlProp.GetString();
 			}
@@ -291,11 +291,11 @@ namespace CrossChat.Controllers
 
 			if (settings == null)
 			{
-				settings = new FacebookSettings 
-				{ 
-					UserId = userId, 
-					PageId = pageId, 
-					ProfileId = GetActiveProfileId().Value 
+				settings = new FacebookSettings
+				{
+					UserId = userId,
+					PageId = pageId,
+					ProfileId = GetActiveProfileId().Value
 				};
 				_db.FacebookSettings.Add(settings);
 			}
@@ -308,6 +308,15 @@ namespace CrossChat.Controllers
 			settings.PageName = pageName;
 			settings.PageAccessToken = pageToken;
 			settings.IsActive = true;
+
+			// Определяем, привязан ли к этой странице Instagram-аккаунт:
+			settings.LinkedInstagramBusinessId = await GetLinkedInstagramBusinessAccountIdAsync(pageId, pageToken);
+
+			if (!string.IsNullOrEmpty(settings.LinkedInstagramBusinessId))
+			{
+				_logger.LogInformation($"[Facebook] ✅ Страница '{pageName}' связана с Instagram Business ID: {settings.LinkedInstagramBusinessId}");
+			}
+
 
 			await _db.SaveChangesAsync();
 			_logger.LogInformation($"[Facebook] Страница '{pageName}' ({pageId}) сохранена в БД для пользователя {userId}");
@@ -361,6 +370,30 @@ namespace CrossChat.Controllers
 
 			// Возвращаемся на главную страницу управления Facebook без выбранного botId
 			return RedirectToAction("Index");
+		}
+
+		private async Task<string?> GetLinkedInstagramBusinessAccountIdAsync(string pageId, string pageToken)
+		{
+			try
+			{
+				string url = $"https://graph.facebook.com/v24.0/{pageId}?fields=instagram_business_account&access_token={pageToken}";
+				var response = await _httpClient.GetAsync(url);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+					if (doc.RootElement.TryGetProperty("instagram_business_account", out var igAccount) &&
+						igAccount.TryGetProperty("id", out var idElem))
+					{
+						return idElem.GetString();
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "[Facebook] Не удалось проверить привязку Instagram для страницы {PageId}", pageId);
+			}
+			return null;
 		}
 	}
 }

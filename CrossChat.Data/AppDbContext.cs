@@ -20,13 +20,15 @@ namespace CrossChat.Data
 		public DbSet<InstagramBotCustomer> InstagramBotCustomers { get; set; }
 		public DbSet<BotResponseLog> BotResponseLogs { get; set; }
 		public DbSet<Profile> Profile { get; set; }
-
-
+		
 		public DbSet<PostEntity> Posts { get; set; }
 		public DbSet<PostMediaEntity> PostMedia { get; set; }
 		public DbSet<NetworkStateEntity> NetworkStates { get; set; }
 
 		public DbSet<ReviewEntity> Reviews { get; set; }
+
+		public DbSet<TrackedHashtag> TrackedHashtags { get; set; }
+		public DbSet<ViralPost> ViralPosts { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
