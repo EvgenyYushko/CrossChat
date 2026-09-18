@@ -148,7 +148,7 @@ namespace CrossChat.Worker.Services
 			if (string.IsNullOrEmpty(igTagId)) return 0;
 
 			string fields = "id,caption,media_type,media_url,permalink,like_count,comments_count";
-			string url = $"https://graph.facebook.com/{GraphApiVersion}/{igTagId}/top_media?user_id={igUserId}&fields={fields}&access_token={fbSettings.PageAccessToken}";
+			string url = $"https://graph.facebook.com/{GraphApiVersion}/{igTagId}/top_media?user_id={igUserId}&fields={fields}&limit=15&access_token={fbSettings.PageAccessToken}";
 
 			try
 			{
