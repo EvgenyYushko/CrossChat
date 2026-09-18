@@ -57,17 +57,20 @@ if (string.IsNullOrEmpty(connectionString))
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-options.UseNpgsql(connectionString, npgsqlOptions =>
-{
-	// ВАЖНО: Указываем, что миграции лежат в проекте с данными, а не в Web
-	npgsqlOptions.MigrationsAssembly("CrossChat.Data");
+	options.UseNpgsql(connectionString, npgsqlOptions =>
+	{
+		// ВАЖНО: Указываем, что миграции лежат в проекте с данными, а не в Web
+		npgsqlOptions.MigrationsAssembly("CrossChat.Data");
 
-	// ВАЖНО: Устойчивость к сбоям сети (Retry Policy)
-	npgsqlOptions.EnableRetryOnFailure(
-		maxRetryCount: 5,
-		maxRetryDelay: TimeSpan.FromSeconds(10),
-		errorCodesToAdd: null);
-}));
+		npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+
+		// ВАЖНО: Устойчивость к сбоям сети (Retry Policy)
+		npgsqlOptions.EnableRetryOnFailure(
+			maxRetryCount: 5,
+			maxRetryDelay: TimeSpan.FromSeconds(10),
+			errorCodesToAdd: null);
+	})
+);
 
 builder.Services.AddControllers();
 

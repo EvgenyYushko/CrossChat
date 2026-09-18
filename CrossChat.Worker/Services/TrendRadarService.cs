@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -148,89 +143,104 @@ namespace CrossChat.Worker.Services
 			if (string.IsNullOrEmpty(igTagId)) return 0;
 
 			string fields = "id,caption,media_type,media_url,permalink,like_count,comments_count";
-			string url = $"https://graph.facebook.com/{GraphApiVersion}/{igTagId}/top_media?user_id={igUserId}&fields={fields}&limit=15&access_token={fbSettings.PageAccessToken}";
 
-			try
+			// АДАПТИВНЫЙ ЛИМИТ: если тег гигантский (как #girl), плавно снижаем лимит до 8 или 5
+			int[] limitsToTry = new[] { 15, 8, 5 };
+
+			foreach (var limit in limitsToTry)
 			{
-				var response = await _httpClient.GetAsync(url);
-				var json = await response.Content.ReadAsStringAsync();
+				string url = $"https://graph.facebook.com/{GraphApiVersion}/{igTagId}/top_media?user_id={igUserId}&fields={fields}&limit={limit}&access_token={fbSettings.PageAccessToken}";
 
-				if (!response.IsSuccessStatusCode)
+				try
 				{
-					_logger.LogError("[TrendRadar] Ошибка получения постов для #{Tag}: {Json}", hashtag.Tag, json);
+					var response = await _httpClient.GetAsync(url);
+					var json = await response.Content.ReadAsStringAsync();
+
+					if (response.IsSuccessStatusCode)
+					{
+						using var doc = JsonDocument.Parse(json);
+						if (!doc.RootElement.TryGetProperty("data", out var dataArr)) return 0;
+
+						int updatedCount = 0;
+						var hashtagRegex = new Regex(@"#(\w+)", RegexOptions.Compiled);
+
+						foreach (var item in dataArr.EnumerateArray())
+						{
+							var mediaId = item.GetProperty("id").GetString()!;
+							var caption = item.TryGetProperty("caption", out var c) ? c.GetString() : null;
+							var mediaType = item.TryGetProperty("media_type", out var mt) ? mt.GetString() : "IMAGE";
+							var mediaUrl = item.TryGetProperty("media_url", out var mu) ? mu.GetString() : null;
+							var permalink = item.TryGetProperty("permalink", out var pl) ? pl.GetString() : null;
+							var likes = item.TryGetProperty("like_count", out var lc) ? lc.GetInt32() : 0;
+							var comments = item.TryGetProperty("comments_count", out var cc) ? cc.GetInt32() : 0;
+
+							var extractedTagsList = new List<string>();
+							if (!string.IsNullOrEmpty(caption))
+							{
+								foreach (Match match in hashtagRegex.Matches(caption))
+								{
+									extractedTagsList.Add("#" + match.Groups[1].Value.ToLowerInvariant());
+								}
+							}
+							string extractedTagsStr = string.Join(" ", extractedTagsList.Distinct());
+
+							var existingPost = hashtag.Posts.FirstOrDefault(p => p.InstagramMediaId == mediaId);
+							if (existingPost != null)
+							{
+								existingPost.LikeCount = likes;
+								existingPost.CommentsCount = comments;
+								existingPost.Caption = caption;
+								existingPost.MediaUrl = mediaUrl;
+								existingPost.ExtractedHashtags = extractedTagsStr;
+								existingPost.FetchedAt = DateTime.UtcNow;
+							}
+							else
+							{
+								var newPost = new ViralPost
+								{
+									TrackedHashtagId = hashtag.Id,
+									InstagramMediaId = mediaId,
+									Caption = caption,
+									MediaType = mediaType ?? "IMAGE",
+									MediaUrl = mediaUrl,
+									Permalink = permalink,
+									LikeCount = likes,
+									CommentsCount = comments,
+									ExtractedHashtags = extractedTagsStr,
+									FetchedAt = DateTime.UtcNow
+								};
+								_db.ViralPosts.Add(newPost);
+							}
+
+							updatedCount++;
+						}
+
+						hashtag.LastSyncedAt = DateTime.UtcNow;
+						await _db.SaveChangesAsync();
+
+						_logger.LogInformation("[TrendRadar] ✅ Успешно синхронизировано {Count} постов для #{Tag} (использован limit={Limit})",
+							updatedCount, hashtag.Tag, limit);
+						return updatedCount;
+					}
+
+					// Если сервер Meta просит уменьшить объем данных — пробуем меньший лимит
+					if (json.Contains("Please reduce the amount of data") && limit > 5)
+					{
+						_logger.LogWarning("[TrendRadar] Хештег #{Tag} слишком массивный для limit={Limit}. Пробуем меньший лимит...", hashtag.Tag, limit);
+						continue;
+					}
+
+					_logger.LogError("[TrendRadar] ❌ Ошибка получения постов для #{Tag}: {Json}", hashtag.Tag, json);
 					return 0;
 				}
-
-				using var doc = JsonDocument.Parse(json);
-				if (!doc.RootElement.TryGetProperty("data", out var dataArr)) return 0;
-
-				int updatedCount = 0;
-				var hashtagRegex = new Regex(@"#(\w+)", RegexOptions.Compiled);
-
-				foreach (var item in dataArr.EnumerateArray())
+				catch (Exception ex)
 				{
-					var mediaId = item.GetProperty("id").GetString()!;
-					var caption = item.TryGetProperty("caption", out var c) ? c.GetString() : null;
-					var mediaType = item.TryGetProperty("media_type", out var mt) ? mt.GetString() : "IMAGE";
-					var mediaUrl = item.TryGetProperty("media_url", out var mu) ? mu.GetString() : null;
-					var permalink = item.TryGetProperty("permalink", out var pl) ? pl.GetString() : null;
-					var likes = item.TryGetProperty("like_count", out var lc) ? lc.GetInt32() : 0;
-					var comments = item.TryGetProperty("comments_count", out var cc) ? cc.GetInt32() : 0;
-
-					// Парсим все хештеги из текста поста
-					var extractedTagsList = new List<string>();
-					if (!string.IsNullOrEmpty(caption))
-					{
-						foreach (Match match in hashtagRegex.Matches(caption))
-						{
-							extractedTagsList.Add("#" + match.Groups[1].Value.ToLowerInvariant());
-						}
-					}
-					string extractedTagsStr = string.Join(" ", extractedTagsList.Distinct());
-
-					// Upsert: обновляем существующий пост или добавляем новый
-					var existingPost = hashtag.Posts.FirstOrDefault(p => p.InstagramMediaId == mediaId);
-					if (existingPost != null)
-					{
-						existingPost.LikeCount = likes;
-						existingPost.CommentsCount = comments;
-						existingPost.Caption = caption;
-						existingPost.MediaUrl = mediaUrl;
-						existingPost.ExtractedHashtags = extractedTagsStr;
-						existingPost.FetchedAt = DateTime.UtcNow;
-					}
-					else
-					{
-						var newPost = new ViralPost
-						{
-							TrackedHashtagId = hashtag.Id,
-							InstagramMediaId = mediaId,
-							Caption = caption,
-							MediaType = mediaType ?? "IMAGE",
-							MediaUrl = mediaUrl,
-							Permalink = permalink,
-							LikeCount = likes,
-							CommentsCount = comments,
-							ExtractedHashtags = extractedTagsStr,
-							FetchedAt = DateTime.UtcNow
-						};
-						_db.ViralPosts.Add(newPost);
-					}
-
-					updatedCount++;
+					_logger.LogError(ex, "[TrendRadar] Исключение при синхронизации постов для #{Tag}", hashtag.Tag);
+					return 0;
 				}
-
-				hashtag.LastSyncedAt = DateTime.UtcNow;
-				await _db.SaveChangesAsync();
-
-				_logger.LogInformation("[TrendRadar] Успешно синхронизировано {Count} постов для #{Tag}", updatedCount, hashtag.Tag);
-				return updatedCount;
 			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "[TrendRadar] Исключение при синхронизации постов для #{Tag}", hashtag.Tag);
-				return 0;
-			}
+
+			return 0;
 		}
 	}
 }
