@@ -162,6 +162,16 @@ builder.Services.AddQuartz(q =>
 		.ForJob(storyJobKey)
 		.WithIdentity($"{nameof(InstagramDailyStoryJob)}-Trigger")
 		.WithSimpleSchedule(x => x.WithIntervalInMinutes(2).RepeatForever()));
+
+	// 7
+	// Регистрация авто-радара трендов
+	var radarJobKey = new JobKey(nameof(TrendRadarSyncJob));
+	q.AddJob<TrendRadarSyncJob>(opts => opts.WithIdentity(radarJobKey));
+	q.AddTrigger(opts => opts
+		.ForJob(radarJobKey)
+		.WithIdentity($"{nameof(TrendRadarSyncJob)}-Trigger")
+		.WithSimpleSchedule(x => x.WithIntervalInHours(4).RepeatForever()));
+
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

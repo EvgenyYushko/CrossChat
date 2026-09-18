@@ -33,11 +33,28 @@
             border-radius: 12px;
             padding: 12px 16px;
             margin-bottom: 1.5rem;
+            gap: 12px;
         }
 
-        .connection-banner.warning {
-            background: rgba(234, 179, 8, 0.1);
-            border-color: rgba(234, 179, 8, 0.3);
+            .connection-banner.warning {
+                background: rgba(234, 179, 8, 0.1);
+                border-color: rgba(234, 179, 8, 0.3);
+            }
+
+        /* ШАПКА И ФОРМА */
+        .header-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 1.5rem;
+        }
+
+        .add-tag-form {
+            display: flex;
+            gap: 8px;
+            margin: 0;
         }
 
         /* ЧИПСЫ ХЕШТЕГОВ */
@@ -46,7 +63,7 @@
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
 
         .tag-chip {
@@ -64,19 +81,19 @@
             transition: all 0.2s ease;
         }
 
-        .tag-chip:hover, .tag-chip.active {
-            background: var(--accent-color);
-            color: #ffffff;
-            border-color: var(--accent-color);
-            transform: translateY(-1px);
-        }
+            .tag-chip:hover, .tag-chip.active {
+                background: var(--accent-color);
+                color: #ffffff;
+                border-color: var(--accent-color);
+                transform: translateY(-1px);
+            }
 
-        .tag-chip .badge-count {
-            background: rgba(0,0,0,0.25);
-            padding: 2px 6px;
-            border-radius: 10px;
-            font-size: 0.75rem;
-        }
+            .tag-chip .badge-count {
+                background: rgba(0,0,0,0.25);
+                padding: 2px 6px;
+                border-radius: 10px;
+                font-size: 0.75rem;
+            }
 
         /* СЕТКА ВИРУСНЫХ ПОСТОВ */
         .viral-grid {
@@ -96,11 +113,11 @@
             position: relative;
         }
 
-        .viral-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.3);
-            border-color: rgba(99, 102, 241, 0.4);
-        }
+            .viral-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.3);
+                border-color: rgba(99, 102, 241, 0.4);
+            }
 
         .media-preview-box {
             width: 100%;
@@ -110,11 +127,11 @@
             overflow: hidden;
         }
 
-        .media-preview-box img, .media-preview-box video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+            .media-preview-box img, .media-preview-box video {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
 
         .media-badge {
             position: absolute;
@@ -141,7 +158,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             font-weight: 700;
         }
 
@@ -181,6 +198,7 @@
             border: none;
             transition: all 0.2s;
             text-decoration: none;
+            box-sizing: border-box;
         }
 
         .btn-copy-tags {
@@ -189,10 +207,10 @@
             border: 1px solid rgba(99, 102, 241, 0.3);
         }
 
-        .btn-copy-tags:hover {
-            background: var(--accent-color);
-            color: #ffffff;
-        }
+            .btn-copy-tags:hover {
+                background: var(--accent-color);
+                color: #ffffff;
+            }
 
         .btn-insta-link {
             background: rgba(255, 255, 255, 0.05);
@@ -200,8 +218,84 @@
             border: 1px solid var(--glass-border);
         }
 
-        .btn-insta-link:hover {
-            background: rgba(255, 255, 255, 0.15);
+            .btn-insta-link:hover {
+                background: rgba(255, 255, 255, 0.15);
+            }
+
+        /* === МОБИЛЬНАЯ АДАПТАЦИЯ (ЭКРАНЫ ДО 650px) === */
+        @@media (max-width: 650px) {
+            .trends-container {
+                margin: 4.5rem auto 2rem;
+                padding: 0 0.75rem;
+            }
+
+            .header-card {
+                padding: 1.25rem;
+                border-radius: 16px;
+            }
+
+            .connection-banner {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: left;
+            }
+
+                .connection-banner form {
+                    width: 100%;
+                }
+
+                .connection-banner button {
+                    width: 100%;
+                    margin-top: 6px;
+                }
+
+            .header-top-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+            }
+
+            .add-tag-form {
+                flex-direction: column;
+                width: 100%;
+            }
+
+                .add-tag-form input {
+                    width: 100% !important;
+                }
+
+                .add-tag-form button {
+                    width: 100%;
+                    padding: 10px;
+                }
+
+            .tags-bar {
+                gap: 6px;
+            }
+
+            .tag-chip {
+                font-size: 0.8rem;
+                padding: 6px 12px;
+            }
+            /* Сетка постов в 1 колонку на мобильном */
+            .viral-grid {
+                grid-template-columns: 1fr !important;
+                gap: 16px;
+            }
+
+            .card-bottom-actions {
+                flex-direction: column;
+            }
+
+            .tag-info-bar {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 10px;
+            }
+
+                .tag-info-bar form, .tag-info-bar button {
+                    width: 100%;
+                }
         }
     </style>
 }
@@ -213,17 +307,17 @@
     {
         <div class="connection-banner">
             <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 1.5rem;">✅</span>
+                <span style="font-size: 1.4rem; flex-shrink: 0;">✅</span>
                 <div>
-                    <strong style="color: #10b981; font-size: 0.95rem;">Связка активна!</strong>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary);">
-                        Страница FB: <strong>@ViewBag.ConnectedPageName</strong> ➔ Instagram Business ID: <code>@ViewBag.ConnectedIgId</code>
+                    <strong style="color: #10b981; font-size: 0.9rem;">Связка активна!</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); word-break: break-all;">
+                        Страница: <strong>@ViewBag.ConnectedPageName</strong> ➔ Instagram ID: <code>@ViewBag.ConnectedIgId</code>
                     </div>
                 </div>
             </div>
-            <form action="/trends/check-link" method="post" style="margin: 0;">
-                <button type="submit" class="btn-action btn-insta-link" style="font-size: 0.8rem;">
-                    🔄 Перепроверить связку
+            <form action="/trends/check-link" method="post">
+                <button type="submit" class="btn-action btn-insta-link">
+                    🔄 Перепроверить
                 </button>
             </form>
         </div>
@@ -232,15 +326,15 @@
     {
         <div class="connection-banner warning">
             <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 1.5rem;">⚠️</span>
+                <span style="font-size: 1.4rem; flex-shrink: 0;">⚠️</span>
                 <div>
-                    <strong style="color: #fbbf24; font-size: 0.95rem;">Связка Facebook + Instagram не обнаружена</strong>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary);">
-                        Подключите Instagram к вашей странице Facebook в приложении Instagram (Редактировать профиль ➔ Страница).
+                    <strong style="color: #fbbf24; font-size: 0.9rem;">Связка не обнаружена</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                        Свяжите Instagram со страницей Facebook в настройках профиля Instagram.
                     </div>
                 </div>
             </div>
-            <form action="/trends/check-link" method="post" style="margin: 0;">
+            <form action="/trends/check-link" method="post">
                 <button type="submit" class="btn-action" style="background: #eab308; color: #000; font-weight: 700;">
                     🔄 Проверить привязку сейчас
                 </button>
@@ -248,29 +342,29 @@
         </div>
     }
 
-    <!-- ЗАГОЛОВОК И ДОБАВЛЕНИЕ ТЕГА -->
+    <!-- ШАПКА И ФОРМА ДОБАВЛЕНИЯ -->
     <div class="header-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 1.5rem;">
+        <div class="header-top-row">
             <div>
-                <h1 style="font-size: 1.6rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <h1 style="font-size: 1.4rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px;">
                     🔥 Радар трендов Instagram
                 </h1>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 4px 0 0 0;">
-                    Отслеживание самых вирусных публикаций и сопутствующих хештегов в вашей нише
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 4px 0 0 0;">
+                    Вирусные публикации и теги вашей ниши
                 </p>
             </div>
 
             <!-- ФОРМА ДОБАВЛЕНИЯ ТЕГА -->
-            <form action="/trends/add-tag" method="post" style="display: flex; gap: 8px; margin: 0;">
+            <form action="/trends/add-tag" method="post" class="add-tag-form">
                 <input type="text" name="tag" placeholder="#хештег (напр. fitness)" required
-                       class="text-input" style="width: 220px; padding: 8px 12px; margin: 0;">
+                       class="text-input" style="width: 200px; padding: 8px 12px; margin: 0;">
                 <button type="submit" class="btn-action" style="background: var(--accent-color); color: white;" @(isConnected ? "" : "disabled")>
                     + Отслеживать
                 </button>
             </form>
         </div>
 
-        <!-- ЧИПСЫ ТЕГОВ (ФИЛЬТРЫ) -->
+        <!-- ЧИПСЫ ТЕГОВ -->
         <div class="tags-bar">
             <a href="/trends?mediaFilter=@mediaFilter" class="tag-chip @(!selectedTagId.HasValue ? "active" : "")">
                 Все посты <span class="badge-count">@Model.Count</span>
@@ -279,12 +373,12 @@
             @foreach (var t in tags)
             {
                 <div style="display: inline-flex; align-items: center; position: relative;">
-                    <a href="/trends?tagId=@t.Id&mediaFilter=@mediaFilter" class="tag-chip @(selectedTagId == t.Id ? "active" : "")" style="padding-right: 32px;">
+                    <a href="/trends?tagId=@t.Id&mediaFilter=@mediaFilter" class="tag-chip @(selectedTagId == t.Id ? "active" : "")" style="padding-right: 28px;">
                         #@t.Tag <span class="badge-count">@t.Posts.Count</span>
                     </a>
-                    <!-- Меню управления тегом (удалить) -->
-                    <form action="/trends/delete-tag/@t.Id" method="post" onsubmit="return confirm('Удалить хештег #@t.Tag и все его посты?');" style="position: absolute; right: 8px; margin: 0;">
-                        <button type="submit" style="background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; font-size: 12px; padding: 2px;">
+                    <!-- Удалить тег -->
+                    <form action="/trends/delete-tag/@t.Id" method="post" onsubmit="return confirm('Удалить хештег #@t.Tag и все его посты?');" style="position: absolute; right: 6px; margin: 0;">
+                        <button type="submit" style="background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; font-size: 14px; padding: 2px;">
                             &times;
                         </button>
                     </form>
@@ -292,15 +386,15 @@
             }
         </div>
 
-        <!-- ФИЛЬТР ПО ТИПУ МЕДИА -->
+        <!-- ИНФО-ПАНЕЛЬ ВЫБРАННОГО ТЕГА -->
         @if (selectedTagId.HasValue)
         {
             var currentTag = tags.FirstOrDefault(t => t.Id == selectedTagId.Value);
-            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--glass-border); padding-top: 12px; font-size: 0.85rem;">
+            <div class="tag-info-bar" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--glass-border); padding-top: 12px; font-size: 0.85rem;">
                 <div style="color: var(--text-secondary);">
-                    Последнее обновление: <strong>@(currentTag?.LastSyncedAt?.ToString("dd.MM.yyyy HH:mm") ?? "Еще не было")</strong>
+                    Обновлено: <strong>@(currentTag?.LastSyncedAt?.ToString("dd.MM.yyyy HH:mm") ?? "Еще не было")</strong>
                 </div>
-                <div style="display: flex; gap: 8px;">
+                <div>
                     <form action="/trends/sync-tag/@selectedTagId.Value" method="post" style="margin: 0;">
                         <button type="submit" class="btn-action btn-insta-link" style="font-size: 0.8rem;">
                             ⚡ Обновить посты сейчас
@@ -314,11 +408,11 @@
     <!-- СЕТКА ПОСТОВ -->
     @if (!Model.Any())
     {
-        <div style="text-align: center; padding: 4rem 1rem; color: var(--text-secondary); background: var(--card-bg); border-radius: 20px; border: 1px dashed var(--glass-border);">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
-            <h3>Постов пока нет</h3>
-            <p style="font-size: 0.9rem; max-width: 400px; margin: 0 auto;">
-                @(isConnected ? "Добавьте хештег выше, чтобы радар нашел топ вирусных публикаций." : "Сначала подтвердите связку Facebook и Instagram.")
+        <div style="text-align: center; padding: 3rem 1rem; color: var(--text-secondary); background: var(--card-bg); border-radius: 20px; border: 1px dashed var(--glass-border);">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
+            <h3 style="margin: 0 0 6px 0;">Постов пока нет</h3>
+            <p style="font-size: 0.85rem; max-width: 350px; margin: 0 auto;">
+                @(isConnected ? "Добавьте хештег выше, чтобы радар нашел топовые публикации." : "Сначала подтвердите связку Facebook и Instagram.")
             </p>
         </div>
     }
@@ -370,7 +464,7 @@
                         }
 
                         <!-- КНОПКИ ДЕЙСТВИЯ -->
-                        <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: auto;">
+                        <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: auto; padding-top: 6px;">
                             @if (!string.IsNullOrEmpty(post.ExtractedHashtags))
                             {
                                 <button type="button" class="btn-action btn-copy-tags" onclick="copyHashtags('@post.ExtractedHashtags', this)">
