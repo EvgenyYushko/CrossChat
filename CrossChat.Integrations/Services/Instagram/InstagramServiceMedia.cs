@@ -8,6 +8,7 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 using File = System.IO.File;
@@ -526,18 +527,20 @@ public partial class InstagramService
 	}
 
 	/// <summary>
-	/// Выбирает случайный уникальный пост профиля и публикует его в Истории (Stories)
+	/// Выбирает случайный пост профиля (фото или видео), проксирует через наш сервер и публикует в Stories
 	/// </summary>
 	public async Task<DailyStoryResult> PublishDailyStoryAsync(InstagramDailyStoryDto dto)
 	{
 		if (string.IsNullOrEmpty(dto.AccessToken))
 			return new DailyStoryResult { Success = false };
 
+		var tempFilesTracker = new List<string>();
+
 		try
 		{
 			_logger.LogInformation("[Daily Story] Запуск публикации ежедневной истории для @{User}...", dto.Username);
 
-			// 1. Получаем посты аккаунта
+			// 1. Получаем посты аккаунта (и фото, и видео)
 			var mediaList = await GetUserMediaAsync(dto.AccessToken, limit: 100);
 			if (mediaList == null || !mediaList.Any())
 			{
@@ -559,7 +562,6 @@ public partial class InstagramService
 			// 3. Находим посты, которые еще НЕ публиковались в сторис
 			var availableMedia = mediaList.Where(m => !usedIds.Contains(m.Id)).ToList();
 
-			// Если все посты уже были в сторис — сбрасываем цикл
 			if (availableMedia.Count == 0)
 			{
 				_logger.LogInformation("[Daily Story] Все посты уже были в сторис. Сбрасываем цикл постов для @{User}.", dto.Username);
@@ -571,82 +573,173 @@ public partial class InstagramService
 			var random = new Random();
 			var selectedMedia = availableMedia[random.Next(availableMedia.Count)];
 
-			var tempFilesTracker = new List<string>();
+			bool isVideo = selectedMedia.Media_Type == "VIDEO";
+			string extension = isVideo ? ".mp4" : ".jpg";
+			string tempFileName = $"{Guid.NewGuid()}{extension}";
+			string tempLocalPath = System.IO.Path.Combine(_siteSettings.TempFolder, tempFileName);
 
-			try
+			_logger.LogInformation("[Daily Story] Выбран пост для истории: ID {Id} ({Type}). Подготовка файла...",
+				selectedMedia.Id, selectedMedia.Media_Type);
+
+			// 5. СКАЧИВАЕМ ФАЙЛ С CDN INSTAGRAM НА НАШ СЕРВЕР (обход ограничения First-party ICG)
+			using (var downloadClient = new HttpClient())
 			{
-				InstagramMedia mediaToPublish = selectedMedia;
-
-				// ЕСЛИ ВКЛЮЧЕН ТЕКСТ ПОВЕРХ СТОРИС (ДЛЯ ФОТО):
-				if (dto.IsStoryOverlayTextEnabled &&
-					!string.IsNullOrWhiteSpace(dto.StoryOverlayText) &&
-					selectedMedia.Media_Type == "IMAGE")
+				if (isVideo)
 				{
-					_logger.LogInformation("[Daily Story] Наложение текста '{Text}' на фото сторис...", dto.StoryOverlayText);
+					// Скачиваем видео потоком на диск
+					using var response = await downloadClient.GetAsync(selectedMedia.Media_Url, HttpCompletionOption.ResponseHeadersRead);
+					response.EnsureSuccessStatusCode();
 
-					// Скачиваем фото по ссылке
-					using var httpClient = new HttpClient();
-					var originalImageBytes = await httpClient.GetByteArrayAsync(selectedMedia.Media_Url);
-
-					// Накладываем стикер с текстом
-					var modifiedBytes = OverlayTextOnImage(originalImageBytes, dto.StoryOverlayText.Trim());
-
-					// Сохраняем временный файл на диск сервера
-					string tempFileName = $"{Guid.NewGuid()}.jpg";
-					string tempLocalPath = System.IO.Path.Combine(_siteSettings.TempFolder, tempFileName);
-					await File.WriteAllBytesAsync(tempLocalPath, modifiedBytes);
+					using var fs = new FileStream(tempLocalPath, FileMode.Create, FileAccess.Write, FileShare.None);
+					await response.Content.CopyToAsync(fs);
 					tempFilesTracker.Add(tempLocalPath);
 
-					// Подменяем ссылку на нашу локальную
-					string localPublicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
-
-					mediaToPublish = new InstagramMedia
+					// ЕСЛИ ВКЛЮЧЕН ТЕКСТ-СТИКЕР ДЛЯ СТОРИС:
+					if (dto.IsStoryOverlayTextEnabled && !string.IsNullOrWhiteSpace(dto.StoryOverlayText))
 					{
-						Id = selectedMedia.Id,
-						Media_Type = "IMAGE",
-						Media_Url = localPublicUrl,
-						Caption = selectedMedia.Caption
-					};
-				}
+						_logger.LogInformation("[Daily Story] Наложение стикера на видео сторис через FFmpeg...");
 
-				// 5. Публикуем в Stories
-				var containerId = await CreateStoryContainer(mediaToPublish, dto.AccessToken);
-				if (string.IsNullOrEmpty(containerId))
-				{
-					_logger.LogError("[Daily Story] Не удалось создать контейнер истории для @{User}", dto.Username);
-					return new DailyStoryResult { Success = false };
-				}
+						// 1. Генерируем прозрачный PNG стикер
+						var (badgeBytes, yRatio) = GenerateBadgePng(dto.StoryOverlayText, 1080f);
 
-				var storyId = await WaitAndPublishContainer(containerId, dto.AccessToken);
-				if (!string.IsNullOrEmpty(storyId))
-				{
-					_logger.LogInformation("🌟 [Daily Story] Ежедневная история успешно опубликована! StoryId: {StoryId}", storyId);
-
-					usedIds.Add(selectedMedia.Id);
-					return new DailyStoryResult
+						if (badgeBytes.Length > 0)
+						{
+							// 2. Накладываем на видео и одновременно вырезаем метки ИИ
+							await VideoService.OverlayBadgeOnVideoAsync(
+								tempLocalPath, badgeBytes, yRatio, _logger);
+						}
+					}
+					else
 					{
-						Success = true,
-						StoryId = storyId,
-						NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
-					};
+						// Если оверлей выключен — просто очищаем C2PA метаданные ИИ
+						await VideoService.StripAiMetadataAsync(tempLocalPath, _logger);
+					}
 				}
+				else
+				{
+					// Фото скачиваем в байты
+					var originalImageBytes = await downloadClient.GetByteArrayAsync(selectedMedia.Media_Url);
 
+					// Если включен текст поверх сторис — накладываем наш стильный стикер
+					if (dto.IsStoryOverlayTextEnabled && !string.IsNullOrWhiteSpace(dto.StoryOverlayText))
+					{
+						_logger.LogInformation("[Daily Story] Наложение текста-стикера на фото сторис...");
+						originalImageBytes = OverlayTextOnImage(originalImageBytes, dto.StoryOverlayText.Trim());
+					}
+
+					await File.WriteAllBytesAsync(tempLocalPath, originalImageBytes);
+					tempFilesTracker.Add(tempLocalPath);
+				}
+			}
+
+			// Даем диску и веб-серверу 500 мс зафиксировать файл
+			await Task.Delay(500);
+
+			// Формируем нашу независимую публичную ссылку
+			string localPublicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
+
+			var mediaToPublish = new InstagramMedia
+			{
+				Id = selectedMedia.Id,
+				Media_Type = selectedMedia.Media_Type,
+				Media_Url = localPublicUrl,
+				Caption = selectedMedia.Caption
+			};
+
+			// 6. Создаем контейнер и публикуем в Stories через наш URL
+			var containerId = await CreateStoryContainer(mediaToPublish, dto.AccessToken);
+			if (string.IsNullOrEmpty(containerId))
+			{
+				_logger.LogError("[Daily Story] Не удалось создать контейнер истории для @{User}", dto.Username);
 				return new DailyStoryResult { Success = false };
 			}
-			finally
+
+			var storyId = await WaitAndPublishContainer(containerId, dto.AccessToken);
+			if (!string.IsNullOrEmpty(storyId))
 			{
-				// Удаляем временный файл с наложенным текстом
-				foreach (var path in tempFilesTracker)
+				_logger.LogInformation("🌟 [Daily Story] Ежедневная история успешно опубликована! StoryId: {StoryId}", storyId);
+
+				usedIds.Add(selectedMedia.Id);
+				return new DailyStoryResult
 				{
-					try { if (File.Exists(path)) File.Delete(path); } catch { }
-				}
+					Success = true,
+					StoryId = storyId,
+					NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
+				};
 			}
+
+			return new DailyStoryResult { Success = false };
 		}
 		catch (Exception ex)
 		{
 			_logger.LogError(ex, "[Daily Story] Ошибка при публикации ежедневной сторис для @{User}", dto.Username);
 			return new DailyStoryResult { Success = false };
 		}
+		finally
+		{
+			// Гарантированно удаляем временные файлы с сервера
+			foreach (var path in tempFilesTracker)
+			{
+				try { if (File.Exists(path)) File.Delete(path); } catch { }
+			}
+		}
+	}
+
+	/// <summary>
+	/// Генерирует прозрачную PNG-картинку стикера с текстом для последующего наложения на видео
+	/// </summary>
+	private (byte[] PngBytes, float YRatio) GenerateBadgePng(string rawTextConfig, float baseWidth = 1080f)
+	{
+		string text = PickAndSanitizeRandomText(rawTextConfig);
+		if (string.IsNullOrWhiteSpace(text)) return (Array.Empty<byte>(), 0.52f);
+
+		FontFamily family;
+		if (!SystemFonts.TryGet("Arial", out family) &&
+			!SystemFonts.TryGet("DejaVu Sans", out family) &&
+			!SystemFonts.TryGet("Segoe UI", out family) &&
+			!SystemFonts.TryGet("Liberation Sans", out family))
+		{
+			family = SystemFonts.Collection.Families.FirstOrDefault();
+		}
+
+		if (family == default) return (Array.Empty<byte>(), 0.52f);
+
+		float fontSize = Math.Clamp(baseWidth * 0.042f, 32f, 76f);
+		var font = family.CreateFont(fontSize, FontStyle.Bold);
+
+		var textOptions = new TextOptions(font);
+		var textSize = TextMeasurer.MeasureSize(text, textOptions);
+
+		float paddingX = fontSize * 1.2f;
+		float paddingY = fontSize * 0.65f;
+		float badgeWidth = textSize.Width + (paddingX * 2);
+		float badgeHeight = textSize.Height + (paddingY * 2);
+
+		float cornerRadius = badgeHeight / 2f;
+		var rect = new RectangleF(0, 0, badgeWidth, badgeHeight);
+
+		// Создаем абсолютно прозрачный холст точно под размер капсулы
+		using var badgeImage = new Image<Rgba32>((int)Math.Ceiling(badgeWidth), (int)Math.Ceiling(badgeHeight));
+
+		var theme = BadgeThemes[Random.Shared.Next(BadgeThemes.Length)];
+
+		badgeImage.Mutate(ctx =>
+		{
+			var capsuleShape = CreateRoundedRectPath(rect, cornerRadius);
+			ctx.Fill(theme.BgColor, capsuleShape);
+			ctx.Draw(theme.BorderColor, 2.5f, capsuleShape);
+
+			ctx.DrawText(text, font, theme.TextColor, new PointF(paddingX, paddingY));
+		});
+
+		using var ms = new MemoryStream();
+		badgeImage.SaveAsPng(ms);
+
+		// Случайная высота (верх, центр или низ)
+		float[] yRatios = new[] { 0.22f, 0.52f, 0.75f };
+		float chosenYRatio = yRatios[Random.Shared.Next(yRatios.Length)];
+
+		return (ms.ToArray(), chosenYRatio);
 	}
 
 	private async Task<string> CreateStoryContainer(InstagramMedia media, string accessToken)

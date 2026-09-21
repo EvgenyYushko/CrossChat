@@ -238,5 +238,68 @@ namespace CrossChat.Integrations.Services
 				return null;
 			}
 		}
+
+		/// <summary>
+		/// Накладывает прозрачную PNG-плашку поверх видеофайла через FFmpeg со случайной вертикальной позицией
+		/// </summary>
+		public static async Task<bool> OverlayBadgeOnVideoAsync(string videoPath, byte[] badgePngBytes, float yRatio, ILogger? logger = null)
+		{
+			if (!File.Exists(videoPath) || badgePngBytes == null || badgePngBytes.Length == 0)
+				return false;
+
+			string directory = Path.GetDirectoryName(videoPath)!;
+			string tempBadge = Path.Combine(directory, $"{Guid.NewGuid()}_badge.png");
+			string tempOutput = Path.Combine(directory, $"{Guid.NewGuid()}_overlaid.mp4");
+
+			try
+			{
+				// Сохраняем прозрачный PNG-стикер во временный файл
+				await File.WriteAllBytesAsync(tempBadge, badgePngBytes);
+
+				// Форматируем yRatio строго с точкой для FFmpeg (напр: 0.52)
+				string yRatioStr = yRatio.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+				// Фильтр: центрируем по горизонтали (W-w)/2 и ставим на высоту (H-h)*yRatio
+				string filter = $"overlay=(W-w)/2:(H-h)*{yRatioStr}";
+
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -i \"{videoPath}\" -i \"{tempBadge}\" -filter_complex \"{filter}\" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -c:a copy -map_metadata -1 \"{tempOutput}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(tempOutput))
+				{
+					File.Delete(videoPath);
+					File.Move(tempOutput, videoPath);
+					logger?.LogInformation("✅ Стикер успешно наложен на видео: {Path}", videoPath);
+					return true;
+				}
+
+				logger?.LogWarning("FFmpeg не смог наложить стикер на видео: {Err}", errorOutput);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "Ошибка при наложении стикера на видео: {Path}", videoPath);
+				return false;
+			}
+			finally
+			{
+				if (File.Exists(tempBadge)) try { File.Delete(tempBadge); } catch { }
+				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
+			}
+		}
 	}
 }
