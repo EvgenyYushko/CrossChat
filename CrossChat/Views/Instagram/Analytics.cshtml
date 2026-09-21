@@ -1,0 +1,435 @@
+@model CrossChat.Integrations.Models.InstagramFeedPageDto
+@{
+    ViewData["Title"] = "Аналитика постов @" + ViewBag.Username;
+    int botId = ViewBag.BotId;
+}
+
+@section Styles {
+    <style>
+        .analytics-container {
+            max-width: 1000px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .header-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .user-meta {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #e1306c;
+            padding: 2px;
+        }
+
+        /* СЕТКА ПОСТОВ */
+        .posts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .post-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+
+            .post-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 12px 25px -5px rgba(0, 0, 0, 0.3);
+                border-color: rgba(225, 48, 108, 0.4);
+            }
+
+        .post-thumb-wrapper {
+            width: 100%;
+            aspect-ratio: 1;
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+            .post-thumb-wrapper img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+        .badge-type {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        .post-body {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 10px;
+        }
+
+        .post-stats-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .post-caption {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: var(--text-main);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .btn-insights {
+            width: 100%;
+            padding: 8px;
+            background: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(139, 92, 246, 0.15));
+            border: 1px solid rgba(236, 72, 153, 0.3);
+            border-radius: 8px;
+            color: #f43f5e;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-insights:hover {
+                background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+                color: #ffffff;
+                border-color: transparent;
+            }
+
+        /* МОДАЛЬНОЕ ОКНО СТАТИСТИКИ */
+        .insights-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 5000;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .insights-modal {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .metric-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metric-value {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 2.5rem;
+        }
+
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
+        @@media (max-width: 600px) {
+            .analytics-container {
+                margin-top: 4.5rem;
+                padding: 0 0.75rem;
+            }
+
+            .header-box {
+                padding: 1.25rem;
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+
+            .user-meta {
+                flex-direction: column;
+                justify-content: center;
+            }
+
+            .posts-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+        }
+    </style>
+}
+
+<div class="analytics-container">
+
+    <!-- ШАПКА ПРОФИЛЯ -->
+    <div class="header-box">
+        <div class="user-meta">
+            @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
+            {
+                <img src="@ViewBag.AvatarUrl" class="user-avatar" alt="Avatar">
+            }
+            else
+            {
+                <div class="user-avatar" style="background:#333;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">IG</div>
+            }
+            <div>
+                <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Username</h2>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                    Официальная аналитика Meta Graph API
+                </div>
+            </div>
+        </div>
+        <div>
+            <a href="/instagram?botId=@botId" class="btn btn-console" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:10px; font-size:0.85rem;">
+                ← В настройки аккаунта
+            </a>
+        </div>
+    </div>
+
+    <!-- СЕТКА ПОСТОВ -->
+    @if (!Model.Posts.Any())
+    {
+        <div style="text-align:center; padding:4rem 1rem; color:var(--text-secondary); background:var(--card-bg); border-radius:20px; border:1px dashed var(--glass-border);">
+            <div style="font-size:3rem; margin-bottom:1rem;">📭</div>
+            <h3>Постов не найдено</h3>
+            <p style="font-size:0.9rem;">В этом Instagram-профиле пока нет опубликованных постов или Reels.</p>
+        </div>
+    }
+    else
+    {
+        <div class="posts-grid">
+            @foreach (var post in Model.Posts)
+            {
+                <div class="post-card">
+                    <!-- ОБЛОЖКА -->
+                    <div class="post-thumb-wrapper">
+                        @if (post.MediaType == "VIDEO")
+                        {
+                            <span class="badge-type">▶ REELS</span>
+                            <img src="@(post.ThumbnailUrl ?? post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
+                        }
+                        else if (post.MediaType == "CAROUSEL_ALBUM")
+                        {
+                            <span class="badge-type">📑 КАРУСЕЛЬ</span>
+                            <img src="@(post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
+                        }
+                        else
+                        {
+                            <img src="@(post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
+                        }
+                    </div>
+
+                    <div class="post-body">
+                        <!-- ЛАЙКИ И КОММЕНТАРИИ -->
+                        <div class="post-stats-row">
+                            <span style="color: #ef4444;">❤️ @post.LikeCount.ToString("N0")</span>
+                            <span style="color: #38bdf8;">💬 @post.CommentsCount.ToString("N0")</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM.yyyy")</span>
+                        </div>
+
+                        <!-- ОПИСАНИЕ -->
+                        @if (!string.IsNullOrEmpty(post.Caption))
+                        {
+                            <div class="post-caption" title="@post.Caption">
+                                @post.Caption
+                            </div>
+                        }
+
+                        <!-- КНОПКА ПОКАЗА СТАТИСТИКИ -->
+                        <button type="button" class="btn-insights"
+                                onclick="openInsightsModal('@post.Id', '@post.MediaType', '@post.LikeCount', '@post.CommentsCount', '@post.Permalink')">
+                            📈 Посмотреть статистику
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- ПАГИНАЦИЯ -->
+        <div class="pagination-bar">
+            @if (Model.HasPrevious)
+            {
+                <a href="/instagram/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">
+                    ⬅ Назад
+                </a>
+            }
+            @if (Model.HasNext)
+            {
+                <a href="/instagram/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">
+                    Вперед ➡
+                </a>
+            }
+        </div>
+    }
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО ГЛУБОКОЙ СТАТИСТИКИ -->
+<div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
+    <div class="insights-modal" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+            <h3 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:8px;">
+                📊 Статистика публикации
+            </h3>
+            <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+
+        <div id="insightsLoading" style="text-align:center; padding:2rem 0; color:var(--text-secondary);">
+            ⏳ Загрузка инсайтов из Meta...
+        </div>
+
+        <div id="insightsContent" style="display:none;">
+            <!-- ПУБЛИЧНЫЕ МЕТРИКИ -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                <div class="metric-card" style="margin:0;">
+                    <div class="metric-title">❤️ Лайки</div>
+                    <div class="metric-value" id="modalLikes" style="color:#ef4444;">0</div>
+                </div>
+                <div class="metric-card" style="margin:0;">
+                    <div class="metric-title">💬 Комменты</div>
+                    <div class="metric-value" id="modalComments" style="color:#38bdf8;">0</div>
+                </div>
+            </div>
+
+            <!-- ЗАКРЫТЫЕ ИНСАЙТЫ -->
+            <div class="metric-card">
+                <div class="metric-title">👥 Охват (Уникальные зрители)</div>
+                <div class="metric-value" id="modalReach" style="color:#10b981;">-</div>
+            </div>
+
+            <div class="metric-card" id="playsMetricBox" style="display:none;">
+                <div class="metric-title">🎬 Просмотры Reels (Plays)</div>
+                <div class="metric-value" id="modalPlays" style="color:#8b5cf6;">-</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">🔖 Сохранения в закладки</div>
+                <div class="metric-value" id="modalSaved" style="color:#f59e0b;">-</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">↗️ Репосты в Директ</div>
+                <div class="metric-value" id="modalShares" style="color:#a855f7;">-</div>
+            </div>
+
+            <div style="margin-top:1.25rem;">
+                <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block;">
+                    🔗 Открыть публикацию в Instagram
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const botId = @botId;
+
+        async function openInsightsModal(mediaId, mediaType, likes, comments, permalink) {
+            const overlay = document.getElementById('insightsModalOverlay');
+            const loading = document.getElementById('insightsLoading');
+            const content = document.getElementById('insightsContent');
+
+            document.getElementById('modalLikes').textContent = Number(likes).toLocaleString();
+            document.getElementById('modalComments').textContent = Number(comments).toLocaleString();
+            document.getElementById('modalPermalink').href = permalink || '#';
+
+            // Скрываем/показываем бокс просмотров для видео
+            document.getElementById('playsMetricBox').style.display = mediaType === 'VIDEO' ? 'flex' : 'none';
+
+            overlay.style.display = 'flex';
+            loading.style.display = 'block';
+            content.style.display = 'none';
+
+            try {
+                const response = await fetch(`/instagram/analytics/insights?botId=${botId}&mediaId=${mediaId}&mediaType=${mediaType}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('modalReach').textContent = data.reach ? data.reach.toLocaleString() : '0';
+                    document.getElementById('modalSaved').textContent = data.saved ? data.saved.toLocaleString() : '0';
+                    document.getElementById('modalShares').textContent = data.shares ? data.shares.toLocaleString() : '0';
+                    document.getElementById('modalPlays').textContent = data.plays ? data.plays.toLocaleString() : '0';
+
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+                } else {
+                    loading.textContent = '⚠️ Не удалось загрузить инсайты (Meta не предоставила статистику для этого медиа)';
+                }
+            } catch (err) {
+                loading.textContent = '❌ Ошибка сети при получении статистики';
+            }
+        }
+
+        function closeInsightsModal(event) {
+            document.getElementById('insightsModalOverlay').style.display = 'none';
+        }
+    </script>
+}

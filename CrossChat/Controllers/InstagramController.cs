@@ -574,5 +574,51 @@ namespace CrossChat.Controllers
 
 			return BadRequest("Не удалось перенести бота.");
 		}
+
+		// ==========================================================
+		// СТРАНИЦА АНАЛИТИКИ АККАУНТА (/instagram/analytics)
+		// ==========================================================
+		[HttpGet("analytics")]
+		public async Task<IActionResult> Analytics(int botId, string? after = null, string? before = null)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+			{
+				return RedirectToAction("Index");
+			}
+
+			ViewBag.BotId = botId;
+			ViewBag.Username = settings.Username;
+			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
+
+			// Загружаем 12 постов с пагинацией
+			var feedPage = await _instagramService.GetAccountFeedAsync(settings.AccessToken, 12, after, before);
+
+			return View(feedPage);
+		}
+
+		// ==========================================================
+		// БЫСТРЫЙ AJAX-ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ ИНСАЙТОВ ПОСТА
+		// ==========================================================
+		[HttpGet("analytics/insights")]
+		public async Task<IActionResult> GetPostInsights(int botId, string mediaId, string mediaType)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+			{
+				return Unauthorized();
+			}
+
+			var insights = await _instagramService.GetMediaInsightsAsync(mediaId, mediaType, settings.AccessToken);
+			return Json(insights);
+		}
 	}
 }

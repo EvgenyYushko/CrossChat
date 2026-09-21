@@ -74,5 +74,8 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<List<InstagramMedia>> GetUserMediaAsync(string accessToken, int limit = 50);
 		Task<DailyStoryResult> PublishDailyStoryAsync(InstagramDailyStoryDto dto);
+
+		Task<InstagramFeedPageDto> GetAccountFeedAsync(string accessToken, int limit = 12, string? after = null, string? before = null);
+		Task<InstagramPostInsightsDto> GetMediaInsightsAsync(string mediaId, string mediaType, string accessToken);
 	}
 }

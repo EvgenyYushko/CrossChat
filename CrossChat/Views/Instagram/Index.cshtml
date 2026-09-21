@@ -528,13 +528,16 @@
                 </div>
             </div>
 
-            <!-- НОВАЯ ЭЛЕГАНТНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
-            <div class="action-buttons-group">
-                <a href="/auth/console?provider=instagram&botId=@Model.Id&username=@Model.Username" class="btn btn-console">
-                    💻 Консоль бота
+            <!-- ТРИ ЭЛЕГАНТНЫЕ КНОПКИ ДЕЙСТВИЯ -->
+            <div class="action-buttons-group" style="grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <a href="/auth/console?provider=instagram&botId=@Model.Id&username=@Model.Username" class="btn btn-console" style="padding: 12px 6px;">
+                    💻 Консоль
                 </a>
-                <a href="/planner?profileId=@Model.ProfileId&network=Instagram&botId=@Model.Id" class="btn btn-autoposting">
-                    📅 Автопостинг
+                <a href="/planner?profileId=@Model.ProfileId&network=Instagram&botId=@Model.Id" class="btn btn-autoposting" style="padding: 12px 6px;">
+                    📅 Постинг
+                </a>
+                <a href="/instagram/analytics?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%); color: white; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.25); padding: 12px 6px;">
+                    📊 Аналитика
                 </a>
             </div>
 

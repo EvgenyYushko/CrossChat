@@ -488,4 +488,130 @@ public partial class InstagramService : IInstagramService
 
 		return resultText;
 	}
+
+	/// <summary>
+	/// Получает сетку постов профиля с курсорной пагинацией (по 12 постов)
+	/// </summary>
+	public async Task<InstagramFeedPageDto> GetAccountFeedAsync(string accessToken, int limit = 12, string? after = null, string? before = null)
+	{
+		var result = new InstagramFeedPageDto();
+		var fields = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count";
+		var url = $"https://graph.instagram.com/v21.0/me/media?fields={fields}&access_token={accessToken}&limit={limit}";
+
+		if (!string.IsNullOrEmpty(after)) url += $"&after={after}";
+		else if (!string.IsNullOrEmpty(before)) url += $"&before={before}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogError("[Instagram Analytics] Ошибка загрузки ленты: {Err}", err);
+				return result;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			if (root.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var item in dataArr.EnumerateArray())
+				{
+					var post = new InstagramFeedPostDto
+					{
+						Id = item.GetProperty("id").GetString()!,
+						MediaType = item.TryGetProperty("media_type", out var mt) ? mt.GetString() ?? "IMAGE" : "IMAGE",
+						MediaUrl = item.TryGetProperty("media_url", out var mu) ? mu.GetString() : null,
+						ThumbnailUrl = item.TryGetProperty("thumbnail_url", out var tu) ? tu.GetString() : null,
+						Permalink = item.TryGetProperty("permalink", out var pl) ? pl.GetString() : null,
+						Caption = item.TryGetProperty("caption", out var c) ? c.GetString() : null,
+						LikeCount = item.TryGetProperty("like_count", out var lc) ? lc.GetInt32() : 0,
+						CommentsCount = item.TryGetProperty("comments_count", out var cc) ? cc.GetInt32() : 0
+					};
+
+					if (item.TryGetProperty("timestamp", out var ts) && DateTime.TryParse(ts.GetString(), out var dt))
+					{
+						post.Timestamp = dt;
+					}
+
+					result.Posts.Add(post);
+				}
+			}
+
+			if (root.TryGetProperty("paging", out var paging) && paging.TryGetProperty("cursors", out var cursors))
+			{
+				if (cursors.TryGetProperty("after", out var afterProp)) result.AfterCursor = afterProp.GetString();
+				if (cursors.TryGetProperty("before", out var beforeProp)) result.BeforeCursor = beforeProp.GetString();
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram Analytics] Исключение при получении ленты");
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Получает глубокие закрытые инсайты конкретного поста (охват, показы, сохранения, репосты)
+	/// </summary>
+	public async Task<InstagramPostInsightsDto> GetMediaInsightsAsync(string mediaId, string mediaType, string accessToken)
+	{
+		var insights = new InstagramPostInsightsDto();
+
+		// Для Reels Meta использует метрику plays, для фото и каруселей — reach, saved, shares
+		string metrics = mediaType == "VIDEO"
+			? "reach,saved,shares,plays,total_interactions"
+			: "reach,saved,shares,total_interactions";
+
+		string url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric={metrics}&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				// Если расширенный набор не прошел, пробуем базовый безопасный
+				url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric=reach,saved&access_token={accessToken}";
+				response = await _httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return insights;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+
+			if (doc.RootElement.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var m in dataArr.EnumerateArray())
+				{
+					var name = m.GetProperty("name").GetString();
+					int val = 0;
+
+					if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
+					{
+						val = vals[0].GetProperty("value").GetInt32();
+					}
+
+					switch (name)
+					{
+						case "reach": insights.Reach = val; break;
+						case "impressions": insights.Impressions = val; break;
+						case "plays": insights.Plays = val; break;
+						case "saved": insights.Saved = val; break;
+						case "shares": insights.Shares = val; break;
+						case "total_interactions": insights.TotalInteractions = val; break;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "[Instagram Insights] Не удалось получить инсайты для {MediaId}", mediaId);
+		}
+
+		return insights;
+	}
+
 }
