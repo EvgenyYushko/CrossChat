@@ -77,5 +77,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<InstagramFeedPageDto> GetAccountFeedAsync(string accessToken, int limit = 12, string? after = null, string? before = null);
 		Task<InstagramPostInsightsDto> GetMediaInsightsAsync(string mediaId, string mediaType, string accessToken);
+
+		Task<InstagramAccountInsightsDto> GetAccountInsightsAsync(string accessToken);
 	}
 }

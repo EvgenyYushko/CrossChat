@@ -637,7 +637,110 @@ public partial class InstagramService : IInstagramService
 			_logger.LogWarning(ex, "[Instagram Insights] Не удалось получить инсайты для {MediaId}", mediaId);
 		}
 
+		// Суммируем все взаимодействия (лайки, комменты, сохранения, репосты)
+		int totalEngagements = insights.TotalInteractions > 0
+			? insights.TotalInteractions
+			: (insights.Saved + insights.Shares);
+
+		// Рассчитываем True ER по охвату
+		if (insights.Reach > 0 && totalEngagements > 0)
+		{
+			insights.EngagementRate = Math.Round(((double)totalEngagements / insights.Reach) * 100.0, 2);
+
+			if (insights.EngagementRate >= 7.0)
+			{
+				insights.EngagementBadge = "🔥 Вирусный хит";
+				insights.BadgeColor = "#ec4899"; // Розовый неон
+			}
+			else if (insights.EngagementRate >= 3.5)
+			{
+				insights.EngagementBadge = "⚡ Высокая активность";
+				insights.BadgeColor = "#10b981"; // Зеленый
+			}
+			else if (insights.EngagementRate >= 1.5)
+			{
+				insights.EngagementBadge = "Нормальный отклик";
+				insights.BadgeColor = "#38bdf8"; // Синий
+			}
+			else
+			{
+				insights.EngagementBadge = "Слабый интерес";
+				insights.BadgeColor = "#94a3b8"; // Серый
+			}
+		}
+
+		return insights;
+
 		return insights;
 	}
 
+	/// <summary>
+	/// Получает сводную аналитику аккаунта за последние 28 дней (охват, клики по ссылке, просмотры профиля)
+	/// </summary>
+	public async Task<InstagramAccountInsightsDto> GetAccountInsightsAsync(string accessToken)
+	{
+		var insights = new InstagramAccountInsightsDto();
+
+		// Запрашиваем ключевые бизнес-метрики за скользящий 28-дневный период
+		string metrics = "reach,profile_views,website_clicks,accounts_engaged";
+		string url = $"https://graph.instagram.com/v21.0/me/insights?metric={metrics}&period=days_28&metric_type=total_value&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+
+			// Запасной вариант, если какая-то из метрик недоступна для этого типа аккаунта
+			if (!response.IsSuccessStatusCode)
+			{
+				string fallbackMetrics = "reach,profile_views,website_clicks";
+				url = $"https://graph.instagram.com/v21.0/me/insights?metric={fallbackMetrics}&period=days_28&metric_type=total_value&access_token={accessToken}";
+				response = await _httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return insights;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+
+			if (doc.RootElement.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var m in dataArr.EnumerateArray())
+				{
+					var name = m.GetProperty("name").GetString();
+					int val = 0;
+
+					// Парсим total_value или массив values
+					if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var v))
+					{
+						val = v.GetInt32();
+					}
+					else if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
+					{
+						val = vals[0].GetProperty("value").GetInt32();
+					}
+
+					switch (name)
+					{
+						case "reach":
+							insights.Reach = val;
+							break;
+						case "profile_views":
+							insights.ProfileViews = val;
+							break;
+						case "website_clicks":
+							insights.WebsiteClicks = val;
+							break;
+						case "accounts_engaged":
+							insights.AccountsEngaged = val;
+							break;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "[Instagram Account Insights] Не удалось получить сводную аналитику аккаунта");
+		}
+
+		return insights;
+	}
 }

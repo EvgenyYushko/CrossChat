@@ -24,11 +24,16 @@ namespace CrossChat.Integrations.Models
 
 	public class InstagramPostInsightsDto
 	{
-		public int Reach { get; set; }         // Охват (уникальные аккаунты)
-		public int Impressions { get; set; }   // Показы (всего просмотров)
-		public int Plays { get; set; }         // Просмотры Reels
-		public int Saved { get; set; }         // Сохранения в закладки
-		public int Shares { get; set; }        // Репосты в Директ
-		public int TotalInteractions { get; set; } // Суммарные взаимодействия
+		public int Reach { get; set; }
+		public int Impressions { get; set; }
+		public int Plays { get; set; }
+		public int Saved { get; set; }
+		public int Shares { get; set; }
+		public int TotalInteractions { get; set; }
+
+		// НОВЫЕ ПОЛЯ ER:
+		public double EngagementRate { get; set; }   // Процент вовлеченности (True ER)
+		public string EngagementBadge { get; set; } = "Норма"; // "Вирусный хит", "Высокий", "Норма", "Низкий"
+		public string BadgeColor { get; set; } = "#10b981";    // Цвет бейджа
 	}
 }

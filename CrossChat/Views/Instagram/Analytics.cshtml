@@ -1,7 +1,8 @@
 @model CrossChat.Integrations.Models.InstagramFeedPageDto
 @{
-    ViewData["Title"] = "Аналитика постов @" + ViewBag.Username;
+    ViewData["Title"] = "Аналитика @" + ViewBag.Username;
     int botId = ViewBag.BotId;
+    int followersCount = ViewBag.FollowersCount ?? 0;
 }
 
 @section Styles {
@@ -39,6 +40,60 @@
             object-fit: cover;
             border: 3px solid #e1306c;
             padding: 2px;
+        }
+
+        /* KPI КАРТОЧКИ */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+            .kpi-card:hover {
+                transform: translateY(-2px);
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .kpi-icon {
+            font-size: 1.25rem;
+        }
+
+        .kpi-value {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--text-main);
+            line-height: 1.1;
+        }
+
+        .kpi-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
         }
 
         /* СЕТКА ПОСТОВ */
@@ -92,6 +147,22 @@
             backdrop-filter: blur(4px);
         }
 
+        /* БЕЙДЖ ER НА КАРТОЧКЕ */
+        .badge-er {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         .post-body {
             padding: 14px;
             display: flex;
@@ -141,7 +212,7 @@
                 border-color: transparent;
             }
 
-        /* МОДАЛЬНОЕ ОКНО СТАТИСТИКИ */
+        /* МОДАЛКА СТАТИСТИКИ */
         .insights-modal-overlay {
             display: none;
             position: fixed;
@@ -163,32 +234,57 @@
             border-radius: 20px;
             width: 100%;
             max-width: 440px;
-            padding: 2rem;
+            padding: 1.75rem;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             position: relative;
+        }
+
+        /* БЛОК TRUE ER В МОДАЛКЕ */
+        .er-hero-box {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1));
+            border: 1px solid rgba(236, 72, 153, 0.3);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 15px;
+        }
+
+        .er-progress-bg {
+            background: rgba(255, 255, 255, 0.1);
+            height: 6px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .er-progress-fill {
+            height: 100%;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #38bdf8, #ec4899);
+            width: 0%;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .metric-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--glass-border);
             border-radius: 12px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .metric-title {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .metric-value {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             font-weight: 800;
             color: var(--text-main);
         }
@@ -201,29 +297,41 @@
             margin-top: 2.5rem;
         }
 
-        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
+        @@media (max-width: 850px) {
+            .overview-grid
+
+        {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        }
+
         @@media (max-width: 600px) {
-            .analytics-container {
-                margin-top: 4.5rem;
-                padding: 0 0.75rem;
-            }
+            .analytics-container
 
-            .header-box {
-                padding: 1.25rem;
-                flex-direction: column;
-                align-items: stretch;
-                text-align: center;
-            }
+        {
+            margin-top: 4.5rem;
+            padding: 0 0.75rem;
+        }
 
-            .user-meta {
-                flex-direction: column;
-                justify-content: center;
-            }
+        .header-box {
+            padding: 1.25rem;
+            flex-direction: column;
+            align-items: stretch;
+            text-align: center;
+        }
 
-            .posts-grid {
-                grid-template-columns: 1fr;
-                gap: 16px;
-            }
+        .user-meta {
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .posts-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
         }
     </style>
 }
@@ -244,7 +352,7 @@
             <div>
                 <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Username</h2>
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
-                    Официальная аналитика Meta Graph API
+                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Официальные инсайты Meta
                 </div>
             </div>
         </div>
@@ -255,13 +363,42 @@
         </div>
     </div>
 
+    <!-- БЛОК KPI ЗА 28 ДНЕЙ -->
+    @{
+        var accountStats = ViewBag.AccountInsights as CrossChat.Integrations.Models.InstagramAccountInsightsDto
+        ?? new CrossChat.Integrations.Models.InstagramAccountInsightsDto();
+    }
+
+    <div class="overview-grid">
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Охват (28 дней)</span><span class="kpi-icon">👥</span></div>
+            <div class="kpi-value" style="color: #10b981;">@accountStats.Reach.ToString("N0")</div>
+            <div class="kpi-subtitle">Уникальных аккаунтов</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Клики в шапке</span><span class="kpi-icon">🔗</span></div>
+            <div class="kpi-value" style="color: #38bdf8;">@accountStats.WebsiteClicks.ToString("N0")</div>
+            <div class="kpi-subtitle">Переходов по вашей ссылке</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Просмотры профиля</span><span class="kpi-icon">👤</span></div>
+            <div class="kpi-value" style="color: #818cf8;">@accountStats.ProfileViews.ToString("N0")</div>
+            <div class="kpi-subtitle">Посещений страницы</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Вовлеченность</span><span class="kpi-icon">💬</span></div>
+            <div class="kpi-value" style="color: #f43f5e;">@accountStats.AccountsEngaged.ToString("N0")</div>
+            <div class="kpi-subtitle">Проявили активность</div>
+        </div>
+    </div>
+
     <!-- СЕТКА ПОСТОВ -->
     @if (!Model.Posts.Any())
     {
         <div style="text-align:center; padding:4rem 1rem; color:var(--text-secondary); background:var(--card-bg); border-radius:20px; border:1px dashed var(--glass-border);">
             <div style="font-size:3rem; margin-bottom:1rem;">📭</div>
             <h3>Постов не найдено</h3>
-            <p style="font-size:0.9rem;">В этом Instagram-профиле пока нет опубликованных постов или Reels.</p>
+            <p style="font-size:0.9rem;">В этом профиле пока нет опубликованных постов или Reels.</p>
         </div>
     }
     else
@@ -269,9 +406,23 @@
         <div class="posts-grid">
             @foreach (var post in Model.Posts)
             {
+                // Расчет быстрого публичного ER для карточки
+                double publicEr = followersCount > 0
+                ? Math.Round(((double)(post.LikeCount + post.CommentsCount) / followersCount) * 100.0, 1)
+                : 0;
+
+                string erColor = publicEr >= 5.0 ? "#ec4899" : (publicEr >= 2.0 ? "#10b981" : "#94a3b8");
+
                 <div class="post-card">
-                    <!-- ОБЛОЖКА -->
                     <div class="post-thumb-wrapper">
+                        <!-- БЕЙДЖ БЫСТРОГО ER НА КАРТОЧКЕ -->
+                        @if (publicEr > 0)
+                        {
+                            <span class="badge-er" style="color: @erColor; border: 1px solid @erColor;">
+                                ⚡ ER @publicEr%
+                            </span>
+                        }
+
                         @if (post.MediaType == "VIDEO")
                         {
                             <span class="badge-type">▶ REELS</span>
@@ -289,56 +440,44 @@
                     </div>
 
                     <div class="post-body">
-                        <!-- ЛАЙКИ И КОММЕНТАРИИ -->
                         <div class="post-stats-row">
                             <span style="color: #ef4444;">❤️ @post.LikeCount.ToString("N0")</span>
                             <span style="color: #38bdf8;">💬 @post.CommentsCount.ToString("N0")</span>
                             <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM.yyyy")</span>
                         </div>
 
-                        <!-- ОПИСАНИЕ -->
                         @if (!string.IsNullOrEmpty(post.Caption))
                         {
-                            <div class="post-caption" title="@post.Caption">
-                                @post.Caption
-                            </div>
+                            <div class="post-caption" title="@post.Caption">@post.Caption</div>
                         }
 
-                        <!-- КНОПКА ПОКАЗА СТАТИСТИКИ -->
                         <button type="button" class="btn-insights"
                                 onclick="openInsightsModal('@post.Id', '@post.MediaType', '@post.LikeCount', '@post.CommentsCount', '@post.Permalink')">
-                            📈 Посмотреть статистику
+                            📈 Статистика и True ER
                         </button>
                     </div>
                 </div>
             }
         </div>
 
-        <!-- ПАГИНАЦИЯ -->
         <div class="pagination-bar">
             @if (Model.HasPrevious)
             {
-                <a href="/instagram/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">
-                    ⬅ Назад
-                </a>
+                <a href="/instagram/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">⬅ Назад</a>
             }
             @if (Model.HasNext)
             {
-                <a href="/instagram/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">
-                    Вперед ➡
-                </a>
+                <a href="/instagram/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">Вперед ➡</a>
             }
         </div>
     }
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО ГЛУБОКОЙ СТАТИСТИКИ -->
+<!-- МОДАЛКА ИНСАЙТОВ И TRUE ER -->
 <div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
     <div class="insights-modal" onclick="event.stopPropagation()">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
-            <h3 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:8px;">
-                📊 Статистика публикации
-            </h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика публикации</h3>
             <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>
 
@@ -347,8 +486,25 @@
         </div>
 
         <div id="insightsContent" style="display:none;">
-            <!-- ПУБЛИЧНЫЕ МЕТРИКИ -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+            <!-- ГЕРОЙ-БЛОК: TRUE ER -->
+            <div class="er-hero-box" id="erBox">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary); letter-spacing:0.05em;">Вовлеченность (True ER)</span>
+                        <div style="font-size:1.6rem; font-weight:900; line-height:1.1; margin-top:2px;" id="modalErValue">0%</div>
+                    </div>
+                    <span id="modalErBadge" style="font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:20px; background:rgba(0,0,0,0.3); border:1px solid transparent;">-</span>
+                </div>
+                <div class="er-progress-bg">
+                    <div class="er-progress-fill" id="modalErProgress"></div>
+                </div>
+                <small style="display:block; font-size:0.7rem; color:var(--text-secondary); margin-top:6px;">
+                    Доля зрителей, совершивших действие (лайк, коммент, сохранение или репост).
+                </small>
+            </div>
+
+            <!-- МЕТРИКИ -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
                 <div class="metric-card" style="margin:0;">
                     <div class="metric-title">❤️ Лайки</div>
                     <div class="metric-value" id="modalLikes" style="color:#ef4444;">0</div>
@@ -359,29 +515,29 @@
                 </div>
             </div>
 
-            <!-- ЗАКРЫТЫЕ ИНСАЙТЫ -->
             <div class="metric-card">
                 <div class="metric-title">👥 Охват (Уникальные зрители)</div>
                 <div class="metric-value" id="modalReach" style="color:#10b981;">-</div>
             </div>
 
             <div class="metric-card" id="playsMetricBox" style="display:none;">
-                <div class="metric-title">🎬 Просмотры Reels (Plays)</div>
+                <div class="metric-title">🎬 Просмотры Reels (Views)</div>
                 <div class="metric-value" id="modalPlays" style="color:#8b5cf6;">-</div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-title">🔖 Сохранения в закладки</div>
-                <div class="metric-value" id="modalSaved" style="color:#f59e0b;">-</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-title">↗️ Репосты в Директ</div>
-                <div class="metric-value" id="modalShares" style="color:#a855f7;">-</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="metric-card">
+                    <div class="metric-title">🔖 Закладки</div>
+                    <div class="metric-value" id="modalSaved" style="color:#f59e0b;">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">↗️ Репосты</div>
+                    <div class="metric-value" id="modalShares" style="color:#a855f7;">-</div>
+                </div>
             </div>
 
             <div style="margin-top:1.25rem;">
-                <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block;">
+                <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block; padding:10px;">
                     🔗 Открыть публикацию в Instagram
                 </a>
             </div>
@@ -402,7 +558,6 @@
             document.getElementById('modalComments').textContent = Number(comments).toLocaleString();
             document.getElementById('modalPermalink').href = permalink || '#';
 
-            // Скрываем/показываем бокс просмотров для видео
             document.getElementById('playsMetricBox').style.display = mediaType === 'VIDEO' ? 'flex' : 'none';
 
             overlay.style.display = 'flex';
@@ -413,10 +568,27 @@
                 const response = await fetch(`/instagram/analytics/insights?botId=${botId}&mediaId=${mediaId}&mediaType=${mediaType}`);
                 if (response.ok) {
                     const data = await response.json();
+
                     document.getElementById('modalReach').textContent = data.reach ? data.reach.toLocaleString() : '0';
                     document.getElementById('modalSaved').textContent = data.saved ? data.saved.toLocaleString() : '0';
                     document.getElementById('modalShares').textContent = data.shares ? data.shares.toLocaleString() : '0';
                     document.getElementById('modalPlays').textContent = data.plays ? data.plays.toLocaleString() : '0';
+
+                    // TRUE ER РАСЧЕТ И АНИМАЦИЯ
+                    const er = data.engagementRate || 0;
+                    document.getElementById('modalErValue').textContent = er + '%';
+                    document.getElementById('modalErValue').style.color = data.badgeColor || '#10b981';
+
+                    const badge = document.getElementById('modalErBadge');
+                    badge.textContent = data.engagementBadge || 'Норма';
+                    badge.style.color = data.badgeColor || '#10b981';
+                    badge.style.borderColor = data.badgeColor || '#10b981';
+
+                    // Шкала прогресса (максимум берем за 10%)
+                    const progressPercent = Math.min(100, (er / 10.0) * 100);
+                    setTimeout(() => {
+                        document.getElementById('modalErProgress').style.width = progressPercent + '%';
+                    }, 50);
 
                     loading.style.display = 'none';
                     content.style.display = 'block';
@@ -430,6 +602,7 @@
 
         function closeInsightsModal(event) {
             document.getElementById('insightsModalOverlay').style.display = 'none';
+            document.getElementById('modalErProgress').style.width = '0%';
         }
     </script>
 }
