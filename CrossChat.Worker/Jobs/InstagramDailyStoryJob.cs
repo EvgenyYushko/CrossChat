@@ -63,7 +63,9 @@ namespace CrossChat.Worker.Jobs
 						{
 							AccessToken = bot.AccessToken,
 							Username = bot.Username,
-							UsedMediaIdsJson = bot.UsedMediaIdsJson
+							UsedMediaIdsJson = bot.UsedMediaIdsJson,
+							IsStoryOverlayTextEnabled = bot.IsStoryOverlayTextEnabled,
+							StoryOverlayText = bot.StoryOverlayText
 						};
 
 						var result = await instaService.PublishDailyStoryAsync(storyDto);

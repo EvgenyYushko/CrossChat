@@ -1,8 +1,14 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Logging;
+using SixLabors.Fonts;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Processing;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 using File = System.IO.File;
 
@@ -368,7 +374,7 @@ public partial class InstagramService
 
 		// Генерируем уникальное имя
 		string fileName = $"{Guid.NewGuid()}{extension}";
-		string localPath = Path.Combine(tempFolder, fileName);
+		string localPath = System.IO.Path.Combine(tempFolder, fileName);
 
 		// Декодируем и сохраняем файл
 		byte[] fileBytes = Convert.FromBase64String(cleanBase64);
@@ -565,33 +571,76 @@ public partial class InstagramService
 			var random = new Random();
 			var selectedMedia = availableMedia[random.Next(availableMedia.Count)];
 
-			_logger.LogInformation("[Daily Story] Выбран пост для истории: ID {Id} ({Type})", selectedMedia.Id, selectedMedia.Media_Type);
+			var tempFilesTracker = new List<string>();
 
-			// 5. Публикуем в Stories через твои существующие методы
-			var containerId = await CreateStoryContainer(selectedMedia, dto.AccessToken);
-			if (string.IsNullOrEmpty(containerId))
+			try
 			{
-				_logger.LogError("[Daily Story] Не удалось создать контейнер истории для @{User}", dto.Username);
+				InstagramMedia mediaToPublish = selectedMedia;
+
+				// ЕСЛИ ВКЛЮЧЕН ТЕКСТ ПОВЕРХ СТОРИС (ДЛЯ ФОТО):
+				if (dto.IsStoryOverlayTextEnabled &&
+					!string.IsNullOrWhiteSpace(dto.StoryOverlayText) &&
+					selectedMedia.Media_Type == "IMAGE")
+				{
+					_logger.LogInformation("[Daily Story] Наложение текста '{Text}' на фото сторис...", dto.StoryOverlayText);
+
+					// Скачиваем фото по ссылке
+					using var httpClient = new HttpClient();
+					var originalImageBytes = await httpClient.GetByteArrayAsync(selectedMedia.Media_Url);
+
+					// Накладываем стикер с текстом
+					var modifiedBytes = OverlayTextOnImage(originalImageBytes, dto.StoryOverlayText.Trim());
+
+					// Сохраняем временный файл на диск сервера
+					string tempFileName = $"{Guid.NewGuid()}.jpg";
+					string tempLocalPath = System.IO.Path.Combine(_siteSettings.TempFolder, tempFileName);
+					await File.WriteAllBytesAsync(tempLocalPath, modifiedBytes);
+					tempFilesTracker.Add(tempLocalPath);
+
+					// Подменяем ссылку на нашу локальную
+					string localPublicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
+
+					mediaToPublish = new InstagramMedia
+					{
+						Id = selectedMedia.Id,
+						Media_Type = "IMAGE",
+						Media_Url = localPublicUrl,
+						Caption = selectedMedia.Caption
+					};
+				}
+
+				// 5. Публикуем в Stories
+				var containerId = await CreateStoryContainer(mediaToPublish, dto.AccessToken);
+				if (string.IsNullOrEmpty(containerId))
+				{
+					_logger.LogError("[Daily Story] Не удалось создать контейнер истории для @{User}", dto.Username);
+					return new DailyStoryResult { Success = false };
+				}
+
+				var storyId = await WaitAndPublishContainer(containerId, dto.AccessToken);
+				if (!string.IsNullOrEmpty(storyId))
+				{
+					_logger.LogInformation("🌟 [Daily Story] Ежедневная история успешно опубликована! StoryId: {StoryId}", storyId);
+
+					usedIds.Add(selectedMedia.Id);
+					return new DailyStoryResult
+					{
+						Success = true,
+						StoryId = storyId,
+						NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
+					};
+				}
+
 				return new DailyStoryResult { Success = false };
 			}
-
-			var storyId = await WaitAndPublishContainer(containerId, dto.AccessToken);
-			if (!string.IsNullOrEmpty(storyId))
+			finally
 			{
-				_logger.LogInformation("🌟 [Daily Story] Ежедневная история успешно опубликована! StoryId: {StoryId}", storyId);
-
-				// Запоминаем ID использованного медиа
-				usedIds.Add(selectedMedia.Id);
-
-				return new DailyStoryResult
+				// Удаляем временный файл с наложенным текстом
+				foreach (var path in tempFilesTracker)
 				{
-					Success = true,
-					StoryId = storyId,
-					NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
-				};
+					try { if (File.Exists(path)) File.Delete(path); } catch { }
+				}
 			}
-
-			return new DailyStoryResult { Success = false };
 		}
 		catch (Exception ex)
 		{
@@ -707,6 +756,191 @@ public partial class InstagramService
 
 		_logger.LogError($"❌ Container not ready after {maxAttempts} attempts");
 		return null;
+	}
+
+	// Пресеты стилей для плашки (рандомизируются каждый день)
+	private class StoryBadgeStyle
+	{
+		public Color BgColor { get; set; }
+		public Color BorderColor { get; set; }
+		public Color TextColor { get; set; }
+	}
+
+	private static readonly StoryBadgeStyle[] BadgeThemes = new[]
+	{
+		// 1. Neon Graphite (Темный полупрозрачный с неоном)
+		new StoryBadgeStyle {
+			BgColor = Color.FromRgba(15, 23, 42, 225),
+			BorderColor = Color.FromRgba(99, 102, 241, 200),
+			TextColor = Color.White
+		},
+		// 2. Instagram Sunset (Пурпурно-розовый)
+		new StoryBadgeStyle {
+			BgColor = Color.FromRgba(225, 48, 108, 230),
+			BorderColor = Color.FromRgba(240, 148, 51, 220),
+			TextColor = Color.White
+		},
+		// 3. Frosted Glass (Белое матовое стекло)
+		new StoryBadgeStyle {
+			BgColor = Color.FromRgba(255, 255, 255, 235),
+			BorderColor = Color.FromRgba(255, 255, 255, 160),
+			TextColor = Color.FromRgb(15, 23, 42) // темный текст
+		},
+		// 4. Cyber Violet (Фиолетовый неон)
+		new StoryBadgeStyle {
+			BgColor = Color.FromRgba(88, 28, 135, 230),
+			BorderColor = Color.FromRgba(192, 132, 252, 210),
+			TextColor = Color.White
+		},
+		// 5. Emerald Luxury (Изумруд с мятной обводкой)
+		new StoryBadgeStyle {
+			BgColor = Color.FromRgba(6, 78, 59, 230),
+			BorderColor = Color.FromRgba(52, 211, 153, 210),
+			TextColor = Color.White
+		}
+	};
+
+	/// <summary>
+	/// Выбирает случайную фразу из массива или многострочного текста и чистит от ломающих глифов
+	/// </summary>
+	private static string PickAndSanitizeRandomText(string rawInput)
+	{
+		if (string.IsNullOrWhiteSpace(rawInput)) return "";
+
+		string selected = rawInput;
+
+		// 1. Если задано как JSON-массив: ["текст 1", "текст 2"]
+		if (rawInput.TrimStart().StartsWith("["))
+		{
+			try
+			{
+				var list = JsonSerializer.Deserialize<List<string>>(rawInput);
+				if (list != null && list.Any())
+				{
+					selected = list[Random.Shared.Next(list.Count)];
+				}
+			}
+			catch { }
+		}
+		else
+		{
+			// 2. Если задано через Enter с новой строки или через разделитель '|'
+			var lines = rawInput
+				.Split(new[] { "\r\n", "\r", "\n", "|" }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(l => l.Trim())
+				.Where(l => !string.IsNullOrEmpty(l))
+				.ToList();
+
+			if (lines.Any())
+			{
+				selected = lines[Random.Shared.Next(lines.Count)];
+			}
+		}
+
+		// 3. Защита от квадратиков: удаляем не поддерживаемые векторными шрифтами суррогатные эмодзи
+		string cleanText = Regex.Replace(selected, @"[\uD800-\uDBFF][\uDC00-\uDFFF]", "").Trim();
+		return string.IsNullOrWhiteSpace(cleanText) ? selected.Trim() : cleanText;
+	}
+
+	/// <summary>
+	/// Рисует случайную стильную плашку со случайным текстом и случайной позицией
+	/// </summary>
+	private byte[] OverlayTextOnImage(byte[] imageBytes, string rawTextConfig)
+	{
+		// Выбираем случайную надпись
+		string text = PickAndSanitizeRandomText(rawTextConfig);
+		if (string.IsNullOrWhiteSpace(text)) return imageBytes;
+
+		using var image = Image.Load(imageBytes);
+
+		FontFamily family;
+		if (!SystemFonts.TryGet("Arial", out family) &&
+			!SystemFonts.TryGet("DejaVu Sans", out family) &&
+			!SystemFonts.TryGet("Segoe UI", out family) &&
+			!SystemFonts.TryGet("Liberation Sans", out family))
+		{
+			family = SystemFonts.Collection.Families.FirstOrDefault();
+		}
+
+		if (family == default)
+		{
+			_logger.LogWarning("[Daily Story] Системные шрифты не найдены.");
+			return imageBytes;
+		}
+
+		float fontSize = Math.Clamp(image.Width * 0.042f, 32f, 76f);
+		var font = family.CreateFont(fontSize, FontStyle.Bold);
+
+		var textOptions = new TextOptions(font);
+		var textSize = TextMeasurer.MeasureSize(text, textOptions);
+
+		float paddingX = fontSize * 1.2f;
+		float paddingY = fontSize * 0.65f;
+		float badgeWidth = textSize.Width + (paddingX * 2);
+		float badgeHeight = textSize.Height + (paddingY * 2);
+
+		// РАНДОМИЗАЦИЯ ПОЗИЦИИ: Верх (22%), Центр (52%) или Низ (75%)
+		float[] yRatios = new[] { 0.22f, 0.52f, 0.75f };
+		float chosenYRatio = yRatios[Random.Shared.Next(yRatios.Length)];
+
+		float badgeX = (image.Width - badgeWidth) / 2f;
+		float badgeY = (image.Height - badgeHeight) * chosenYRatio;
+
+		float cornerRadius = badgeHeight / 2f;
+		var rect = new RectangleF(badgeX, badgeY, badgeWidth, badgeHeight);
+
+		float textX = badgeX + paddingX;
+		float textY = badgeY + paddingY;
+
+		// РАНДОМИЗАЦИЯ СТИЛЯ: выбираем одну из 5 тем оформления
+		var theme = BadgeThemes[Random.Shared.Next(BadgeThemes.Length)];
+
+		image.Mutate(ctx =>
+		{
+			var capsuleShape = CreateRoundedRectPath(rect, cornerRadius);
+			ctx.Fill(theme.BgColor, capsuleShape);
+			ctx.Draw(theme.BorderColor, 2.5f, capsuleShape);
+
+			ctx.DrawText(text, font, theme.TextColor, new PointF(textX, textY));
+		});
+
+		using var ms = new MemoryStream();
+		image.SaveAsJpeg(ms);
+		return ms.ToArray();
+	}
+
+	/// <summary>
+	/// Создает фигуру скругленного прямоугольника / капсулы через нативные дуги PathBuilder
+	/// </summary>
+	private static IPath CreateRoundedRectPath(RectangleF rect, float cornerRadius)
+	{
+		float x = rect.X;
+		float y = rect.Y;
+		float w = rect.Width;
+		float h = rect.Height;
+		float r = Math.Min(cornerRadius, Math.Min(w / 2f, h / 2f));
+
+		var builder = new PathBuilder();
+		builder.StartFigure();
+
+		// 1. Верхняя линия и правый верхний угол
+		builder.AddLine(new PointF(x + r, y), new PointF(x + w - r, y));
+		builder.AddArc(x + w - r, y + r, r, r, 0, 270, 90);
+
+		// 2. Правая линия и правый нижний угол
+		builder.AddLine(new PointF(x + w, y + r), new PointF(x + w, y + h - r));
+		builder.AddArc(x + w - r, y + h - r, r, r, 0, 0, 90);
+
+		// 3. Нижняя линия и левый нижний угол
+		builder.AddLine(new PointF(x + w - r, y + h), new PointF(x + r, y + h));
+		builder.AddArc(x + r, y + h - r, r, r, 0, 90, 90);
+
+		// 4. Левая линия и левый верхний угол
+		builder.AddLine(new PointF(x, y + h - r), new PointF(x, y + r));
+		builder.AddArc(x + r, y + r, r, r, 0, 180, 90);
+
+		builder.CloseFigure();
+		return builder.Build();
 	}
 
 	/// <summary>

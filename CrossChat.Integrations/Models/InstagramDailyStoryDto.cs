@@ -5,6 +5,8 @@ namespace CrossChat.Integrations.Models
 		public string AccessToken { get; set; } = string.Empty;
 		public string? Username { get; set; }
 		public string? UsedMediaIdsJson { get; set; }
+		public bool IsStoryOverlayTextEnabled { get; set; }
+		public string? StoryOverlayText { get; set; }
 	}
 
 	public class DailyStoryResult

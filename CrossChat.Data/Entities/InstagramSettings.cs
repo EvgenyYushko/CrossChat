@@ -55,4 +55,10 @@ public class InstagramSettings
 
 	// JSON-массив ID постов, которые уже выкладывались в сторис (["123", "456"])
 	public string? UsedMediaIdsJson { get; set; } = "[]";
+
+	// Включен ли текст поверх фото в сторис
+	public bool IsStoryOverlayTextEnabled { get; set; } = false;
+
+	// Текст надписи (например: "✈️ Telegram: @my_channel" или "🔗 Ссылка в описании")
+	public string? StoryOverlayText { get; set; } = "✈️ Telegram: @my_channel";
 }

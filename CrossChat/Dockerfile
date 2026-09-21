@@ -6,7 +6,7 @@ EXPOSE 8081
 # --- УСТАНОВКА FFMPEG И СИСТЕМНЫХ ТАЙМЗОН ---
 USER root
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates ffmpeg tzdata && \
+    apt-get install -y --no-install-recommends ca-certificates ffmpeg tzdata fonts-dejavu-core && \
     rm -rf /var/lib/apt/lists/*
 
 # Выставляем системный часовой пояс контейнера на Минск

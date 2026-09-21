@@ -130,7 +130,9 @@ namespace CrossChat.Controllers
 			int profileId,
 			// === НОВЫЕ ПАРАМЕТРЫ СТОРИС ===
 			bool isDailyStoriesEnabled,
-			string dailyStoryTime)
+			string dailyStoryTime,
+			bool isStoryOverlayTextEnabled,
+			string? storyOverlayText)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -177,6 +179,9 @@ namespace CrossChat.Controllers
 				// Обновляем настройки авто-сторис:
 				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
 				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
+
+				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
+				settings.StoryOverlayText = string.IsNullOrWhiteSpace(storyOverlayText) ? null : storyOverlayText.Trim();
 
 				var reactionList = allowedReactions?.EnumerateRunes()
 					.Select(r => r.ToString())
