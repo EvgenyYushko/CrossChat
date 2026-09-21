@@ -555,15 +555,15 @@ public partial class InstagramService : IInstagramService
 	}
 
 	/// <summary>
-	/// Получает глубокие закрытые инсайты конкретного поста (охват, показы, сохранения, репосты)
+	/// Получает глубокие закрытые инсайты конкретного поста (охват, просмотры, сохранения, репосты)
 	/// </summary>
 	public async Task<InstagramPostInsightsDto> GetMediaInsightsAsync(string mediaId, string mediaType, string accessToken)
 	{
 		var insights = new InstagramPostInsightsDto();
 
-		// Для Reels Meta использует метрику plays, для фото и каруселей — reach, saved, shares
+		// ВАЖНО: Используем 'views' вместо устаревшего 'plays'
 		string metrics = mediaType == "VIDEO"
-			? "reach,saved,shares,plays,total_interactions"
+			? "views,reach,saved,shares,total_interactions"
 			: "reach,saved,shares,total_interactions";
 
 		string url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric={metrics}&access_token={accessToken}";
@@ -573,10 +573,17 @@ public partial class InstagramService : IInstagramService
 			var response = await _httpClient.GetAsync(url);
 			if (!response.IsSuccessStatusCode)
 			{
-				// Если расширенный набор не прошел, пробуем базовый безопасный
-				url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric=reach,saved&access_token={accessToken}";
+				// Фоллбек на случай более старых постов
+				url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric=views,reach,saved&access_token={accessToken}";
 				response = await _httpClient.GetAsync(url);
-				if (!response.IsSuccessStatusCode) return insights;
+
+				if (!response.IsSuccessStatusCode)
+				{
+					// Если пост опубликован до 2024 года, пробуем старый plays
+					url = $"https://graph.instagram.com/v21.0/{mediaId}/insights?metric=plays,reach,saved&access_token={accessToken}";
+					response = await _httpClient.GetAsync(url);
+					if (!response.IsSuccessStatusCode) return insights;
+				}
 			}
 
 			var json = await response.Content.ReadAsStringAsync();
@@ -589,19 +596,38 @@ public partial class InstagramService : IInstagramService
 					var name = m.GetProperty("name").GetString();
 					int val = 0;
 
+					// 1. Проверяем старый формат массива "values": [{"value": 123}]
 					if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
 					{
 						val = vals[0].GetProperty("value").GetInt32();
 					}
+					// 2. ВАЖНО: Проверяем новый формат Meta "total_value": {"value": 123} (именно так Meta отдает views!)
+					else if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var v))
+					{
+						val = v.GetInt32();
+					}
 
 					switch (name)
 					{
-						case "reach": insights.Reach = val; break;
-						case "impressions": insights.Impressions = val; break;
-						case "plays": insights.Plays = val; break;
-						case "saved": insights.Saved = val; break;
-						case "shares": insights.Shares = val; break;
-						case "total_interactions": insights.TotalInteractions = val; break;
+						case "views":
+						case "plays":
+							insights.Plays = val; // Записываем реальные просмотры Reels!
+							break;
+						case "reach":
+							insights.Reach = val;
+							break;
+						case "impressions":
+							insights.Impressions = val;
+							break;
+						case "saved":
+							insights.Saved = val;
+							break;
+						case "shares":
+							insights.Shares = val;
+							break;
+						case "total_interactions":
+							insights.TotalInteractions = val;
+							break;
 					}
 				}
 			}
