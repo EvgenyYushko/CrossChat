@@ -39,6 +39,13 @@ namespace CrossChat.Integrations.Services
 
 					var textJson = await textResp.Content.ReadFromJsonAsync<JsonElement>();
 					creationId = textJson.GetProperty("id").GetString()!;
+
+					// ИСПРАВЛЕНИЕ: Ждем готовности текстового контейнера Meta (3-5 секунд)
+					bool isReady = await WaitForMediaReadyAsync(creationId, accessToken, 30);
+					if (!isReady)
+					{
+						_logger.LogWarning($"[Threads] Текстовый контейнер {creationId} не ответил статусом готовности вовремя.");
+					}
 				}
 				// 2. ОДИНОЧНОЕ МЕДИА (1 фото или 1 видео)
 				else if (imagesBase64.Count == 1)
@@ -152,22 +159,35 @@ namespace CrossChat.Integrations.Services
 					if (!isCarouselReady) return (false, null);
 				}
 
-				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ
+				// 4. ФИНАЛЬНАЯ ПУБЛИКАЦИЯ С ЗАЩИТОЙ И ПОВТОРАМИ (RETRY 4279009)
 				var publishUrl = $"https://graph.threads.net/v1.0/me/threads_publish?creation_id={creationId}&access_token={accessToken}";
-				var publishResp = await _httpClient.PostAsync(publishUrl, null);
 
-				if (publishResp.IsSuccessStatusCode)
+				for (int attempt = 1; attempt <= 3; attempt++)
 				{
-					// Достаем ID опубликованного поста в Threads
-					var publishJson = await publishResp.Content.ReadFromJsonAsync<JsonElement>();
-					string publishedPostId = publishJson.GetProperty("id").GetString()!;
+					var publishResp = await _httpClient.PostAsync(publishUrl, null);
+					var publishContent = await publishResp.Content.ReadAsStringAsync();
 
-					_logger.LogInformation($"[Threads] ✅ Пост успешно опубликован в Threads (ID поста: {publishedPostId})");
-					return (true, publishedPostId);
+					if (publishResp.IsSuccessStatusCode)
+					{
+						using var doc = JsonDocument.Parse(publishContent);
+						string publishedPostId = doc.RootElement.GetProperty("id").GetString()!;
+
+						_logger.LogInformation($"[Threads] ✅ Пост успешно опубликован в Threads (ID поста: {publishedPostId})");
+						return (true, publishedPostId);
+					}
+
+					// Если сервер Meta еще реплицирует контейнер — ждем 4 секунды и повторяем
+					if (publishContent.Contains("4279009") && attempt < 3)
+					{
+						_logger.LogWarning($"[Threads] Сервер Meta еще не видит контейнер {creationId}. Повтор через 4 сек (попытка {attempt}/3)...");
+						await Task.Delay(4000);
+						continue;
+					}
+
+					_logger.LogError($"[Threads] ❌ Ошибка финальной публикации в Threads: {publishContent}");
+					return (false, null);
 				}
 
-				var publishError = await publishResp.Content.ReadAsStringAsync();
-				_logger.LogError($"[Threads] ❌ Ошибка финальной публикации в Threads: {publishError}");
 				return (false, null);
 			}
 			catch (Exception ex)
