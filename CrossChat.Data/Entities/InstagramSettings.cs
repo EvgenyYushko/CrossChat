@@ -61,4 +61,11 @@ public class InstagramSettings
 
 	// Текст надписи (например: "✈️ Telegram: @my_channel" или "🔗 Ссылка в описании")
 	public string? StoryOverlayText { get; set; } = "✈️ Telegram: @my_channel";
+
+	// === НАСТРОЙКИ АВТООТВЕТОВ В КОММЕНТАРИЯХ ===
+	// 1 = Только ИИ, 2 = Только шаблоны (дефолт), 3 = Комбинированный
+	public int CommentReplyMode { get; set; } = 2;
+
+	// Список шаблонов для комментариев (каждый с новой строки или массив)
+	public string? CommentTemplates { get; set; } = "Спасибо за ваш комментарий! ❤️\nРады, что вам понравилось! 😊\nСпасибо за отклик! ✨";
 }

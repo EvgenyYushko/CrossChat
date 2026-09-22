@@ -10,8 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using static CrossChat.Constants.AppConstants;
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
@@ -128,11 +128,13 @@ namespace CrossChat.Controllers
 			int maxAnswerMessagesCount,
 			int maxAnswersTokensCount,
 			int profileId,
-			// === НОВЫЕ ПАРАМЕТРЫ СТОРИС ===
 			bool isDailyStoriesEnabled,
 			string dailyStoryTime,
 			bool isStoryOverlayTextEnabled,
-			string? storyOverlayText)
+			string? storyOverlayText,
+			// === НОВЫЕ ПАРАМЕТРЫ ДЛЯ КОММЕНТАРИЕВ ===
+			int commentReplyMode,
+			string? commentTemplates)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
@@ -182,6 +184,9 @@ namespace CrossChat.Controllers
 
 				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
 				settings.StoryOverlayText = string.IsNullOrWhiteSpace(storyOverlayText) ? null : storyOverlayText.Trim();
+
+				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
+				settings.CommentTemplates = commentTemplates;
 
 				var reactionList = allowedReactions?.EnumerateRunes()
 					.Select(r => r.ToString())

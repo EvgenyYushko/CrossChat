@@ -26,7 +26,7 @@ using Quartz;
 using Resend;
 using StackExchange.Redis;
 using Telegram.Bot;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Infrastructure.Constants.EnvConstants;
 using static CrossChat.Worker.WorkerInstaller;
 
@@ -174,6 +174,16 @@ builder.Services.AddQuartz(q =>
 		.ForJob(radarJobKey)
 		.WithIdentity($"{nameof(TrendRadarSyncJob)}-Trigger")
 		.WithSimpleSchedule(x => x.WithIntervalInHours(4).RepeatForever()));
+
+	// 8
+	// Регистрация плановой ночной очистки архивных постов
+	var cleanupJobKey = new JobKey(nameof(PostCleanupJob));
+	q.AddJob<PostCleanupJob>(opts => opts.WithIdentity(cleanupJobKey));
+	q.AddTrigger(opts => opts
+		.ForJob(cleanupJobKey)
+		.WithIdentity($"{nameof(PostCleanupJob)}-Trigger")
+		// Запуск раз в сутки (каждые 24 часа):
+		.WithSimpleSchedule(x => x.WithIntervalInHours(24).RepeatForever()));
 
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

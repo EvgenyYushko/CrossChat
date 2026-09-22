@@ -6,7 +6,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Resend;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Services;
 

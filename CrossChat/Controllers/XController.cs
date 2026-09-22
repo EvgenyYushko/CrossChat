@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 using static CrossChat.Helpers.TimeZoneHelper;
 

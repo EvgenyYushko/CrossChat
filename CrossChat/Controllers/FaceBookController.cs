@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers

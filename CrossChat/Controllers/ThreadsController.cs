@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 

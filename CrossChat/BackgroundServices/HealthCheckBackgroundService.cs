@@ -1,4 +1,4 @@
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.BackgroundServices
 {

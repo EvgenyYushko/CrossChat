@@ -1,4 +1,4 @@
-namespace CrossChat.Constants
+namespace CrossChat.Infrastructure.Constants
 {
 	public static class AppConstants
 	{

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot.Types.ReplyMarkups;
 using static CrossChat.Helpers.TimeZoneHelper;
-using static CrossChat.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Controllers
 {
