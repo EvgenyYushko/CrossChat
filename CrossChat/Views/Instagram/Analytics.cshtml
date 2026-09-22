@@ -584,10 +584,16 @@
                     badge.style.color = data.badgeColor || '#10b981';
                     badge.style.borderColor = data.badgeColor || '#10b981';
 
-                    // Шкала прогресса (максимум берем за 10%)
-                    const progressPercent = Math.min(100, (er / 10.0) * 100);
+                    // НОВАЯ ШКАЛА ПРОГРЕСС-БАРА:
+                    // Максимум берем за 30% (для супер-хитов). Минимально 4% для красивого старта.
+                    const maxScale = 30.0;
+                    const progressPercent = Math.min(100, Math.max(er > 0 ? 5 : 0, (er / maxScale) * 100));
+
                     setTimeout(() => {
-                        document.getElementById('modalErProgress').style.width = progressPercent + '%';
+                        const progressBar = document.getElementById('modalErProgress');
+                        progressBar.style.width = progressPercent + '%';
+                        // Динамический градиент под цвет бейджа:
+                        progressBar.style.background = `linear-gradient(90deg, #38bdf8, ${data.badgeColor || '#ec4899'})`;
                     }, 50);
 
                     loading.style.display = 'none';

@@ -643,33 +643,38 @@ public partial class InstagramService : IInstagramService
 			: (insights.Saved + insights.Shares);
 
 		// Рассчитываем True ER по охвату
+		// Внутри GetMediaInsightsAsync (в конце метода):
 		if (insights.Reach > 0 && totalEngagements > 0)
 		{
 			insights.EngagementRate = Math.Round(((double)totalEngagements / insights.Reach) * 100.0, 2);
 
-			if (insights.EngagementRate >= 7.0)
+			// Новая детальная шкала вирусности:
+			if (insights.EngagementRate >= 25.0)
+			{
+				insights.EngagementBadge = "🚀 Космический взрыв";
+				insights.BadgeColor = "#f43f5e"; // Яркий неоновый рубин
+			}
+			else if (insights.EngagementRate >= 8.0)
 			{
 				insights.EngagementBadge = "🔥 Вирусный хит";
-				insights.BadgeColor = "#ec4899"; // Розовый неон
+				insights.BadgeColor = "#ec4899"; // Фуксия / Instagram pink
 			}
 			else if (insights.EngagementRate >= 3.5)
 			{
 				insights.EngagementBadge = "⚡ Высокая активность";
-				insights.BadgeColor = "#10b981"; // Зеленый
+				insights.BadgeColor = "#10b981"; // Изумрудный зеленый
 			}
 			else if (insights.EngagementRate >= 1.5)
 			{
-				insights.EngagementBadge = "Нормальный отклик";
-				insights.BadgeColor = "#38bdf8"; // Синий
+				insights.EngagementBadge = "👍 Хороший результат";
+				insights.BadgeColor = "#38bdf8"; // Небесно-голубой
 			}
 			else
 			{
-				insights.EngagementBadge = "Слабый интерес";
-				insights.BadgeColor = "#94a3b8"; // Серый
+				insights.EngagementBadge = "💤 Слабый интерес";
+				insights.BadgeColor = "#94a3b8"; // Нейтральный серый
 			}
 		}
-
-		return insights;
 
 		return insights;
 	}
