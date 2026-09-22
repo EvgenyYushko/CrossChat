@@ -33,29 +33,29 @@ public class ThreadsPublisher : ISocialPublisher
 		await _console.Log($"Пост успешно опубликован в Threads @{settings.Username}.", settings.UserId, state.BotId);
 
 		// 2. ПЕРВЫЙ КОММЕНТАРИЙ (ВЕТКА В THREADS)
-		if (!string.IsNullOrWhiteSpace(state.FirstComment) && !string.IsNullOrEmpty(publishedPostId))
-		{
-			try
-			{
-				await _console.Log("Публикация первого комментария в Threads...", settings.UserId, state.BotId);
+		//if (!string.IsNullOrWhiteSpace(state.FirstComment) && !string.IsNullOrEmpty(publishedPostId))
+		//{
+		//	try
+		//	{
+		//		await _console.Log("Публикация первого комментария в Threads...", settings.UserId, state.BotId);
 
-				// Пауза 4 сек для фиксации корневого поста в ленте Threads
-				await Task.Delay(4000);
+		//		// Пауза 4 сек для фиксации корневого поста в ленте Threads
+		//		await Task.Delay(4000);
 
-				var replyId = await _service.CreateReplyAsync(publishedPostId, state.FirstComment.Trim(), settings.AccessToken);
-				if (!string.IsNullOrEmpty(replyId))
-				{
-					await _console.Log("Первый комментарий в Threads успешно опубликован!", settings.UserId, state.BotId);
-				}
-				else
-				{
-					await _console.Log("⚠️ Не удалось опубликовать первый комментарий в Threads (основной пост опубликован).", settings.UserId, state.BotId);
-				}
-			}
-			catch (Exception ex)
-			{
-				await _console.Log($"⚠️ Ошибка при создании первого комментария в Threads: {ex.Message}", settings.UserId, state.BotId);
-			}
-		}
+		//		var replyId = await _service.CreateReplyAsync(publishedPostId, state.FirstComment.Trim(), settings.AccessToken);
+		//		if (!string.IsNullOrEmpty(replyId))
+		//		{
+		//			await _console.Log("Первый комментарий в Threads успешно опубликован!", settings.UserId, state.BotId);
+		//		}
+		//		else
+		//		{
+		//			await _console.Log("⚠️ Не удалось опубликовать первый комментарий в Threads (основной пост опубликован).", settings.UserId, state.BotId);
+		//		}
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		await _console.Log($"⚠️ Ошибка при создании первого комментария в Threads: {ex.Message}", settings.UserId, state.BotId);
+		//	}
+		//}
 	}
 }
