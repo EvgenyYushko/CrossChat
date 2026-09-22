@@ -176,19 +176,28 @@ namespace CrossChat.Integrations.Services
 
 		private async Task<HttpResponseMessage> SendWithDPoPAsync(HttpMethod method, string url, BlueSkyModel settings, object? body)
 		{
-			// Функция генерации HTTP-запроса
 			async Task<HttpRequestMessage> CreateRequest(string? nonce = null)
 			{
 				var (proof, _) = CreateDPoPProof(method.Method, url, settings.PrivateKeyJson, nonce, settings.AccessToken, null);
 				var req = new HttpRequestMessage(method, url);
 				req.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
 				req.Headers.Add("DPoP", proof);
-				req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
+
+				// УМНЫЙ АВТО-ВЫБОР ПРОКСИ ДЛЯ AT PROTOCOL:
+				if (url.Contains("/chat.bsky."))
+				{
+					// Личные сообщения (Чат) направляем на сервис чатов
+					req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
+				}
+				else if (url.Contains("/app.bsky."))
+				{
+					// Уведомления, ленту и реплаи направляем на главный AppView!
+					req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.app#bsky_appview");
+				}
+				// Для /com.atproto.repo.* (создание постов и загрузка блобов) заголовок не нужен — PDS обрабатывает сам
 
 				if (body != null)
 				{
-					// ИСПРАВЛЕНИЕ: Если передали готовый HttpContent (байты картинки) — используем его.
-					// Если передали анонимный объект (для чатов/постов) — упаковываем в JsonContent!
 					if (body is HttpContent httpContent)
 					{
 						req.Content = httpContent;
@@ -206,7 +215,7 @@ namespace CrossChat.Integrations.Services
 			var request = await CreateRequest();
 			var response = await _httpClient.SendAsync(request);
 
-			// 2. Если сервер просит Nonce — запрашиваем новый Nonce и повторяем
+			// 2. Если сервер просит Nonce — обновляем DPoP-токен и повторяем
 			if (!response.IsSuccessStatusCode)
 			{
 				var responseContent = await response.Content.ReadAsStringAsync();
