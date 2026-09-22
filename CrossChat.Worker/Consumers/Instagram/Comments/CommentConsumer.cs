@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json;
 using System.Threading.RateLimiting;
-using System.Threading.Tasks;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
@@ -30,10 +25,10 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 		});
 
 		public CommentConsumer(
-			ILogger<CommentConsumer> logger, 
-			AppDbContext db, 
-			IInstagramService instaService, 
-			IAiService aiService, 
+			ILogger<CommentConsumer> logger,
+			AppDbContext db,
+			IInstagramService instaService,
+			IAiService aiService,
 			IInstagramConsole console)
 		{
 			_logger = logger;
@@ -119,44 +114,17 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 		{
 			var fullPrompt = settings.CommentPrompt ?? "";
 			fullPrompt += $"\nYou are now replying to a PUBLIC COMMENT under your post. The user @{msg.Username} wrote: '{msg.Text}'. Reply politely and concisely.";
-			
+
 			return await _aiService.GeminiRequest(fullPrompt, null);
 		}
 
 		/// <summary>
 		/// Выбирает случайную фразу из шаблонов (строки через Enter или JSON-массив)
 		/// </summary>
-		private static string? GetRandomTemplate(string? rawTemplates)
+		public static string? GetRandomTemplate(string? rawTemplates)
 		{
-			if (string.IsNullOrWhiteSpace(rawTemplates)) return null;
-
-			// Если в формате JSON-массива: ["Привет", "Спасибо"]
-			if (rawTemplates.TrimStart().StartsWith("["))
-			{
-				try
-				{
-					var list = JsonSerializer.Deserialize<List<string>>(rawTemplates);
-					if (list != null && list.Any())
-					{
-						return list[Random.Shared.Next(list.Count)].Trim();
-					}
-				}
-				catch { }
-			}
-
-			// Если каждая фраза с новой строки
-			var lines = rawTemplates
-				.Split(new[] { "\r\n", "\r", "\n", "|" }, StringSplitOptions.RemoveEmptyEntries)
-				.Select(l => l.Trim())
-				.Where(l => !string.IsNullOrEmpty(l))
-				.ToList();
-
-			if (lines.Any())
-			{
-				return lines[Random.Shared.Next(lines.Count)];
-			}
-
-			return rawTemplates.Trim();
+			return InstagramCommentEngine.GetRandomTemplate(rawTemplates);
 		}
+
 	}
 }
