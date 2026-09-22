@@ -596,7 +596,7 @@ namespace CrossChat.Controllers
 			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
 
 			// Параллельно запрашиваем: ленту, аналитику за 28 дней и количество подписчиков профиля
-			var feedTask = _instagramService.GetAccountFeedAsync(settings.AccessToken, 12, after, before);
+			var feedTask = _instagramService.GetAccountFeedAsync(settings.AccessToken, 24, after, before);
 			var insightsTask = _instagramService.GetAccountInsightsAsync(settings.AccessToken);
 			var profileTask = _httpClient.GetAsync($"https://graph.instagram.com/v21.0/me?fields=followers_count,media_count&access_token={settings.AccessToken}");
 

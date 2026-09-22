@@ -47,7 +47,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 16px;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .kpi-card {
@@ -94,6 +94,64 @@
         .kpi-subtitle {
             font-size: 0.75rem;
             color: var(--text-secondary);
+        }
+
+        /* ТУЛБАР ФИЛЬТРОВ И СОРТИРОВКИ */
+        .toolbar-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 12px 18px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-btn-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .filter-btn:hover, .filter-btn.active {
+                background: var(--accent-color, #6366f1);
+                color: #ffffff;
+                border-color: var(--accent-color, #6366f1);
+            }
+
+        .sort-controls-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .select-sort {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
         }
 
         /* СЕТКА ПОСТОВ */
@@ -147,7 +205,6 @@
             backdrop-filter: blur(4px);
         }
 
-        /* БЕЙДЖ ER НА КАРТОЧКЕ */
         .badge-er {
             position: absolute;
             top: 10px;
@@ -212,7 +269,7 @@
                 border-color: transparent;
             }
 
-        /* МОДАЛКА СТАТИСТИКИ */
+        /* МОДАЛКА ИНСАЙТОВ */
         .insights-modal-overlay {
             display: none;
             position: fixed;
@@ -239,7 +296,6 @@
             position: relative;
         }
 
-        /* БЛОК TRUE ER В МОДАЛКЕ */
         .er-hero-box {
             background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1));
             border: 1px solid rgba(236, 72, 153, 0.3);
@@ -297,41 +353,51 @@
             margin-top: 2.5rem;
         }
 
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 850px) {
-            .overview-grid
-
-        {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            .overview-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
         }
 
-        }
+        @@media (max-width: 650px) {
+            .analytics-container {
+                margin-top: 4.5rem;
+                padding: 0 0.75rem;
+            }
 
-        @@media (max-width: 600px) {
-            .analytics-container
+            .header-box {
+                padding: 1.25rem;
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
 
-        {
-            margin-top: 4.5rem;
-            padding: 0 0.75rem;
-        }
+            .user-meta {
+                flex-direction: column;
+                justify-content: center;
+            }
 
-        .header-box {
-            padding: 1.25rem;
-            flex-direction: column;
-            align-items: stretch;
-            text-align: center;
-        }
+            .toolbar-box {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
 
-        .user-meta {
-            flex-direction: column;
-            justify-content: center;
-        }
+            .sort-controls-group {
+                width: 100%;
+                justify-content: space-between;
+            }
 
-        .posts-grid {
-            grid-template-columns: 1fr;
-            gap: 16px;
-        }
+            .select-sort {
+                flex: 1;
+            }
 
+            .posts-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
         }
     </style>
 }
@@ -392,6 +458,44 @@
         </div>
     </div>
 
+    <!-- ТУЛБАР ФИЛЬТРОВ И СОРТИРОВКИ -->
+    <div class="toolbar-box">
+        <!-- ФИЛЬТР ПО ТИПУ КОНТЕНТА -->
+        <div class="filter-btn-group">
+            <button type="button" class="filter-btn active" data-type="ALL" onclick="setMediaFilter('ALL', this)">
+                Все форматы
+            </button>
+            <button type="button" class="filter-btn" data-type="VIDEO" onclick="setMediaFilter('VIDEO', this)">
+                🎬 Только Reels
+            </button>
+            <button type="button" class="filter-btn" data-type="IMAGE" onclick="setMediaFilter('IMAGE', this)">
+                📷 Фото
+            </button>
+            <button type="button" class="filter-btn" data-type="CAROUSEL_ALBUM" onclick="setMediaFilter('CAROUSEL_ALBUM', this)">
+                📑 Карусели
+            </button>
+        </div>
+
+        <!-- УПРАВЛЕНИЕ СОРТИРОВКОЙ -->
+        <div class="sort-controls-group">
+            <select id="sortBySelect" class="select-sort" onchange="applyFiltersAndSorting()">
+                <option value="date">📅 По дате</option>
+                <option value="er" selected>⚡ По рейтингу ER</option>
+                <option value="likes">❤️ По лайкам</option>
+                <option value="comments">💬 По комментариям</option>
+            </select>
+
+            <select id="sortOrderSelect" class="select-sort" onchange="applyFiltersAndSorting()">
+                <option value="desc" selected>🔽 По убыванию (Топ)</option>
+                <option value="asc">🔼 По возрастанию</option>
+            </select>
+
+            <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary); margin-left:4px;">
+                Всего: @Model.Posts.Count
+            </span>
+        </div>
+    </div>
+
     <!-- СЕТКА ПОСТОВ -->
     @if (!Model.Posts.Any())
     {
@@ -403,19 +507,24 @@
     }
     else
     {
-        <div class="posts-grid">
+        <div class="posts-grid" id="postsGrid">
             @foreach (var post in Model.Posts)
             {
-                // Расчет быстрого публичного ER для карточки
                 double publicEr = followersCount > 0
                 ? Math.Round(((double)(post.LikeCount + post.CommentsCount) / followersCount) * 100.0, 1)
                 : 0;
 
                 string erColor = publicEr >= 5.0 ? "#ec4899" : (publicEr >= 2.0 ? "#10b981" : "#94a3b8");
 
-                <div class="post-card">
+                <div class="post-card"
+                     data-id="@post.Id"
+                     data-type="@post.MediaType"
+                     data-likes="@post.LikeCount"
+                     data-comments="@post.CommentsCount"
+                     data-er="@publicEr.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
+                     data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
+
                     <div class="post-thumb-wrapper">
-                        <!-- БЕЙДЖ БЫСТРОГО ER НА КАРТОЧКЕ -->
                         @if (publicEr > 0)
                         {
                             <span class="badge-er" style="color: @erColor; border: 1px solid @erColor;">
@@ -548,7 +657,80 @@
 @section Scripts {
     <script>
         const botId = @botId;
+        let currentFilterType = 'ALL';
 
+        // 1. ПЕРЕКЛЮЧЕНИЕ ФИЛЬТРОВ ФОРМАТА
+        function setMediaFilter(type, btn) {
+            currentFilterType = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyFiltersAndSorting();
+        }
+
+        // 2. МГНОВЕННАЯ СОРТИРОВКА И ФИЛЬТРАЦИЯ (0 мс без перезагрузки)
+        function applyFiltersAndSorting() {
+            const grid = document.getElementById('postsGrid');
+            if (!grid) return;
+
+            const cards = Array.from(grid.querySelectorAll('.post-card'));
+            const sortBy = document.getElementById('sortBySelect').value;
+            const sortOrder = document.getElementById('sortOrderSelect').value;
+
+            let visibleCount = 0;
+
+            // А. Фильтрация
+            cards.forEach(card => {
+                const cardType = card.dataset.type;
+                let matches = true;
+
+                if (currentFilterType === 'VIDEO' && cardType !== 'VIDEO') matches = false;
+                else if (currentFilterType === 'IMAGE' && cardType !== 'IMAGE') matches = false;
+                else if (currentFilterType === 'CAROUSEL_ALBUM' && cardType !== 'CAROUSEL_ALBUM') matches = false;
+
+                card.style.display = matches ? 'flex' : 'none';
+                if (matches) visibleCount++;
+            });
+
+            // Б. Сортировка
+            cards.sort((a, b) => {
+                let valA, valB;
+                switch (sortBy) {
+                    case 'er':
+                        valA = parseFloat(a.dataset.er) || 0;
+                        valB = parseFloat(b.dataset.er) || 0;
+                        break;
+                    case 'likes':
+                        valA = parseInt(a.dataset.likes) || 0;
+                        valB = parseInt(b.dataset.likes) || 0;
+                        break;
+                    case 'comments':
+                        valA = parseInt(a.dataset.comments) || 0;
+                        valB = parseInt(b.dataset.comments) || 0;
+                        break;
+                    case 'date':
+                    default:
+                        valA = parseInt(a.dataset.timestamp) || 0;
+                        valB = parseInt(b.dataset.timestamp) || 0;
+                        break;
+                }
+
+                return sortOrder === 'desc' ? (valB - valA) : (valA - valB);
+            });
+
+            // В. Перестраиваем порядок карточек в DOM
+            cards.forEach(card => grid.appendChild(card));
+
+            // Обновляем счетчик
+            const countText = document.getElementById('visibleCountText');
+            if (countText) countText.textContent = `Показано: ${visibleCount} из ${cards.length}`;
+        }
+
+        // Запуск начальной сортировки по ER при открытии страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            applyFiltersAndSorting();
+        });
+
+        // 3. МОДАЛКА ИНСАЙТОВ
         async function openInsightsModal(mediaId, mediaType, likes, comments, permalink) {
             const overlay = document.getElementById('insightsModalOverlay');
             const loading = document.getElementById('insightsLoading');
@@ -574,7 +756,6 @@
                     document.getElementById('modalShares').textContent = data.shares ? data.shares.toLocaleString() : '0';
                     document.getElementById('modalPlays').textContent = data.plays ? data.plays.toLocaleString() : '0';
 
-                    // TRUE ER РАСЧЕТ И АНИМАЦИЯ
                     const er = data.engagementRate || 0;
                     document.getElementById('modalErValue').textContent = er + '%';
                     document.getElementById('modalErValue').style.color = data.badgeColor || '#10b981';
@@ -584,22 +765,19 @@
                     badge.style.color = data.badgeColor || '#10b981';
                     badge.style.borderColor = data.badgeColor || '#10b981';
 
-                    // НОВАЯ ШКАЛА ПРОГРЕСС-БАРА:
-                    // Максимум берем за 30% (для супер-хитов). Минимально 4% для красивого старта.
                     const maxScale = 30.0;
                     const progressPercent = Math.min(100, Math.max(er > 0 ? 5 : 0, (er / maxScale) * 100));
 
                     setTimeout(() => {
                         const progressBar = document.getElementById('modalErProgress');
                         progressBar.style.width = progressPercent + '%';
-                        // Динамический градиент под цвет бейджа:
                         progressBar.style.background = `linear-gradient(90deg, #38bdf8, ${data.badgeColor || '#ec4899'})`;
                     }, 50);
 
                     loading.style.display = 'none';
                     content.style.display = 'block';
                 } else {
-                    loading.textContent = '⚠️ Не удалось загрузить инсайты (Meta не предоставила статистику для этого медиа)';
+                    loading.textContent = '⚠️ Не удалось загрузить инсайты (Meta не предоставила статистику)';
                 }
             } catch (err) {
                 loading.textContent = '❌ Ошибка сети при получении статистики';
