@@ -396,7 +396,7 @@ namespace CrossChat.Controllers
 			string? base64Avatar = null;
 			if (!string.IsNullOrEmpty(profilePicUrl))
 			{
-				base64Avatar = await DownloadImageAsBase64(profilePicUrl);
+				base64Avatar = await DownloadImageAsBase64ForHtml(profilePicUrl);
 			}
 
 			// 4. Обновляем данные
