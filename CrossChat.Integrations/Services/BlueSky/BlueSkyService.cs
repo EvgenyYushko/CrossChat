@@ -370,6 +370,99 @@ namespace CrossChat.Integrations.Services
 			var err = await response.Content.ReadAsStringAsync();
 			_logger.LogError($"[BlueSky] ❌ Ошибка пеметки сообщеня как прочитанное: {err}");
 		}
+
+		/// <summary>
+		/// Получает список непрочитанных уведомлений (реплаи и меншены)
+		/// </summary>
+		public async Task<List<Notification>> GetUnreadNotificationsAsync(BlueSkyModel settings)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/app.bsky.notification.listNotifications?limit=25";
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					var result = JsonSerializer.Deserialize<NotificationListResponse>(json);
+
+					// Фильтруем только реплаи и упоминания, которые еще не прочитаны
+					return result?.Notifications?
+						.Where(n => !n.IsRead && (n.Reason == "reply" || n.Reason == "mention"))
+						.ToList() ?? new List<Notification>();
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка получения уведомлений");
+			}
+
+			return new List<Notification>();
+		}
+
+		/// <summary>
+		/// Отправляет ответ на конкретный комментарий пользователя в ветке BlueSky
+		/// </summary>
+		public async Task<bool> ReplyToThreadCommentAsync(string postText, string parentUri, string parentCid, string rootUri, string rootCid, BlueSkyModel setting)
+		{
+			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl)) return false;
+
+			try
+			{
+				postText = await TruncateTextToMaxLength(postText);
+				var pdsUrl = setting.PdsUrl?.TrimEnd('/');
+				var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
+
+				// Превращаем хештеги в кликабельные фасеты
+				List<Facet> facets = TryGetFacets(postText);
+
+				// Связываем: root — корень всей ветки, parent — комментарий, на который отвечаем!
+				var replyPayload = new
+				{
+					root = new { uri = rootUri, cid = rootCid },
+					parent = new { uri = parentUri, cid = parentCid }
+				};
+
+				var record = new
+				{
+					text = postText,
+					facets = facets.Any() ? facets : null,
+					reply = replyPayload,
+					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				};
+
+				var payload = new
+				{
+					repo = setting.Did,
+					collection = "app.bsky.feed.post",
+					record = record
+				};
+
+				var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+				var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+				var response = await SendWithDPoPAsync(HttpMethod.Post, postEndpoint, setting, content);
+				return response.IsSuccessStatusCode;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка отправки ответа на комментарий");
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Помечает уведомления прочитанными
+		/// </summary>
+		public async Task UpdateNotificationsSeenAsync(BlueSkyModel settings, DateTime seenAt)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/app.bsky.notification.updateSeen";
+
+			var payload = new { seenAt = seenAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") };
+			await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
+		}
 	}
 
 	#region Models

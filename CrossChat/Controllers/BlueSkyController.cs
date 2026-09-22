@@ -9,8 +9,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
-using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
@@ -388,7 +388,7 @@ namespace CrossChat.Controllers
 				// 2. Если такого аккаунта еще нет — создаем
 				settings = new BlueSkySettings { UserId = userId, Did = did };
 				_db.BlueSkySettings.Add(settings);
-				settings.ProfileId = GetActiveProfileId().Value;;
+				settings.ProfileId = GetActiveProfileId().Value; ;
 				isNew = true;
 			}
 
@@ -445,28 +445,36 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update")]
 		[Authorize]
-		public async Task<IActionResult> Update(int botId, string systemPrompt, int profileId)
+		public async Task<IActionResult> Update(
+			int botId,
+			string systemPrompt,
+			string commentPrompt,
+			int profileId,
+			bool isDirectEnabled,
+			bool isCommentsEnabled,
+			int commentReplyMode,
+			string? commentTemplates)
 		{
-			// 1. Получаем ID текущего пользователя
 			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
 
-			// 2. Обработка чекбокса (наш хак со скрытым полем)
-			var isActiveRaw = Request.Form["isActive"].ToString();
-			bool isActive = isActiveRaw.Contains("true");
-
-			// 3. Ищем настройки конкретного бота
 			var settings = await _db.BlueSkySettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			if (settings != null)
 			{
+				settings.IsActive = isDirectEnabled || isCommentsEnabled;
+				settings.IsDirectEnabled = isDirectEnabled;
+				settings.IsCommentsEnabled = isCommentsEnabled;
+
 				settings.SystemPrompt = systemPrompt;
-				settings.IsActive = isActive;
+				settings.CommentPrompt = commentPrompt;
+				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
+				settings.CommentTemplates = commentTemplates;
 				settings.ProfileId = profileId;
 
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}. Активен: {isActive}");
+				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}.");
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });

@@ -491,6 +491,12 @@
                 block.classList.add('open');
             }
         }
+
+        function updateCommentModeUi() {
+            const mode = document.getElementById('commentModeSelect').value;
+            const box = document.getElementById('commentTemplatesBox');
+            box.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
+        }
     </script>
 }
 
@@ -562,30 +568,71 @@
             <form action="/bluesky/update" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id" />
 
-                <!-- Переключатель активности -->
+                <!-- 1. ТУМБЛЕР АВТООТВЕТОВ В ЛС -->
                 <div class="switch-container">
                     <div>
-                        <label style="margin:0; font-size: 1.1rem; color: white;">Автоответы</label>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Обрабатывать упоминания и реплаи</div>
+                        <label style="margin:0; font-size: 1rem; color: white;">Автоответы в ЛС (Чат)</label>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Отвечать на входящие личные сообщения</div>
                     </div>
                     <label class="switch">
-                        <input type="hidden" name="isActive" value="false" />
-                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <input type="checkbox" name="isDirectEnabled" value="true" @(Model.IsDirectEnabled ? "checked" : "")>
                         <span class="slider"></span>
                     </label>
+                    <input type="hidden" name="isDirectEnabled" value="false">
                 </div>
 
+                <!-- 2. БЛОК АВТООТВЕТОВ НА КОММЕНТАРИИ -->
+                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label style="margin:0; font-size: 1rem; color: white; cursor: pointer;">Автоответы на комментарии</label>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Отвечать на реплаи и упоминания (Mentions)</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="commentsToggle" name="isCommentsEnabled" value="true" @(Model.IsCommentsEnabled ? "checked" : "")
+                                   onchange="document.getElementById('commentsSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
+                            <span class="slider"></span>
+                        </label>
+                        <input type="hidden" name="isCommentsEnabled" value="false">
+                    </div>
+
+                    <!-- Подробные настройки комментариев -->
+                    <div id="commentsSettingsBlock" style="display: @(Model.IsCommentsEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                        <div>
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа:</label>
+                            <select name="commentReplyMode" id="commentModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateCommentModeUi()">
+                                <option value="2" selected="@(Model.CommentReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
+                                <option value="3" selected="@(Model.CommentReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
+                                <option value="1" selected="@(Model.CommentReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
+                            </select>
+                        </div>
+
+                        <div id="commentTemplatesBox" style="display: @(Model.CommentReplyMode == 1 ? "none" : "block");">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                                Шаблоны ответов со Spintax {вариант1|вариант2}:
+                            </label>
+                            <textarea name="commentTemplates" rows="3" class="text-input" style="font-size: 0.9rem;"
+                                  placeholder="{Спасибо|Благодарю}! ❤️&#10;Рады видеть! ✨">@(Model.CommentTemplates ?? "{Спасибо|Благодарю}! ❤️\nРады видеть вас здесь! ✨")</textarea>
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Движок автоматически очеловечивает пунктуацию и исключает повторение последних фраз.
+                            </small>
+                        </div>
+
+                        <div>
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Промпт для комментариев (ИИ)</label>
+                            <textarea name="commentPrompt" rows="2" class="text-input" style="font-size: 0.9rem;">@Model.CommentPrompt</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ПРОМПТ ДЛЯ ЛС -->
                 <div class="form-group">
-                    <label>Системный промпт для ИИ</label>
-                    <textarea name="systemPrompt" placeholder="Опишите поведение бота...">@Model.SystemPrompt</textarea>
-                    <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.5rem;">
-                        Инструкция, которой будет следовать Gemini при ответах в BlueSky.
-                    </p>
+                    <label>Системный промпт для ЛС (Чат)</label>
+                    <textarea name="systemPrompt" placeholder="Опишите поведение бота в личных сообщениях...">@Model.SystemPrompt</textarea>
                 </div>
 
                 <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
-                    <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
-
+                    <h4 style="margin-top: 20px; margin-bottom: 10px;">Привязан к профилю</h4>
                     <select name="profileId" class="select-input">
                         @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
                         {
@@ -596,7 +643,7 @@
                     </select>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                <button type="submit" class="btn btn-primary">Сохранить настройки</button>
             </form>
 
             <form action="/bluesky/disconnect" method="post" onsubmit="return confirm('Отключить аккаунт BlueSky?');" style="margin-top: 1rem;">

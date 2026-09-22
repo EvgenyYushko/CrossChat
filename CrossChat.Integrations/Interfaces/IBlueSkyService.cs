@@ -23,4 +23,8 @@ public interface IBlueSkyService
 	Task<(bool Success, string? Uri, string? Cid)> PublishPostWithImagesAsync(string caption, List<string> base64Images, BlueSkyModel settings);
 	Task<(bool Success, string? Uri, string? Cid)> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings);
 	Task<bool> CreateReplyAsync(string postText, string rootUri, string rootCid, BlueSkyModel setting);
+
+	Task<List<Notification>> GetUnreadNotificationsAsync(BlueSkyModel settings);
+	Task<bool> ReplyToThreadCommentAsync(string postText, string parentUri, string parentCid, string rootUri, string rootCid, BlueSkyModel setting);
+	Task UpdateNotificationsSeenAsync(BlueSkyModel settings, DateTime seenAt);
 }

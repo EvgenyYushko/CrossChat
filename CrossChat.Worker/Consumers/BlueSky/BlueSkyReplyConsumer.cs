@@ -30,7 +30,8 @@ namespace CrossChat.Worker.Consumers.BlueSky
 
 			// 1. Достаем настройки бота из БД
 			var bot = await _db.BlueSkySettings.FindAsync(msg.BotDbId);
-			if (bot == null || !bot.IsActive) return;
+			// Если бот выключен вообще ИЛИ выключены конкретно ответы в ЛС:
+			if (bot == null || !bot.IsActive || !bot.IsDirectEnabled) return;
 
 			try
 			{

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Services;
@@ -95,29 +96,104 @@ namespace CrossChat.Worker.Jobs
 						PdsUrl = bot.PdsUrl
 					};
 
-					// 2. Получаем непрочитанные диалоги с использованием свежего токена
-					var unreadConvos = await _bskyService.GetUnreadConversationsAsync(botModel);
-
-					if (unreadConvos != null)
+					if (bot.IsDirectEnabled)
 					{
-						foreach (var convo in unreadConvos)
+						// 2. Получаем непрочитанные диалоги с использованием свежего токена
+						var unreadConvos = await _bskyService.GetUnreadConversationsAsync(botModel);
+
+						if (unreadConvos != null)
 						{
-							// Если последнее сообщение от нас — пропускаем
-							if (convo.LastMessage?.Sender.Did == botModel.Did)
+							foreach (var convo in unreadConvos)
 							{
-								continue;
+								// Если последнее сообщение от нас — пропускаем
+								if (convo.LastMessage?.Sender.Did == botModel.Did)
+								{
+									continue;
+								}
+
+								var queueLockKey = $"lock:bsky_queued:{convo.Id}";
+								if (await _redis.StringSetAsync(queueLockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
+								{
+									await _publishEndpoint.Publish(new BlueSkyProcessReply
+									{
+										BotDbId = bot.Id,
+										ConvoId = convo.Id
+									});
+
+									await _console.Log($"Чат {convo.Id} для @{bot.Handle} отправлен в очередь.", bot.UserId, bot.Id);
+								}
+							}
+						}
+					}
+
+					// ====================================================================
+					// 2. ОБРАБОТКА КОММЕНТАРИЕВ И УПОМИНАНИЙ (REPLIES & MENTIONS)
+					// ====================================================================
+					if (bot.IsCommentsEnabled)
+					{
+						var notifications = await _bskyService.GetUnreadNotificationsAsync(botModel);
+
+						if (notifications != null && notifications.Any())
+						{
+							DateTime maxIndexedAt = DateTime.MinValue;
+
+							foreach (var notif in notifications)
+							{
+								// Игнорируем свои собственные сообщения
+								if (notif.Author.Did == botModel.Did) continue;
+
+								// Защита от дублей через Redis (на 2 часа)
+								var lockKey = $"lock:bsky_comment:{notif.Cid}";
+								if (await _redis.StringSetAsync(lockKey, "1", TimeSpan.FromHours(2), When.NotExists))
+								{
+									string text = "";
+									string rootUri = notif.Uri;
+									string rootCid = notif.Cid;
+
+									// Извлекаем текст и ссылки на родительский пост из record
+									if (notif.Record != null)
+									{
+										var recordJson = JsonSerializer.Serialize(notif.Record);
+										using var doc = JsonDocument.Parse(recordJson);
+
+										if (doc.RootElement.TryGetProperty("text", out var t)) text = t.GetString() ?? "";
+
+										if (doc.RootElement.TryGetProperty("reply", out var rep))
+										{
+											if (rep.TryGetProperty("root", out var r) && r.TryGetProperty("uri", out var ru) && r.TryGetProperty("cid", out var rc))
+											{
+												rootUri = ru.GetString() ?? notif.Uri;
+												rootCid = rc.GetString() ?? notif.Cid;
+											}
+										}
+									}
+
+									// Публикуем событие комментария в MassTransit!
+									await _publishEndpoint.Publish(new BlueSkyCommentReceived
+									{
+										BotDbId = bot.Id,
+										CommentUri = notif.Uri,
+										CommentCid = notif.Cid,
+										RootUri = rootUri,
+										RootCid = rootCid,
+										AuthorDid = notif.Author.Did,
+										AuthorHandle = notif.Author.Handle,
+										Text = text
+									});
+
+									await _console.Log($"Комментарий от @{notif.Author.Handle} отправлен в очередь ответов.", bot.UserId, bot.Id);
+								}
+
+								if (DateTime.TryParse(notif.IndexedAt, out var dt) && dt > maxIndexedAt)
+								{
+									maxIndexedAt = dt;
+								}
 							}
 
-							var queueLockKey = $"lock:bsky_queued:{convo.Id}";
-							if (await _redis.StringSetAsync(queueLockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
+							// Помечаем обработанные уведомления прочитанными на сервере BlueSky
+							if (maxIndexedAt > DateTime.MinValue)
 							{
-								await _publishEndpoint.Publish(new BlueSkyProcessReply
-								{
-									BotDbId = bot.Id,
-									ConvoId = convo.Id
-								});
-
-								await _console.Log($"Чат {convo.Id} для @{bot.Handle} отправлен в очередь.", bot.UserId, bot.Id);
+								await _bskyService.UpdateNotificationsSeenAsync(botModel, maxIndexedAt);
 							}
 						}
 					}
