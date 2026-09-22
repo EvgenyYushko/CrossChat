@@ -382,20 +382,41 @@ namespace CrossChat.Integrations.Services
 			try
 			{
 				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+				var json = await response.Content.ReadAsStringAsync();
+
+				// ВЫВОДИМ СЫРОЙ ОТВЕТ В ЛОГ ДЛЯ ПОЛНОЙ ДИАГНОСТИКИ:
+				_logger.LogInformation("[BlueSky Notif Raw HTTP {Status}]: {Json}", response.StatusCode, json);
+
 				if (response.IsSuccessStatusCode)
 				{
-					var json = await response.Content.ReadAsStringAsync();
-					var result = JsonSerializer.Deserialize<NotificationListResponse>(json);
+					var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+					var result = JsonSerializer.Deserialize<NotificationListResponse>(json, options);
 
-					// Фильтруем только реплаи и упоминания, которые еще не прочитаны
-					return result?.Notifications?
-						.Where(n => !n.IsRead && (n.Reason == "reply" || n.Reason == "mention"))
-						.ToList() ?? new List<Notification>();
+					if (result?.Notifications == null || !result.Notifications.Any())
+					{
+						_logger.LogInformation("[BlueSky] Список уведомлений в ответе API пуст.");
+						return new List<Notification>();
+					}
+
+					_logger.LogInformation("[BlueSky] Получено {Count} уведомлений из API. Применяем фильтр...", result.Notifications.Count);
+
+					// ВАЖНО: Убираем проверку !n.IsRead, так как открытие приложения на телефоне сразу делает ее true!
+					// Фильтруем реплаи, упоминания и цитаты:
+					var filtered = result.Notifications
+						.Where(n => n.Reason == "reply" || n.Reason == "mention" || n.Reason == "quote")
+						.ToList();
+
+					_logger.LogInformation("[BlueSky] После фильтрации подходит {Count} комментариев.", filtered.Count);
+					return filtered;
+				}
+				else
+				{
+					_logger.LogError("[BlueSky] Ошибка запроса уведомлений (HTTP {Code}): {Err}", response.StatusCode, json);
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[BlueSky] Ошибка получения уведомлений");
+				_logger.LogError(ex, "[BlueSky] Исключение при получении уведомлений");
 			}
 
 			return new List<Notification>();

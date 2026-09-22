@@ -196,7 +196,7 @@ namespace CrossChat.Worker.Jobs
 						}
 						else
 						{
-							await _console.Log("Нет новых комментариев для @{Handle}.", bot.UserId, bot.Id);
+							await _console.Log($"Нет новых комментариев для {bot.Handle}.", bot.UserId, bot.Id);
 						}
 					}
 				}
