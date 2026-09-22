@@ -391,21 +391,41 @@ namespace CrossChat.Integrations.Services
 			try
 			{
 				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+				var json = await response.Content.ReadAsStringAsync();
+
+				// 1. ВЫВОДИМ СЫРОЙ ОТВЕТ СЕРВЕРА
+				_logger.LogInformation("[BlueSky Notif Raw HTTP {Status}]: {Json}", response.StatusCode, json);
+
 				if (response.IsSuccessStatusCode)
 				{
-					var json = await response.Content.ReadAsStringAsync();
 					var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 					var result = JsonSerializer.Deserialize<NotificationListResponse>(json, options);
 
-					// ВАЖНО: Фильтруем НЕПРОЧИТАННЫЕ реплаи и упоминания (отсекая лайки, подписки и уже прочитанное)
-					return result?.Notifications?
+					if (result?.Notifications == null || !result.Notifications.Any())
+					{
+						_logger.LogInformation("[BlueSky] Список уведомлений в ответе API пуст.");
+						return new List<Notification>();
+					}
+
+					// Считаем метрики для полной картины
+					int total = result.Notifications.Count;
+					int unread = result.Notifications.Count(n => !n.IsRead);
+					int repliesAndMentions = result.Notifications.Count(n => n.Reason == "reply" || n.Reason == "mention");
+
+					// 2. ТВОЯ ТЕКУЩАЯ СТРОГАЯ ЛОГИКА
+					var filtered = result.Notifications
 						.Where(n => !n.IsRead && (n.Reason == "reply" || n.Reason == "mention"))
-						.ToList() ?? new List<Notification>();
+						.ToList();
+
+					_logger.LogInformation(
+						"[BlueSky] Анализ уведомлений: Всего={Total} | Непрочитанных (!isRead)={Unread} | Реплаев/Меншенов={Replies} | Прошли фильтр={Filtered}",
+						total, unread, repliesAndMentions, filtered.Count);
+
+					return filtered;
 				}
 				else
 				{
-					var err = await response.Content.ReadAsStringAsync();
-					_logger.LogError("[BlueSky] Ошибка получения уведомлений (HTTP {Code}): {Err}", response.StatusCode, err);
+					_logger.LogError("[BlueSky] Ошибка запроса уведомлений (HTTP {Code}): {Err}", response.StatusCode, json);
 				}
 			}
 			catch (Exception ex)
