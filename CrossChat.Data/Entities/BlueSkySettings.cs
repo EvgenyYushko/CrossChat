@@ -41,5 +41,8 @@ namespace CrossChat.Data.Entities
 
 		// Промпт для комментариев ИИ
 		public string CommentPrompt { get; set; } = "Ты ассистент в BlueSky. Отвечай на комментарии дружелюбно, живо и кратко.";
+
+		// Дата и время последнего обработанного комментария строго в UTC (защита от повторов)
+		public DateTime? LastProcessedAt { get; set; }
 	}
 }

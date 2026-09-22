@@ -127,7 +127,7 @@ builder.Services.AddQuartz(q =>
 	q.AddTrigger(opts => opts
 	   .ForJob(joBlueSkybKey)
 	   .WithIdentity("BluesSkyAnswerJob-Trigger")
-	   .WithCronSchedule("0 5,15,25,40,45,55 * * * ?"));
+	   .WithCronSchedule("0 5,10,15,20,25,30,35,40,45,50,55,59 * * * ?"));
 
 	// 3
 	var jobFaceBookbKey = new JobKey("FaceBookAnswerJob");

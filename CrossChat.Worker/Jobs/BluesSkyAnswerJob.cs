@@ -135,20 +135,26 @@ namespace CrossChat.Worker.Jobs
 
 						if (notifications != null && notifications.Any())
 						{
-							await _console.Log($"Найдено {notifications.Count} новых уведомлений для @{bot.Handle}!", bot.UserId, bot.Id);
+							// 1. Берем границу последнего обработанного комментария в честном UTC!
+							// Если запускается впервые — берем комментарии за последние 30 минут от РЕАЛЬНОГО UTC (DateTime.UtcNow)
+							DateTime lastProcessedUtc = bot.LastProcessedAt.HasValue
+								? DateTime.SpecifyKind(bot.LastProcessedAt.Value, DateTimeKind.Utc)
+								: DateTime.UtcNow.AddMinutes(-30);
 
-							DateTime maxIndexedAt = DateTime.MinValue;
+							// 2. Сравниваем даты через DateTimeOffset (он гарантирует, что часовой пояс не сдвинется!)
+							var newComments = notifications
+								.Where(n => DateTimeOffset.TryParse(n.IndexedAt, out var dto) && dto.UtcDateTime > lastProcessedUtc)
+								.Where(n => n.Author.Did != botModel.Did) // не от себя
+								.OrderBy(n => DateTimeOffset.Parse(n.IndexedAt).UtcDateTime) // от старых к новым
+								.ToList();
 
-							foreach (var notif in notifications)
+							if (newComments.Any())
 							{
-								// Игнорируем свои собственные сообщения
-								if (notif.Author.Did == botModel.Did) continue;
+								await _console.Log($"[BlueSky] Найдено {newComments.Count} новых комментариев, созданных после {lastProcessedUtc:HH:mm:ss} UTC!", bot.UserId, bot.Id);
 
-								// Защита от дублей в Redis (на 2 часа)
-								var lockKey = $"lock:bsky_comment:{notif.Cid}";
+								DateTime maxIndexedAtUtc = lastProcessedUtc;
 
-								// ИСПРАВЛЕНИЕ: здесь должен быть lockKey, а не queueLockKey!
-								if (await _redis.StringSetAsync(lockKey, "1", TimeSpan.FromHours(2), When.NotExists))
+								foreach (var notif in newComments)
 								{
 									string text = "";
 									string rootUri = notif.Uri;
@@ -184,19 +190,24 @@ namespace CrossChat.Worker.Jobs
 										Text = text
 									});
 
-									await _console.Log($"Комментарий от @{notif.Author.Handle} отправлен в очередь ответов.", bot.UserId, bot.Id);
+									await _console.Log($"Комментарий от @{notif.Author.Handle}: «{text}» отправлен в очередь ответов.", bot.UserId, bot.Id);
+
+									if (DateTimeOffset.TryParse(notif.IndexedAt, out var dto) && dto.UtcDateTime > maxIndexedAtUtc)
+									{
+										maxIndexedAtUtc = dto.UtcDateTime;
+									}
 								}
 
-								if (DateTime.TryParse(notif.IndexedAt, out var dt) && dt > maxIndexedAt)
-								{
-									maxIndexedAt = dt;
-								}
+								// 3. Сохраняем в PostgreSQL строго в UTC!
+								bot.LastProcessedAt = maxIndexedAtUtc;
+								await _db.SaveChangesAsync();
+
+								// Обновляем seenAt на сервере BlueSky честным временем UTC
+								await _bskyService.UpdateNotificationsSeenAsync(botModel, maxIndexedAtUtc);
 							}
-
-							// Помечаем все обработанные уведомления прочитанными на сервере BlueSky
-							if (maxIndexedAt > DateTime.MinValue)
+							else
 							{
-								await _bskyService.UpdateNotificationsSeenAsync(botModel, maxIndexedAt);
+								await _console.Log($"[BlueSky] Все комментарии уже обработаны ранее (до {lastProcessedUtc:HH:mm:ss} UTC).", bot.UserId, bot.Id);
 							}
 						}
 					}
