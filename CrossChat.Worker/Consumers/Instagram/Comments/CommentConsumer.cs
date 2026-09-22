@@ -125,6 +125,5 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 		{
 			return InstagramCommentEngine.GetRandomTemplate(rawTemplates);
 		}
-
 	}
 }

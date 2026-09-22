@@ -389,13 +389,41 @@
 
             <form action="/threads/update-settings" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id">
-                <div class="switch-container">
-                    <label style="margin:0;">Включить автоответы</label>
-                    <label class="switch">
-                        <input type="hidden" name="isActive" value="false" />
-                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
-                        <span class="slider"></span>
-                    </label>
+                <!-- АВТООТВЕТЫ В THREADS С ВЫБОРОМ РЕЖИМА -->
+                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label style="margin: 0; font-weight: 600; cursor: pointer;">Автоответы на комментарии (Replies)</label>
+                        <label class="switch">
+                            <input type="hidden" name="isActive" value="false" />
+                            <input type="checkbox" id="threadsActiveToggle" name="isActive" value="true" @(Model.IsActive ? "checked" : "")
+                                   onchange="document.getElementById('threadsSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- ПОДРОБНЫЕ НАСТРОЙКИ СПОСОБА ОТВЕТА -->
+                    <div id="threadsSettingsBlock" style="display: @(Model.IsActive ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                        <div>
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа:</label>
+                            <select name="replyMode" id="threadsReplyModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateThreadsModeUi()">
+                                <option value="2" selected="@(Model.ReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
+                                <option value="3" selected="@(Model.ReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
+                                <option value="1" selected="@(Model.ReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
+                            </select>
+                        </div>
+
+                        <!-- ПОЛЕ ДЛЯ ШАБЛОНОВ СО SPINTAX -->
+                        <div id="threadsTemplatesBox" style="display: @(Model.ReplyMode == 1 ? "none" : "block");">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                                Шаблоны ответов (поддерживает {вариант1|вариант2} и перенос строк):
+                            </label>
+                            <textarea name="replyTemplates" rows="3" class="text-input" style="font-size: 0.9rem;"
+                                  placeholder="{Спасибо|Благодарю}! ❤️&#10;Рада видеть! ✨">@(Model.ReplyTemplates ?? "{Спасибо|Благодарю}! ❤️\nРада видеть тебя здесь! ✨")</textarea>
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Движок автоматически раскрывает Spintax, очеловечивает знаки препинания и исключает повторы фраз.
+                            </small>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">

@@ -11,8 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
@@ -471,11 +471,16 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
+		public async Task<IActionResult> UpdateSettings(
+			int botId,
+			string systemPrompt,
+			int profileId,
+			// === НОВЫЕ ПАРАМЕТРЫ РЕЖИМА И ШАБЛОНОВ ===
+			int replyMode,
+			string? replyTemplates)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-			// Ищем настройки бота по его Id И проверяем, что он принадлежит текущему юзеру
 			var settings = await _db.ThreadsSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
@@ -487,32 +492,23 @@ namespace CrossChat.Controllers
 				var isActiveRaw = Request.Form["isActive"].ToString();
 				bool isActive = isActiveRaw.Contains("true");
 
-				// 2. Управление вебхуками (если статус изменился)
-				if (settings.IsActive != isActive)
-				{
-					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {isActive}");
-
-					//bool success = await ManageWebhooksAsync(settings.AccessToken, newIsActiveStatus);
-					//if (!success)
-					//{
-					//	_logger.LogWarning($"[Meta API] Не удалось обновить подписку на вебхуки для бота {botId}");
-					//}
-				}
-
-				// 3. Обновляем модель
 				settings.IsActive = isActive;
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.ProfileId = profileId;
 
+				// Сохраняем режим ответов и шаблоны со Spintax:
+				settings.ReplyMode = replyMode > 0 ? replyMode : 2;
+				settings.ReplyTemplates = replyTemplates;
+
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"Настройки бота {botId} успешно сохранены.");
+				_logger.LogInformation($"Настройки бота Threads '{settings.Username}' обновлены.");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, $"Ошибка при обновлении настроек бота {botId}");
+				_logger.LogError(ex, $"Ошибка при обновлении настроек Threads {botId}");
 			}
 
-			return RedirectToAction("Index", new { botId = botId });
+			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 	}
 }
