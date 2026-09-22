@@ -1,94 +1,164 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 public static class InstagramCommentEngine
 {
-    private static readonly Regex SpintaxRegex = new(@"\{([^{}]+)\}", RegexOptions.Compiled);
+	private static readonly Regex SpintaxRegex = new(@"\{([^{}]+)\}", RegexOptions.Compiled);
 
-    /// <summary>
-    /// Главный метод: достает фразу из переменной БД, раскрывает {а|б} и оживляет текст
-    /// </summary>
-    public static string? GetRandomTemplate(string? rawTemplates)
-    {
-        if (string.IsNullOrWhiteSpace(rawTemplates)) return null;
+	// Память на последние использованные фразы (чтобы не повторяться)
+	private static readonly Queue<string> RecentTemplates = new();
+	private const int MaxRecentMemory = 5;
 
-        // 1. Достаем случайную строку (поддерживает и обычный список, и JSON, и разделитель "|")
-        string? selected = PickRandomLine(rawTemplates);
-        if (string.IsNullOrWhiteSpace(selected)) return null;
+	public static string? GetRandomTemplate(string? rawTemplates)
+	{
+		if (string.IsNullOrWhiteSpace(rawTemplates)) return null;
 
-        // 2. Раскрываем Spintax: {пасиб|спасибо}
-        selected = ResolveSpintax(selected);
+		// 1. Достаем случайную строку с защитой от дублей
+		string? selected = PickRandomLineWithAntiRepeat(rawTemplates);
+		if (string.IsNullOrWhiteSpace(selected)) return null;
 
-        // 3. Добавляем щепотку "человечности" (скобочки, строчная буква)
-        selected = AddHumanSalt(selected);
+		// 2. Раскрываем Spintax: {пасиб|спасибо}
+		selected = ResolveSpintax(selected);
 
-        return selected;
-    }
+		// 3. Активно солим (добавляем скобочки, точки, строчные буквы)
+		selected = AddHumanSalt(selected);
 
-    private static string? PickRandomLine(string raw)
-    {
-        var trimmed = raw.Trim();
+		return selected;
+	}
 
-        // Если в БД случайно лежит JSON-массив: ["фраза1", "фраза2"]
-        if (trimmed.StartsWith("["))
-        {
-            try
-            {
-                var list = JsonSerializer.Deserialize<List<string>>(trimmed);
-                if (list != null && list.Count > 0)
-                    return list[Random.Shared.Next(list.Count)].Trim();
-            }
-            catch { }
-        }
+	private static string? PickRandomLineWithAntiRepeat(string raw)
+	{
+		var trimmed = raw.Trim();
+		List<string>? lines = null;
 
-        // Если строки через перенос или "|"
-        var lines = trimmed
-            .Split(new[] { "\r\n", "\r", "\n", "|" }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(l => l.Trim())
-            .Where(l => !string.IsNullOrEmpty(l))
-            .ToList();
+		if (trimmed.StartsWith("["))
+		{
+			try
+			{
+				lines = JsonSerializer.Deserialize<List<string>>(trimmed);
+			}
+			catch { }
+		}
 
-        return lines.Count > 0 ? lines[Random.Shared.Next(lines.Count)] : trimmed;
-    }
+		if (lines == null || lines.Count == 0)
+		{
+			lines = trimmed
+				.Split(new[] { "\r\n", "\r", "\n", "|" }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(l => l.Trim())
+				.Where(l => !string.IsNullOrEmpty(l))
+				.ToList();
+		}
 
-    public static string ResolveSpintax(string text)
-    {
-        while (SpintaxRegex.IsMatch(text))
-        {
-            text = SpintaxRegex.Replace(text, match =>
-            {
-                var options = match.Groups[1].Value.Split('|');
-                return options[Random.Shared.Next(options.Length)];
-            });
-        }
-        return text;
-    }
+		if (lines == null || lines.Count == 0) return null;
 
-    public static string AddHumanSalt(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return text;
+		// Пытаемся взять строку, которой не было в последних ответах (до 10 попыток)
+		string candidate = lines[Random.Shared.Next(lines.Count)];
+		int attempts = 0;
 
-        // 1. Делаем первую букву маленькой, ТОЛЬКО если это буква (не ломает эмодзи)
-        if (Random.Shared.Next(100) < 85 && text.Length > 0 && char.IsLetter(text[0]))
-        {
-            text = char.ToLower(text[0]) + text.Substring(1);
-        }
+		lock (RecentTemplates)
+		{
+			while (RecentTemplates.Contains(candidate) && attempts < 10 && lines.Count > 1)
+			{
+				candidate = lines[Random.Shared.Next(lines.Count)];
+				attempts++;
+			}
 
-        // 2. Живые скобочки в конце: рандомим от 1 до 3 скобок
-        if (text.EndsWith(")"))
-        {
-            text = text.TrimEnd(')');
-            text += new string(')', Random.Shared.Next(1, 4));
-        }
-        // 3. Многоточия: случайно варьируем ".." или "..."
-        else if (text.EndsWith(".."))
-        {
-            text = text.TrimEnd('.') + (Random.Shared.Next(2) == 0 ? ".." : "...");
-        }
+			RecentTemplates.Enqueue(candidate);
+			if (RecentTemplates.Count > MaxRecentMemory)
+			{
+				RecentTemplates.Dequeue();
+			}
+		}
 
-        return text.Trim();
-    }
+		return candidate;
+	}
+
+	public static string ResolveSpintax(string text)
+	{
+		while (SpintaxRegex.IsMatch(text))
+		{
+			text = SpintaxRegex.Replace(text, match =>
+			{
+				var options = match.Groups[1].Value.Split('|');
+				return options[Random.Shared.Next(options.Length)];
+			});
+		}
+		return text;
+	}
+
+	public static string AddHumanSalt(string text)
+	{
+		if (string.IsNullOrWhiteSpace(text)) return text;
+
+		text = text.Trim();
+
+		// 1. Делаем первую букву маленькой (85% шанс), если это буква
+		if (Random.Shared.Next(100) < 85 && text.Length > 0 && char.IsLetter(text[0]))
+		{
+			text = char.ToLower(text[0]) + text.Substring(1);
+		}
+
+		// 2. ЕСЛИ В КОНЦЕ ИЗНАЧАЛЬНО СКОБКА ")"
+		if (text.EndsWith(")"))
+		{
+			text = text.TrimEnd(')');
+
+			// 20% шанс ВООБЩЕ убрать скобку (оставить голое слово!)
+			if (Random.Shared.Next(100) < 20)
+			{
+				return text.Trim();
+			}
+
+			// Иначе ставим от 1 до 3 скобочек
+			text += new string(')', Random.Shared.Next(1, 4));
+			return text;
+		}
+
+		// 3. ЕСЛИ В КОНЦЕ МНОГОТОЧИЕ ".." или "..."
+		if (text.EndsWith("..") || text.EndsWith("..."))
+		{
+			text = text.TrimEnd('.');
+			int dotRoll = Random.Shared.Next(100);
+
+			if (dotRoll < 20) return text.Trim(); // 20% шанс убрать точки вовсе
+			text += (dotRoll < 60) ? ".." : "...";
+			return text;
+		}
+
+		// 4. ЕСЛИ В КОНЦЕ СМАЙЛИК (🙈, 🥰 и т.д.)
+		if (!char.IsLetterOrDigit(text[^1]) && text[^1] != '!' && text[^1] != '?')
+		{
+			// Только в 30% случаев прилепляем скобку после смайла (🙈)), в 70% оставляем как есть
+			if (Random.Shared.Next(100) < 30)
+			{
+				text += new string(')', Random.Shared.Next(1, 3));
+			}
+			return text;
+		}
+
+		// 5. ЕСЛИ В КОНЦЕ ОБЫЧНОЕ СЛОВО БЕЗ ЗНАКОВ:
+		if (char.IsLetterOrDigit(text[^1]))
+		{
+			int roll = Random.Shared.Next(100);
+
+			if (roll < 45) // 45% — скобочки ) или ))
+			{
+				text += new string(')', Random.Shared.Next(1, 3));
+			}
+			else if (roll < 70) // 25% — ОСТАВЛЯЕМ ГОЛЫМ СЛОВОМ (вообще без знаков!)
+			{
+				// ничего не добавляем, выходит чистый текст
+			}
+			else if (roll < 88) // 18% — многоточие
+			{
+				text += Random.Shared.Next(2) == 0 ? ".." : "...";
+			}
+			else // 12% — восклицательный знак
+			{
+				text += "!";
+			}
+		}
+
+		return text.Trim();
+	}
 }
