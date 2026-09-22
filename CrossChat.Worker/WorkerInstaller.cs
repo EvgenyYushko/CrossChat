@@ -34,6 +34,7 @@ namespace CrossChat.Worker
 			x.AddConsumer<ThreadsReplyConsumer>(typeof(ThreadsReplyDefinition)); // Явная регистрация
 			x.AddConsumer<ThreadsPublishConsumer>();
 			x.AddConsumer<BlueSkyReplyConsumer>(typeof(BlueSkyReplyDefinition));
+			x.AddConsumer<BlueSkyCommentConsumer>(typeof(BlueSkyCommentDefinition));
 			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}

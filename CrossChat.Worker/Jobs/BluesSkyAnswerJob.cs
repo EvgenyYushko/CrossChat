@@ -131,7 +131,6 @@ namespace CrossChat.Worker.Jobs
 					// ====================================================================
 					if (bot.IsCommentsEnabled)
 					{
-						await _console.Log($"Проверка новых комментариев и упоминаний для {bot.Handle}...", bot.UserId, bot.Id);
 						var notifications = await _bskyService.GetUnreadNotificationsAsync(botModel);
 
 						if (notifications != null && notifications.Any())
@@ -142,9 +141,13 @@ namespace CrossChat.Worker.Jobs
 
 							foreach (var notif in notifications)
 							{
+								// Игнорируем свои собственные сообщения
 								if (notif.Author.Did == botModel.Did) continue;
 
+								// Защита от дублей в Redis (на 2 часа)
 								var lockKey = $"lock:bsky_comment:{notif.Cid}";
+
+								// ИСПРАВЛЕНИЕ: здесь должен быть lockKey, а не queueLockKey!
 								if (await _redis.StringSetAsync(lockKey, "1", TimeSpan.FromHours(2), When.NotExists))
 								{
 									string text = "";
@@ -168,6 +171,7 @@ namespace CrossChat.Worker.Jobs
 										}
 									}
 
+									// Отправляем в очередь MassTransit
 									await _publishEndpoint.Publish(new BlueSkyCommentReceived
 									{
 										BotDbId = bot.Id,
@@ -189,14 +193,11 @@ namespace CrossChat.Worker.Jobs
 								}
 							}
 
+							// Помечаем все обработанные уведомления прочитанными на сервере BlueSky
 							if (maxIndexedAt > DateTime.MinValue)
 							{
 								await _bskyService.UpdateNotificationsSeenAsync(botModel, maxIndexedAt);
 							}
-						}
-						else
-						{
-							await _console.Log($"Нет новых комментариев для {bot.Handle}.", bot.UserId, bot.Id);
 						}
 					}
 				}
