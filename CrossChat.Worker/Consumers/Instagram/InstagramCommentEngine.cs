@@ -13,14 +13,17 @@ public static class InstagramCommentEngine
 	{
 		if (string.IsNullOrWhiteSpace(rawTemplates)) return null;
 
-		// 1. Достаем случайную строку с защитой от дублей
+		// 1. Достаем строку
 		string? selected = PickRandomLineWithAntiRepeat(rawTemplates);
 		if (string.IsNullOrWhiteSpace(selected)) return null;
 
 		// 2. Раскрываем Spintax: {пасиб|спасибо}
 		selected = ResolveSpintax(selected);
 
-		// 3. Активно солим (добавляем скобочки, точки, строчные буквы)
+		// СТРАХОВКА: если где-то осталась фигурная скобка, стираем её намертво
+		selected = selected.Replace("{", "").Replace("}", "").Trim();
+
+		// 3. Солим (скобочки, точки)
 		selected = AddHumanSalt(selected);
 
 		return selected;
@@ -31,6 +34,7 @@ public static class InstagramCommentEngine
 		var trimmed = raw.Trim();
 		List<string>? lines = null;
 
+		// Читаем JSON массив [...]
 		if (trimmed.StartsWith("["))
 		{
 			try
@@ -40,10 +44,11 @@ public static class InstagramCommentEngine
 			catch { }
 		}
 
+		// Если обычный текст — делим ТОЛЬКО по переносам строк (БЕЗ "|")
 		if (lines == null || lines.Count == 0)
 		{
 			lines = trimmed
-				.Split(new[] { "\r\n", "\r", "\n", "|" }, StringSplitOptions.RemoveEmptyEntries)
+				.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
 				.Select(l => l.Trim())
 				.Where(l => !string.IsNullOrEmpty(l))
 				.ToList();
@@ -51,7 +56,7 @@ public static class InstagramCommentEngine
 
 		if (lines == null || lines.Count == 0) return null;
 
-		// Пытаемся взять строку, которой не было в последних ответах (до 10 попыток)
+		// Анти-повтор
 		string candidate = lines[Random.Shared.Next(lines.Count)];
 		int attempts = 0;
 
