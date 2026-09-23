@@ -1048,9 +1048,14 @@
                 <div class="form-group" id="locationSelectGroup" style="margin-bottom: 1.25rem; position: relative;">
                     <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <span style="font-weight: 600;">📍 Местоположение (Instagram / Facebook):</span>
-                        <button type="button" id="clearLocationBtn" onclick="clearLocationSelection()" style="display: none; background: none; border: none; color: #ef4444; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
-                            ✕ Убрать геометку
-                        </button>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <a href="https://www.instagram.com/explore/locations/" target="_blank" style="color: var(--accent-color); font-size: 0.75rem; text-decoration: none;">
+                                🌐 Каталог мест
+                            </a>
+                            <button type="button" id="clearLocationBtn" onclick="clearLocationSelection()" style="display: none; background: none; border: none; color: #ef4444; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
+                                ✕ Убрать
+                            </button>
+                        </div>
                     </label>
 
                     <div style="position: relative;">
@@ -2987,10 +2992,32 @@
             }
 
             function onLocationInput(query) {
-                clearTimeout(locationSearchTimeout);
-                locationSearchTimeout = setTimeout(() => {
-                    fetchAndRenderLocations(query);
-                }, 250);
+                // ПАРСЕР ССЫЛОК INSTAGRAM EXPLORE LOCATIONS
+                // Если пользователь вставил полную ссылку вроде:
+                // https://www.instagram.com/explore/locations/786966744/metz/
+                const instaLocationUrlRegex = /locations\/(\d+)(?:\/([^\/\?#]+))?/i;
+                const match = query.match(instaLocationUrlRegex);
+
+                if (match && match[1]) {
+                    const extractedId = match[1]; // Числовой ID (786966744)
+                    let extractedName = match[2] ? decodeURIComponent(match[2]).replace(/-/g, ' ') : `Место #${extractedId}`;
+
+                    // Делаем первую букву заглавной
+                    extractedName = extractedName.charAt(0).toUpperCase() + extractedName.slice(1);
+
+                    // Автоматически выбираем эту точку и сохраняем в базу данных!
+                    selectLocation(extractedId, extractedName);
+
+                    // Отправляем на бэкенд для сохранения в таблицу SavedLocations
+                    fetch('/planner/locations/add-custom', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `locationId=${extractedId}&name=${encodeURIComponent(extractedName)}`
+                    });
+
+                    document.getElementById('locationDropdown').style.display = 'none';
+                    return;
+                }
             }
 
             async function fetchAndRenderLocations(query) {
