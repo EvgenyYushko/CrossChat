@@ -1,3 +1,5 @@
+using CrossChat.Integrations.Models;
+
 namespace CrossChat.Integrations.Interfaces
 {
 	public interface IFaceBookService
@@ -12,6 +14,7 @@ namespace CrossChat.Integrations.Interfaces
 		Task<bool> PublishStoryAsync(string base64Image, string acessToken, string pageIdToPublish);
 		Task<(bool Success, string? PostId)> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish);
 		Task<string?> CreateCommentAsync(string postId, string text, string pageAccessToken);
+		Task<DailyStoryResult> PublishDailyStoryAsync(FacebookDailyStoryDto dto);
 	}
 
 	public class FbUser

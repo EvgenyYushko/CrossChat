@@ -355,6 +355,64 @@
                         </select>
                     </div>
 
+                    <!-- БЛОК ЕЖЕДНЕВНЫХ ИСТОРИЙ FACEBOOK (STORIES) -->
+                    <h4 style="margin-top: 30px; margin-bottom: 15px;">🌟 Ежедневные истории (Stories)</h4>
+                    <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label style="font-weight: 600; margin: 0; color: var(--text-main); cursor: pointer;" for="dailyStoryToggle">
+                                    Автоматические ежедневные сторис
+                                </label>
+                                <small style="display: block; color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px;">
+                                    Бот будет раз в сутки выбирать случайное фото страницы и публиковать его в Истории Facebook.
+                                </small>
+                            </div>
+
+                            <label class="switch">
+                                <input type="checkbox" id="dailyStoryToggle" name="isDailyStoriesEnabled" value="true"
+                                       @(Model.IsDailyStoriesEnabled ? "checked" : "")
+                                       onchange="document.getElementById('storySettingsBox').style.display = this.checked ? 'flex' : 'none';">
+                                <span class="slider"></span>
+                            </label>
+                            <input type="hidden" name="isDailyStoriesEnabled" value="false">
+                        </div>
+
+                        <!-- Разворачивающиеся настройки времени и надписи -->
+                        <div id="storySettingsBox" style="display: @(Model.IsDailyStoriesEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                <label style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Время публикации (по Минску):</label>
+                                <input type="time" name="dailyStoryTime" value="@(Model.DailyStoryTime ?? "12:00")" class="text-input" style="width: 120px; padding: 6px 10px; font-weight: bold; margin: 0;">
+                            </div>
+
+                            <!-- ТУМБЛЕР И ПОЛЕ НАДПИСИ ПОВЕРХ ФОТО -->
+                            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <label style="font-size: 0.85rem; font-weight: 600; margin: 0; color: var(--text-main); cursor: pointer;" for="overlayTextToggle">
+                                        💬 Текст-стикер поверх фото
+                                    </label>
+                                    <label class="switch">
+                                        <input type="checkbox" id="overlayTextToggle" name="isStoryOverlayTextEnabled" value="true"
+                                               @(Model.IsStoryOverlayTextEnabled ? "checked" : "")
+                                               onchange="document.getElementById('overlayInputBox').style.display = this.checked ? 'block' : 'none';">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <input type="hidden" name="isStoryOverlayTextEnabled" value="false">
+                                </div>
+
+                                <div id="overlayInputBox" style="display: @(Model.IsStoryOverlayTextEnabled ? "block" : "none");">
+                                    <label style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; display: block;">
+                                        Надписи для историй (каждая с новой строки или со Spintax {вариант1|вариант2}):
+                                    </label>
+                                    <textarea name="storyOverlayText" rows="3" class="text-input" style="font-size: 0.85rem; font-family: monospace;"
+                                          placeholder="Больше интересного в описании!&#10;{Загляни|Переходи} в шапку профиля 👆">@(Model.StoryOverlayText ?? "Больше интересного в описании!\nСсылка на Telegram в шапке профиля 👆")</textarea>
+                                    <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px;">
+                                        🎲 Бот случайным образом выбирает тему оформления, позицию на фото и фразу из списка.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                 </form>
 

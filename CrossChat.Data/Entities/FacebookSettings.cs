@@ -29,5 +29,20 @@ namespace CrossChat.Data.Entities
 		// ID привязанного Instagram Business аккаунта (определяется автоматически)
 		[MaxLength(100)]
 		public string? LinkedInstagramBusinessId { get; set; }
+
+		// === ЕЖЕДНЕВНЫЕ СТОРИС FACEBOOK ===
+		public bool IsDailyStoriesEnabled { get; set; } = false;
+
+		[MaxLength(5)]
+		public string DailyStoryTime { get; set; } = "12:00";
+
+		public DateTime? LastDailyStoryDate { get; set; }
+
+		public string? UsedMediaIdsJson { get; set; } = "[]";
+
+		public bool IsStoryOverlayTextEnabled { get; set; } = false;
+
+		// Храним без ограничения длины (text) под большие списки фраз
+		public string? StoryOverlayText { get; set; } = "Больше интересного по ссылке в описании!\nСсылка на Telegram в шапке профиля 👆";
 	}
 }

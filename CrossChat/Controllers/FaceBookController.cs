@@ -215,48 +215,44 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
+		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId,
+			bool isDailyStoriesEnabled,
+			string dailyStoryTime,
+			bool isStoryOverlayTextEnabled,
+			string? storyOverlayText)
 		{
-			// 1. Получаем ID текущего пользователя
 			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
 			var userId = int.Parse(userIdClaim);
 
-			// 2. Корректно считываем чекбокс isActive из формы
-			// (учитываем хак с hidden полем: при вкл придет "false,true", при выкл - "false")
-			var isActiveRaw = Request.Form["isActive"].ToString();
-			bool isActive = isActiveRaw.Contains("true");
-
-			// 3. Ищем настройки конкретной страницы в БД, проверяя владельца
 			var settings = await _db.FacebookSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
-			if (settings == null)
-			{
-				_logger.LogWarning($"[Facebook] Настройки бота {botId} не найдены для пользователя {userId}");
-				return RedirectToAction("Index");
-			}
+			if (settings == null) return RedirectToAction("Index");
 
 			try
 			{
-				// 4. Обновляем данные
+				var isActiveRaw = Request.Form["isActive"].ToString();
+				bool isActive = isActiveRaw.Contains("true");
+
 				settings.SystemPrompt = systemPrompt;
 				settings.IsActive = isActive;
 				settings.ProfileId = profileId;
 
-				// ВАЖНО: В Facebook Pages вебхуки обычно настраиваются один раз на всё приложение
-				// в панели разработчика. Поэтому здесь мы просто меняем флаг IsActive в нашей БД.
-				// Наш WebhookController будет просто игнорировать запросы, если IsActive == false.
+				// Сохраняем настройки авто-сторис:
+				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
+				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
+				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
+				settings.StoryOverlayText = storyOverlayText;
 
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[Facebook] Настройки страницы '{settings.PageName}' обновлены. Активен: {isActive}");
+				_logger.LogInformation($"[Facebook] Настройки страницы '{settings.PageName}' обновлены.");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, $"[Facebook] Ошибка при сохранении настроек для бота {botId}");
+				_logger.LogError(ex, $"[Facebook] Ошибка сохранения настроек {botId}");
 			}
 
-			// Возвращаемся на ту же страницу настроек с параметром botId и уведомлением
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 

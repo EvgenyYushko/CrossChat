@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 
 namespace CrossChat.Integrations.Services
 {
@@ -375,6 +376,127 @@ namespace CrossChat.Integrations.Services
 					Console.WriteLine($"Ошибка при загрузке изображения в Facebook (HTTP {response.StatusCode}): {errorResult}");
 					return null;
 				}
+			}
+		}
+
+		/// <summary>
+		/// Получает список опубликованных фотографий страницы Facebook
+		/// </summary>
+		public async Task<List<(string Id, string SourceUrl)>> GetPagePhotosAsync(string pageId, string pageAccessToken, int limit = 100)
+		{
+			var result = new List<(string Id, string SourceUrl)>();
+			string url = $"https://graph.facebook.com/v24.0/{pageId}/photos?type=uploaded&fields=id,images&access_token={pageAccessToken}&limit={limit}";
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var response = await httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return result;
+
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+
+				if (doc.RootElement.TryGetProperty("data", out var dataArr))
+				{
+					foreach (var item in dataArr.EnumerateArray())
+					{
+						var id = item.GetProperty("id").GetString()!;
+
+						// В массиве images первый элемент — это самое высокое оригинальное разрешение!
+						if (item.TryGetProperty("images", out var imagesArr) && imagesArr.GetArrayLength() > 0)
+						{
+							var sourceUrl = imagesArr[0].GetProperty("source").GetString();
+							if (!string.IsNullOrEmpty(sourceUrl))
+							{
+								result.Add((id, sourceUrl));
+							}
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Photos] Ошибка получения фото страницы: {ex.Message}");
+			}
+
+			return result;
+		}
+
+		/// <summary>
+		/// Выбирает случайное фото страницы, накладывает стикер и публикует в Истории (Stories) Facebook Page
+		/// </summary>
+		public async Task<DailyStoryResult> PublishDailyStoryAsync(FacebookDailyStoryDto dto)
+		{
+			if (string.IsNullOrEmpty(dto.PageAccessToken) || string.IsNullOrEmpty(dto.PageId))
+				return new DailyStoryResult { Success = false };
+
+			try
+			{
+				Console.WriteLine($"[Facebook Daily Story] Запуск публикации авто-сторис для страницы '{dto.PageName}'...");
+
+				// 1. Получаем фото страницы
+				var photosList = await GetPagePhotosAsync(dto.PageId, dto.PageAccessToken, 100);
+				if (!photosList.Any())
+				{
+					Console.WriteLine($"[Facebook Daily Story] На странице '{dto.PageName}' нет загруженных фото.");
+					return new DailyStoryResult { Success = false };
+				}
+
+				// 2. Достаем список уже использованных ID
+				var usedIds = new HashSet<string>();
+				try
+				{
+					if (!string.IsNullOrEmpty(dto.UsedMediaIdsJson))
+					{
+						usedIds = JsonSerializer.Deserialize<HashSet<string>>(dto.UsedMediaIdsJson) ?? new HashSet<string>();
+					}
+				}
+				catch { usedIds = new HashSet<string>(); }
+
+				// 3. Отбираем неиспользованные фото
+				var availablePhotos = photosList.Where(p => !usedIds.Contains(p.Id)).ToList();
+				if (!availablePhotos.Any())
+				{
+					Console.WriteLine($"[Facebook Daily Story] Все фото уже были в историях. Сбрасываем цикл для '{dto.PageName}'.");
+					usedIds.Clear();
+					availablePhotos = photosList;
+				}
+
+				// 4. Выбираем случайное фото
+				var selectedPhoto = availablePhotos[Random.Shared.Next(availablePhotos.Count)];
+				Console.WriteLine($"[Facebook Daily Story] Выбрано фото ID: {selectedPhoto.Id}");
+
+				// 5. Скачиваем оригинальные байты фото
+				using var downloadClient = new HttpClient();
+				var imageBytes = await downloadClient.GetByteArrayAsync(selectedPhoto.SourceUrl);
+
+				// Если включен оверлей — накладываем наш дизайнерский стикер!
+				if (dto.IsStoryOverlayTextEnabled && !string.IsNullOrWhiteSpace(dto.StoryOverlayText))
+				{
+					imageBytes = CrossChat.Infrastructure.Helpers.StoryOverlayHelper.OverlayTextOnImage(imageBytes, dto.StoryOverlayText.Trim());
+				}
+
+				string base64Image = Convert.ToBase64String(imageBytes);
+
+				// 6. Публикуем в Истории через наш проверенный метод!
+				bool success = await PublishStoryAsync(base64Image, dto.PageAccessToken, dto.PageId);
+
+				if (success)
+				{
+					usedIds.Add(selectedPhoto.Id);
+					return new DailyStoryResult
+					{
+						Success = true,
+						NewUsedMediaIdsJson = JsonSerializer.Serialize(usedIds)
+					};
+				}
+
+				return new DailyStoryResult { Success = false };
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Daily Story] Ошибка публикации сторис: {ex.Message}");
+				return new DailyStoryResult { Success = false };
 			}
 		}
 	}

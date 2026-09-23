@@ -185,6 +185,14 @@ builder.Services.AddQuartz(q =>
 		// Запуск раз в сутки (каждые 24 часа):
 		.WithSimpleSchedule(x => x.WithIntervalInHours(24).RepeatForever()));
 
+	// 9
+	var fbStoryJobKey = new JobKey(nameof(FacebookDailyStoryJob));
+	q.AddJob<FacebookDailyStoryJob>(opts => opts.WithIdentity(fbStoryJobKey));
+	q.AddTrigger(opts => opts
+		.ForJob(fbStoryJobKey)
+		.WithIdentity($"{nameof(FacebookDailyStoryJob)}-Trigger")
+		.WithSimpleSchedule(x => x.WithIntervalInMinutes(2).RepeatForever()));
+
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
