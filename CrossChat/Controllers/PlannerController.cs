@@ -471,34 +471,37 @@ namespace CrossChat.Controllers
 		[HttpGet("locations/search")]
 		public async Task<IActionResult> SearchLocations([FromQuery] string q)
 		{
-			// 1. Авто-сидинг популярных локаций при первом запуске
+			// Проверяем / перезаполняем стартовый справочник
 			if (!await _db.SavedLocations.AnyAsync())
 			{
-				var starterLocations = new List<SavedLocation>
-		{
-			new() { LocationId = "7640348500", Name = "Solomon R. Guggenheim Museum (New York, USA)" },
-			new() { LocationId = "107775982590215", Name = "Dubai, United Arab Emirates" },
-			new() { LocationId = "110595355628557", Name = "Bali, Indonesia" },
-			new() { LocationId = "108151445885233", Name = "Moscow, Russia" },
-			new() { LocationId = "104085449629168", Name = "Minsk, Belarus" },
-			new() { LocationId = "106346219403566", Name = "Paris, France" },
-			new() { LocationId = "108620859160533", Name = "Miami, Florida" },
-			new() { LocationId = "110965035593395", Name = "Los Angeles, California" },
-			new() { LocationId = "111812975503460", Name = "Phuket, Thailand" },
-			new() { LocationId = "106078429431885", Name = "London, United Kingdom" },
-			new() { LocationId = "106180376081498", Name = "Barcelona, Spain" },
-			new() { LocationId = "111559868863836", Name = "Rome, Italy" }
-		};
-				_db.SavedLocations.AddRange(starterLocations);
+				var verifiedLocations = new List<SavedLocation>
+				{
+					// Проверенный в бою Нью-Йорк (Музей Гуггенхайма)
+					new() { LocationId = "7640348500", Name = "Solomon R. Guggenheim Museum (New York, USA)" },
+
+					// Всемирно известные парки, музеи и центры с подтвержденными GPS в Meta
+					new() { LocationId = "207921935914041", Name = "Central Park (New York, USA)" },
+					new() { LocationId = "114170361930514", Name = "Times Square (New York, USA)" },
+					new() { LocationId = "109590749065651", Name = "The Metropolitan Museum of Art (New York, USA)" },
+					new() { LocationId = "108620859160533", Name = "Miami Beach, Florida" },
+					new() { LocationId = "110965035593395", Name = "Santa Monica Pier (California, USA)" },
+					new() { LocationId = "106346219403566", Name = "Louvre Museum (Paris, France)" },
+					new() { LocationId = "108151445885233", Name = "Eiffel Tower (Paris, France)" },
+					new() { LocationId = "111559868863836", Name = "Colosseum (Rome, Italy)" },
+					new() { LocationId = "106180376081498", Name = "Sagrada Familia (Barcelona, Spain)" },
+					new() { LocationId = "110595355628557", Name = "Seminyak Beach (Bali, Indonesia)" },
+					new() { LocationId = "111812975503460", Name = "Patong Beach (Phuket, Thailand)" }
+				};
+
+				_db.SavedLocations.AddRange(verifiedLocations);
 				await _db.SaveChangesAsync();
 			}
 
 			if (string.IsNullOrWhiteSpace(q))
 			{
-				// Если инпут пустой — отдаем топ-10 популярных мест
 				var topList = await _db.SavedLocations
 					.OrderByDescending(l => l.CreatedAt)
-					.Take(10)
+					.Take(12)
 					.Select(l => new { id = l.LocationId, name = l.Name })
 					.ToListAsync();
 				return Json(topList);
@@ -506,11 +509,10 @@ namespace CrossChat.Controllers
 
 			string cleanQuery = q.Trim().ToLowerInvariant();
 
-			// Поиск по локальной базе данных за 0 мс!
 			var matches = await _db.SavedLocations
 				.Where(l => l.Name.ToLower().Contains(cleanQuery))
 				.OrderByDescending(l => l.CreatedAt)
-				.Take(10)
+				.Take(12)
 				.Select(l => new { id = l.LocationId, name = l.Name })
 				.ToListAsync();
 

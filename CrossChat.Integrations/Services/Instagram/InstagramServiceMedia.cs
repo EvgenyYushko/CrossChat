@@ -168,7 +168,7 @@ public partial class InstagramService
 	{
 		try
 		{
-			_logger.LogInformation("CreateSingleMediaContainerAsync - Start");
+			_logger.LogInformation("CreateSingleMediaContainerAsync - Start. LocationId: '{LocId}'", locationId);
 			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
 
 			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
@@ -176,29 +176,44 @@ public partial class InstagramService
 
 			await Task.Delay(500);
 
-			// Параметр локации для Instagram Graph API
-			string locationParam = !string.IsNullOrEmpty(locationId) ? $"&location_id={locationId}" : "";
-			string containerUrl;
-
-			if (mediaUrl.EndsWith(".mp4"))
+			// Функция сборки URL с локацией или без нее
+			string BuildContainerUrl(string? locId)
 			{
-				containerUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
-							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
-							   "&media_type=REELS" +
-							   "&share_to_feed=true" +
-							   locationParam + // <-- Геолокация для Reels
-							   $"&access_token={accessToken}";
-			}
-			else
-			{
-				containerUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
-							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
-							   locationParam + // <-- Геолокация для фото
-							   $"&access_token={accessToken}";
+				// Проверяем, чтобы locationId был чисто числовым
+				string locParam = (!string.IsNullOrWhiteSpace(locId) && locId.All(char.IsDigit))
+					? $"&location_id={locId}"
+					: "";
+
+				if (mediaUrl.EndsWith(".mp4"))
+				{
+					return $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
+						   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
+						   "&media_type=REELS" +
+						   "&share_to_feed=true" +
+						   locParam +
+						   $"&access_token={accessToken}";
+				}
+				else
+				{
+					return $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
+						   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
+						   locParam +
+						   $"&access_token={accessToken}";
+				}
 			}
 
+			string containerUrl = BuildContainerUrl(locationId);
 			var response = await _httpClient.PostAsync(containerUrl, null);
 			var json = await response.Content.ReadAsStringAsync();
+
+			// СТРАХОВКА: Если Meta пожаловалась именно на location_id (ошибка 100) — повторяем БЕЗ геометки!
+			if (!response.IsSuccessStatusCode && json.Contains("location_id"))
+			{
+				_logger.LogWarning("[Instagram] Геолокация '{LocId}' не принята Meta. Повторная отправка поста БЕЗ геометки...", locationId);
+				containerUrl = BuildContainerUrl(null);
+				response = await _httpClient.PostAsync(containerUrl, null);
+				json = await response.Content.ReadAsStringAsync();
+			}
 
 			if (!response.IsSuccessStatusCode)
 			{
