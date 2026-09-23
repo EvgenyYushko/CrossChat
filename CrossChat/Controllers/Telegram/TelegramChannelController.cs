@@ -48,9 +48,9 @@ namespace CrossChat.Controllers
 		public async Task<IActionResult> GenerateLinkCode()
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-			
+
 			var code = Guid.NewGuid().ToString("N")[..8]; // Одноразовый код
-			
+
 			// Сохраняем связку код -> userId на 15 минут в Redis
 			await _cache.SetStringAsync($"tg_link:{code}", userId.ToString(), new DistributedCacheEntryOptions
 			{
@@ -62,17 +62,32 @@ namespace CrossChat.Controllers
 		}
 
 		[HttpPost("update")]
-		public async Task<IActionResult> Update(int botId, string systemPrompt, int profileId)
+		[Authorize]
+		public async Task<IActionResult> Update(
+			int botId,
+			string systemPrompt,
+			int profileId,
+			// === НОВЫЕ ПАРАМЕТРЫ ЗАЯВОК ===
+			bool autoApproveJoinRequests,
+			bool notifyOnJoinRequests,
+			bool notifyOnMemberLeft)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-			var settings = await _db.TelegramChannelSettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
-			if (settings != null)
+			var channel = await _db.TelegramChannelSettings
+				.FirstOrDefaultAsync(c => c.Id == botId && c.UserId == userId);
+
+			if (channel != null)
 			{
 				var isActiveRaw = Request.Form["isActive"].ToString();
-				settings.IsActive = isActiveRaw.Contains("true");
-				settings.SystemPrompt = systemPrompt ?? "";
-				settings.ProfileId = profileId;
+				channel.IsActive = isActiveRaw.Contains("true");
+				channel.SystemPrompt = systemPrompt ?? "";
+				channel.ProfileId = profileId;
+
+				// Сохраняем настройки автоприема заявок:
+				channel.AutoApproveJoinRequests = autoApproveJoinRequests;
+				channel.NotifyOnJoinRequests = notifyOnJoinRequests;
+				channel.NotifyOnMemberLeft = notifyOnMemberLeft;
 
 				await _db.SaveChangesAsync();
 			}

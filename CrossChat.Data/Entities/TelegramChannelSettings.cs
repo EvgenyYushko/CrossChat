@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CrossChat.Data.Entities
 {
@@ -28,5 +23,14 @@ namespace CrossChat.Data.Entities
 
 		public int ProfileId { get; set; }
 		public Profile Profile { get; set; } = null!;
+
+		// Автоматически одобрять заявки на вступление в канал
+		public bool AutoApproveJoinRequests { get; set; } = false;
+
+		// Уведомлять админа в Telegram о новом принятом подписчике
+		public bool NotifyOnJoinRequests { get; set; } = true;
+
+		// Уведомлять админа в Telegram, когда подписчик покинул канал
+		public bool NotifyOnMemberLeft { get; set; } = false;
 	}
 }

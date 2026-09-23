@@ -9,6 +9,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -337,6 +338,105 @@ namespace CrossChat.Controllers
 						if (isUpdated)
 						{
 							await _db.SaveChangesAsync();
+						}
+					}
+				}
+
+				// ===================================================================
+				// 4. СЦЕНАРИЙ: Заявка на вступление в канал (ChatJoinRequest)
+				// ===================================================================
+				if (update.Type == UpdateType.ChatJoinRequest && update.ChatJoinRequest != null)
+				{
+					var req = update.ChatJoinRequest;
+					var channelId = req.Chat.Id;
+					var fromUser = req.From;
+
+					var channel = await _db.TelegramChannelSettings
+						.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+					if (channel != null && channel.AutoApproveJoinRequests)
+					{
+						try
+						{
+							// 1. АВТО-ОДОБРЕНИЕ ЗАЯВКИ ЧЕРЕЗ API
+							await _telegramBotClient.ApproveChatJoinRequest(channelId, fromUser.Id);
+							_logger.LogInformation($"[Telegram Webhook] ✅ Автоматически одобрена заявка пользователя {fromUser.Id} в канал {channel.ChannelTitle}");
+
+							// 2. ОПОВЕЩЕНИЕ АДМИНА
+							if (channel.NotifyOnJoinRequests)
+							{
+								string userDisplay = !string.IsNullOrEmpty(fromUser.Username)
+									? $"@{fromUser.Username}"
+									: $"{fromUser.FirstName} {fromUser.LastName}".Trim();
+
+								string adminMessage =
+									$"🎉 <b>НОВЫЙ ПОДПИСЧИК В КАНАЛЕ!</b>\n\n" +
+									$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+									$"<b>Пользователь:</b> {userDisplay}\n" +
+									$"<b>ID:</b> <code>{fromUser.Id}</code>\n" +
+									$"<b>Действие:</b> Заявка автоматически одобрена ✅\n" +
+									$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}";
+
+								// Кнопка для быстрого перехода в профиль пользователя или канал
+								InlineKeyboardMarkup? inlineKeyboard = null;
+								if (!string.IsNullOrEmpty(fromUser.Username))
+								{
+									inlineKeyboard = new InlineKeyboardMarkup(new[]
+									{
+						InlineKeyboardButton.WithUrl("👤 Открыть профиль в Telegram", $"https://t.me/{fromUser.Username}")
+					});
+								}
+
+								await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
+							}
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, $"[Telegram Webhook] Ошибка при авто-одобрении заявки пользователя {fromUser.Id}. Возможно, боту не выдано право 'Пригласительные ссылки'.");
+						}
+					}
+				}
+
+				// ===================================================================
+				// 5. СЦЕНАРИЙ: Подписчик покинул канал (ChatMember)
+				// ===================================================================
+				if (update.Type == UpdateType.ChatMember && update.ChatMember != null)
+				{
+					var chatMemberUpdate = update.ChatMember;
+
+					// Отслеживаем только события в каналах
+					if (chatMemberUpdate.Chat.Type == ChatType.Channel)
+					{
+						var oldStatus = chatMemberUpdate.OldChatMember.Status;
+						var newStatus = chatMemberUpdate.NewChatMember.Status;
+						var channelId = chatMemberUpdate.Chat.Id;
+
+						// Пользователь был подписчиком/админом и вышел (Left) или был исключен (Kicked)
+						if ((oldStatus == ChatMemberStatus.Member || oldStatus == ChatMemberStatus.Administrator) &&
+							(newStatus == ChatMemberStatus.Left || newStatus == ChatMemberStatus.Kicked))
+						{
+							var channel = await _db.TelegramChannelSettings
+								.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+							if (channel != null && channel.NotifyOnMemberLeft)
+							{
+								var leftUser = chatMemberUpdate.NewChatMember.User;
+								string userDisplay = !string.IsNullOrEmpty(leftUser.Username)
+									? $"@{leftUser.Username}"
+									: $"{leftUser.FirstName} {leftUser.LastName}".Trim();
+
+								string actionDesc = newStatus == ChatMemberStatus.Kicked ? "Был удален/забанен 🚫" : "Отписался сам 👋";
+
+								string adminMessage =
+									$"⚠️ <b>ПОДПИСЧИК ПОКИНУЛ КАНАЛ</b>\n\n" +
+									$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+									$"<b>Пользователь:</b> {userDisplay}\n" +
+									$"<b>ID:</b> <code>{leftUser.Id}</code>\n" +
+									$"<b>Статус:</b> {actionDesc}\n" +
+									$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}";
+
+								await _telegramService.SendMessageToAdmin(adminMessage);
+							}
 						}
 					}
 				}
