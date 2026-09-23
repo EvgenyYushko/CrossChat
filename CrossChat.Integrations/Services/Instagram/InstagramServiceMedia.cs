@@ -17,17 +17,13 @@ namespace CrossChat.Integrations.Services;
 
 public partial class InstagramService
 {
-	public async Task<CreateMediaResult> CreateMediaAsync(List<string> base64Strings, string accessToken, string caption = null)
+	public async Task<CreateMediaResult> CreateMediaAsync(List<string> base64Strings, string accessToken, string caption = null, string? locationId = null)
 	{
 		if (base64Strings == null || base64Strings.Count == 0)
 			throw new ArgumentException("Список изображений не может быть пустым");
 
 		_logger.LogInformation("CreateMediaAsync - Start");
-
-		// Запускаем фоновую чистку старого мусора (на случай прошлых падений)
 		CleanupOldTempFiles();
-
-		// Список для отслеживания созданных локальных файлов
 		var tempFilesTracker = new List<string>();
 
 		try
@@ -36,17 +32,15 @@ public partial class InstagramService
 
 			if (base64Strings.Count == 1)
 			{
-				// Одиночное изображение
-				containerResult = await CreateSingleMediaContainerAsync(base64Strings[0], caption, tempFilesTracker, accessToken);
+				containerResult = await CreateSingleMediaContainerAsync(base64Strings[0], caption, tempFilesTracker, accessToken, locationId);
 			}
 			else if (base64Strings.Count <= 10)
 			{
-				// Карусель
-				containerResult = await CreateCarouselContainerAsync(base64Strings, caption, tempFilesTracker, accessToken);
+				containerResult = await CreateCarouselContainerAsync(base64Strings, caption, tempFilesTracker, accessToken, locationId);
 			}
 			else
 			{
-				throw new ArgumentException("Instagram позволяет не более 10 изображений в одном посте");
+				throw new ArgumentException("Instagram позволяет не более 10 медиа в одном посте");
 			}
 
 			if (containerResult == null || string.IsNullOrEmpty(containerResult.Id))
@@ -54,38 +48,21 @@ public partial class InstagramService
 
 			_logger.LogInformation($"Контейнер создан: {containerResult.Id}");
 
-			// ЖДЕМ пока медиа станет готовым к публикации
 			var isReady = await WaitForMediaReadyAsync(containerResult.Id, accessToken);
 			if (!isReady)
 			{
 				throw new Exception($"Медиа {containerResult.Id} не готово к публикации после ожидания");
 			}
 
-			_logger.LogInformation($"Медиа {containerResult.Id} готово к публикации");
-
-			// Публикуем
 			var container = await PublishContainerAsync(containerResult.Id, accessToken);
 			container.ExternalContentUrl = containerResult.ExternalContentUrl;
 			return container;
 		}
 		finally
 		{
-			// === ГАРАНТИРОВАННОЕ УДАЛЕНИЕ ФАЙЛОВ ===
-			// Выполняется всегда, даже если произошла ошибка публикации
 			foreach (var localPath in tempFilesTracker)
 			{
-				try
-				{
-					if (File.Exists(localPath))
-					{
-						File.Delete(localPath);
-						_logger.LogInformation($"Удален временный файл: {localPath}");
-					}
-				}
-				catch (Exception ex)
-				{
-					_logger.LogError($"Не удалось удалить файл {localPath}: {ex.Message}");
-				}
+				try { if (File.Exists(localPath)) File.Delete(localPath); } catch { }
 			}
 		}
 	}
@@ -187,45 +164,41 @@ public partial class InstagramService
 		}
 	}
 
-	private async Task<ContainerResult> CreateSingleMediaContainerAsync(string base64String, string caption, List<string> tempFilesTracker, string accessToken)
+	private async Task<ContainerResult> CreateSingleMediaContainerAsync(string base64String, string caption, List<string> tempFilesTracker, string accessToken, string? locationId = null)
 	{
 		try
 		{
 			_logger.LogInformation("CreateSingleMediaContainerAsync - Start");
-
 			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
 
-			// Сохраняем на свой сервер
 			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
-			tempFilesTracker.Add(localPath); // Добавляем в трекер для последующего удаления
-
-			_logger.LogInformation($"Медиа доступно по ссылке: {mediaUrl}");
+			tempFilesTracker.Add(localPath);
 
 			await Task.Delay(500);
 
-			// Учитываем тип: для видео нужен параметр media_type=VIDEO, для фото по умолчанию IMAGE
-			string mediaTypeParam = mediaUrl.EndsWith(".mp4") ? "&media_type=VIDEO" : "";
+			// Параметр локации для Instagram Graph API
+			string locationParam = !string.IsNullOrEmpty(locationId) ? $"&location_id={locationId}" : "";
+			string containerUrl;
 
-			// Создаем контейнер для медиа
-			var containerUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
-							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
-							   mediaTypeParam +
-							   $"&access_token={accessToken}";
-
-			// Для видео Instagram ожидает video_url вместо image_url
 			if (mediaUrl.EndsWith(".mp4"))
 			{
 				containerUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
 							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
-							   "&media_type=REELS" +          // <-- Используем REELS вместо устаревшего VIDEO
-							   "&share_to_feed=true" +        // <-- Публикуем и в Reels, и в общую сетку ленты!
+							   "&media_type=REELS" +
+							   "&share_to_feed=true" +
+							   locationParam + // <-- Геолокация для Reels
+							   $"&access_token={accessToken}";
+			}
+			else
+			{
+				containerUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
+							   $"&caption={Uri.EscapeDataString(caption ?? "")}" +
+							   locationParam + // <-- Геолокация для фото
 							   $"&access_token={accessToken}";
 			}
 
 			var response = await _httpClient.PostAsync(containerUrl, null);
 			var json = await response.Content.ReadAsStringAsync();
-
-			_logger.LogInformation($"Ответ от Instagram API: {json}");
 
 			if (!response.IsSuccessStatusCode)
 			{
@@ -246,43 +219,24 @@ public partial class InstagramService
 		}
 	}
 
-	private async Task<ContainerResult> CreateCarouselContainerAsync(List<string> base64Strings, string caption, List<string> tempFilesTracker, string accessToken)
+	private async Task<ContainerResult> CreateCarouselContainerAsync(List<string> base64Strings, string caption, List<string> tempFilesTracker, string accessToken, string? locationId = null)
 	{
 		try
 		{
 			_logger.LogInformation("CreateCarouselContainerAsync - Start");
 			var childrenIds = new List<string>();
 
-			// 1. Создаем дочерние контейнеры для каждого слайда карусели
 			foreach (var base64String in base64Strings)
 			{
 				string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
-
-				// Сохраняем на свой сервер
 				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
 				tempFilesTracker.Add(localPath);
 
 				bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
+				string childUrl = isVideo
+					? $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}&media_type=VIDEO&is_carousel_item=true&access_token={accessToken}"
+					: $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}&is_carousel_item=true&access_token={accessToken}";
 
-				string childUrl;
-
-				if (isVideo)
-				{
-					// ДЛЯ ВИДЕО В КАРУСЕЛИ: обязательно is_carousel_item=true и media_type=VIDEO
-					childUrl = $"me/media?video_url={Uri.EscapeDataString(mediaUrl)}" +
-							   $"&media_type=VIDEO" +
-							   $"&is_carousel_item=true" +
-							   $"&access_token={accessToken}";
-				}
-				else
-				{
-					// ДЛЯ ФОТО В КАРУСЕЛИ: обязательно is_carousel_item=true
-					childUrl = $"me/media?image_url={Uri.EscapeDataString(mediaUrl)}" +
-							   $"&is_carousel_item=true" +
-							   $"&access_token={accessToken}";
-				}
-
-				// Даем диску зафиксировать файл
 				await Task.Delay(500);
 
 				var childResponse = await _httpClient.PostAsync(childUrl, null);
@@ -290,39 +244,33 @@ public partial class InstagramService
 
 				if (!childResponse.IsSuccessStatusCode)
 				{
-					_logger.LogError($"Ошибка создания child: {childJson}");
 					throw new Exception($"Не удалось создать дочерний контейнер: {childJson}");
 				}
 
 				using var childDoc = JsonDocument.Parse(childJson);
-				var childId = childDoc.RootElement.GetProperty("id").GetString();
+				var childId = childDoc.RootElement.GetProperty("id").GetString()!;
 				childrenIds.Add(childId);
 
-				// ВАЖНО: Если этот слайд — видео, ждем его готовности (FINISHED) перед сборкой карусели!
 				if (isVideo)
 				{
-					_logger.LogInformation($"Ожидаем готовности дочернего видео-контейнера {childId}...");
 					bool isChildReady = await WaitForMediaReadyAsync(childId, accessToken, 120);
-					if (!isChildReady)
-					{
-						throw new Exception($"Дочернее видео {childId} не успело обработаться серверами Instagram.");
-					}
+					if (!isChildReady) throw new Exception($"Видео {childId} не успело обработаться серверами Instagram.");
 				}
 
 				await Task.Delay(500);
 			}
 
-			if (childrenIds.Count == 0)
-				throw new Exception("Не удалось создать ни одного дочернего контейнера");
-
-			// 2. Создаем родительский контейнер карусели
 			var carouselUrl = $"me/media?access_token={accessToken}";
-
 			var formData = new MultipartFormDataContent();
 			formData.Add(new StringContent("CAROUSEL"), "media_type");
 			formData.Add(new StringContent(caption ?? ""), "caption");
 
-			// Передаем массив ID дочерних контейнеров
+			// Прикрепляем геолокацию ко всей карусели
+			if (!string.IsNullOrEmpty(locationId))
+			{
+				formData.Add(new StringContent(locationId), "location_id");
+			}
+
 			for (int i = 0; i < childrenIds.Count; i++)
 			{
 				formData.Add(new StringContent(childrenIds[i]), $"children[{i}]");
@@ -337,10 +285,7 @@ public partial class InstagramService
 			}
 
 			using var doc = JsonDocument.Parse(json);
-			return new ContainerResult
-			{
-				Id = doc.RootElement.GetProperty("id").GetString()
-			};
+			return new ContainerResult { Id = doc.RootElement.GetProperty("id").GetString() };
 		}
 		catch (Exception ex)
 		{

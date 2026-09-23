@@ -1044,6 +1044,30 @@
                     </div>
                 </div>
 
+                <!-- БЛОК ГЕОЛОКАЦИИ (Instagram & Facebook) -->
+                <div class="form-group" id="locationSelectGroup" style="margin-bottom: 1.25rem; position: relative;">
+                    <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-weight: 600;">📍 Местоположение (Instagram / Facebook):</span>
+                        <button type="button" id="clearLocationBtn" onclick="clearLocationSelection()" style="display: none; background: none; border: none; color: #ef4444; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
+                            ✕ Убрать геометку
+                        </button>
+                    </label>
+
+                    <div style="position: relative;">
+                        <input type="text" id="locationInput" class="text-input" 
+                               placeholder="Начните вводить место (напр. Dubai, Москва, Paris)..." 
+                               autocomplete="off" 
+                               onfocus="onLocationFocus()"
+                               oninput="onLocationInput(this.value)">
+                    </div>
+
+                    <!-- Выпадающий список совпадений -->
+                    <div id="locationDropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: var(--card-bg, #1e293b); border: 1px solid var(--glass-border); border-radius: 12px; max-height: 220px; overflow-y: auto; z-index: 3000; box-shadow: 0 15px 35px rgba(0,0,0,0.6);"></div>
+
+                    <input type="hidden" name="locationId" id="locationIdHidden">
+                    <input type="hidden" name="locationName" id="locationNameHidden">
+                </div>
+
                 <!-- Галерея для превью -->
                 <div id="imageGallery" class="image-gallery"></div>
 
@@ -1719,7 +1743,6 @@
                                     cb.checked = isActive;
 
                                     if (isActive && !isUnified) {
-                                        // Подгружаем текст из базы данных для этой соцсети
                                         const savedText = networks[netKey].caption || networks[netKey].Caption || "";
                                         createDynamicCaptionGroup(netKey, savedText);
                                     }
@@ -1800,7 +1823,7 @@
                                 }
                             }
 
-                            // Проверка одинаковости ЗВЁЗД:
+                            // Звёзды:
                             let allSameStars = true;
                             if (tgChannelsData.length > 1) {
                                 for (let i = 1; i < tgChannelsData.length; i++) {
@@ -1839,7 +1862,7 @@
                                 }, 50);
                             }
 
-                            // Проверка одинаковости КНОПОК:
+                            // Кнопки:
                             let allSameButtons = true;
                             if (tgChannelsData.length > 1) {
                                 for (let i = 1; i < tgChannelsData.length; i++) {
@@ -1884,7 +1907,6 @@
                                 }, 50);
                             }
 
-                            // Выставляем кружочек Telegram
                             const noteCb = document.getElementById('isVideoNoteTelegramCheckbox');
                             if (noteCb) noteCb.checked = isNotePost;
 
@@ -1910,6 +1932,40 @@
 
                             if (typeof toggleFirstCommentMode === 'function') toggleFirstCommentMode();
                             if (typeof updateFirstCommentVisibility === 'function') updateFirstCommentVisibility();
+
+                            // === 3. [НОВОЕ] ПОДГРУЗКА МЕСТОПОЛОЖЕНИЯ (INSTAGRAM / FACEBOOK) ===
+                            let postLocId = '';
+                            let postLocName = '';
+
+                            for (let key in networks) {
+                                if (networks[key] && (key.includes("Instagram") || key.includes("Facebook"))) {
+                                    postLocId = networks[key].locationId || networks[key].LocationId || '';
+                                    postLocName = networks[key].locationName || networks[key].LocationName || '';
+                                    if (postLocId) break;
+                                }
+                            }
+
+                            const locInput = document.getElementById('locationInput');
+                            const locIdHidden = document.getElementById('locationIdHidden');
+                            const locNameHidden = document.getElementById('locationNameHidden');
+                            const clearLocBtn = document.getElementById('clearLocationBtn');
+                            const locDropdown = document.getElementById('locationDropdown');
+                            if (locDropdown) locDropdown.style.display = 'none';
+
+                            if (locInput && locIdHidden && locNameHidden) {
+                                if (postLocId && postLocName) {
+                                    locInput.value = postLocName;
+                                    locIdHidden.value = postLocId;
+                                    locNameHidden.value = postLocName;
+                                    if (clearLocBtn) clearLocBtn.style.display = 'inline-block';
+                                } else {
+                                    locInput.value = '';
+                                    locIdHidden.value = '';
+                                    locNameHidden.value = '';
+                                    if (clearLocBtn) clearLocBtn.style.display = 'none';
+                                }
+                            }
+                            // ====================================================================
 
                             deleteBtn.style.display = 'block';
                             postForm.action = `/planner/update/${postId}`;
@@ -1953,6 +2009,18 @@
 
                     const netSelectGroup = document.getElementById('networkSelectGroup');
                     const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
+
+                    const stickyId = localStorage.getItem('crosschat_last_loc_id');
+                    const stickyName = localStorage.getItem('crosschat_last_loc_name');
+
+                    if (stickyId && stickyName) {
+                        document.getElementById('locationInput').value = stickyName;
+                        document.getElementById('locationIdHidden').value = stickyId;
+                        document.getElementById('locationNameHidden').value = stickyName;
+                        document.getElementById('clearLocationBtn').style.display = 'inline-block';
+                    } else {
+                        clearLocationSelection();
+                    }
 
                     if (currentNetwork === "All") {
                         if (netSelectGroup) netSelectGroup.style.display = 'block';
@@ -2228,6 +2296,9 @@
 
                 const singleTgBtn = document.getElementById('singleTelegramButtonContainer');
                 if (singleTgBtn) singleTgBtn.style.display = 'block';
+
+                const locDropdown = document.getElementById('locationDropdown');
+                if (locDropdown) locDropdown.style.display = 'none';
             }
 
             // Переключение галочки "Один текст для всех соцсетей"
@@ -2436,6 +2507,9 @@
 
                 const hasComment = document.getElementById('hasFirstCommentCheckbox')?.checked;
                 formData.append('firstComment', hasComment ? document.getElementById('firstCommentInput').value : '');
+
+                formData.append('locationId', document.getElementById('locationIdHidden').value || '');
+                formData.append('locationName', document.getElementById('locationNameHidden').value || '');
 
                 xhr.send(formData);
             }
@@ -2901,5 +2975,83 @@
                 groupDiv.appendChild(textarea);
                 dynamicContainer.appendChild(groupDiv);
             }
+
+            let locationSearchTimeout = null;
+
+            // При клике на инпут сразу показываем популярные места
+            async function onLocationFocus() {
+                const input = document.getElementById('locationInput');
+                if (!input.value) {
+                    await fetchAndRenderLocations('');
+                }
+            }
+
+            function onLocationInput(query) {
+                clearTimeout(locationSearchTimeout);
+                locationSearchTimeout = setTimeout(() => {
+                    fetchAndRenderLocations(query);
+                }, 250);
+            }
+
+            async function fetchAndRenderLocations(query) {
+                const dropdown = document.getElementById('locationDropdown');
+                try {
+                    const res = await fetch(`/planner/locations/search?q=${encodeURIComponent(query.trim())}`);
+                    const locations = await res.json();
+
+                    dropdown.innerHTML = '';
+                    if (locations && locations.length > 0) {
+                        locations.forEach(loc => {
+                            const item = document.createElement('div');
+                            item.style.cssText = 'padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--glass-border); font-size: 0.85rem; display: flex; align-items: center; gap: 8px; color: var(--text-main); transition: background 0.15s;';
+                            item.innerHTML = `<span>📍</span> <span>${loc.name}</span>`;
+                            item.onmouseover = () => item.style.background = 'rgba(99, 102, 241, 0.15)';
+                            item.onmouseout = () => item.style.background = 'transparent';
+                            item.onclick = () => selectLocation(loc.id, loc.name);
+                            dropdown.appendChild(item);
+                        });
+                        dropdown.style.display = 'block';
+                    } else {
+                        dropdown.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            // Выбор локации
+            function selectLocation(id, name) {
+                document.getElementById('locationInput').value = name;
+                document.getElementById('locationIdHidden').value = id;
+                document.getElementById('locationNameHidden').value = name;
+
+                document.getElementById('locationDropdown').style.display = 'none';
+                document.getElementById('clearLocationBtn').style.display = 'inline-block';
+
+                // ЗАПОМИНАЕМ В LOCALSTORAGE ДЛЯ СЛЕДУЮЩИХ ПОСТОВ!
+                localStorage.setItem('crosschat_last_loc_id', id);
+                localStorage.setItem('crosschat_last_loc_name', name);
+            }
+
+            // Очистка геометки
+            function clearLocationSelection() {
+                document.getElementById('locationInput').value = '';
+                document.getElementById('locationIdHidden').value = '';
+                document.getElementById('locationNameHidden').value = '';
+                document.getElementById('clearLocationBtn').style.display = 'none';
+                document.getElementById('locationDropdown').style.display = 'none';
+
+                // Удаляем из памяти, чтобы следующий пост был без геометки
+                localStorage.removeItem('crosschat_last_loc_id');
+                localStorage.removeItem('crosschat_last_loc_name');
+            }
+
+            // Закрытие списка при клике мимо
+            document.addEventListener('click', function(e) {
+                const group = document.getElementById('locationSelectGroup');
+                if (group && !group.contains(e.target)) {
+                    document.getElementById('locationDropdown').style.display = 'none';
+                }
+            });
         </script>
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CrossChat.Data;
 using CrossChat.Data.Emuns;
+using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
@@ -464,6 +465,84 @@ namespace CrossChat.Controllers
 			return Ok();
 		}
 
+		// ==========================================================
+		// ПОИСК И АВТО-КЭШИРОВАНИЕ ГЕОЛОКАЦИЙ (META PLACES)
+		// ==========================================================
+		[HttpGet("locations/search")]
+		public async Task<IActionResult> SearchLocations([FromQuery] string q)
+		{
+			// 1. Авто-сидинг популярных локаций при первом запуске
+			if (!await _db.SavedLocations.AnyAsync())
+			{
+				var starterLocations = new List<SavedLocation>
+		{
+			new() { LocationId = "7640348500", Name = "Solomon R. Guggenheim Museum (New York, USA)" },
+			new() { LocationId = "107775982590215", Name = "Dubai, United Arab Emirates" },
+			new() { LocationId = "110595355628557", Name = "Bali, Indonesia" },
+			new() { LocationId = "108151445885233", Name = "Moscow, Russia" },
+			new() { LocationId = "104085449629168", Name = "Minsk, Belarus" },
+			new() { LocationId = "106346219403566", Name = "Paris, France" },
+			new() { LocationId = "108620859160533", Name = "Miami, Florida" },
+			new() { LocationId = "110965035593395", Name = "Los Angeles, California" },
+			new() { LocationId = "111812975503460", Name = "Phuket, Thailand" },
+			new() { LocationId = "106078429431885", Name = "London, United Kingdom" },
+			new() { LocationId = "106180376081498", Name = "Barcelona, Spain" },
+			new() { LocationId = "111559868863836", Name = "Rome, Italy" }
+		};
+				_db.SavedLocations.AddRange(starterLocations);
+				await _db.SaveChangesAsync();
+			}
+
+			if (string.IsNullOrWhiteSpace(q))
+			{
+				// Если инпут пустой — отдаем топ-10 популярных мест
+				var topList = await _db.SavedLocations
+					.OrderByDescending(l => l.CreatedAt)
+					.Take(10)
+					.Select(l => new { id = l.LocationId, name = l.Name })
+					.ToListAsync();
+				return Json(topList);
+			}
+
+			string cleanQuery = q.Trim().ToLowerInvariant();
+
+			// Поиск по локальной базе данных за 0 мс!
+			var matches = await _db.SavedLocations
+				.Where(l => l.Name.ToLower().Contains(cleanQuery))
+				.OrderByDescending(l => l.CreatedAt)
+				.Take(10)
+				.Select(l => new { id = l.LocationId, name = l.Name })
+				.ToListAsync();
+
+			return Json(matches);
+		}
+
+		/// <summary>
+		/// Добавление своего места вручную по ID Meta
+		/// </summary>
+		[HttpPost("locations/add-custom")]
+		public async Task<IActionResult> AddCustomLocation([FromForm] string locationId, [FromForm] string name)
+		{
+			if (string.IsNullOrWhiteSpace(locationId) || string.IsNullOrWhiteSpace(name))
+				return BadRequest("ID и название обязательны");
+
+			locationId = locationId.Trim();
+			name = name.Trim();
+
+			if (!await _db.SavedLocations.AnyAsync(l => l.LocationId == locationId))
+			{
+				_db.SavedLocations.Add(new SavedLocation
+				{
+					LocationId = locationId,
+					Name = name,
+					CreatedAt = DateTime.UtcNow
+				});
+				await _db.SaveChangesAsync();
+			}
+
+			return Json(new { success = true, id = locationId, name = name });
+		}
+
 		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
 		{
 			// 1. ЗАЩИТА: Если текст не ввели, заменяем null на пустую строку ""
@@ -474,6 +553,10 @@ namespace CrossChat.Controllers
 			string? tgButtonUrl = Request.Form["tgButtonUrl"].ToString();
 			string? firstComment = Request.Form["firstComment"].ToString();
 			if (string.IsNullOrWhiteSpace(firstComment)) firstComment = null;
+
+			string? locationId = Request.Form["locationId"].ToString();
+			string? locationName = Request.Form["locationName"].ToString();
+			if (string.IsNullOrWhiteSpace(locationId)) { locationId = null; locationName = null; }
 
 			// Читаем параметры платного поста для Telegram
 			bool isPaidTelegram = Request.Form["isPaidTelegram"] == "true";
@@ -512,6 +595,7 @@ namespace CrossChat.Controllers
 						finalCaption ??= string.Empty;
 
 						bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
+						bool isInstaOrFb = parsedNet == NetworkType.Instagram || parsedNet == NetworkType.Facebook;
 
 						// РАСЧЕТ ЗВЕЗД ДЛЯ КОНКРЕТНОГО КАНАЛА:
 						bool channelIsPaid = isPaidTelegram;
@@ -535,6 +619,8 @@ namespace CrossChat.Controllers
 						{
 							post.Networks[netKey].Caption = finalCaption;
 							post.Networks[netKey].FirstComment = isTg ? null : firstComment;
+
+
 							if (isTg)
 							{
 								// РАСЧЕТ КНОПКИ ДЛЯ КОНКРЕТНОГО КАНАЛА:
@@ -555,6 +641,12 @@ namespace CrossChat.Controllers
 								post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(channelButtonUrl) ? null : channelButtonUrl.Trim();
 							}
 
+							if (isInstaOrFb)
+							{
+								post.Networks[netKey].LocationId = locationId;
+								post.Networks[netKey].LocationName = locationName;
+							}
+
 							// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
 							if (post.Networks[netKey].Status == SocialStatus.None || post.Networks[netKey].Status == SocialStatus.Error)
 							{
@@ -572,7 +664,9 @@ namespace CrossChat.Controllers
 								Price = (isTg && channelIsPaid) ? channelPrice : 0,
 								IsVideoNote = isTg && isVideoNoteTelegram,
 								ButtonText = isTg && !string.IsNullOrWhiteSpace(tgButtonText) ? tgButtonText.Trim() : null,
-								ButtonUrl = isTg && !string.IsNullOrWhiteSpace(tgButtonUrl) ? tgButtonUrl.Trim() : null
+								ButtonUrl = isTg && !string.IsNullOrWhiteSpace(tgButtonUrl) ? tgButtonUrl.Trim() : null,
+								LocationId = isInstaOrFb ? locationId : null,
+								LocationName = isInstaOrFb ? locationName : null,
 							};
 						}
 					}
@@ -586,6 +680,7 @@ namespace CrossChat.Controllers
 					var netKey = $"{networkType}_{finalBotId}";
 
 					bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
+					bool isCurrentInstaOrFb = parsedNet == NetworkType.Instagram || parsedNet == NetworkType.Facebook;
 
 					if (post.Networks.ContainsKey(netKey))
 					{
@@ -598,6 +693,12 @@ namespace CrossChat.Controllers
 							post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
 							post.Networks[netKey].ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim();
 							post.Networks[netKey].ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim();
+						}
+
+						if (isCurrentInstaOrFb)
+						{
+							post.Networks[netKey].LocationId = locationId;
+							post.Networks[netKey].LocationName = locationName;
 						}
 
 						// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
@@ -618,6 +719,8 @@ namespace CrossChat.Controllers
 							ButtonText = string.IsNullOrWhiteSpace(tgButtonText) ? null : tgButtonText.Trim(),
 							ButtonUrl = string.IsNullOrWhiteSpace(tgButtonUrl) ? null : tgButtonUrl.Trim(),
 							FirstComment = isTg ? null : firstComment,
+							LocationId = isCurrentInstaOrFb ? locationId : null,
+							LocationName = isCurrentInstaOrFb ? locationName : null,
 						};
 					}
 				}

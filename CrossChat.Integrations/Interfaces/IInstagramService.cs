@@ -68,7 +68,7 @@ namespace CrossChat.Integrations.Interfaces
 
 
 		// Media part
-		Task<CreateMediaResult> CreateMediaAsync(List<string> base64Strings, string accessToken, string caption);
+		Task<CreateMediaResult> CreateMediaAsync(List<string> base64Strings, string accessToken, string caption, string locationId);
 
 		Task<string> PublishStoryFromBase64(string base64Img, string accessToken);
 

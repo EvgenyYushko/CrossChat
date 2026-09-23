@@ -49,7 +49,7 @@ namespace CrossChat.Worker.Publishers
 			else if (photoItems.Any())
 			{
 				await _console.Log($"Публикация {photoItems.Count} фото в ленту страницы Facebook...", settings.UserId, state.BotId);
-				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, photoItems);
+				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, photoItems, state.LocationId);
 				postSuccess = result.Success;
 				publishedPostId = result.PostId;
 			}
@@ -57,7 +57,7 @@ namespace CrossChat.Worker.Publishers
 			else
 			{
 				await _console.Log("Публикация текстового поста в Facebook...", settings.UserId, state.BotId);
-				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, null);
+				var result = await _service.PublishToPageAsync(caption, settings.PageAccessToken, settings.PageId, null, state.LocationId);
 				postSuccess = result.Success;
 				publishedPostId = result.PostId;
 			}

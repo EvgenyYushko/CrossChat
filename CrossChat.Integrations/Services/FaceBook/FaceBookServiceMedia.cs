@@ -5,7 +5,8 @@ namespace CrossChat.Integrations.Services
 {
 	public partial class FaceBookService
 	{
-		public async Task<(bool Success, string? PostId)> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null)
+		public async Task<(bool Success, string? PostId)> PublishToPageAsync(string message, string acessToken, string pageIdToPublish, List<string> base64Images = null
+			, string locationId = null)
 		{
 			string pageAccessToken = acessToken;
 
@@ -15,17 +16,22 @@ namespace CrossChat.Integrations.Services
 				{
 					if (base64Images?.Any() == true)
 					{
-						return await PublishAlbumAsync(pageAccessToken, pageIdToPublish, message, base64Images);
+						return await PublishAlbumAsync(pageAccessToken, pageIdToPublish, message, base64Images, locationId);
 					}
 					else
 					{
 						string publishUrl = $"https://graph.facebook.com/v24.0/{pageIdToPublish}/feed";
 
 						var postData = new Dictionary<string, string>
-				{
-					{ "message", message ?? "" },
-					{ "access_token", pageAccessToken }
-				};
+						{
+							{ "message", message ?? "" },
+							{ "access_token", pageAccessToken }
+						};
+
+						if (!string.IsNullOrEmpty(locationId))
+						{
+							postData.Add("place", locationId);
+						}
 
 						using (var content = new FormUrlEncodedContent(postData))
 						{
@@ -267,7 +273,8 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		private async Task<(bool Success, string? PostId)> PublishAlbumAsync(string pageAccessToken, string pageId, string message, List<string> base64Images)
+		private async Task<(bool Success, string? PostId)> PublishAlbumAsync(string pageAccessToken, string pageId, string message, List<string> base64Images
+			, string locationId = null)
 		{
 			var mediaFbidList = new List<string>();
 
@@ -293,16 +300,21 @@ namespace CrossChat.Integrations.Services
 				string publishUrl = $"https://graph.facebook.com/v24.0/{pageId}/feed";
 
 				var postData = new Dictionary<string, string>
-		{
-			{ "message", message ?? "" },
-			{ "access_token", pageAccessToken }
-		};
+				{
+					{ "message", message ?? "" },
+					{ "access_token", pageAccessToken }
+				};
 
 				for (int i = 0; i < mediaFbidList.Count; i++)
 				{
 					var mediaObject = new { media_fbid = mediaFbidList[i] };
 					string jsonMedia = JsonSerializer.Serialize(mediaObject);
 					postData.Add($"attached_media[{i}]", jsonMedia);
+				}
+
+				if (!string.IsNullOrEmpty(locationId))
+				{
+					postData.Add("place", locationId);
 				}
 
 				using (var content = new FormUrlEncodedContent(postData))

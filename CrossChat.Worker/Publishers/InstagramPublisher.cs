@@ -31,7 +31,7 @@ namespace CrossChat.Worker.Publishers
 			await _console.Log($"Начало отправки поста в профиль {settings.Username}.", settings.UserId, state.BotId);
 
 			// 1. Публикуем основной пост
-			var result = await _service.CreateMediaAsync(images, settings.AccessToken, caption);
+			var result = await _service.CreateMediaAsync(images, settings.AccessToken, caption, state.LocationId);
 			if (!result.Success || string.IsNullOrEmpty(result.Id))
 				throw new Exception($"Ошибка API при публикации поста в Instagram (BotId: {state.BotId})");
 

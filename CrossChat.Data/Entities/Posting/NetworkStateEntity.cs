@@ -46,5 +46,11 @@ namespace CrossChat.Data.Entities.Posting
 
 		// Текст первого комментария (для Instagram, Facebook, Threads и т.д.)
 		public string? FirstComment { get; set; }
+
+		[MaxLength(100)]
+		public string? LocationId { get; set; }
+
+		[MaxLength(255)]
+		public string? LocationName { get; set; }
 	}
 }

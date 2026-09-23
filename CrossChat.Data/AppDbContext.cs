@@ -30,6 +30,8 @@ namespace CrossChat.Data
 		public DbSet<TrackedHashtag> TrackedHashtags { get; set; }
 		public DbSet<ViralPost> ViralPosts { get; set; }
 
+		public DbSet<SavedLocation> SavedLocations { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			// Ускоряем поиск при входе

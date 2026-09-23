@@ -304,6 +304,8 @@ namespace CrossChat.Worker.Services
 							dbState.ButtonText = kvp.Value.ButtonText;
 							dbState.ButtonUrl = kvp.Value.ButtonUrl;
 							dbState.FirstComment = kvp.Value.FirstComment;
+							dbState.LocationId = kvp.Value.LocationId;
+							dbState.LocationName = kvp.Value.LocationName;
 						}
 					}
 					else
@@ -324,6 +326,8 @@ namespace CrossChat.Worker.Services
 								ButtonText = kvp.Value.ButtonText,
 								ButtonUrl = kvp.Value.ButtonUrl,
 								FirstComment = kvp.Value.FirstComment,
+								LocationId = kvp.Value.LocationId,
+								LocationName = kvp.Value.LocationName,
 							});
 						}
 					}
@@ -431,6 +435,8 @@ namespace CrossChat.Worker.Services
 					ButtonText = state.ButtonText,
 					ButtonUrl = state.ButtonUrl,
 					FirstComment = state.FirstComment,
+					LocationId = state.LocationId,
+					LocationName = state.LocationName,
 				};
 			}
 
@@ -487,6 +493,8 @@ namespace CrossChat.Worker.Services
 					ButtonText = kvp.Value.ButtonText,
 					ButtonUrl = kvp.Value.ButtonUrl,
 					FirstComment = kvp.Value.FirstComment,
+					LocationId = kvp.Value.LocationId,
+					LocationName = kvp.Value.LocationName,
 				});
 			}
 
