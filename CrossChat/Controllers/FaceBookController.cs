@@ -2,7 +2,9 @@ using System.Security.Claims;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,7 @@ namespace CrossChat.Controllers
 	public class FaceBookController : BaseController
 	{
 		private readonly ILogger<FaceBookController> _logger;
+		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly SocialMediaSettings _settings;
 		private readonly HttpClient _httpClient;
 		private readonly AppDbContext _db;
@@ -25,9 +28,11 @@ namespace CrossChat.Controllers
 		public FaceBookController(
 			ILogger<FaceBookController> logger,
 			IOptions<SocialMediaSettings> options,
+			IPublishEndpoint publishEndpoint,
 			AppDbContext db)
 		{
 			_logger = logger;
+			_publishEndpoint = publishEndpoint;
 			_settings = options.Value;
 			_db = db;
 			_httpClient = new HttpClient();
@@ -62,6 +67,71 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 				_logger.LogInformation("[Facebook Webhook]: " + body);
+
+				using var doc = JsonDocument.Parse(body);
+				var root = doc.RootElement;
+
+				if (root.TryGetProperty("entry", out var entryArr))
+				{
+					foreach (var entry in entryArr.EnumerateArray())
+					{
+						var pageId = entry.GetProperty("id").GetString();
+						if (string.IsNullOrEmpty(pageId)) continue;
+
+						// === ПЕРЕХВАТ КОММЕНТАРИЕВ К ПОСТАМ И REELS (field: "feed") ===
+						if (entry.TryGetProperty("changes", out var changesArr))
+						{
+							foreach (var change in changesArr.EnumerateArray())
+							{
+								var field = change.TryGetProperty("field", out var f) ? f.GetString() : null;
+
+								if (field == "feed" && change.TryGetProperty("value", out var val))
+								{
+									var item = val.TryGetProperty("item", out var i) ? i.GetString() : null;
+									var verb = val.TryGetProperty("verb", out var v) ? v.GetString() : null;
+
+									// Нас интересует только добавление нового комментария
+									if (item == "comment" && verb == "add")
+									{
+										var commentId = val.GetProperty("comment_id").GetString()!;
+										var postId = val.TryGetProperty("post_id", out var pi) ? pi.GetString() ?? "" : "";
+										var message = val.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
+
+										string senderId = "";
+										string senderName = "Пользователь";
+
+										if (val.TryGetProperty("from", out var fromObj))
+										{
+											senderId = fromObj.TryGetProperty("id", out var sid) ? sid.GetString() ?? "" : "";
+											senderName = fromObj.TryGetProperty("name", out var sname) ? sname.GetString() ?? "Пользователь" : "Пользователь";
+										}
+
+										// ЗАЩИТА: Игнорируем комментарии от самой страницы (чтобы бот не отвечал сам себе)
+										if (senderId == pageId)
+										{
+											_logger.LogInformation("[Facebook Webhook] Игнорируем свой собственный комментарий.");
+											continue;
+										}
+
+										_logger.LogInformation($"[Facebook Webhook] Пойман комментарий от {senderName}: «{message}» к посту {postId}");
+
+										// Отправляем в очередь MassTransit!
+										await _publishEndpoint.Publish(new FacebookCommentReceived
+										{
+											PageId = pageId,
+											CommentId = commentId,
+											PostId = postId,
+											SenderId = senderId,
+											SenderName = senderName,
+											Text = message
+										});
+									}
+								}
+							}
+						}
+					}
+				}
+
 				return Ok();
 			}
 			catch (Exception ex)
@@ -219,7 +289,11 @@ namespace CrossChat.Controllers
 			bool isDailyStoriesEnabled,
 			string dailyStoryTime,
 			bool isStoryOverlayTextEnabled,
-			string? storyOverlayText)
+			string? storyOverlayText,
+			bool isCommentsEnabled,
+			int commentReplyMode,
+			string? commentTemplates,
+			string commentPrompt)
 		{
 			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
@@ -244,6 +318,11 @@ namespace CrossChat.Controllers
 				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
 				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
 				settings.StoryOverlayText = storyOverlayText;
+
+				settings.IsCommentsEnabled = isCommentsEnabled;
+				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
+				settings.CommentTemplates = commentTemplates;
+				settings.CommentPrompt = commentPrompt ?? "";
 
 				await _db.SaveChangesAsync();
 				_logger.LogInformation($"[Facebook] Настройки страницы '{settings.PageName}' обновлены.");
@@ -273,7 +352,7 @@ namespace CrossChat.Controllers
 			// 1. Подписываем страницу на вебхуки Messenger (для автоответов)
 			try
 			{
-				var subscribeUrl = $"https://graph.facebook.com/v22.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks&access_token={pageToken}";
+				var subscribeUrl = $"https://graph.facebook.com/v24.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,feed&access_token={pageToken}";
 				await _httpClient.PostAsync(subscribeUrl, null);
 			}
 			catch (Exception ex)

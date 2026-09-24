@@ -15,6 +15,7 @@ namespace CrossChat.Integrations.Interfaces
 		Task<(bool Success, string? PostId)> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish);
 		Task<string?> CreateCommentAsync(string postId, string text, string pageAccessToken);
 		Task<DailyStoryResult> PublishDailyStoryAsync(FacebookDailyStoryDto dto);
+		Task<bool> ReplyToCommentAsync(string commentId, string text, string pageAccessToken);
 	}
 
 	public class FbUser

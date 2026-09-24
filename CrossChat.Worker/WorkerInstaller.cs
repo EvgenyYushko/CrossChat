@@ -4,6 +4,7 @@ using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
 using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Worker.Consumers.BlueSky;
+using CrossChat.Worker.Consumers.Facebook.Comments;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
@@ -36,6 +37,7 @@ namespace CrossChat.Worker
 			x.AddConsumer<BlueSkyReplyConsumer>(typeof(BlueSkyReplyDefinition));
 			x.AddConsumer<BlueSkyCommentConsumer>(typeof(BlueSkyCommentDefinition));
 			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
+			x.AddConsumer<FacebookCommentConsumer>(typeof(FacebookCommentDefinition));
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 

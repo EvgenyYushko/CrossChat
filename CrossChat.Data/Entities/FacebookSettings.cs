@@ -44,5 +44,17 @@ namespace CrossChat.Data.Entities
 
 		// Храним без ограничения длины (text) под большие списки фраз
 		public string? StoryOverlayText { get; set; } = "Больше интересного по ссылке в описании!\nСсылка на Telegram в шапке профиля 👆";
+
+		// === НАСТРОЙКИ АВТООТВЕТОВ НА КОММЕНТАРИИ ===
+		public bool IsCommentsEnabled { get; set; } = true;
+
+		// 1 = Только ИИ, 2 = Только шаблоны (дефолт), 3 = Комбинированный
+		public int CommentReplyMode { get; set; } = 2;
+
+		// Шаблоны со Spintax
+		public string? CommentTemplates { get; set; } = "{Спасибо|Благодарю|Пасиб} за {отклик|комментарий}! ❤️\nРады видеть вас на нашей странице! ✨\n{Заглядывайте|Заходите} почаще 😊";
+
+		// Промпт для ИИ
+		public string CommentPrompt { get; set; } = "Ты ассистент на странице Facebook. Отвечай на комментарии дружелюбно, вежливо и лаконично.";
 	}
 }

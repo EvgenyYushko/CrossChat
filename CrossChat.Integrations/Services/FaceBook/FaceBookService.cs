@@ -176,10 +176,10 @@ namespace CrossChat.Integrations.Services
 			string url = $"https://graph.facebook.com/v24.0/{postId}/comments";
 
 			var postData = new Dictionary<string, string>
-	{
-		{ "message", text },
-		{ "access_token", pageAccessToken }
-	};
+			{
+				{ "message", text },
+				{ "access_token", pageAccessToken }
+			};
 
 			try
 			{
@@ -209,6 +209,43 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		
+		/// <summary>
+		/// Отправляет ответ на конкретный комментарий пользователя на странице Facebook
+		/// </summary>
+		public async Task<bool> ReplyToCommentAsync(string commentId, string text, string pageAccessToken)
+		{
+			if (string.IsNullOrWhiteSpace(commentId) || string.IsNullOrWhiteSpace(text))
+				return false;
+
+			string url = $"https://graph.facebook.com/v24.0/{commentId}/comments";
+
+			var postData = new Dictionary<string, string>
+			{
+				{ "message", text },
+				{ "access_token", pageAccessToken }
+			};
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				using var content = new FormUrlEncodedContent(postData);
+
+				var response = await httpClient.PostAsync(url, content);
+				if (response.IsSuccessStatusCode)
+				{
+					Console.WriteLine($"[Facebook] ✅ Ответ на комментарий {commentId} успешно отправлен!");
+					return true;
+				}
+
+				var errorResult = await response.Content.ReadAsStringAsync();
+				Console.WriteLine($"[Facebook] ❌ Ошибка ответа на комментарий (HTTP {response.StatusCode}): {errorResult}");
+				return false;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook] Исключение при ответе на комментарий: {ex.Message}");
+				return false;
+			}
+		}
 	}
 }
