@@ -4,6 +4,7 @@ using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Publishers.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
 public class TelegramChannelPublisher : ISocialPublisher
@@ -74,13 +75,13 @@ public class TelegramChannelPublisher : ISocialPublisher
 					else
 					{
 						await _console.Log("Отправка видео с кнопкой в Telegram...", settings.UserId, state.BotId);
-						await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption, replyMarkup: inlineKeyboard);
+						await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard);
 					}
 				}
 				else
 				{
 					await _console.Log("Отправка фото с кнопкой в Telegram...", settings.UserId, state.BotId);
-					await _service.SendSinglePhotoAsync(settings.ChannelId, visualMedia[0], caption, replyMarkup: inlineKeyboard);
+					await _service.SendSinglePhotoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard);
 				}
 			}
 			else

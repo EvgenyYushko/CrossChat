@@ -22,17 +22,17 @@ namespace CrossChat.Integrations.Services.Telegram
 
 		public Task<Message> SendMessage(long senderId, string text, ReplyMarkup replyMarkup)
 		{
-			return _telegramBotClient.SendMessage(senderId, text, replyMarkup: replyMarkup);
+			return _telegramBotClient.SendMessage(senderId, text, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
 		}
 
 		public Task<Message> SendMessage(long senderId, string text)
 		{
-			return _telegramBotClient.SendMessage(senderId, text);
+			return _telegramBotClient.SendMessage(senderId, text, parseMode: ParseMode.Html);
 		}
 
 		public Task<Message> SendMessageToAdmin(string text, ReplyMarkup replyMarkup = null)
 		{
-			return SendMessage(text, ADMIN_ID, replyMarkup: replyMarkup);
+			return SendMessage(text, ADMIN_ID, replyMarkup: replyMarkup,  parseMode: ParseMode.Html);
 		}
 
 		public Task<Message> SendMessage(string text
@@ -240,9 +240,8 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
-			// Очищаем префикс Base64, если он есть
 			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
 			var imageBytes = Convert.FromBase64String(cleanBase64);
 
@@ -252,7 +251,6 @@ namespace CrossChat.Integrations.Services.Telegram
 			{
 				if (isCaptionTooLong)
 				{
-					// Если описание длинное: шлем фото без текста, а текст — отдельным сообщением
 					var photoMsg = await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"));
 					await _telegramBotClient.SendMessage(senderId, caption, replyMarkup: replyMarkup, parseMode: parseMode);
 					return photoMsg;
@@ -267,7 +265,7 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
 			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
 			var videoBytes = Convert.FromBase64String(cleanBase64);
