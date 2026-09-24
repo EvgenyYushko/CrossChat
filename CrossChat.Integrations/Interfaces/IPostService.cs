@@ -21,5 +21,6 @@ namespace CrossChat.Integrations.Interfaces
 		public Task AddPostAsync(BlogPost post);
 		public Task UpdatePostAsync(BlogPost post);
 		public Task DeletePostAsync(Guid id);
+		void InvalidateCache(Guid postId);
 	}
 }

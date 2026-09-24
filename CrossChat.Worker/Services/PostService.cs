@@ -28,6 +28,13 @@ namespace CrossChat.Worker.Services
 			_logger = logger;
 		}
 
+		// 1. Метод сброса кэша поста:
+		public void InvalidateCache(Guid postId)
+		{
+			_cache.Remove(postId);
+			_logger.LogInformation("[Cache] Кэш для поста {PostId} успешно сброшен.", postId);
+		}
+
 		public async Task<List<BlogPost>> GetPendingPostsAsync(int profileId, AccessLevel accessLevel, int count)
 		{
 			// 1. Ищем посты со статусом Pending
@@ -296,8 +303,13 @@ namespace CrossChat.Worker.Services
 						}
 						else
 						{
+							// ЖЕЛЕЗНАЯ ЗАЩИТА: Если пост УЖЕ опубликован в этой сети — НИКОГДА не сбрасываем его в Pending!
+							if (dbState.Status != (int)SocialStatus.Published)
+							{
+								dbState.Status = newStatus;
+							}
+
 							// Обновляем существующую запись
-							dbState.Status = newStatus;
 							dbState.Caption = newCaption ?? string.Empty;
 							dbState.IsVideoNote = kvp.Value.IsVideoNote;
 							dbState.IsPaid = kvp.Value.IsPaid;

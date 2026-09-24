@@ -1,5 +1,6 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Enums;
+using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Facades;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -91,6 +92,10 @@ namespace CrossChat.Worker.Jobs
 
 					// Успешная публикация
 					state.Status = (int)SocialStatus.Published;
+
+					// ВАЖНО: Сбрасываем кэш в оперативной памяти, чтобы там не зависал статус Pending!
+					var postService = scope.ServiceProvider.GetRequiredService<IPostService>();
+					postService.InvalidateCache(state.PostId);
 				}
 				catch (Exception ex)
 				{
