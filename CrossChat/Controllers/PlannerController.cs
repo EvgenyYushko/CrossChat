@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using CrossChat.Data;
 using CrossChat.Data.Emuns;
 using CrossChat.Data.Entities;
+using CrossChat.Data.Entities.Posting;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
@@ -63,6 +64,9 @@ namespace CrossChat.Controllers
 			return View(profile);
 		}
 
+		// ==========================================================
+		// 4. GET EVENTS (ДОБАВЛЯЕМ ЗНАЧОК 🔁 ДЛЯ ПОВТОРЯЮЩИХСЯ ПОСТОВ)
+		// ==========================================================
 		[HttpGet("events")]
 		public async Task<IActionResult> GetEvents(int profileId, string networkType, int? botId)
 		{
@@ -82,19 +86,20 @@ namespace CrossChat.Controllers
 					var mainCaption = activeStates.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Caption))?.Caption;
 					if (string.IsNullOrWhiteSpace(mainCaption)) mainCaption = "Пост";
 
-					// ЛОГИКА ЦВЕТА ДЛЯ РЕЖИМА "ALL":
-					// 1. Если ХОТЯ БЫ В ОДНОЙ сети ошибка -> КРАСНЫЙ
-					// 2. Если ВО ВСЕХ активных сетях опубликовано -> ЗЕЛЕНЫЙ
-					// 3. Иначе (есть ожидающие) -> ЖЕЛТЫЙ / ОРАНЖЕВЫЙ
-					string color = "#f59e0b"; // Оранжевый (Pending)
+					// Если пост из серии повторений — добавляем красивый значок 🔁
+					if (p.RecurrenceGroupId.HasValue)
+					{
+						mainCaption = "🔁 " + mainCaption;
+					}
 
+					string color = "#f59e0b"; // Оранжевый (Pending)
 					if (activeStates.Any(ns => ns.Status == (int)SocialStatus.Error))
 					{
-						color = "#ef4444"; // Красный (Error)
+						color = "#ef4444"; // Красный
 					}
 					else if (activeStates.All(ns => ns.Status == (int)SocialStatus.Published))
 					{
-						color = "#10b981"; // Зеленый (Published)
+						color = "#10b981"; // Зеленый
 					}
 
 					return new
@@ -104,6 +109,7 @@ namespace CrossChat.Controllers
 						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
 						backgroundColor = color,
 						network = "All",
+						isRecurring = p.RecurrenceGroupId.HasValue,
 						activeNetworks = activeStates.Select(ns => $"{((NetworkType)ns.NetworkType).ToString()}_{ns.BotId}").ToList()
 					};
 				});
@@ -129,15 +135,18 @@ namespace CrossChat.Controllers
 					var state = p.NetworkStates.FirstOrDefault(ns => ns.NetworkType == netTypeId && ns.BotId == finalBotId);
 					var status = state?.Status ?? (int)SocialStatus.Pending;
 
-					// ЛОГИКА ЦВЕТА ДЛЯ ОДИНОЧНОЙ СЕТИ:
 					string color = status switch
 					{
-						(int)SocialStatus.Published => "#10b981", // Зеленый
-						(int)SocialStatus.Error => "#ef4444",     // КРАСНЫЙ!
-						_ => "#f59e0b"                           // Оранжевый (Pending)
+						(int)SocialStatus.Published => "#10b981",
+						(int)SocialStatus.Error => "#ef4444",
+						_ => "#f59e0b"
 					};
 
 					string title = string.IsNullOrWhiteSpace(state?.Caption) ? "Пост" : state.Caption;
+					if (p.RecurrenceGroupId.HasValue)
+					{
+						title = "🔁 " + title;
+					}
 
 					return new
 					{
@@ -145,7 +154,8 @@ namespace CrossChat.Controllers
 						title = title,
 						start = p.ShowDate.ToString("yyyy-MM-ddTHH:mm:ss"),
 						backgroundColor = color,
-						network = networkType
+						network = networkType,
+						isRecurring = p.RecurrenceGroupId.HasValue
 					};
 				});
 
@@ -153,16 +163,23 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// ==========================================================
+		// 1. СОЗДАНИЕ ПОСТА (С ПОДДЕРЖКОЙ СЕРИИ ПОВТОРЕНИЙ)
+		// ==========================================================
 		[HttpPost("create")]
-		[RequestSizeLimit(300 * 1024 * 1024)] // Лимит 300 МБ для поддержки видео
+		[RequestSizeLimit(300 * 1024 * 1024)]
 		[RequestFormLimits(MultipartBodyLengthLimit = 300 * 1024 * 1024)]
 		public async Task<IActionResult> Create(
 			[FromForm] int profileId,
 			[FromForm] string networkType,
 			[FromForm] List<string> selectedNetworks,
-			[FromForm] string caption,
+			[FromForm] string? caption,
 			[FromForm] DateTime showDate,
 			[FromForm] int? botId,
+			// ПАРАМЕТРЫ ПОВТОРЕНИЯ:
+			[FromForm] bool isRecurring,
+			[FromForm] int recurrenceInterval,
+			[FromForm] int recurrenceCount,
 			List<IFormFile> images)
 		{
 			var utcDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
@@ -181,14 +198,77 @@ namespace CrossChat.Controllers
 				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 			}
 
-			// Загрузка медиа в Google Drive
+			// Загружаем файлы в Google Drive ОДИН РАЗ
 			await UploadMedia(images, post);
 
-			await _postService.AddPostAsync(post);
+			// ЕСЛИ ВКЛЮЧЕНО ПОВТОРЕНИЕ (ГЕНЕРАЦИЯ СЕРИИ):
+			if (isRecurring && recurrenceCount > 1)
+			{
+				int interval = recurrenceInterval > 0 ? recurrenceInterval : 7;
+				int count = Math.Clamp(recurrenceCount, 1, 24); // максимум 24 цикла
+				var groupId = Guid.NewGuid();
+
+				post.RecurrenceGroupId = groupId;
+				await _postService.AddPostAsync(post);
+
+				// Генерируем последующие посты серии
+				for (int i = 1; i < count; i++)
+				{
+					var repeatPost = new BlogPost
+					{
+						Id = Guid.NewGuid(),
+						ProfileId = profileId,
+						CreatedAt = DateTimeNow,
+						ShowDate = utcDate.AddDays(interval * i),
+						Access = AccessLevel.Public,
+						RecurrenceGroupId = groupId,
+						// Ссылаемся на те же самые файлы в Google Диске (без дублирования места!)
+						Media = post.Media.Select(m => new PostMediaItem
+						{
+							MediaType = m.MediaType,
+							GoogleDriveFileId = m.GoogleDriveFileId,
+							ThumbnailDriveFileId = m.ThumbnailDriveFileId,
+							FileName = m.FileName,
+							MimeType = m.MimeType,
+							FileSizeBytes = m.FileSizeBytes,
+							SortOrder = m.SortOrder
+						}).ToList()
+					};
+
+					// Копируем настройки соцсетей (текст, кнопки, геолокацию, звезды)
+					foreach (var kvp in post.Networks)
+					{
+						repeatPost.Networks[kvp.Key] = new NetworkPostData
+						{
+							Status = kvp.Value.Status,
+							Caption = kvp.Value.Caption,
+							FirstComment = kvp.Value.FirstComment,
+							IsPaid = kvp.Value.IsPaid,
+							Price = kvp.Value.Price,
+							IsVideoNote = kvp.Value.IsVideoNote,
+							ButtonText = kvp.Value.ButtonText,
+							ButtonUrl = kvp.Value.ButtonUrl,
+							LocationId = kvp.Value.LocationId,
+							LocationName = kvp.Value.LocationName
+						};
+					}
+
+					await _postService.AddPostAsync(repeatPost);
+				}
+
+				_logger.LogInformation("[Planner] Создана серия из {Count} повторяющихся постов с шагом {Days} дн. GroupId: {GroupId}", count, interval, groupId);
+			}
+			else
+			{
+				await _postService.AddPostAsync(post);
+			}
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 		}
 
+		// ==========================================================
+		// 2. ОБНОВЛЕНИЕ ПОСТА (ТОЛЬКО ЭТОТ ИЛИ ВСЯ СЕРИЯ)
+		// ==========================================================
 		[HttpPost("update/{id}")]
 		[RequestSizeLimit(300 * 1024 * 1024)]
 		[RequestFormLimits(MultipartBodyLengthLimit = 300 * 1024 * 1024)]
@@ -196,12 +276,14 @@ namespace CrossChat.Controllers
 			Guid id,
 			[FromForm] int profileId,
 			[FromForm] string networkType,
-			[FromForm] string caption,
+			[FromForm] string? caption,
 			[FromForm] DateTime showDate,
 			[FromForm] int? botId,
-			[FromForm] List<string> keptMediaDriveIds, // ID файлов, которые пользователь оставил
+			[FromForm] List<string> keptMediaDriveIds,
 			[FromForm] List<string> selectedNetworks,
-			[FromForm] List<IFormFile> images)
+			// ФЛАГ: ПРИМЕНИТЬ КО ВСЕЙ СЕРИИ:
+			[FromForm] bool updateSeries,
+			List<IFormFile> images)
 		{
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
@@ -210,42 +292,80 @@ namespace CrossChat.Controllers
 
 			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 			{
-				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
+				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть.");
 			}
 
-			// === УДАЛЕНИЕ ИЗ GOOGLE DRIVE ТЕХ ФАЙЛОВ, КОТОРЫЕ УДАЛИЛИ ПО КРЕСТИКУ ===
-			var keptSet = keptMediaDriveIds != null
-				? new HashSet<string>(keptMediaDriveIds)
-				: new HashSet<string>();
+			// Безопасное удаление убранных медиа
+			var keptSet = keptMediaDriveIds != null ? new HashSet<string>(keptMediaDriveIds) : new HashSet<string>();
+			var removedMedia = post.Media.Where(m => !keptSet.Contains(m.GoogleDriveFileId)).ToList();
 
-			// Находим те медиа, которых нет в списке оставленных (пользователь нажал на них крестик)
-			var removedMedia = post.Media
-				.Where(m => !keptSet.Contains(m.GoogleDriveFileId))
-				.ToList();
-
-			// Удаляем каждый удаленный файл из Google Диска
 			foreach (var media in removedMedia)
 			{
-				_logger.LogInformation("Удаление файла {FileName} (DriveId: {DriveId}) из Google Drive...",
-					media.FileName, media.GoogleDriveFileId);
-
-				await _googleDriveUploader.DeleteFileByIdAsync(media.GoogleDriveFileId);
-
-				// Если у файла была отдельная превьюшка, удаляем и её
+				await SafeDeleteMediaFileAsync(media.GoogleDriveFileId, excludingPostId: post.Id);
 				if (!string.IsNullOrEmpty(media.ThumbnailDriveFileId))
 				{
-					await _googleDriveUploader.DeleteFileByIdAsync(media.ThumbnailDriveFileId);
+					await SafeDeleteMediaFileAsync(media.ThumbnailDriveFileId, excludingPostId: post.Id);
 				}
 			}
 
-			// Оставляем в посте только те файлы, которые остались активными
 			post.Media = post.Media.Where(m => keptSet.Contains(m.GoogleDriveFileId)).ToList();
-
-			// Догружаем новые выбранные медиафайлы в Google Drive
 			await UploadMedia(images, post);
 
-			// Сохраняем изменения в базе данных
+			// Обновляем текущий пост
 			await _postService.UpdatePostAsync(post);
+
+			// ЕСЛИ ПОЛЬЗОВАТЕЛЬ ВЫБРАЛ: "ПРИМЕНИТЬ КО ВСЕЙ СЕРИИ"
+			if (post.RecurrenceGroupId.HasValue && updateSeries)
+			{
+				var futurePosts = await _db.Posts
+					.Include(p => p.Media)
+					.Include(p => p.NetworkStates)
+					.Where(p => p.RecurrenceGroupId == post.RecurrenceGroupId.Value &&
+								p.Id != post.Id &&
+								p.ShowDate >= post.ShowDate)
+					.ToListAsync();
+
+				foreach (var fPost in futurePosts)
+				{
+					// Обновляем медиафайлы (ссылаемся на актуальный набор)
+					fPost.Media.Clear();
+					foreach (var m in post.Media)
+					{
+						fPost.Media.Add(new PostMediaEntity
+						{
+							PostId = fPost.Id,
+							MediaType = m.MediaType,
+							GoogleDriveFileId = m.GoogleDriveFileId,
+							ThumbnailDriveFileId = m.ThumbnailDriveFileId,
+							FileName = m.FileName,
+							MimeType = m.MimeType,
+							FileSizeBytes = m.FileSizeBytes,
+							SortOrder = m.SortOrder
+						});
+					}
+
+					// Обновляем тексты, кнопки, звезды, локацию
+					foreach (var state in fPost.NetworkStates)
+					{
+						string netKey = $"{((NetworkType)state.NetworkType).ToString()}_{state.BotId}";
+						if (post.Networks.TryGetValue(netKey, out var netData))
+						{
+							state.Caption = netData.Caption;
+							state.FirstComment = netData.FirstComment;
+							state.IsPaid = netData.IsPaid;
+							state.Price = netData.Price;
+							state.IsVideoNote = netData.IsVideoNote;
+							state.ButtonText = netData.ButtonText;
+							state.ButtonUrl = netData.ButtonUrl;
+							state.LocationId = netData.LocationId;
+							state.LocationName = netData.LocationName;
+						}
+					}
+				}
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation("[Planner] Серия постов (GroupId: {GroupId}) успешно обновлена.", post.RecurrenceGroupId.Value);
+			}
 
 			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 		}
@@ -428,42 +548,116 @@ namespace CrossChat.Controllers
 			return post != null ? Json(post, options) : NotFound();
 		}
 
+		// ==========================================================
+		// 3. УДАЛЕНИЕ ПОСТА (ТОЛЬКО ЭТОТ ИЛИ ВСЯ СЕРИЯ)
+		// ==========================================================
 		[HttpPost("delete/{id}")]
-		public async Task<IActionResult> Delete(Guid id, [FromQuery] string networkType, [FromQuery] int? botId)
+		public async Task<IActionResult> Delete(
+			Guid id,
+			[FromQuery] string networkType,
+			[FromQuery] int? botId,
+			[FromQuery] bool deleteSeries = false)
 		{
 			var post = await _postService.GetPostByIdAsync(id);
 			if (post == null) return NotFound();
 
-			var activeNets = post.Networks
-				.Where(n => n.Value.Status != SocialStatus.None)
-				.Select(n => n.Key)
-				.ToList();
-
-			if (networkType == "All" || activeNets.Count <= 1)
+			// СЦЕНАРИЙ А: УДАЛЕНИЕ ВСЕЙ СЕРИИ
+			if (post.RecurrenceGroupId.HasValue && deleteSeries)
 			{
-				// Удаляем файлы из Google Drive перед удалением поста
-				foreach (var media in post.Media)
+				var seriesPosts = await _db.Posts
+					.Include(p => p.Media)
+					.Where(p => p.RecurrenceGroupId == post.RecurrenceGroupId.Value && p.ShowDate >= post.ShowDate)
+					.ToListAsync();
+
+				var postIds = seriesPosts.Select(p => p.Id).ToList();
+
+				// Удаляем медиафайлы только если они не используются другими постами вне этой серии
+				var driveIds = seriesPosts.SelectMany(p => p.Media).Select(m => m.GoogleDriveFileId).Distinct().ToList();
+				foreach (var dId in driveIds)
 				{
-					await _googleDriveUploader.DeleteFileByIdAsync(media.GoogleDriveFileId);
+					await SafeDeleteMediaFileAsync(dId, excludingPostIds: postIds);
 				}
 
-				await _postService.DeletePostAsync(id);
+				foreach (var p in seriesPosts)
+				{
+					await _postService.DeletePostAsync(p.Id);
+				}
+
+				_logger.LogInformation("[Planner] Удалена вся серия постов (GroupId: {GroupId}) начиная с {Date}", post.RecurrenceGroupId.Value, post.ShowDate);
 			}
+			// СЦЕНАРИЙ Б: УДАЛЕНИЕ ТОЛЬКО ЭТОГО ПОСТА
 			else
 			{
-				var netType = Enum.Parse<NetworkType>(networkType);
-				var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, netType);
-				var netKey = $"{networkType}_{finalBotId}";
+				var activeNets = post.Networks.Where(n => n.Value.Status != SocialStatus.None).Select(n => n.Key).ToList();
 
-				if (post.Networks.ContainsKey(netKey))
+				if (networkType == "All" || activeNets.Count <= 1)
 				{
-					post.Networks[netKey] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+					// Безопасное удаление из Google Drive с защитой файлов серии
+					foreach (var media in post.Media)
+					{
+						await SafeDeleteMediaFileAsync(media.GoogleDriveFileId, excludingPostId: post.Id);
+						if (!string.IsNullOrEmpty(media.ThumbnailDriveFileId))
+						{
+							await SafeDeleteMediaFileAsync(media.ThumbnailDriveFileId, excludingPostId: post.Id);
+						}
+					}
+
+					await _postService.DeletePostAsync(id);
 				}
-				await _postService.UpdatePostAsync(post);
+				else
+				{
+					var netType = Enum.Parse<NetworkType>(networkType);
+					var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, netType);
+					var netKey = $"{networkType}_{finalBotId}";
+
+					if (post.Networks.ContainsKey(netKey))
+					{
+						post.Networks[netKey] = new NetworkPostData { Status = SocialStatus.None, Caption = "" };
+					}
+					await _postService.UpdatePostAsync(post);
+				}
 			}
 
 			return Ok();
 		}
+
+
+		// ==========================================================
+		// ВСПОМОГАТЕЛЬНЫЙ МЕТОД: БЕЗОПАСНОЕ УДАЛЕНИЕ ИЗ GOOGLE DRIVE
+		// (Удаляет файл из облака ТОЛЬКО если на него больше никто не ссылается!)
+		// ==========================================================
+		private async Task SafeDeleteMediaFileAsync(string? driveFileId, Guid? excludingPostId = null, List<Guid>? excludingPostIds = null)
+		{
+			if (string.IsNullOrEmpty(driveFileId)) return;
+
+			try
+			{
+				var query = _db.PostMedia.AsNoTracking().Where(m => m.GoogleDriveFileId == driveFileId);
+
+				if (excludingPostId.HasValue)
+					query = query.Where(m => m.PostId != excludingPostId.Value);
+
+				if (excludingPostIds != null && excludingPostIds.Any())
+					query = query.Where(m => !excludingPostIds.Contains(m.PostId));
+
+				bool isStillUsed = await query.AnyAsync();
+
+				if (!isStillUsed)
+				{
+					await _googleDriveUploader.DeleteFileByIdAsync(driveFileId);
+					_logger.LogInformation("[Storage] Файл {DriveId} удален из Google Drive (нет ссылок).", driveFileId);
+				}
+				else
+				{
+					_logger.LogInformation("[Storage] Файл {DriveId} сохранен в Google Drive (используется другими постами серии).", driveFileId);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "[Storage] Ошибка проверки использования файла {DriveId}", driveFileId);
+			}
+		}
+
 
 		// ==========================================================
 		// ПОИСК И АВТО-КЭШИРОВАНИЕ ГЕОЛОКАЦИЙ (META PLACES)
@@ -538,10 +732,17 @@ namespace CrossChat.Controllers
 			var safeCaption = caption ?? string.Empty;
 
 			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
-			string? tgButtonText = Request.Form["tgButtonText"].ToString();
-			string? tgButtonUrl = Request.Form["tgButtonUrl"].ToString();
+			string? tgButtonText = Request.Form["tgButtonText"].FirstOrDefault();
+			string? tgButtonUrl = Request.Form["tgButtonUrl"].FirstOrDefault();
 			string? firstComment = Request.Form["firstComment"].ToString();
 			if (string.IsNullOrWhiteSpace(firstComment)) firstComment = null;
+
+			// Страховка: если строка уже пришла с запятыми из-за дубля полей формы — берем первую часть
+			if (!string.IsNullOrEmpty(tgButtonText) && tgButtonText.Contains(","))
+				tgButtonText = tgButtonText.Split(',')[0].Trim();
+
+			if (!string.IsNullOrEmpty(tgButtonUrl) && tgButtonUrl.Contains(","))
+				tgButtonUrl = tgButtonUrl.Split(',')[0].Trim();
 
 			string? locationId = Request.Form["locationId"].ToString();
 			string? locationName = Request.Form["locationName"].ToString();
@@ -555,7 +756,7 @@ namespace CrossChat.Controllers
 			// Флаг: одинаковые ли настройки звезд для всех каналов (по умолчанию true)
 			bool isUnifiedTelegramPaid = Request.Form["isUnifiedTelegramPaid"] != "false";
 			// Флаг единого режима для кнопок-ссылок
-			bool isUnifiedTelegramButton = Request.Form["isUnifiedTelegramButton"] != "false";
+			bool isUnifiedTelegramButton = Request.Form["isUnifiedTelegramButton"].FirstOrDefault() != "false";
 
 			if (networkType == "All")
 			{
@@ -619,8 +820,14 @@ namespace CrossChat.Controllers
 								if (!isUnifiedTelegramButton)
 								{
 									// Если включен РАЗДЕЛЬНЫЙ режим, считываем индивидуальные поля этого канала:
-									channelButtonText = Request.Form[$"tgButtonText_{netKey}"].ToString();
-									channelButtonUrl = Request.Form[$"tgButtonUrl_{netKey}"].ToString();
+									channelButtonText = Request.Form[$"tgButtonText_{netKey}"].FirstOrDefault();
+									channelButtonUrl = Request.Form[$"tgButtonUrl_{netKey}"].FirstOrDefault();
+
+									 if (!string.IsNullOrEmpty(channelButtonText) && channelButtonText.Contains(",")) 
+										channelButtonText = channelButtonText.Split(',')[0].Trim();
+
+									if (!string.IsNullOrEmpty(channelButtonUrl) && channelButtonUrl.Contains(",")) 
+										channelButtonUrl = channelButtonUrl.Split(',')[0].Trim();
 								}
 
 								post.Networks[netKey].IsPaid = channelIsPaid;

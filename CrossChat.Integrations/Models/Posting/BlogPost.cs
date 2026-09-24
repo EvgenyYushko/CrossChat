@@ -19,5 +19,7 @@ namespace CrossChat.Integrations.Models
 
 		// Ключ словаря теперь - строка вида "{NetworkType}_{BotId}" (например, "Instagram_5")
 		public Dictionary<string, NetworkPostData> Networks { get; set; } = new();
+
+		public Guid? RecurrenceGroupId { get; set; }
 	}
 }

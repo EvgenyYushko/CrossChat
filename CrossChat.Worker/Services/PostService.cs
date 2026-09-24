@@ -220,6 +220,7 @@ namespace CrossChat.Worker.Services
 			{
 				entity.AccessLevel = (int)post.Access;
 				entity.ShowDate = post.ShowDate;
+				entity.RecurrenceGroupId = post.RecurrenceGroupId;
 
 				// --- ОБНОВЛЕНИЕ МЕДИАФАЙЛОВ ---
 				// Сравниваем по уникальному GoogleDriveFileId
@@ -418,7 +419,8 @@ namespace CrossChat.Worker.Services
 						MimeType = m.MimeType,
 						FileSizeBytes = m.FileSizeBytes,
 						SortOrder = m.SortOrder
-					}).ToList()
+					}).ToList(),
+				RecurrenceGroupId = entity.RecurrenceGroupId,
 			};
 
 			foreach (var state in entity.NetworkStates)
@@ -451,7 +453,8 @@ namespace CrossChat.Worker.Services
 				ProfileId = model.ProfileId,
 				ShowDate = model.ShowDate,
 				CreatedAt = model.CreatedAt,
-				AccessLevel = (int)model.Access
+				AccessLevel = (int)model.Access,
+				RecurrenceGroupId = model.RecurrenceGroupId,
 			};
 
 			if (model.Media != null && model.Media.Count > 0)

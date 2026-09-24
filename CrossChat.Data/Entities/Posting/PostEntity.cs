@@ -28,5 +28,8 @@ namespace CrossChat.Data.Entities.Posting
 
 		// Связь с состояниями сетей (Один пост -> Много состояний)
 		public virtual List<NetworkStateEntity> NetworkStates { get; set; } = new();
+
+		// Идентификатор серии повторений (одинаковый для всех постов одной цепочки)
+		public Guid? RecurrenceGroupId { get; set; }
 	}
 }
