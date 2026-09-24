@@ -22,6 +22,42 @@ namespace CrossChat.Integrations.Services
 			_logger = logger;
 		}
 
+		/// <summary>
+		/// Получает актуальные данные профиля BlueSky (Handle, AvatarUrl, DisplayName)
+		/// </summary>
+		public async Task<(string? Handle, string? AvatarUrl, string? DisplayName)?> GetProfileAsync(BlueSkyModel settings)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var profileUrl = $"{pdsUrl}/xrpc/app.bsky.actor.getProfile?actor={settings.Did}";
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, profileUrl, settings, null);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+					var root = doc.RootElement;
+
+					string? handle = root.TryGetProperty("handle", out var h) ? h.GetString() : null;
+					string? avatarUrl = root.TryGetProperty("avatar", out var av) ? av.GetString() : null;
+					string? displayName = root.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
+
+					return (handle, avatarUrl, displayName);
+				}
+				else
+				{
+					_logger.LogWarning("[BlueSky] Не удалось получить профиль {Did} (HTTP {Code})", settings.Did, response.StatusCode);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка получения профиля для {Did}", settings.Did);
+			}
+
+			return null;
+		}
+
 		public async Task<(string AccessToken, string RefreshToken, int ExpiresIn)?> RefreshTokenAsync(string refreshToken, string privateKeyJson)
 		{
 			var tokenUrl = "https://bsky.social/oauth/token";

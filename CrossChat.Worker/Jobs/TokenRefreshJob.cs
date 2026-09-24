@@ -1,5 +1,6 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Services;
 using CrossChat.Worker.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -79,7 +80,7 @@ public class TokenRefreshJob : IJob
 		await RefreshThreadsTokens(thresholdDate);
 
 		// --- БЛОК 3: BLUESKY ---
-		//await RefreshBlueSkyTokens(DateTimeNow.AddHours(1));
+		await RefreshBlueSkyData();
 
 		await RefreshXTokens(DateTimeNow.AddHours(1));
 
@@ -209,32 +210,70 @@ public class TokenRefreshJob : IJob
 		}
 	}
 
-	private async Task RefreshBlueSkyTokens(DateTime thresholdDate)
+	private async Task RefreshBlueSkyData()
 	{
 		var bskyUsers = await _db.BlueSkySettings
-			.Where(s => s.AccessToken != null && s.TokenExpiresAt < thresholdDate)
+			.Include(p => p.User)
+			.Where(s => s.AccessToken != null)
 			.ToListAsync();
+
+		if (!bskyUsers.Any()) return;
+
+		_logger.LogInformation($"[TokenRefreshJob] BlueSky: найдено {bskyUsers.Count} аккаунтов для проверки данных.");
 
 		foreach (var bot in bskyUsers)
 		{
 			try
 			{
-				// Обновляем токен
-				var result = await _blueSkyService.RefreshTokenAsync(bot.RefreshToken!, bot.PrivateKeyJson!);
+				var botModel = new BlueSkyModel
+				{
+					AccessToken = bot.AccessToken!,
+					RefreshToken = bot.RefreshToken,
+					Handle = bot.Handle,
+					PrivateKeyJson = bot.PrivateKeyJson!,
+					TokenExpiresAt = bot.TokenExpiresAt,
+					Did = bot.Did!,
+					PdsUrl = bot.PdsUrl!
+				};
 
-				if (result != null)
+				// 1. Проверяем и обновляем токен доступа, если он скоро истекает
+				await _blueSkyService.GetValidTokenAsync(botModel);
+				bot.AccessToken = botModel.AccessToken;
+				bot.RefreshToken = botModel.RefreshToken;
+				bot.TokenExpiresAt = botModel.TokenExpiresAt;
+
+				// 2. Запрашиваем актуальные данные профиля (аватарку и никнейм)
+				var profile = await _blueSkyService.GetProfileAsync(botModel);
+				if (profile != null)
 				{
-					bot.AccessToken = result.Value.AccessToken;
-					bot.RefreshToken = result.Value.RefreshToken;
-					bot.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
-					_logger.LogInformation($"✅ BlueSky токен обновлен для @{bot.Handle}");
-				}
-				else
-				{
-					_logger.LogWarning($"⚠️ Не удалось обновить BlueSky для @{bot.Handle}. Возможно, отозван.");
+					// Обновляем никнейм, если сменился
+					if (!string.IsNullOrEmpty(profile.Value.Handle))
+					{
+						bot.Handle = profile.Value.Handle;
+					}
+
+					// Если есть аватарка — скачиваем ее в Base64 для постоянного хранения в базе
+					if (!string.IsNullOrEmpty(profile.Value.AvatarUrl))
+					{
+						bot.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(profile.Value.AvatarUrl);
+					}
+
+					_logger.LogInformation($"✅ [TokenRefreshJob] Данные профиля BlueSky успешно обновлены для @{bot.Handle}");
 				}
 			}
-			catch (Exception ex) { _logger.LogError(ex, $"❌ Ошибка BlueSky Refresh для {bot.Handle}"); }
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"❌ [TokenRefreshJob] Ошибка обновления BlueSky для @{bot.Handle}");
+
+				if (bot.User != null)
+				{
+					try
+					{
+						await _emailService.SendErrorRefreshToken(bot.User.Email, bot.User.Name, bot.Id, bot.Handle ?? "BlueSky", "BlueSky");
+					}
+					catch { }
+				}
+			}
 		}
 	}
 
