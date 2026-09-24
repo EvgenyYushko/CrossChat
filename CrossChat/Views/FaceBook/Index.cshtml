@@ -284,7 +284,14 @@
 }
 
 @section NavbarActions {
-    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Профиль</a>
+    @{
+        var backUrl = Model?.ProfileId > 0
+            ? $"/profile?profileId={Model.ProfileId}"
+            : (Context.Request.Query.ContainsKey("profileId") ? $"/profile?profileId={Context.Request.Query["profileId"]}" : "/profiles");
+    }
+    <a href="@backUrl" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
+        ← Назад
+    </a>
 }
 
 <div class="container">

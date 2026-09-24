@@ -300,6 +300,42 @@
     </style>
 }
 
+@section NavbarActions {
+    @{
+        var network = Context.Request.Query["network"].ToString();
+        var botId = Context.Request.Query["botId"].ToString();
+        var profileId = Context.Request.Query["profileId"].ToString();
+
+        string backUrl;
+        string backText;
+
+        if (!string.IsNullOrEmpty(network) && !string.IsNullOrEmpty(botId))
+        {
+            backText = $"← Назад";
+            backUrl = network switch
+            {
+                "Instagram" => $"/instagram?botId={botId}",
+                "Facebook" => $"/facebook?botId={botId}",
+                _ => $"/profile?profileId={profileId}"
+            };
+        }
+        else if (!string.IsNullOrEmpty(profileId) && profileId != "0")
+        {
+            backText = "← Назад";
+            backUrl = $"/profile?profileId={profileId}";
+        }
+        else
+        {
+            backText = "← Все профили";
+            backUrl = "/profiles";
+        }
+    }
+
+    <a href="@backUrl" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; transition: color 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--text-secondary)'">
+        @backText
+    </a>
+}
+
 <div class="trends-container">
 
     <!-- СТАТУС СВЯЗКИ -->

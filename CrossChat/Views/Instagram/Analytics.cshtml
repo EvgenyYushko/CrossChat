@@ -402,6 +402,19 @@
     </style>
 }
 
+@section NavbarActions {
+    @{
+        var bId = ViewBag.BotId ?? Context.Request.Query["botId"].ToString();
+        var backUrl = !string.IsNullOrEmpty(bId?.ToString()) && bId.ToString() != "0"
+            ? $"/instagram?botId={bId}"
+            : "/profiles";
+    }
+
+    <a href="@backUrl" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; transition: color 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--text-secondary)'">
+        ← Назад
+    </a>
+}
+
 <div class="analytics-container">
 
     <!-- ШАПКА ПРОФИЛЯ -->

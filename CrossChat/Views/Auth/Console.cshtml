@@ -164,7 +164,36 @@
 }
 
 @section NavbarActions {
-    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← В кабинет</a>
+    @{
+        var provider = (Context.Request.Query["provider"].ToString() ?? "").ToLowerInvariant().Trim();
+        var botId = Context.Request.Query["botId"].ToString().Trim();
+
+        string backUrl;
+        string backText;
+
+        if (!string.IsNullOrEmpty(botId) && botId != "0" && !string.IsNullOrEmpty(provider))
+        {
+            (backUrl, backText) = provider switch
+            {
+                "instagram" => ($"/instagram?botId={botId}", "← Назад"),
+                "facebook" => ($"/facebook?botId={botId}", "← Назад"),
+                "threads" => ($"/threads?botId={botId}", "← Назад"),
+                "bluesky" => ($"/bluesky?botId={botId}", "← Назад"),
+                "telegramchannel" or "telegram" => ($"/telegram-channel?botId={botId}", "← Назад"),
+                "x" or "twitter" => ($"/x?botId={botId}", "← Назад"),
+                _ => ("/profiles", "← Все профили")
+            };
+        }
+        else
+        {
+            backUrl = "/profiles";
+            backText = "← Все профили";
+        }
+    }
+
+    <a href="@backUrl" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; transition: color 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--text-secondary)'">
+        @backText
+    </a>
 }
 
 <div class="container">

@@ -935,6 +935,49 @@
     </style>
 }
 
+@section NavbarActions {
+    @{
+        var network = Context.Request.Query["network"].ToString();
+        var botId = Context.Request.Query["botId"].ToString();
+        var profileId = Context.Request.Query["profileId"].ToString();
+
+        string backUrl;
+        string backText;
+
+        // 1. Пришли из конкретной соцсети:
+        if (!string.IsNullOrEmpty(network) && network != "All" && !string.IsNullOrEmpty(botId))
+        {
+            backText = $"← Назад";
+            backUrl = network switch
+            {
+                "Instagram" => $"/instagram?botId={botId}",
+                "Facebook" => $"/facebook?botId={botId}",
+                "Threads" => $"/threads?botId={botId}",
+                "TelegramChannel" => $"/telegram-channel?botId={botId}",
+                "BlueSky" => $"/bluesky?botId={botId}",
+                "X" => $"/x?botId={botId}",
+                _ => $"/profile?profileId={profileId}"
+            };
+        }
+        // 2. Пришли из общего профиля со всеми соцсетями:
+        else if (!string.IsNullOrEmpty(profileId) && profileId != "0")
+        {
+            backText = "← Назад";
+            backUrl = $"/profile?profileId={profileId}";
+        }
+        // 3. Запасной фоллбек:
+        else
+        {
+            backText = "← Все профили";
+            backUrl = "/profiles";
+        }
+    }
+
+    <a href="@backUrl" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; transition: color 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--text-secondary)'">
+        @backText
+    </a>
+}
+
 <!-- Модальное окно (скрыто по умолчанию) -->
 <div class="container">
     <div id='calendar'></div>
