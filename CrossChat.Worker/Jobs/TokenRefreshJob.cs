@@ -237,10 +237,10 @@ public class TokenRefreshJob : IJob
 				};
 
 				// 1. Проверяем и обновляем токен доступа, если он скоро истекает
-				await _blueSkyService.GetValidTokenAsync(botModel);
-				bot.AccessToken = botModel.AccessToken;
-				bot.RefreshToken = botModel.RefreshToken;
-				bot.TokenExpiresAt = botModel.TokenExpiresAt;
+				//await _blueSkyService.GetValidTokenAsync(botModel);
+				//bot.AccessToken = botModel.AccessToken;
+				//bot.RefreshToken = botModel.RefreshToken;
+				//bot.TokenExpiresAt = botModel.TokenExpiresAt;
 
 				// 2. Запрашиваем актуальные данные профиля (аватарку и никнейм)
 				var profile = await _blueSkyService.GetProfileAsync(botModel);
