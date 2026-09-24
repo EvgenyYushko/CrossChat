@@ -38,6 +38,8 @@ namespace CrossChat.Worker
 			x.AddConsumer<BlueSkyCommentConsumer>(typeof(BlueSkyCommentDefinition));
 			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
 			x.AddConsumer<FacebookCommentConsumer>(typeof(FacebookCommentDefinition));
+			x.AddConsumer<FacebookWebhookConsumer>(typeof(FacebookWebhookDefinition));
+
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}
 

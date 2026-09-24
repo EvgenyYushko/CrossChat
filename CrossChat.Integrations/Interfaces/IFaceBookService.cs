@@ -1,4 +1,5 @@
 using CrossChat.Integrations.Models;
+using static CrossChat.Integrations.Services.FaceBookService;
 
 namespace CrossChat.Integrations.Interfaces
 {
@@ -16,6 +17,8 @@ namespace CrossChat.Integrations.Interfaces
 		Task<string?> CreateCommentAsync(string postId, string text, string pageAccessToken);
 		Task<DailyStoryResult> PublishDailyStoryAsync(FacebookDailyStoryDto dto);
 		Task<bool> ReplyToCommentAsync(string commentId, string text, string pageAccessToken);
+		Task<List<FbMessageItem>> GetMessagesBySenderIdAsync(string pageId, string senderId, string token, int limit = 10);
+		Task SetTypingStatusAsync(string recipientId, string token);
 	}
 
 	public class FbUser

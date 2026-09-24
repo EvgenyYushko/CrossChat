@@ -98,7 +98,7 @@ namespace CrossChat.Controllers
 							{
 								if (mItem.TryGetProperty("message", out var msgObj))
 								{
-									// Защита от эха (сообщения, которые отправляет сам бот)
+									// Игнорируем эхо-сообщения от самого бота
 									if (msgObj.TryGetProperty("is_echo", out var isEcho) && isEcho.GetBoolean())
 										continue;
 
@@ -106,26 +106,25 @@ namespace CrossChat.Controllers
 									var mid = msgObj.TryGetProperty("mid", out var m) ? m.GetString() : null;
 									var text = msgObj.TryGetProperty("text", out var t) ? t.GetString() : null;
 
-									if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(mid) || string.IsNullOrEmpty(text))
+									if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(mid))
 										continue;
 
 									if (senderId == pageId) continue;
 
-									// Защита от дублей в Redis (на 10 минут)
-									var lockKey = $"lock:fb_msg:{mid}";
-									if (await _redis.StringSetAsync(lockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
-									{
-										_logger.LogInformation($"[Facebook Webhook] Поймано ЛС от {senderId}: «{text}»");
+									int attachCount = msgObj.TryGetProperty("attachments", out var atts) ? atts.GetArrayLength() : 0;
 
-										await _publishEndpoint.Publish(new FacebookMessageReceived
-										{
-											BotDbId = settings.Id,
-											PageId = pageId,
-											SenderId = senderId,
-											MessageId = mid,
-											Text = text
-										});
-									}
+									_logger.LogInformation($"[Facebook Webhook] Поймано ЛС от {senderId}: «{text}» (вложений: {attachCount})");
+
+									// Отправляем в Debounce-очередь накопителя!
+									await _publishEndpoint.Publish(new FacebookMessageReceived
+									{
+										BotDbId = settings.Id,
+										PageId = pageId,
+										SenderId = senderId,
+										MessageId = mid,
+										Text = text ?? "",
+										AttachmentCount = attachCount
+									});
 								}
 							}
 						}

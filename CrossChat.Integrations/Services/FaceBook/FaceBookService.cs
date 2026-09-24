@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 
@@ -246,6 +247,84 @@ namespace CrossChat.Integrations.Services
 				Console.WriteLine($"[Facebook] Исключение при ответе на комментарий: {ex.Message}");
 				return false;
 			}
+		}
+
+		/// <summary>
+		/// Получает историю переписки с конкретным пользователем (PSID) на странице Facebook
+		/// </summary>
+		public async Task<List<FbMessageItem>> GetMessagesBySenderIdAsync(string pageId, string senderId, string token, int limit = 10)
+		{
+			var result = new List<FbMessageItem>();
+
+			// В Graph API диалог с конкретным пользователем запрашивается через user_id
+			string url = $"https://graph.facebook.com/v24.0/{pageId}/conversations?user_id={senderId}&fields=messages.limit({limit}){{from,message,created_time}}&access_token={token}";
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var response = await httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return result;
+
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+
+				if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.GetArrayLength() > 0)
+				{
+					var convo = dataArr[0];
+					if (convo.TryGetProperty("messages", out var msgs) && msgs.TryGetProperty("data", out var mArr))
+					{
+						foreach (var m in mArr.EnumerateArray())
+						{
+							string fromId = m.TryGetProperty("from", out var f) && f.TryGetProperty("id", out var fid) ? fid.GetString() ?? "" : "";
+							string text = m.TryGetProperty("message", out var msgElem) ? msgElem.GetString() ?? "" : "";
+							string id = m.TryGetProperty("id", out var mid) ? mid.GetString() ?? "" : "";
+
+							result.Add(new FbMessageItem
+							{
+								Id = id,
+								FromId = fromId,
+								Text = text
+							});
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Messages] Ошибка получения истории: {ex.Message}");
+			}
+
+			return result;
+		}
+
+		/// <summary>
+		/// Отправляет статус "печатает..." (typing_on) в чат Messenger
+		/// </summary>
+		public async Task SetTypingStatusAsync(string recipientId, string token)
+		{
+			string url = $"https://graph.facebook.com/v24.0/me/messages";
+			var payload = new
+			{
+				recipient = new { id = recipientId },
+				sender_action = "typing_on",
+				access_token = token
+			};
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var json = JsonSerializer.Serialize(payload);
+				var content = new StringContent(json, Encoding.UTF8, "application/json");
+				await httpClient.PostAsync(url, content);
+			}
+			catch { }
+		}
+
+		public class FbMessageItem
+		{
+			public string Id { get; set; } = string.Empty;
+			public string FromId { get; set; } = string.Empty;
+			public string Text { get; set; } = string.Empty;
 		}
 	}
 }
