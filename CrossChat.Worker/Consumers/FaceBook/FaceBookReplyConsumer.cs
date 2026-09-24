@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
@@ -41,9 +37,33 @@ namespace CrossChat.Worker.Consumers.FaceBook
 		public async Task Consume(ConsumeContext<ProcessFacebookDialogReply> context)
 		{
 			var msg = context.Message;
-			var processingKey = $"processed:fb:{msg.ReplyId}";
+			var targetTimeKey = $"debounce:target_time:fb:{msg.SenderId}:{msg.PageId}";
+			var activeTimerKey = $"debounce:timer_active:fb:{msg.SenderId}:{msg.PageId}";
 
-			// Защита от дублей
+			// === ПРОВЕРКА СКОЛЬЗЯЩЕГО ТАЙМЕРА (НАСТОЯЩИЙ DEBOUNCE) ===
+			var storedTicks = await _redis.StringGetAsync(targetTimeKey);
+			if (storedTicks.HasValue && long.TryParse(storedTicks, out long ticks))
+			{
+				var targetTimeUtc = new DateTime(ticks, DateTimeKind.Utc);
+				var remaining = targetTimeUtc - DateTime.UtcNow;
+
+				// Если пользователь продолжал писать и до нового срока осталось более 2 секунд:
+				if (remaining > TimeSpan.FromSeconds(2))
+				{
+					_logger.LogInformation("[Facebook Debounce] ⏳ Пользователь {Sender} всё еще пишет! Откладываем ответ еще на {Sec:F0} сек...",
+						msg.SenderId, remaining.TotalSeconds);
+
+					// Переназначаем себя в очередь на оставшееся время и ВЫХОДИМ без отправки!
+					await context.SchedulePublish(remaining, context.Message);
+					return;
+				}
+			}
+
+			// Время вышло, наступила полная тишина — очищаем ключи таймера
+			await _redis.KeyDeleteAsync(targetTimeKey);
+			await _redis.KeyDeleteAsync(activeTimerKey);
+
+			var processingKey = $"processed:fb:{msg.ReplyId}";
 			if (await _redis.KeyExistsAsync(processingKey))
 			{
 				_logger.LogInformation("[Facebook Reply] Сообщение уже обработано. Пропуск.");
@@ -60,19 +80,18 @@ namespace CrossChat.Worker.Consumers.FaceBook
 				if (bot == null || !bot.IsActive || !bot.IsDirectEnabled || string.IsNullOrEmpty(bot.PageAccessToken))
 					return;
 
-				// 2. Скачиваем ВСЮ историю переписки (со всеми сообщениями за последние 30 секунд!)
-				var messages = await _faceBookService.GetMessagesBySenderIdAsync(bot.PageId, msg.SenderId, bot.PageAccessToken, 10);
+				// 2. Скачиваем ВСЮ пачку сообщений, накопившихся за всё время печати
+				var messages = await _faceBookService.GetMessagesBySenderIdAsync(bot.PageId, msg.SenderId, bot.PageAccessToken, 15);
 				if (messages == null || !messages.Any()) return;
 
-				// Если последнее сообщение в чате отправлено самой страницей — мы уже ответили, выходим
+				// Если последнее сообщение в чате отправлено самой страницей — выходим
 				if (messages.First().FromId == bot.PageId)
 				{
 					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(10), When.NotExists);
 					return;
 				}
 
-				// 3. Формируем единый контекст всех полученных сообщений
-				// Разворачиваем от старых к новым
+				// 3. Формируем контекст истории
 				var chatHistory = new List<AiRequest>();
 				for (int i = messages.Count - 1; i >= 0; i--)
 				{
@@ -88,19 +107,18 @@ namespace CrossChat.Worker.Consumers.FaceBook
 				int mode = bot.DirectReplyMode > 0 ? bot.DirectReplyMode : 2;
 				string? replyText = null;
 
-				await _console.Log($"Генерация ответа в ЛС для {msg.SenderId} (Режим: {mode}, накопилось сообщений: {messages.Count(m => m.FromId != bot.PageId)})", bot.UserId, bot.Id);
+				int totalUserMsgs = messages.Count(m => m.FromId != bot.PageId);
+				await _console.Log($"Формирование одного ответа на ВСЮ серию из {totalUserMsgs} сообщений для {msg.SenderId} (Режим: {mode})", bot.UserId, bot.Id);
 
-				// === СЦЕНАРИЙ 2: ТОЛЬКО ШАБЛОНЫ (Spintax) ===
+				// Сценарии генерации:
 				if (mode == 2)
 				{
 					replyText = InstagramCommentEngine.GetRandomTemplate(bot.DirectTemplates);
 				}
-				// === СЦЕНАРИЙ 1: ТОЛЬКО ИИ ===
 				else if (mode == 1)
 				{
 					replyText = await _aiService.GetAnswerAsync(bot.SystemPrompt, chatHistory, null);
 				}
-				// === СЦЕНАРИЙ 3: КОМБИНИРОВАННЫЙ ===
 				else if (mode == 3)
 				{
 					try
@@ -109,7 +127,7 @@ namespace CrossChat.Worker.Consumers.FaceBook
 					}
 					catch (Exception aiEx)
 					{
-						_logger.LogWarning(aiEx, "[Facebook Direct] Сбой ИИ для ЛС. Переход на шаблон.");
+						_logger.LogWarning(aiEx, "[Facebook Direct] Сбой ИИ, переключение на шаблон.");
 					}
 
 					if (string.IsNullOrWhiteSpace(replyText))
@@ -120,7 +138,7 @@ namespace CrossChat.Worker.Consumers.FaceBook
 
 				if (string.IsNullOrWhiteSpace(replyText)) return;
 
-				// Имитация печати: показываем статус "печатает..." 2-3 секунды
+				// Имитация печати человека
 				await _faceBookService.SetTypingStatusAsync(msg.SenderId, bot.PageAccessToken);
 				await Task.Delay(2500);
 
@@ -135,11 +153,6 @@ namespace CrossChat.Worker.Consumers.FaceBook
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "[Facebook Reply] Ошибка при формировании ответа в ЛС {SenderId}", msg.SenderId);
-			}
-			finally
-			{
-				// Удаляем ключ дебаунса
-				await _redis.KeyDeleteAsync($"debounce:fb:{msg.SenderId}:{msg.PageId}");
 			}
 		}
 	}
