@@ -325,19 +325,52 @@
                 <form action="/facebook/update-settings" method="post">
                     <input type="hidden" name="botId" value="@Model.Id" />
 
-                    <div class="switch-container">
-                        <div>
-                            <label style="margin:0; font-size: 1.1rem; color: var(--text-main);">Включить автоответы</label>
-                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Отвечать в Messenger</div>
+                    <!-- 1. БЛОК АВТООТВЕТОВ В ЛС (MESSENGER) -->
+                    <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label style="margin:0; font-size: 1.05rem; font-weight: 600; color: var(--text-main); cursor: pointer;">
+                                    Автоответы в ЛС (Messenger)
+                                </label>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;">
+                                    Мгновенный ответ на входящие личные сообщения страницы
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="directToggle" name="isDirectEnabled" value="true"
+                                       @(Model.IsDirectEnabled ? "checked" : "")
+                                       onchange="document.getElementById('directSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
+                                <span class="slider"></span>
+                            </label>
+                            <input type="hidden" name="isDirectEnabled" value="false">
                         </div>
-                        <label class="switch">
-                            <input type="hidden" name="isActive" value="false" />
-                            <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
-                            <span class="slider"></span>
-                        </label>
+
+                        <div id="directSettingsBlock" style="display: @(Model.IsDirectEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                            <div>
+                                <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа в ЛС:</label>
+                                <select name="directReplyMode" id="directModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateDirectModeUi()">
+                                    <option value="2" selected="@(Model.DirectReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
+                                    <option value="3" selected="@(Model.DirectReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
+                                    <option value="1" selected="@(Model.DirectReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
+                                </select>
+                            </div>
+
+                            <div id="directTemplatesBox" style="display: @(Model.DirectReplyMode == 1 ? "none" : "block");">
+                                <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                                    Шаблоны ответов для ЛС (Spintax {вариант1|вариант2}):
+                                </label>
+                                <textarea name="directTemplates" rows="3" class="text-input" style="font-size: 0.9rem;"
+                                      placeholder="{Здравствуйте|Привет}! 😊 Чем могу {помочь|быть полезна}?&#10;{Спасибо|Благодарю} за сообщение! ✨">@(Model.DirectTemplates ?? "{Здравствуйте|Привет}! 😊 Чем могу {помочь|быть полезна}?\n{Спасибо|Благодарю} за сообщение! ✨")</textarea>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Системный промпт для ЛС (ИИ)</label>
+                                <textarea name="systemPrompt" rows="2" class="text-input" style="font-size: 0.9rem;">@Model.SystemPrompt</textarea>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- БЛОК АВТООТВЕТОВ НА КОММЕНТАРИИ СТРАНИЦЫ FACEBOOK -->
+                    <!-- 2. БЛОК АВТООТВЕТОВ НА КОММЕНТАРИИ -->
                     <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-top: 15px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
@@ -357,10 +390,9 @@
                             <input type="hidden" name="isCommentsEnabled" value="false">
                         </div>
 
-                        <!-- Разворачивающиеся настройки режимов -->
                         <div id="commentsSettingsBlock" style="display: @(Model.IsCommentsEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
                             <div>
-                                <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа:</label>
+                                <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа на комментарии:</label>
                                 <select name="commentReplyMode" id="commentModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateFbCommentModeUi()">
                                     <option value="2" selected="@(Model.CommentReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
                                     <option value="3" selected="@(Model.CommentReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
@@ -370,13 +402,9 @@
 
                             <div id="commentTemplatesBox" style="display: @(Model.CommentReplyMode == 1 ? "none" : "block");">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
-                                    Шаблоны ответов (поддерживает Spintax {вариант1|вариант2} и перенос строк):
+                                    Шаблоны ответов на комментарии:
                                 </label>
-                                <textarea name="commentTemplates" rows="3" class="text-input" style="font-size: 0.9rem;"
-                                      placeholder="{Спасибо|Благодарю}! ❤️&#10;Рады видеть вас на нашей странице! ✨">@(Model.CommentTemplates ?? "{Спасибо|Благодарю}! ❤️\nРады видеть вас на нашей странице! ✨")</textarea>
-                                <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
-                                    Движок автоматически очеловечивает знаки препинания и исключает повторение последних фраз.
-                                </small>
+                                <textarea name="commentTemplates" rows="3" class="text-input" style="font-size: 0.9rem;">@(Model.CommentTemplates ?? "{Спасибо|Благодарю}! ❤️\nРады видеть вас на нашей странице! ✨")</textarea>
                             </div>
 
                             <div>
@@ -386,24 +414,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Системный промпт (Инструкция)</label>
-                        <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
-                    </div>
-
-                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
-                        <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
-
-                        <select name="profileId" class="select-input">
-                            @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
-                            {
-                                <option value="@p.Id" selected="@(p.Id == Model.ProfileId)">
-                                    @p.Name
-                                </option>
-                            }
-                        </select>
-                    </div>
-
+                    <!-- 3. БЛОК СТОРИС -->
                     <!-- БЛОК ЕЖЕДНЕВНЫХ ИСТОРИЙ FACEBOOK (STORIES) -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">🌟 Ежедневные истории (Stories)</h4>
                     <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
@@ -462,6 +473,16 @@
                         </div>
                     </div>
 
+                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem; margin-top: 20px;">
+                        <h4>Привязан к профилю</h4>
+                        <select name="profileId" class="select-input">
+                            @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
+                            {
+                                <option value="@p.Id" selected="@(p.Id == Model.ProfileId)">@p.Name</option>
+                            }
+                        </select>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                 </form>
 
@@ -495,6 +516,12 @@
         function updateFbCommentModeUi() {
             const mode = document.getElementById('commentModeSelect').value;
             const box = document.getElementById('commentTemplatesBox');
+            box.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
+        }
+
+        function updateDirectModeUi() {
+            const mode = document.getElementById('directModeSelect').value;
+            const box = document.getElementById('directTemplatesBox');
             box.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
         }
     </script>

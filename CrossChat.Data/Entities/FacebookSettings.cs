@@ -56,5 +56,14 @@ namespace CrossChat.Data.Entities
 
 		// Промпт для ИИ
 		public string CommentPrompt { get; set; } = "Ты ассистент на странице Facebook. Отвечай на комментарии дружелюбно, вежливо и лаконично.";
+
+		// === НАСТРОЙКИ АВТООТВЕТОВ В ЛС (MESSENGER) ===
+		public bool IsDirectEnabled { get; set; } = true;
+
+		// 1 = Только ИИ, 2 = Только шаблоны (дефолт), 3 = Комбинированный
+		public int DirectReplyMode { get; set; } = 2;
+
+		// Шаблоны ответов для личных сообщений (со Spintax)
+		public string? DirectTemplates { get; set; } = "{Здравствуйте|Привет}! 😊 Чем могу {помочь|быть полезна}?\n{Спасибо|Благодарю} за сообщение! ✨";
 	}
 }

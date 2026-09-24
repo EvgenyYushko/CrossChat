@@ -1,64 +1,90 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
 using MassTransit;
-using StackExchange.Redis;
+using Microsoft.Extensions.Logging;
 
 namespace CrossChat.Worker.Consumers.FaceBook
 {
-	public class FaceBookReplyConsumer : IConsumer<FaceBookProcessReply>
+	public class FaceBookReplyConsumer : IConsumer<FacebookMessageReceived>
 	{
 		private readonly AppDbContext _db;
 		private readonly IFaceBookService _faceBookService;
+		private readonly IAiService _aiService;
 		private readonly IFaceBookConsole _console;
-		private readonly IDatabase _redis;
+		private readonly ILogger<FaceBookReplyConsumer> _logger;
 
-		public FaceBookReplyConsumer(AppDbContext db, IFaceBookService faceBookService,
-			IConnectionMultiplexer redis, IFaceBookConsole console)
+		public FaceBookReplyConsumer(
+			AppDbContext db,
+			IFaceBookService faceBookService,
+			IAiService aiService,
+			IFaceBookConsole console,
+			ILogger<FaceBookReplyConsumer> logger)
 		{
 			_db = db;
 			_faceBookService = faceBookService;
+			_aiService = aiService;
 			_console = console;
-			_redis = redis.GetDatabase();
+			_logger = logger;
 		}
 
-		public async Task Consume(ConsumeContext<FaceBookProcessReply> context)
+		public async Task Consume(ConsumeContext<FacebookMessageReceived> context)
 		{
 			var msg = context.Message;
+
+			var bot = await _db.FacebookSettings.FindAsync(msg.BotDbId);
+			if (bot == null || !bot.IsActive || !bot.IsDirectEnabled || string.IsNullOrEmpty(bot.PageAccessToken))
+				return;
+
+			int mode = bot.DirectReplyMode > 0 ? bot.DirectReplyMode : 2;
+			string? replyText = null;
+
 			try
 			{
-				var bot = await _db.FacebookSettings.FindAsync(msg.BotDbId);
-				if (bot == null || !bot.IsActive) return;
+				await _console.Log($"Обработка ЛС от пользователя {msg.SenderId} в Facebook (Режим: {mode})", bot.UserId, bot.Id);
 
-				var dlg = await _faceBookService.GetDialogByIdAsync(bot.PageAccessToken, msg.DialogId);
-				if (dlg == null || !dlg.messages.data.Any()) return;
-
-				var messages = dlg.messages.data;
-
-				var chatHistory = messages.Select(m => new AiRequest
+				// === 1. ТОЛЬКО ШАБЛОНЫ (Spintax + Очеловечивание) ===
+				if (mode == 2)
 				{
-					Role = m.from.id == bot.PageId.ToString() ? "model" : "user",
-					Text = m.message
-				}).ToList();
-
-				//var aiResponse = await _aiService.GetAnswerAsync(botModel.SystemPrompt, chatHistory, null);
-				var aiResponse = "hello";
-
-				if (!string.IsNullOrWhiteSpace(aiResponse))
+					replyText = InstagramCommentEngine.GetRandomTemplate(bot.DirectTemplates);
+				}
+				// === 2. ТОЛЬКО ИИ ===
+				else if (mode == 1)
 				{
-					// 5. Отправка ответа
-					var recepientId = messages.First().from.id;
-					var sended = await _faceBookService.SendReplyAsync(recepientId, aiResponse, bot.PageAccessToken);
-					if (sended)
+					var prompt = $"{bot.SystemPrompt}\n\nПользователь написал в личные сообщения Messenger: '{msg.Text}'. Ответь вежливо и по делу.";
+					replyText = await _aiService.GeminiRequest(prompt, null);
+				}
+				// === 3. КОМБИНИРОВАННЫЙ ===
+				else if (mode == 3)
+				{
+					try
 					{
-						await _console.Log($"✅ Ответили в чат {msg.DialogId}", bot.UserId, bot.Id);
+						var prompt = $"{bot.SystemPrompt}\n\nПользователь написал в личные сообщения Messenger: '{msg.Text}'. Ответь вежливо и по делу.";
+						replyText = await _aiService.GeminiRequest(prompt, null);
+					}
+					catch (Exception aiEx)
+					{
+						_logger.LogWarning(aiEx, "[Facebook Direct] Сбой ИИ для ЛС. Переключение на шаблон.");
+					}
+
+					if (string.IsNullOrWhiteSpace(replyText))
+					{
+						replyText = InstagramCommentEngine.GetRandomTemplate(bot.DirectTemplates);
 					}
 				}
+
+				if (string.IsNullOrWhiteSpace(replyText)) return;
+
+				// Отправляем ответ пользователю в Messenger
+				bool sent = await _faceBookService.SendReplyAsync(msg.SenderId, replyText, bot.PageAccessToken);
+				if (sent)
+				{
+					await _console.Log($"Ответили в ЛС пользователю {msg.SenderId}: «{replyText}»", bot.UserId, bot.Id);
+				}
 			}
-			finally
+			catch (Exception ex)
 			{
-				await _redis.KeyDeleteAsync($"lock:fsbk_queued:{msg.DialogId}");
+				_logger.LogError(ex, "[Facebook Direct] Ошибка ответа в ЛС пользователю {Sender}", msg.SenderId);
 			}
 		}
 	}

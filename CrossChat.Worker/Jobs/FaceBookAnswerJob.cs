@@ -41,6 +41,8 @@ namespace CrossChat.Worker.Jobs
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+				return;
+
 			if (_env.IsDevelopment())
 			{
 				return;

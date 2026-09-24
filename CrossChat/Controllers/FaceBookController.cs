@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
@@ -23,18 +24,22 @@ namespace CrossChat.Controllers
 		private readonly SocialMediaSettings _settings;
 		private readonly HttpClient _httpClient;
 		private readonly AppDbContext _db;
+		private readonly IDatabase _redis;
+
 		private string RedirectUri => $"{APP_URL}/facebook/auth/callback";
 
 		public FaceBookController(
 			ILogger<FaceBookController> logger,
 			IOptions<SocialMediaSettings> options,
 			IPublishEndpoint publishEndpoint,
-			AppDbContext db)
+			AppDbContext db,
+			IConnectionMultiplexer redis)
 		{
 			_logger = logger;
 			_publishEndpoint = publishEndpoint;
 			_settings = options.Value;
 			_db = db;
+			_redis = redis.GetDatabase();
 			_httpClient = new HttpClient();
 		}
 
@@ -78,8 +83,57 @@ namespace CrossChat.Controllers
 						var pageId = entry.GetProperty("id").GetString();
 						if (string.IsNullOrEmpty(pageId)) continue;
 
-						// === ПЕРЕХВАТ КОММЕНТАРИЕВ К ПОСТАМ И REELS (field: "feed") ===
-						if (entry.TryGetProperty("changes", out var changesArr))
+						var settings = await _db.FacebookSettings
+							.AsNoTracking()
+							.FirstOrDefaultAsync(s => s.PageId == pageId);
+
+						if (settings == null || !settings.IsActive) continue;
+
+						// ===================================================================
+						// 1. ПЕРЕХВАТ ЛИЧНЫХ СООБЩЕНИЙ (MESSENGER / DIRECT)
+						// ===================================================================
+						if (settings.IsDirectEnabled && entry.TryGetProperty("messaging", out var messagingArr))
+						{
+							foreach (var mItem in messagingArr.EnumerateArray())
+							{
+								if (mItem.TryGetProperty("message", out var msgObj))
+								{
+									// Защита от эха (сообщения, которые отправляет сам бот)
+									if (msgObj.TryGetProperty("is_echo", out var isEcho) && isEcho.GetBoolean())
+										continue;
+
+									var senderId = mItem.TryGetProperty("sender", out var s) ? s.GetProperty("id").GetString() : null;
+									var mid = msgObj.TryGetProperty("mid", out var m) ? m.GetString() : null;
+									var text = msgObj.TryGetProperty("text", out var t) ? t.GetString() : null;
+
+									if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(mid) || string.IsNullOrEmpty(text))
+										continue;
+
+									if (senderId == pageId) continue;
+
+									// Защита от дублей в Redis (на 10 минут)
+									var lockKey = $"lock:fb_msg:{mid}";
+									if (await _redis.StringSetAsync(lockKey, "1", TimeSpan.FromMinutes(10), When.NotExists))
+									{
+										_logger.LogInformation($"[Facebook Webhook] Поймано ЛС от {senderId}: «{text}»");
+
+										await _publishEndpoint.Publish(new FacebookMessageReceived
+										{
+											BotDbId = settings.Id,
+											PageId = pageId,
+											SenderId = senderId,
+											MessageId = mid,
+											Text = text
+										});
+									}
+								}
+							}
+						}
+
+						// ===================================================================
+						// 2. ПЕРЕХВАТ КОММЕНТАРИЕВ К ПУБЛИКАЦИЯМ (FEED)
+						// ===================================================================
+						if (settings.IsCommentsEnabled && entry.TryGetProperty("changes", out var changesArr))
 						{
 							foreach (var change in changesArr.EnumerateArray())
 							{
@@ -90,7 +144,6 @@ namespace CrossChat.Controllers
 									var item = val.TryGetProperty("item", out var i) ? i.GetString() : null;
 									var verb = val.TryGetProperty("verb", out var v) ? v.GetString() : null;
 
-									// Нас интересует только добавление нового комментария
 									if (item == "comment" && verb == "add")
 									{
 										var commentId = val.GetProperty("comment_id").GetString()!;
@@ -106,16 +159,10 @@ namespace CrossChat.Controllers
 											senderName = fromObj.TryGetProperty("name", out var sname) ? sname.GetString() ?? "Пользователь" : "Пользователь";
 										}
 
-										// ЗАЩИТА: Игнорируем комментарии от самой страницы (чтобы бот не отвечал сам себе)
-										if (senderId == pageId)
-										{
-											_logger.LogInformation("[Facebook Webhook] Игнорируем свой собственный комментарий.");
-											continue;
-										}
+										if (senderId == pageId) continue;
 
-										_logger.LogInformation($"[Facebook Webhook] Пойман комментарий от {senderName}: «{message}» к посту {postId}");
+										_logger.LogInformation($"[Facebook Webhook] Пойман комментарий от {senderName}: «{message}»");
 
-										// Отправляем в очередь MassTransit!
 										await _publishEndpoint.Publish(new FacebookCommentReceived
 										{
 											PageId = pageId,
@@ -136,7 +183,7 @@ namespace CrossChat.Controllers
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[Facebook Webhook] Ошибка обработки входящего вебхука");
+				_logger.LogError(ex, "[Facebook Webhook] Ошибка обработки вебхука");
 				return StatusCode(500);
 			}
 		}
@@ -160,7 +207,6 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
-			// Полный проверенный набор разрешений для публикации, сообщений и бизнес-страниц
 			var fbScopes = "pages_manage_posts,pages_messaging,pages_show_list,pages_manage_metadata,pages_read_engagement,pages_read_user_content,business_management,public_profile,email,pages_manage_engagement,instagram_basic";
 			ViewBag.FbLoginUrl = $"https://www.facebook.com/v22.0/dialog/oauth?client_id={AppId}&redirect_uri={Uri.EscapeDataString(RedirectUri)}&scope={fbScopes}&response_type=code&auth_type=rerequest";
 
@@ -285,11 +331,19 @@ namespace CrossChat.Controllers
 
 		[HttpPost("update-settings")]
 		[Authorize]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId,
+		public async Task<IActionResult> UpdateSettings(
+			int botId,
+			string systemPrompt,
+			int profileId,
 			bool isDailyStoriesEnabled,
 			string dailyStoryTime,
 			bool isStoryOverlayTextEnabled,
 			string? storyOverlayText,
+			// === НАСТРОЙКИ ЛС (MESSENGER) ===
+			bool isDirectEnabled,
+			int directReplyMode,
+			string? directTemplates,
+			// === НАСТРОЙКИ КОММЕНТАРИЕВ ===
 			bool isCommentsEnabled,
 			int commentReplyMode,
 			string? commentTemplates,
@@ -306,26 +360,30 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				var isActiveRaw = Request.Form["isActive"].ToString();
-				bool isActive = isActiveRaw.Contains("true");
+				// Главный статус: активен, если включено хоть одно направление
+				settings.IsActive = isDirectEnabled || isCommentsEnabled;
 
-				settings.SystemPrompt = systemPrompt;
-				settings.IsActive = isActive;
-				settings.ProfileId = profileId;
+				// ЛС:
+				settings.IsDirectEnabled = isDirectEnabled;
+				settings.DirectReplyMode = directReplyMode > 0 ? directReplyMode : 2;
+				settings.DirectTemplates = directTemplates;
+				settings.SystemPrompt = systemPrompt ?? "";
 
-				// Сохраняем настройки авто-сторис:
-				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
-				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
-				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
-				settings.StoryOverlayText = storyOverlayText;
-
+				// Комментарии:
 				settings.IsCommentsEnabled = isCommentsEnabled;
 				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
 				settings.CommentTemplates = commentTemplates;
 				settings.CommentPrompt = commentPrompt ?? "";
 
+				// Истории:
+				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
+				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
+				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
+				settings.StoryOverlayText = storyOverlayText;
+				settings.ProfileId = profileId;
+
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[Facebook] Настройки страницы '{settings.PageName}' обновлены.");
+				_logger.LogInformation($"[Facebook] Все настройки обновлены для '{settings.PageName}'.");
 			}
 			catch (Exception ex)
 			{
