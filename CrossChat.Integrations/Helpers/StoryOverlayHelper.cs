@@ -21,26 +21,31 @@ namespace CrossChat.Infrastructure.Helpers
 
 		private static readonly StoryBadgeStyle[] BadgeThemes = new[]
 		{
+			// 1. Neon Graphite (Темный с неоном)
 			new StoryBadgeStyle {
 				BgColor = Color.FromRgba(15, 23, 42, 225),
 				BorderColor = Color.FromRgba(99, 102, 241, 200),
 				TextColor = Color.White
 			},
+			// 2. Instagram Sunset (Розово-пурпурный)
 			new StoryBadgeStyle {
 				BgColor = Color.FromRgba(225, 48, 108, 230),
 				BorderColor = Color.FromRgba(240, 148, 51, 220),
 				TextColor = Color.White
 			},
+			// 3. Frosted Glass (Белое матовое стекло с темным текстом)
 			new StoryBadgeStyle {
 				BgColor = Color.FromRgba(255, 255, 255, 235),
 				BorderColor = Color.FromRgba(255, 255, 255, 160),
 				TextColor = Color.FromRgb(15, 23, 42)
 			},
+			// 4. Cyber Violet (Фиолетовый неон)
 			new StoryBadgeStyle {
 				BgColor = Color.FromRgba(88, 28, 135, 230),
 				BorderColor = Color.FromRgba(192, 132, 252, 210),
 				TextColor = Color.White
 			},
+			// 5. Emerald Luxury (Изумруд)
 			new StoryBadgeStyle {
 				BgColor = Color.FromRgba(6, 78, 59, 230),
 				BorderColor = Color.FromRgba(52, 211, 153, 210),
@@ -48,13 +53,54 @@ namespace CrossChat.Infrastructure.Helpers
 			}
 		};
 
+		/// <summary>
+		/// Наложение стилизованного стикера с автопереносом и наклоном на ФОТО
+		/// </summary>
 		public static byte[] OverlayTextOnImage(byte[] imageBytes, string rawTextConfig, ILogger? logger = null)
 		{
-			string text = PickAndSanitizeRandomText(rawTextConfig);
-			if (string.IsNullOrWhiteSpace(text)) return imageBytes;
+			using var baseImage = Image.Load(imageBytes);
 
-			using var image = Image.Load(imageBytes);
+			// Создаем готовый прозрачный стикер с учетом ширины фото
+			using var badgeImage = CreateBadgeImage(rawTextConfig, baseImage.Width, out float yRatio);
+			if (badgeImage == null) return imageBytes;
 
+			// Центрируем по горизонтали и позиционируем по случайной высоте
+			float posX = (baseImage.Width - badgeImage.Width) / 2f;
+			float posY = (baseImage.Height - badgeImage.Height) * yRatio;
+
+			baseImage.Mutate(ctx =>
+			{
+				ctx.DrawImage(badgeImage, new Point((int)posX, (int)posY), 1f);
+			});
+
+			using var ms = new MemoryStream();
+			baseImage.SaveAsJpeg(ms);
+			return ms.ToArray();
+		}
+
+		/// <summary>
+		/// Генерация прозрачного PNG-стикера с автопереносом и наклоном для ВИДЕО (FFmpeg)
+		/// </summary>
+		public static (byte[] PngBytes, float YRatio) GenerateBadgePng(string rawTextConfig, float baseWidth = 1080f)
+		{
+			using var badgeImage = CreateBadgeImage(rawTextConfig, baseWidth, out float yRatio);
+			if (badgeImage == null) return (Array.Empty<byte>(), 0.52f);
+
+			using var ms = new MemoryStream();
+			badgeImage.SaveAsPng(ms);
+			return (ms.ToArray(), yRatio);
+		}
+
+		/// <summary>
+		/// Фабрика создания стикера: перенос слов, строгое центрирование каждой строки и случайный наклон
+		/// </summary>
+		private static Image<Rgba32>? CreateBadgeImage(string rawTextConfig, float targetCanvasWidth, out float yRatio)
+		{
+			yRatio = 0.52f;
+			string rawText = PickAndSanitizeRandomText(rawTextConfig);
+			if (string.IsNullOrWhiteSpace(rawText)) return null;
+
+			// 1. Подбираем системный шрифт
 			FontFamily family;
 			if (!SystemFonts.TryGet("Arial", out family) &&
 				!SystemFonts.TryGet("DejaVu Sans", out family) &&
@@ -64,54 +110,122 @@ namespace CrossChat.Infrastructure.Helpers
 				family = SystemFonts.Collection.Families.FirstOrDefault();
 			}
 
-			if (family == default)
-			{
-				logger?.LogWarning("[StoryOverlay] Системные шрифты не найдены.");
-				return imageBytes;
-			}
+			if (family == default) return null;
 
-			float fontSize = Math.Clamp(image.Width * 0.042f, 32f, 76f);
+			// 2. Размер шрифта (3.8% от ширины)
+			float fontSize = Math.Clamp(targetCanvasWidth * 0.038f, 28f, 64f);
 			var font = family.CreateFont(fontSize, FontStyle.Bold);
 
+			// 3. Ограничиваем максимальную ширину текста (не более 76% от ширины экрана)
+			float maxAllowedTextWidth = targetCanvasWidth * 0.76f;
+
+			// 4. Логический перенос слов по строкам (Word-Wrap)
+			var lines = WrapTextByWords(rawText, font, maxAllowedTextWidth);
+
+			// Если получилось слишком много строк — уменьшаем шрифт на 15% и переносим заново
+			if (lines.Count > 3)
+			{
+				fontSize *= 0.85f;
+				font = family.CreateFont(fontSize, FontStyle.Bold);
+				lines = WrapTextByWords(rawText, font, maxAllowedTextWidth);
+			}
+
+			// 5. Замеряем каждую строчку индивидуально для идеального центрирования
 			var textOptions = new TextOptions(font);
-			var textSize = TextMeasurer.MeasureSize(text, textOptions);
+			var lineSizes = lines.Select(l => TextMeasurer.MeasureSize(l, textOptions)).ToList();
 
-			float paddingX = fontSize * 1.2f;
-			float paddingY = fontSize * 0.65f;
-			float badgeWidth = textSize.Width + (paddingX * 2);
-			float badgeHeight = textSize.Height + (paddingY * 2);
+			float maxLineWidth = lineSizes.Max(s => s.Width);
+			float lineHeight = lineSizes.Max(s => s.Height);
+			float lineSpacing = fontSize * 0.22f;
+			float totalTextHeight = (lineHeight * lines.Count) + (lineSpacing * (lines.Count - 1));
 
-			float[] yRatios = new[] { 0.22f, 0.52f, 0.75f };
-			float chosenYRatio = yRatios[Random.Shared.Next(yRatios.Length)];
+			// 6. Размеры и отступы плашки
+			float paddingX = fontSize * 1.25f;
+			float paddingY = fontSize * 0.75f;
+			float badgeWidth = maxLineWidth + (paddingX * 2);
+			float badgeHeight = totalTextHeight + (paddingY * 2);
 
-			float badgeX = (image.Width - badgeWidth) / 2f;
-			float badgeY = (image.Height - badgeHeight) * chosenYRatio;
+			// Если строка 1 — идеальная капсула (pill). Если несколько — стильный закругленный бейдж (24px)
+			float cornerRadius = lines.Count == 1 ? (badgeHeight / 2f) : Math.Min(26f, badgeHeight / 3f);
+			var badgeRect = new RectangleF(0, 0, badgeWidth, badgeHeight);
 
-			float cornerRadius = badgeHeight / 2f;
-			var rect = new RectangleF(badgeX, badgeY, badgeWidth, badgeHeight);
-
-			float textX = badgeX + paddingX;
-			float textY = badgeY + paddingY;
-
+			// 7. Отрисовываем плашку и текст на прозрачном холсте
+			var badgeImage = new Image<Rgba32>((int)Math.Ceiling(badgeWidth), (int)Math.Ceiling(badgeHeight));
 			var theme = BadgeThemes[Random.Shared.Next(BadgeThemes.Length)];
 
-			image.Mutate(ctx =>
+			badgeImage.Mutate(ctx =>
 			{
-				var capsuleShape = CreateRoundedRectPath(rect, cornerRadius);
-				ctx.Fill(theme.BgColor, capsuleShape);
-				ctx.Draw(theme.BorderColor, 2.5f, capsuleShape);
+				var shape = CreateRoundedRectPath(badgeRect, cornerRadius);
+				ctx.Fill(theme.BgColor, shape);
+				ctx.Draw(theme.BorderColor, 2.5f, shape);
 
-				ctx.DrawText(text, font, theme.TextColor, new PointF(textX, textY));
+				// Рисуем каждую строку СТРОГО ПО ЦЕНТРУ плашки!
+				for (int i = 0; i < lines.Count; i++)
+				{
+					string lineText = lines[i];
+					float currentLineWidth = lineSizes[i].Width;
+
+					// Математический центр для каждой строки:
+					float textX = (badgeWidth - currentLineWidth) / 2f;
+					float textY = paddingY + (i * (lineHeight + lineSpacing));
+
+					ctx.DrawText(lineText, font, theme.TextColor, new PointF(textX, textY));
+				}
 			});
 
-			using var ms = new MemoryStream();
-			image.SaveAsJpeg(ms);
-			return ms.ToArray();
+			// 8. ЧЕЛОВЕЧНЫЙ НАКЛОН (Случайный поворот от -3.5° до +3.5°)
+			float[] tiltAngles = new[] { -3.5f, -2.2f, -1.2f, 0f, 0f, 1.2f, 2.2f, 3.5f };
+			float randomAngle = tiltAngles[Random.Shared.Next(tiltAngles.Length)];
+
+			if (Math.Abs(randomAngle) > 0.1f)
+			{
+				badgeImage.Mutate(ctx => ctx.Rotate(randomAngle));
+			}
+
+			// 9. Случайная вертикальная позиция (Верх 22%, Центр 52% или Низ 76%)
+			float[] yRatios = new[] { 0.22f, 0.52f, 0.76f };
+			yRatio = yRatios[Random.Shared.Next(yRatios.Length)];
+
+			return badgeImage;
 		}
 
 		/// <summary>
-		/// Создает фигуру скругленного прямоугольника / капсулы через нативные дуги PathBuilder
+		/// Алгоритм аккуратного переноса по словам с сохранением смысла
 		/// </summary>
+		private static List<string> WrapTextByWords(string text, Font font, float maxLineWidth)
+		{
+			var resultLines = new List<string>();
+			var textOptions = new TextOptions(font);
+
+			var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			if (words.Length == 0) return resultLines;
+
+			string currentLine = words[0];
+
+			for (int i = 1; i < words.Length; i++)
+			{
+				string testLine = currentLine + " " + words[i];
+				var size = TextMeasurer.MeasureSize(testLine, textOptions);
+
+				if (size.Width <= maxLineWidth)
+				{
+					currentLine = testLine;
+				}
+				else
+				{
+					resultLines.Add(currentLine);
+					currentLine = words[i];
+				}
+			}
+
+			if (!string.IsNullOrEmpty(currentLine))
+			{
+				resultLines.Add(currentLine);
+			}
+
+			return resultLines;
+		}
+
 		private static IPath CreateRoundedRectPath(RectangleF rect, float cornerRadius)
 		{
 			float x = rect.X;
@@ -171,7 +285,6 @@ namespace CrossChat.Infrastructure.Helpers
 				}
 			}
 
-			// Раскрываем Spintax, если он есть
 			selected = ResolveSpintax(selected);
 
 			// Очистка от суррогатных символов
@@ -191,63 +304,6 @@ namespace CrossChat.Infrastructure.Helpers
 				});
 			}
 			return text.Replace("{", "").Replace("}", "").Trim();
-		}
-
-		/// <summary>
-		/// Генерирует прозрачную PNG-картинку стикера с текстом для последующего наложения на видео
-		/// </summary>
-		public static (byte[] PngBytes, float YRatio) GenerateBadgePng(string rawTextConfig, float baseWidth = 1080f)
-		{
-			string text = PickAndSanitizeRandomText(rawTextConfig);
-			if (string.IsNullOrWhiteSpace(text)) return (Array.Empty<byte>(), 0.52f);
-
-			FontFamily family;
-			if (!SystemFonts.TryGet("Arial", out family) &&
-				!SystemFonts.TryGet("DejaVu Sans", out family) &&
-				!SystemFonts.TryGet("Segoe UI", out family) &&
-				!SystemFonts.TryGet("Liberation Sans", out family))
-			{
-				family = SystemFonts.Collection.Families.FirstOrDefault();
-			}
-
-			if (family == default) return (Array.Empty<byte>(), 0.52f);
-
-			float fontSize = Math.Clamp(baseWidth * 0.042f, 32f, 76f);
-			var font = family.CreateFont(fontSize, FontStyle.Bold);
-
-			var textOptions = new TextOptions(font);
-			var textSize = TextMeasurer.MeasureSize(text, textOptions);
-
-			float paddingX = fontSize * 1.2f;
-			float paddingY = fontSize * 0.65f;
-			float badgeWidth = textSize.Width + (paddingX * 2);
-			float badgeHeight = textSize.Height + (paddingY * 2);
-
-			float cornerRadius = badgeHeight / 2f;
-			var rect = new RectangleF(0, 0, badgeWidth, badgeHeight);
-
-			// Создаем абсолютно прозрачный холст точно под размер капсулы
-			using var badgeImage = new Image<Rgba32>((int)Math.Ceiling(badgeWidth), (int)Math.Ceiling(badgeHeight));
-
-			var theme = BadgeThemes[Random.Shared.Next(BadgeThemes.Length)];
-
-			badgeImage.Mutate(ctx =>
-			{
-				var capsuleShape = CreateRoundedRectPath(rect, cornerRadius);
-				ctx.Fill(theme.BgColor, capsuleShape);
-				ctx.Draw(theme.BorderColor, 2.5f, capsuleShape);
-
-				ctx.DrawText(text, font, theme.TextColor, new PointF(paddingX, paddingY));
-			});
-
-			using var ms = new MemoryStream();
-			badgeImage.SaveAsPng(ms);
-
-			// Случайная высота (верх, центр или низ)
-			float[] yRatios = new[] { 0.22f, 0.52f, 0.75f };
-			float chosenYRatio = yRatios[Random.Shared.Next(yRatios.Length)];
-
-			return (ms.ToArray(), chosenYRatio);
 		}
 	}
 }
