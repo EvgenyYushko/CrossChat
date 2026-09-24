@@ -64,6 +64,31 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
+		var senderId = context.Message.SenderId; // Клиент (кто написал)
+		var businessAccountId = context.Message.RecipientId; // Бот (кому написали)
+
+		var targetTimeKey = $"debounce:target_time:ig:{senderId}:{businessAccountId}";
+		var activeTimerKey = $"debounce:timer_active:ig:{senderId}:{businessAccountId}";
+
+		// ПРОВЕРКА: продолжал ли пользователь писать?
+		var storedTicks = await _redis.StringGetAsync(targetTimeKey);
+		if (storedTicks.HasValue && long.TryParse(storedTicks, out long ticks))
+		{
+			var targetTimeUtc = new DateTime(ticks, DateTimeKind.Utc);
+			var remaining = targetTimeUtc - DateTime.UtcNow;
+
+			if (remaining > TimeSpan.FromSeconds(2))
+			{
+				_logger.LogInformation($"[Instagram Debounce] ⏳ Пользователь {senderId} еще пишет! Откладываем ответ еще на {remaining.TotalSeconds:F0} сек...");
+				await context.SchedulePublish(remaining, context.Message);
+				return; // НЕ ОТВЕЧАЕМ СЕЙЧАС!
+			}
+		}
+
+		// Время тишины вышло — сбрасываем ключи
+		await _redis.KeyDeleteAsync(targetTimeKey);
+		await _redis.KeyDeleteAsync(activeTimerKey);
+
 		// Пытаемся получить разрешение на выполнение
 		using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
 
@@ -72,9 +97,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// Лимит исчерпан -> бросаем исключение, чтобы сработал Redelivery (повтор через минуту)
 			throw new RateLimitExceededException("Rate limit exceeded (Gemini). Triggering Redelivery.");
 		}
-
-		var senderId = context.Message.SenderId;       // Клиент (кто написал)
-		var businessAccountId = context.Message.RecipientId; // Бот (кому написали)
 
 		_logger.LogInformation($"[Reply] 🚀 Обработка диалога. BusinessID: {businessAccountId}, SenderID: {senderId}");
 

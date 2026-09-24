@@ -20,34 +20,34 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 	{
 		var senderId = context.Message.SenderId;
 		var recipientId = context.Message.RecipientId;
-		var lockKey = $"debounce:{senderId}:{recipientId}";
 
-		// ВАЖНО: Проверяем, пришло ли медиа
-		int extensionTime = (context.Message.AttachmentCount * 15) + 5;
+		var targetTimeKey = $"debounce:target_time:ig:{senderId}:{recipientId}";
+		var activeTimerKey = $"debounce:timer_active:ig:{senderId}:{recipientId}";
 
-		// Пытаемся взять текущий TTL ключа
-		var ttl = await _redis.KeyTimeToLiveAsync(lockKey);
+		int extensionTime = (context.Message.AttachmentCount * 10);
+		int totalWait = 25 + extensionTime; // 25 секунд тишины
 
-		if (ttl.HasValue)
+		// 1. Сдвигаем целевое время вперед
+		var targetTimeUtc = DateTime.UtcNow.AddSeconds(totalWait);
+		await _redis.StringSetAsync(targetTimeKey, targetTimeUtc.Ticks.ToString(), TimeSpan.FromMinutes(10));
+
+		// 2. Запускаем таймер, только если это первое сообщение в серии
+		bool isFirst = await _redis.StringSetAsync(activeTimerKey, "1", TimeSpan.FromMinutes(10), When.NotExists);
+
+		if (isFirst)
 		{
-			// Таймер уже идет! Продлеваем его
-			var newTtl = ttl.Value.TotalSeconds + extensionTime;
-			await _redis.KeyExpireAsync(lockKey, TimeSpan.FromSeconds(newTtl));
+			_logger.LogInformation($"[Instagram Debounce] ⏳ Первое сообщение от {senderId}. Запущен таймер тишины {totalWait}с...");
 
-			_logger.LogInformation($"[Debounce] Продлили таймер для {senderId} на {extensionTime} сек.");
-			// Сообщение сохраняем в БД, но задачу в RabbitMQ НЕ планируем (она уже есть)
-		}
-		else
-		{
-			// Таймера нет, создаем новый
-			await _redis.StringSetAsync(lockKey, "active", TimeSpan.FromSeconds(30 + extensionTime));
-
-			await context.SchedulePublish(TimeSpan.FromSeconds(30 + extensionTime), new ProcessDialogReply
+			await context.SchedulePublish(TimeSpan.FromSeconds(totalWait), new ProcessDialogReply
 			{
 				SenderId = senderId,
 				RecipientId = recipientId,
 				ReplyId = context.Message.MessageId
 			});
+		}
+		else
+		{
+			_logger.LogInformation($"[Instagram Debounce] 💬 Новое сообщение от {senderId}. Таймер сдвинут вперед на {totalWait}с.");
 		}
 	}
 }
