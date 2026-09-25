@@ -116,7 +116,7 @@ namespace CrossChat.Worker.Consumers.Facebook.Comments
 
 		private async Task<string?> GenerateAiReply(FacebookSettings settings, FacebookCommentReceived msg)
 		{
-			var prompt = $"{settings.CommentPrompt}\n\nПользователь {msg.SenderName} оставил комментарий к публикации на странице Facebook: '{msg.Text}'. Ответь вежливо, естественно и кратко.";
+			var prompt = $"{settings.CommentPrompt}\n\nUser {msg.SenderName} left a comment on a Facebook post: '{msg.Text}'. Reply politely, naturally, and briefly.";
 			return await _aiService.GeminiRequest(prompt, null);
 		}
 	}

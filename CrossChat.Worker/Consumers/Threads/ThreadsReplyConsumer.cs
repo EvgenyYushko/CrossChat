@@ -31,15 +31,28 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 	{
 		var msg = context.Message;
 
-		// 1. ЗАЩИТА ОТ ДУБЛЕЙ
+		// 1. ЗАЩИТА ОТ ДУБЛЕЙ ОБРАБОТКИ ОДНОГО И ТОГО ЖЕ СООБЩЕНИЯ
 		var lockKey = $"processed_threads:{msg.MediaId}:{msg.BotThreadsId}";
-		if (!await _redis.StringSetAsync(lockKey, "processing", TimeSpan.FromMinutes(5), When.NotExists))
+		if (!await _redis.StringSetAsync(lockKey, "processing", TimeSpan.FromMinutes(10), When.NotExists))
 		{
 			_logger.LogInformation($"[Threads] Сообщение {msg.MediaId} уже в обработке. Игнорируем дубль.");
 			return;
 		}
 
-		// 2. Ищем бота в БД по ThreadsUserId
+		// 2. ЗАЩИТА: ОДИН ОТВЕТ НА ПОЛЬЗОВАТЕЛЯ ПОД ОДНИМ ПОСТОМ (24 часа)
+		if (!string.IsNullOrEmpty(msg.RootPostId))
+		{
+			var userPostKey = $"threads_answered_user:{msg.RootPostId}:{msg.Username}";
+
+			// Если ключ уже есть — значит, мы этому пользователю под этим постом уже ответили!
+			if (!await _redis.StringSetAsync(userPostKey, "answered", TimeSpan.FromHours(24), When.NotExists))
+			{
+				_logger.LogInformation($"[Threads] Мы уже отвечали пользователю @{msg.Username} под постом {msg.RootPostId}. Пропускаем.");
+				return;
+			}
+		}
+
+		// 3. Ищем бота в БД по ThreadsUserId
 		var settings = await _db.ThreadsSettings.FirstOrDefaultAsync(s => s.ThreadsUserId == msg.BotThreadsId);
 		if (settings == null || !settings.IsActive || string.IsNullOrEmpty(settings.AccessToken)) return;
 
@@ -60,7 +73,7 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 			{
 				replyText = await GenerateAiThreadsReply(settings, msg);
 			}
-			// === СЦЕНАРИЙ 3: КОМБИНИРОВАННЫЙ (ИИ с фоллбеком на Spintax-шаблоны) ===
+			// === СЦЕНАРИЙ 3: КОМБИНИРОВАННЫЙ ===
 			else if (replyMode == 3)
 			{
 				try
@@ -110,7 +123,7 @@ public class ThreadsReplyConsumer : IConsumer<ThreadsEventReceived>
 
 	private async Task<string?> GenerateAiThreadsReply(ThreadsSettings settings, ThreadsEventReceived msg)
 	{
-		var prompt = $"{settings.SystemPrompt}\n\nТы отвечаешь на комментарий (реплай) в Threads. Пользователь @{msg.Username} написал: '{msg.Text}'. Ответь живо и кратко.";
+		var prompt = $"{settings.SystemPrompt}\n\nYou are replying to a comment in the Topics section. User @{msg.Username} wrote: '{msg.Text}'. Reply in a lively and concise manner, and strictly in the language they used.";
 		return await _aiService.GeminiRequest(prompt, null);
 	}
 }

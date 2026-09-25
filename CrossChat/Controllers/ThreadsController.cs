@@ -73,13 +73,11 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 
-				// Логируем для отладки
 				_logger.LogInformation($"[Threads Webhook Raw]: {body}");
 
 				using var doc = JsonDocument.Parse(body);
 				var root = doc.RootElement;
 
-				// Проверяем поле "topic" (в Threads оно в корне)
 				if (root.TryGetProperty("topic", out var topic) &&
 				   (topic.GetString() == "moderate" || topic.GetString() == "interaction"))
 				{
@@ -92,21 +90,20 @@ namespace CrossChat.Controllers
 
 							if (field == "replies" || field == "mentions")
 							{
-								// 1. Получаем имя автора сообщения
 								var authorUsername = val.GetProperty("username").GetString();
 
-								// 2. Получаем имя бота (владельца)
 								string? botUsername = null;
 								string? botThreadsId = null;
+								string? rootPostId = null;
 
 								if (val.TryGetProperty("root_post", out var rootPost))
 								{
-									botUsername = rootPost.GetProperty("username").GetString();
-									botThreadsId = rootPost.GetProperty("owner_id").GetString();
+									botUsername = rootPost.TryGetProperty("username", out var bu) ? bu.GetString() : null;
+									botThreadsId = rootPost.TryGetProperty("owner_id", out var bo) ? bo.GetString() : null;
+									rootPostId = rootPost.TryGetProperty("id", out var bi) ? bi.GetString() : null;
 								}
 
-								// --- ЗАЩИТА ОТ САМОГО СЕБЯ ---
-								// Если автор сообщения и есть наш бот - игнорируем
+								// 1. ЗАЩИТА ОТ САМОГО СЕБЯ (Эхо)
 								if (!string.IsNullOrEmpty(authorUsername) &&
 									authorUsername.Equals(botUsername, StringComparison.OrdinalIgnoreCase))
 								{
@@ -116,18 +113,43 @@ namespace CrossChat.Controllers
 
 								if (string.IsNullOrEmpty(botThreadsId)) continue;
 
+								// 2. ГЛАВНАЯ ЗАЩИТА: РАЗРЫВ БЕСКОНЕЧНОЙ ЦЕПОЧКИ
+								// Если это ответ (reply), проверяем, на что именно ответил человек
+								if (field == "replies" && val.TryGetProperty("replied_to", out var repliedTo))
+								{
+									var repliedToId = repliedTo.TryGetProperty("id", out var rId) ? rId.GetString() : null;
+									var repliedToUsername = repliedTo.TryGetProperty("username", out var rUser) ? rUser.GetString() : null;
+
+									// А) Если человек ответил на комментарий бота — ИГНОРИРУЕМ!
+									if (!string.IsNullOrEmpty(repliedToUsername) &&
+										repliedToUsername.Equals(botUsername, StringComparison.OrdinalIgnoreCase))
+									{
+										_logger.LogInformation($"[Threads] Пользователь @{authorUsername} ответил на комментарий бота. Игнорируем, чтобы не создавать бесконечный диалог.");
+										continue;
+									}
+
+									// Б) Если человек ответил на чей-то чужой комментарий (вложенная ветка), а не на сам пост
+									if (!string.IsNullOrEmpty(repliedToId) && !string.IsNullOrEmpty(rootPostId) && repliedToId != rootPostId)
+									{
+										_logger.LogInformation($"[Threads] Игнорируем вложенный реплай от @{authorUsername} (ответ на коммент {repliedToId}, а не на пост {rootPostId}).");
+										continue;
+									}
+								}
+
 								var text = val.GetProperty("text").GetString();
 								var mediaId = val.GetProperty("id").GetString();
 
 								_logger.LogInformation($"[Threads] Пойман {field} от {authorUsername}: {text}");
 
+								// Публикуем событие вместе с RootPostId
 								await _publishEndpoint.Publish(new ThreadsEventReceived
 								{
 									BotThreadsId = botThreadsId,
 									Type = field,
 									MediaId = mediaId!,
 									Text = text ?? "",
-									Username = authorUsername ?? "user"
+									Username = authorUsername ?? "user",
+									RootPostId = rootPostId
 								});
 							}
 						}
@@ -139,7 +161,7 @@ namespace CrossChat.Controllers
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Error processing Threads webhook");
-				return Ok(); // Всегда возвращаем 200, чтобы Meta не зациклила ретраи
+				return Ok();
 			}
 		}
 

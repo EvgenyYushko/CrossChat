@@ -8,6 +8,8 @@ public record ThreadsEventReceived
 	public string MediaId { get; init; } = string.Empty;      // ID коммента, на который отвечаем
 	public string Text { get; init; } = string.Empty;         // Что написал юзер
 	public string Username { get; init; } = string.Empty;     // Кто написал
+															  // НОВОЕ ПОЛЕ: ID корневого поста для защиты от дублей
+	public string? RootPostId { get; set; }
 }
 
 // 2. Команда: "Опубликовать готовый ответ"

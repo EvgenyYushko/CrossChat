@@ -65,7 +65,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 				// === 2. ТОЛЬКО ИИ ===
 				else if (replyMode == 1)
 				{
-					var prompt = $"{bot.CommentPrompt}\n\nПользователь @{msg.AuthorHandle} оставил комментарий в BlueSky: '{msg.Text}'. Ответь кратко.";
+					var prompt = $"{bot.CommentPrompt}\n\nUser @{msg.AuthorHandle} left a comment on BlueSky: '{msg.Text}'. Reply briefly.";
 					replyText = await _aiService.GeminiRequest(prompt, null);
 				}
 				// === 3. КОМБИНИРОВАННЫЙ ===
@@ -73,7 +73,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 				{
 					try
 					{
-						var prompt = $"{bot.CommentPrompt}\n\nПользователь @{msg.AuthorHandle} оставил комментарий в BlueSky: '{msg.Text}'. Ответь кратко.";
+						var prompt = $"{bot.CommentPrompt}\n\nUser @{msg.AuthorHandle} left a comment on BlueSky: '{msg.Text}'. Reply briefly.";
 						replyText = await _aiService.GeminiRequest(prompt, null);
 					}
 					catch (Exception aiEx)
