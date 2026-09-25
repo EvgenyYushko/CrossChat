@@ -267,32 +267,35 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GetValidTokenAsync(BlueSkyModel settings)
 		{
-			// 1. Проверяем, не истек ли токен (с запасом в 2 минуты)
-			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTimeNow.AddMinutes(2))
+			// 1. Если токен еще действует больше 15 минут — отдаем текущий без лишних сетевых запросов
+			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTimeNow.AddMinutes(15))
 			{
 				return settings.AccessToken!;
 			}
 
-			_logger.LogInformation($"[BlueSky] Токен для @{settings.Handle} истек. Обновляем...");
+			_logger.LogInformation($"[BlueSky] Токен для @{settings.Handle} требует обновления (осталось < 15 мин или истек). Обновляем...");
 
-			// 2. Если истек — вызываем рефреш
-			var result = await RefreshTokenAsync(settings.RefreshToken!, settings.PrivateKeyJson!);
+			if (string.IsNullOrEmpty(settings.RefreshToken))
+			{
+				throw new InvalidOperationException($"[BlueSky] Отсутствует RefreshToken для @{settings.Handle}. Требуется повторный вход.");
+			}
+
+			// 2. Вызываем единый механизм рефреша
+			var result = await RefreshTokenAsync(settings.RefreshToken, settings.PrivateKeyJson!);
 
 			if (result != null)
 			{
-				// 3. ОБЯЗАТЕЛЬНО обновляем объект в памяти
+				// 3. Обновляем модель в памяти
 				settings.AccessToken = result.Value.AccessToken;
 				settings.RefreshToken = result.Value.RefreshToken;
 				settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 
-				// 4. Сохраняем в БД (нужно будет вызвать _db.SaveChangesAsync() в вызывающем коде)
-				// Но лучше передать сюда callback или сделать метод сохранения
-				_logger.LogInformation($"[BlueSky] Токен успешно обновлен. Новый срок: {settings.TokenExpiresAt}");
+				_logger.LogInformation($"[BlueSky] Токен успешно обновлен для @{settings.Handle}. Новый срок истечения: {settings.TokenExpiresAt}");
 
 				return settings.AccessToken;
 			}
 
-			throw new Exception("Не удалось обновить токен BlueSky. Требуется ручной перезапуск.");
+			throw new Exception($"Не удалось обновить токен BlueSky для @{settings.Handle}. Сервер отклонил RefreshToken.");
 		}
 
 		public async Task<List<Convo>> GetUnreadConversationsAsync(BlueSkyModel settings)

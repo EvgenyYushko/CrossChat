@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
+using StackExchange.Redis;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
@@ -28,12 +29,14 @@ public class TokenRefreshJob : IJob
 	private readonly IEmailService _emailService;
 	private readonly IHostEnvironment _env;
 	private readonly ILogger<TokenRefreshJob> _logger;
+	private readonly IDatabase _redis;
 	private readonly SocialMediaSettings _settings;
 
 	public TokenRefreshJob(
 		AppDbContext db,
 		IOptions<SocialMediaSettings> options,
 		ILogger<TokenRefreshJob> logger,
+		IConnectionMultiplexer redis,
 		IInstagramService instagramService,
 		IThreadsService threadsService,
 		IBlueSkyService blueSkyService,
@@ -60,6 +63,7 @@ public class TokenRefreshJob : IJob
 		_emailService = emailService;
 		_env = env;
 		_logger = logger;
+		_redis = redis.GetDatabase();
 		_settings = options.Value;
 	}
 
@@ -82,12 +86,12 @@ public class TokenRefreshJob : IJob
 		// --- БЛОК 3: BLUESKY ---
 		await RefreshBlueSkyData();
 
+		// --- БЛОК 4: X (TWITTER) ---
 		await RefreshXTokens(DateTimeNow.AddHours(1));
 
+		// --- БЛОК 5: FACEBOOK ---
 		await RefreshFaceBookData();
 
-		// Сохраняем все изменения в БД одним махом
-		await _db.SaveChangesAsync();
 		_logger.LogInformation("🏁 [TokenRefreshJob] Все задачи по обновлению завершены.");
 	}
 
@@ -112,6 +116,7 @@ public class TokenRefreshJob : IJob
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 					await _instagramConsole.Log($"✅ Instagram токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
+					
 					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))
@@ -119,6 +124,9 @@ public class TokenRefreshJob : IJob
 						base64Icon = await DownloadImageAsBase64ForHtml(userInfo.profilePicUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
+
+					// Фиксируем сразу в базе!
+					await _db.SaveChangesAsync();
 				}
 			}
 			catch (Exception ex)
@@ -156,6 +164,8 @@ public class TokenRefreshJob : IJob
 					}
 					settings.ProfilePictureUrl = base64Icon;
 					settings.PageName = userInfo.Name;
+
+					await _db.SaveChangesAsync();
 				}
 			}
 			catch (Exception ex)
@@ -168,7 +178,6 @@ public class TokenRefreshJob : IJob
 
 	private async Task RefreshThreadsTokens(DateTime thresholdDate)
 	{
-		// Выбираем все записи Threads, которые скоро протухнут
 		var threadsUsers = await _db.ThreadsSettings
 			.Include(p => p.User)
 			.Where(s => s.AccessToken != null && s.TokenExpiresAt != null && s.TokenExpiresAt < thresholdDate)
@@ -187,7 +196,7 @@ public class TokenRefreshJob : IJob
 				{
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
-					await _threadsConsole.Log($"токен обновлен для {settings.Username} UserId={settings.UserId}", settings.UserId, settings.Id);
+					await _threadsConsole.Log($"Токен обновлен для {settings.Username} UserId={settings.UserId}", settings.UserId, settings.Id);
 
 					var profile = await _threadsService.GetThreadsUserProfileAsync(result.Value.NewToken);
 					string? base64Icon = null;
@@ -196,6 +205,9 @@ public class TokenRefreshJob : IJob
 						base64Icon = await DownloadImageAsBase64ForHtml(profile.ProfilePictureUrl);
 					}
 					settings.ProfilePictureUrl = base64Icon;
+
+					// Фиксируем сразу в базе!
+					await _db.SaveChangesAsync();
 				}
 				else
 				{
@@ -223,8 +235,23 @@ public class TokenRefreshJob : IJob
 
 		foreach (var bot in bskyUsers)
 		{
+			var lockKey = $"lock:bsky_token_refresh:{bot.Id}";
+			var lockValue = Guid.NewGuid().ToString("N");
+
+			// Берем тот же самый Redis Lock, что и в BluesSkyAnswerJob
+			bool isLockAcquired = await _redis.StringSetAsync(lockKey, lockValue, TimeSpan.FromSeconds(30), When.NotExists);
+
+			if (!isLockAcquired)
+			{
+				_logger.LogInformation($"[TokenRefreshJob] BlueSky: @{bot.Handle} сейчас обрабатывается другой джобой. Пропускаем.");
+				continue;
+			}
+
 			try
 			{
+				// Перечитываем актуальные данные из БД
+				await _db.Entry(bot).ReloadAsync();
+
 				var botModel = new BlueSkyModel
 				{
 					AccessToken = bot.AccessToken!,
@@ -236,30 +263,36 @@ public class TokenRefreshJob : IJob
 					PdsUrl = bot.PdsUrl!
 				};
 
-				// 1. Проверяем и обновляем токен доступа, если он скоро истекает
-				//await _blueSkyService.GetValidTokenAsync(botModel);
-				//bot.AccessToken = botModel.AccessToken;
-				//bot.RefreshToken = botModel.RefreshToken;
-				//bot.TokenExpiresAt = botModel.TokenExpiresAt;
+				// 1. Проверяем и обновляем токен через единый метод (если истекает)
+				await _blueSkyService.GetValidTokenAsync(botModel);
+
+				// Если токен был обновлен — фиксируем изменения в сущности
+				if (bot.AccessToken != botModel.AccessToken)
+				{
+					bot.AccessToken = botModel.AccessToken;
+					bot.RefreshToken = botModel.RefreshToken;
+					bot.TokenExpiresAt = botModel.TokenExpiresAt;
+				}
 
 				// 2. Запрашиваем актуальные данные профиля (аватарку и никнейм)
 				var profile = await _blueSkyService.GetProfileAsync(botModel);
 				if (profile != null)
 				{
-					// Обновляем никнейм, если сменился
 					if (!string.IsNullOrEmpty(profile.Value.Handle))
 					{
 						bot.Handle = profile.Value.Handle;
 					}
 
-					// Если есть аватарка — скачиваем ее в Base64 для постоянного хранения в базе
 					if (!string.IsNullOrEmpty(profile.Value.AvatarUrl))
 					{
 						bot.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(profile.Value.AvatarUrl);
 					}
-
-					_logger.LogInformation($"✅ [TokenRefreshJob] Данные профиля BlueSky успешно обновлены для @{bot.Handle}");
 				}
+
+				// Сохраняем изменения в БД сразу
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation($"✅ [TokenRefreshJob] Данные профиля и токен BlueSky успешно синхронизированы для @{bot.Handle}");
 			}
 			catch (Exception ex)
 			{
@@ -274,12 +307,20 @@ public class TokenRefreshJob : IJob
 					catch { }
 				}
 			}
+			finally
+			{
+				// Освобождаем Redis Lock
+				var currentLock = await _redis.StringGetAsync(lockKey);
+				if (currentLock == lockValue)
+				{
+					await _redis.KeyDeleteAsync(lockKey);
+				}
+			}
 		}
 	}
 
 	private async Task RefreshXTokens(DateTime thresholdDate)
 	{
-		// Ищем токены X, которые скоро истекают
 		var xBots = await _db.XSettings
 			.Include(p => p.User)
 			.Where(s => s.AccessToken != null && s.TokenExpiresAt < thresholdDate)
@@ -289,7 +330,6 @@ public class TokenRefreshJob : IJob
 
 		_logger.LogInformation($"[TokenRefreshJob] X: найдено {xBots.Count} токенов для обновления.");
 
-		// 1. Проверяем, заданы ли настройки XClientId и XClientSecret в воркере
 		if (string.IsNullOrEmpty(_settings.XClientId) || string.IsNullOrEmpty(_settings.XClientSecret))
 		{
 			_logger.LogError("❌ [X Refresh] Ошибка: _settings.XClientId или _settings.XClientSecret пустые! Проверьте appsettings.json в проекте Worker.");
@@ -322,13 +362,15 @@ public class TokenRefreshJob : IJob
 					{
 						_logger.LogWarning(ex, "[X Refresh] Не удалось обновить аватарку профиля после рефреша");
 					}
+
+					// Сохраняем немедленно в БД!
+					await _db.SaveChangesAsync();
 				}
 				else
 				{
 					_logger.LogWarning($"⚠️ [X Refresh] Не удалось обновить токен для @{settings.ScreenName}");
 					await _xConsole.LogWarning($"⚠️ Не удалось обновить X для @{settings.ScreenName}. Возможно, доступ отозван.", settings.UserId, settings.Id);
 
-					// Безопасный вызов отправки email (таймаут почты не упустит джобу!)
 					try
 					{
 						//await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
@@ -344,7 +386,6 @@ public class TokenRefreshJob : IJob
 			{
 				_logger.LogError(ex, $"❌ Ошибка X Refresh для {settings.ScreenName}");
 
-				// Безопасный вызов отправки email в блоке исключений
 				try
 				{
 					await _emailService.SendErrorRefreshToken(settings.User.Email, settings.User.Name, settings.Id, settings.ScreenName, "X");
