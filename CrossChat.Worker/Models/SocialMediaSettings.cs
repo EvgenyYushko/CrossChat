@@ -8,7 +8,6 @@ namespace CrossChat.Worker.Models
 		public string AppId { get; set; }
 		public string AppSecret { get; set; }
 
-
 		public string ThreadsAppId { get; set; }
 		public string ThreadsAppSecret { get; set; }
 
@@ -18,5 +17,9 @@ namespace CrossChat.Worker.Models
 		public string XConsumerApiSecret { get; set; }
 		public string XAccessToken { get; set; }
 		public string XAccessTokenSecret { get; set; }
+
+		// === YOUTUBE DATA API V3 ===
+		public string YouTubeClientId { get; set; } = string.Empty;
+		public string YouTubeClientSecret { get; set; } = string.Empty;
 	}
 }

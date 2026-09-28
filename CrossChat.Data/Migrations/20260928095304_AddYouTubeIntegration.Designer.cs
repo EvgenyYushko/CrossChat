@@ -3,6 +3,7 @@ using System;
 using CrossChat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CrossChat.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928095304_AddYouTubeIntegration")]
+    partial class AddYouTubeIntegration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -934,69 +937,6 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("XSettings");
                 });
 
-            modelBuilder.Entity("CrossChat.Data.Entities.YouTubeSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AccessToken")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ChannelId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ChannelTitle")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CustomUrl")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ProfileId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProfilePictureUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("RefreshToken")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("SubscriberCount")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<string>("SystemPrompt")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("TokenExpiresAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("VideoCount")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProfileId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("YouTubeSettings");
-                });
-
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
@@ -1248,25 +1188,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("CrossChat.Data.Entities.YouTubeSettings", b =>
-                {
-                    b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
-                        .WithMany("YouTubeSettingsList")
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CrossChat.Data.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Profile");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>
                 {
                     b.Navigation("ResponseLogs");
@@ -1301,8 +1222,6 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("ThreadsSettingsList");
 
                     b.Navigation("XSettingsList");
-
-                    b.Navigation("YouTubeSettingsList");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.TrackedHashtag", b =>

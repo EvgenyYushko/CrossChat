@@ -1,0 +1,382 @@
+@model CrossChat.Data.Entities.YouTubeSettings
+@{
+    ViewData["Title"] = "Управление YouTube каналом";
+    var channelUrl = !string.IsNullOrEmpty(Model.CustomUrl)
+        ? $"https://youtube.com/{Model.CustomUrl}"
+        : $"https://youtube.com/channel/{Model.ChannelId}";
+}
+
+@section Styles {
+    <style>
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin: 6rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .connected-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .big-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #ff0000;
+            padding: 4px;
+            background: transparent;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(255, 0, 0, 0.25);
+        }
+
+        .channel-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: var(--text-main);
+        }
+
+        .channel-handle {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-family: monospace;
+            margin-bottom: 1rem;
+        }
+
+        /* Бейджи статистики */
+        .stats-grid {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 1.25rem;
+        }
+
+        .stat-badge {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-main);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-paused {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* Кнопки управления */
+        .action-buttons-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px 20px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            width: 100%;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+
+        .btn-yt {
+            background: #ff0000 !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
+        }
+
+            .btn-yt:hover {
+                background: #cc0000 !important;
+                transform: translateY(-1px);
+            }
+
+        .btn-autoposting {
+            background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+            .btn-autoposting:hover {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+                transform: translateY(-1px);
+            }
+
+        /* Форма настроек */
+        .form-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            padding-top: 2rem;
+            text-align: left;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .select-input, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+            .select-input:focus, textarea:focus {
+                border-color: var(--accent-color);
+            }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .switch-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
+            }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            margin-top: 1.5rem;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+            .btn-danger:hover {
+                background: rgba(239, 68, 68, 0.25);
+                border-color: rgba(239, 68, 68, 0.4);
+            }
+
+        @@media (max-width: 600px) {
+            .container { margin-top: 5rem; }
+            .card { padding: 1.5rem; }
+            .action-buttons-group { grid-template-columns: 1fr; }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Профиль</a>
+}
+
+<div class="container">
+    <div class="card">
+        <div class="connected-header">
+            @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
+            {
+                <img src="@Model.ProfilePictureUrl" class="big-avatar" alt="Avatar">
+            }
+            else
+            {
+                <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;background:#ff0000;color:white;">YT</div>
+            }
+
+            <div class="channel-title">@Model.ChannelTitle</div>
+            <div class="channel-handle">@(Model.CustomUrl ?? Model.ChannelId)</div>
+
+            <div class="stats-grid">
+                <span class="stat-badge">👥 @Model.SubscriberCount.ToString("N0") подписчиков</span>
+                <span class="stat-badge">🎬 @Model.VideoCount.ToString("N0") видео</span>
+            </div>
+
+            <div>
+                @if (Model.IsActive)
+                {
+                    <span class="status-badge status-active"><span class="dot"></span> Канал активен</span>
+                }
+                else
+                {
+                    <span class="status-badge status-paused">⚠️ Отключен</span>
+                }
+            </div>
+        </div>
+
+        <div class="action-buttons-group">
+            <a href="@channelUrl" target="_blank" class="btn btn-yt">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+                Открыть канал
+            </a>
+            <a href="/planner?profileId=@Model.ProfileId&network=YouTube&botId=@Model.Id" class="btn btn-autoposting">
+                📅 Загрузка Shorts
+            </a>
+        </div>
+
+        <div class="form-section">
+            <form action="/youtube/update-settings" method="post">
+                <input type="hidden" name="botId" value="@Model.Id">
+
+                <h4 style="margin-bottom: 15px; color: var(--text-main);">Настройки канала</h4>
+
+                <div class="switch-container">
+                    <label style="margin: 0;">Включен для автопостинга</label>
+                    <label class="switch">
+                        <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
+                        <span class="slider"></span>
+                    </label>
+                    <input type="hidden" name="isActive" value="false">
+                </div>
+
+                <div class="form-group">
+                    <label>Промпт для генерации описания и тегов (ИИ)</label>
+                    <textarea name="systemPrompt" rows="3">@Model.SystemPrompt</textarea>
+                    <small style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px; display: block;">
+                        Используется при автогенерации описаний к Shorts и видео.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label>Привязан к профилю</label>
+                    <select name="profileId" class="select-input">
+                        @if (ViewBag.Profiles != null)
+                        {
+                            @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
+                            {
+                                <option value="@p.Id" selected="@(p.Id == Model.ProfileId)">
+                                    @p.Name
+                                </option>
+                            }
+                        }
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 10px;">Сохранить настройки</button>
+            </form>
+
+            <form action="/youtube/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить этот YouTube-канал от CrossChat?');">
+                <button type="submit" class="btn btn-danger">Отключить канал</button>
+            </form>
+        </div>
+    </div>
+</div>

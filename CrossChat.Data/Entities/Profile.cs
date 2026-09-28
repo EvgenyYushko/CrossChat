@@ -21,5 +21,6 @@ namespace CrossChat.Data.Entities
 		public TelegramSettings? TelegramSettings { get; set; }
 		public List<TelegramChannelSettings> TelegramChannelSettingsList { get; set; } = new();
 		public List<BlueSkySettings> BlueSkySettingsList { get; set; } = new();
+		public List<YouTubeSettings> YouTubeSettingsList { get; set; } = new();
 	}
 }

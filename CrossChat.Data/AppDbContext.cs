@@ -32,6 +32,8 @@ namespace CrossChat.Data
 
 		public DbSet<SavedLocation> SavedLocations { get; set; }
 
+		public DbSet<YouTubeSettings> YouTubeSettings { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			// Ускоряем поиск при входе

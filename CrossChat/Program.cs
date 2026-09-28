@@ -7,6 +7,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Services;
 using CrossChat.Integrations.Services.Google;
 using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Models;
@@ -276,6 +277,15 @@ builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
 builder.Services.AddSingleton<ITelegramChannelConsole, TelegramChannelConsole>();
 
 builder.Services.AddSingleton<IEmailService, EmailService>();
+
+builder.Services.Configure<YouTubeOptions>(options =>
+{
+    // Если ключи лежат в секции SocialMediaSettings:
+    var section = builder.Configuration.GetSection("SocialMedia");
+    options.ClientId = section["YouTubeClientId"] ?? "";
+    options.ClientSecret = section["YouTubeClientSecret"] ?? "";
+});
+builder.Services.AddHttpClient<IYouTubeService, YouTubeService>();
 
 builder.Services.Configure<ResendClientOptions>(options =>
 {
