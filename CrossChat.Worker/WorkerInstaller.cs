@@ -33,7 +33,7 @@ namespace CrossChat.Worker
 			// MassTransit просканирует сборку, где лежит WebhookConsumer, 
 			// и зарегистрирует все консьюмеры, которые найдет.
 			x.AddConsumer<ThreadsReplyConsumer>(typeof(ThreadsReplyDefinition)); // Явная регистрация
-			x.AddConsumer<ThreadsPublishConsumer>();
+			x.AddConsumer<ThreadsPublishConsumer>(typeof(ThreadsPublishDefinition));
 			x.AddConsumer<BlueSkyReplyConsumer>(typeof(BlueSkyReplyDefinition));
 			x.AddConsumer<BlueSkyCommentConsumer>(typeof(BlueSkyCommentDefinition));
 			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
