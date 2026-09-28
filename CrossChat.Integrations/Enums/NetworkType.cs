@@ -49,6 +49,8 @@ namespace CrossChat.Integrations.Enums
 		/// <summary>
 		/// Threads
 		/// </summary>
-		Threads
+		Threads,
+
+		YouTube 
 	}
 }

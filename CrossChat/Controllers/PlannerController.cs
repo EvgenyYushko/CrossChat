@@ -53,6 +53,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.BlueSkySettingsList)
+				.Include(p => p.YouTubeSettingsList)
 				.FirstOrDefaultAsync(p => p.Id == profileId);
 
 			if (profile == null) return NotFound();
@@ -936,6 +937,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.BlueSkySettingsList)
+				.Include(p => p.YouTubeSettingsList)
 				.FirstOrDefault(p => p.Id == profileId);
 
 			if (profile == null) return 0;
@@ -956,6 +958,8 @@ namespace CrossChat.Controllers
 					return profile.TelegramChannelSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				case NetworkType.BlueSky:
 					return profile.BlueSkySettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
+				case NetworkType.YouTube: // 2. ДОБАВЛЯЕМ ПОИСК АКТИВНОГО КАНАЛА
+					return profile.YouTubeSettingsList.FirstOrDefault(x => x.IsActive)?.Id ?? 0;
 				default:
 					return 0;
 			}

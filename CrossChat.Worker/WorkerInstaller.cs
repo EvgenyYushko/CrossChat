@@ -103,6 +103,7 @@ namespace CrossChat.Worker
 			services.AddKeyedScoped<ISocialPublisher, ThreadsPublisher>(NetworkType.Threads);
 			services.AddKeyedScoped<ISocialPublisher, XPublisher>(NetworkType.X);
 			services.AddKeyedScoped<ISocialPublisher, BlueSkyPublisher>(NetworkType.BlueSky);
+			services.AddKeyedScoped<ISocialPublisher, YouTubePublisher>(NetworkType.YouTube);
 
 			services.AddScoped<TrendRadarService>();
 		}

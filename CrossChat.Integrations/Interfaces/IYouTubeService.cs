@@ -8,6 +8,13 @@ namespace CrossChat.Integrations.Interfaces
 		Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> ExchangeCodeForTokensAsync(string code, string redirectUri);
 		Task<(string? AccessToken, int ExpiresIn)?> RefreshAccessTokenAsync(string refreshToken);
 		Task<YouTubeChannelInfoDto?> GetChannelInfoAsync(string accessToken);
+
+		Task<(bool Success, string? VideoId, string? ErrorMessage)> UploadVideoAsync(
+			byte[] videoBytes,
+			string title,
+			string description,
+			List<string> tags,
+			string accessToken);
 	}
 
 	public class YouTubeChannelInfoDto

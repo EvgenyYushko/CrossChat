@@ -28,7 +28,7 @@ namespace CrossChat.Controllers
 			_logger = logger;
 		}
 
-		// Страница профиля (пока заглушка)
+		// Страница профиля
 		[HttpGet]
 		public async Task<IActionResult> Index(int profileId)
 		{
@@ -53,6 +53,7 @@ namespace CrossChat.Controllers
 				.Include(p => p.TelegramSettings)
 				.Include(p => p.TelegramChannelSettingsList)
 				.Include(p => p.BlueSkySettingsList)
+				.Include(p => p.YouTubeSettingsList)
 				.FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);
 
 			// Если профиль не найден или чужой — 404 или редирект

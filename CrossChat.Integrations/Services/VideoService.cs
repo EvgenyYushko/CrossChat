@@ -67,6 +67,44 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
+		/// Мгновенно удаляет все метаданные и манифесты C2PA (метку ИИ) из массива байтов видео без пережатия (0.1 сек).
+		/// </summary>
+		public static async Task<byte[]> StripAiMetadataAsync(byte[] videoBytes, ILogger? logger = null)
+		{
+			if (videoBytes == null || videoBytes.Length == 0) return videoBytes;
+
+			string tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_yt_clean.mp4");
+
+			try
+			{
+				// Записываем во временный файл
+				await File.WriteAllBytesAsync(tempFile, videoBytes);
+
+				// Вызываем наш проверенный метод очистки FFmpeg (-map_metadata -1 -c copy)
+				bool success = await StripAiMetadataAsync(tempFile, logger);
+
+				if (success && File.Exists(tempFile))
+				{
+					return await File.ReadAllBytesAsync(tempFile);
+				}
+
+				return videoBytes;
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "Ошибка при очистке метаданных ИИ из массива байтов видео");
+				return videoBytes;
+			}
+			finally
+			{
+				if (File.Exists(tempFile))
+				{
+					try { File.Delete(tempFile); } catch { }
+				}
+			}
+		}
+
+		/// <summary>
 		/// Конвертирует любой аудиофайл (mp3, wav, m4a) в эталонный формат Telegram Voice (OGG Opus 32k)
 		/// </summary>
 		public static async Task<byte[]> ConvertToTelegramVoiceOggAsync(byte[] inputAudioBytes)

@@ -27,6 +27,7 @@ public class TokenRefreshJob : IJob
 	private readonly IThreadsConsole _threadsConsole;
 	private readonly IXConsole _xConsole;
 	private readonly IEmailService _emailService;
+	private readonly IYouTubeService _youTubeService;
 	private readonly IHostEnvironment _env;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly IDatabase _redis;
@@ -47,7 +48,8 @@ public class TokenRefreshJob : IJob
 		IThreadsConsole threadsConsole,
 		IXConsole xConsole,
 		IEmailService emailService,
-		IHostEnvironment env
+		IHostEnvironment env,
+		IYouTubeService youTubeService
 		)
 	{
 		_db = db;
@@ -61,6 +63,7 @@ public class TokenRefreshJob : IJob
 		_threadsConsole = threadsConsole;
 		_xConsole = xConsole;
 		_emailService = emailService;
+		_youTubeService = youTubeService;
 		_env = env;
 		_logger = logger;
 		_redis = redis.GetDatabase();
@@ -92,6 +95,9 @@ public class TokenRefreshJob : IJob
 		// --- БЛОК 5: FACEBOOK ---
 		await RefreshFaceBookData();
 
+		// --- БЛОК 6: YOUTUBE ---
+		await RefreshYouTubeData(); // <-- ДОБАВЛЯЕМ ВЫЗОВ YOUTUBE
+
 		_logger.LogInformation("🏁 [TokenRefreshJob] Все задачи по обновлению завершены.");
 	}
 
@@ -116,7 +122,7 @@ public class TokenRefreshJob : IJob
 					settings.AccessToken = result.Value.NewToken;
 					settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
 					await _instagramConsole.Log($"✅ Instagram токен обновлен для User {settings.UserId}", settings.UserId, settings.Id);
-					
+
 					var userInfo = await _instagramService.GetMeInfo(result.Value.NewToken);
 					string? base64Icon = null;
 					if (!string.IsNullOrEmpty(userInfo.profilePicUrl))
@@ -393,6 +399,81 @@ public class TokenRefreshJob : IJob
 				catch (Exception mailEx)
 				{
 					await _xConsole.LogWarning("❌ Не удалось отправить email-уведомление (Таймаут SMTP)" + mailEx, settings.UserId, settings.Id);
+				}
+			}
+		}
+	}
+
+	private async Task RefreshYouTubeData()
+	{
+		var ytChannels = await _db.YouTubeSettings
+			.Include(p => p.User)
+			.Where(s => s.IsActive && s.RefreshToken != null)
+			.ToListAsync();
+
+		if (!ytChannels.Any()) return;
+
+		_logger.LogInformation($"[TokenRefreshJob] YouTube: найдено {ytChannels.Count} каналов для синхронизации.");
+
+		foreach (var channel in ytChannels)
+		{
+			try
+			{
+				// 1. Проверяем токен: если истекает в ближайшие 2 часа — обновляем
+				if (!channel.TokenExpiresAt.HasValue || channel.TokenExpiresAt.Value <= DateTimeNow.AddHours(2))
+				{
+					_logger.LogInformation($"[TokenRefreshJob] Продление токена YouTube для канала '{channel.ChannelTitle}'...");
+					var tokenResult = await _youTubeService.RefreshAccessTokenAsync(channel.RefreshToken!);
+
+					if (tokenResult != null && !string.IsNullOrEmpty(tokenResult.Value.AccessToken))
+					{
+						channel.AccessToken = tokenResult.Value.AccessToken;
+						channel.TokenExpiresAt = DateTimeNow.AddSeconds(tokenResult.Value.ExpiresIn);
+					}
+					else
+					{
+						throw new Exception("Google отклонил RefreshToken (возможно, доступ отозван).");
+					}
+				}
+
+				// 2. Актуализируем статистику и данные профиля (подписчики, видео, аватарка)
+				if (!string.IsNullOrEmpty(channel.AccessToken))
+				{
+					var channelInfo = await _youTubeService.GetChannelInfoAsync(channel.AccessToken);
+					if (channelInfo != null)
+					{
+						channel.SubscriberCount = channelInfo.SubscriberCount;
+						channel.VideoCount = channelInfo.VideoCount;
+						channel.ChannelTitle = channelInfo.Title;
+						channel.CustomUrl = channelInfo.CustomUrl;
+
+						if (!string.IsNullOrEmpty(channelInfo.AvatarUrl))
+						{
+							channel.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(channelInfo.AvatarUrl);
+						}
+					}
+				}
+
+				// 3. Сохраняем изменения по каждому каналу сразу
+				await _db.SaveChangesAsync();
+				_logger.LogInformation($"✅ [TokenRefreshJob] YouTube канал '{channel.ChannelTitle}' успешно синхронизирован ({channel.SubscriberCount} подп.).");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"❌ [TokenRefreshJob] Ошибка обновления YouTube для канала '{channel.ChannelTitle}'");
+
+				if (channel.User != null)
+				{
+					try
+					{
+						await _emailService.SendErrorRefreshToken(
+							channel.User.Email,
+							channel.User.Name,
+							channel.Id,
+							channel.ChannelTitle,
+							"YouTube");
+					}
+					catch { }
 				}
 			}
 		}

@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models; // <-- Подключаем свои локальные модели!
@@ -191,6 +192,93 @@ namespace CrossChat.Integrations.Services
 			{
 				_logger.LogError(ex, "[YouTube] Исключение при получении данных канала");
 				return null;
+			}
+		}
+
+		public async Task<(bool Success, string? VideoId, string? ErrorMessage)> UploadVideoAsync(
+			byte[] videoBytes,
+			string title,
+			string description,
+			List<string> tags,
+			string accessToken)
+		{
+			try
+			{
+				// 1. Формируем метаданные видеоролика
+				var metadata = new
+				{
+					snippet = new
+					{
+						title = title,
+						description = description,
+						tags = tags,
+						categoryId = "22" // Категория по умолчанию: "People & Blogs"
+					},
+					status = new
+					{
+						privacyStatus = "public", // Сразу делаем публичным
+						selfDeclaredMadeForKids = false
+					}
+				};
+
+				var jsonMetadata = JsonSerializer.Serialize(metadata);
+				var metadataContent = new StringContent(jsonMetadata, Encoding.UTF8, "application/json");
+
+				// 2. ЭТАП 1: Инициализация сессии загрузки (Resumable Upload)
+				var initUrl = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+				using var initReq = new HttpRequestMessage(HttpMethod.Post, initUrl)
+				{
+					Content = metadataContent
+				};
+
+				initReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+				initReq.Headers.Add("X-Upload-Content-Length", videoBytes.Length.ToString());
+				initReq.Headers.Add("X-Upload-Content-Type", "video/mp4");
+
+				var initResp = await _httpClient.SendAsync(initReq);
+				if (!initResp.IsSuccessStatusCode)
+				{
+					var err = await initResp.Content.ReadAsStringAsync();
+					_logger.LogError("[YouTube Upload] Ошибка инициализации загрузки: {Err}", err);
+					return (false, null, $"Init error: {err}");
+				}
+
+				// Google отдает URL для загрузки бинарника в заголовке Location
+				var uploadUrl = initResp.Headers.Location;
+				if (uploadUrl == null)
+				{
+					return (false, null, "Google не вернул заголовок Location для загрузки видео.");
+				}
+
+				// 3. ЭТАП 2: Загрузка самого видеофайла
+				using var videoContent = new ByteArrayContent(videoBytes);
+				videoContent.Headers.ContentType = new MediaTypeHeaderValue("video/mp4");
+
+				using var uploadReq = new HttpRequestMessage(HttpMethod.Put, uploadUrl)
+				{
+					Content = videoContent
+				};
+
+				var uploadResp = await _httpClient.SendAsync(uploadReq);
+				var responseJson = await uploadResp.Content.ReadAsStringAsync();
+
+				if (!uploadResp.IsSuccessStatusCode)
+				{
+					_logger.LogError("[YouTube Upload] Ошибка загрузки видеопотока: {Err}", responseJson);
+					return (false, null, $"Upload error: {responseJson}");
+				}
+
+				// Успешно! Достаем ID созданного видео
+				using var doc = JsonDocument.Parse(responseJson);
+				string videoId = doc.RootElement.GetProperty("id").GetString()!;
+
+				_logger.LogInformation("✅ [YouTube Upload] Видео успешно опубликовано! VideoId: {Id}", videoId);
+				return (true, videoId, null);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[YouTube Upload] Исключение при загрузке видео");
+				return (false, null, ex.Message);
 			}
 		}
 	}
