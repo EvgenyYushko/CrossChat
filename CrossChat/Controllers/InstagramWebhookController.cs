@@ -143,32 +143,32 @@ namespace CrossChat.Controllers
 							if (change.Field == "comments")
 							{
 								var InstagramBusinessId = entry.Id;
-								var value = change.Value; // Это InstagramChangeValue (из твоей модели)
+								var value = change.Value;
 
-								// Защита: не отвечаем самим себе (если бот написал коммент, не надо на него отвечать)
-								// (В идеале нужно проверить, не совпадает ли value.From.Id с entry.Id)
-								_logger.LogInformation($"[Webhook] Новый коммент от {value.From.Username}: {value.Text}");
+								_logger.LogInformation($"[Webhook] Новый коммент от {value.From?.Username}: {value.Text}");
 
+								// 1. Защита: не отвечаем самим себе
 								if (value.From?.Id == InstagramBusinessId)
 								{
-									_logger.LogInformation($"Ignoring comment from self (bot)");
-									return Ok();
+									_logger.LogInformation("Ignoring comment from self (bot)");
+									continue; // ИСПРАВЛЕНО: continue вместо return Ok()
 								}
 
+								// 2. Защита: не отвечаем на вложенные комментарии (ответы на реплаи)
 								if (value.ParentId is not null)
 								{
-									_logger.LogInformation($"Ignoring comment from Parent");
-									return Ok();
+									_logger.LogInformation("Ignoring nested reply (has ParentId)");
+									continue; // ИСПРАВЛЕНО: continue вместо return Ok()
 								}
 
 								// Отправляем в RabbitMQ!
 								await _publishEndpoint.Publish(new InstagramCommentReceived
 								{
-									BusinessAccountId = InstagramBusinessId, // ID страницы, куда прилетел коммент
+									BusinessAccountId = InstagramBusinessId,
 									CommentId = value.Id,
-									Text = value.Text,
+									Text = value.Text ?? "",
 									Username = value.From?.Username ?? "user",
-									// Если в модели есть ParentId, передай его, иначе оставь null
+									MediaId = value.Media?.Id // Передаем ID поста!
 								});
 							}
 						}

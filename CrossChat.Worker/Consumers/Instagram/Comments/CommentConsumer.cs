@@ -1,4 +1,3 @@
-using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
@@ -6,6 +5,7 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace CrossChat.Worker.Consumers.Instagram.Comments
 {
@@ -16,19 +16,14 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 		private readonly IInstagramService _instaService;
 		private readonly IAiService _aiService;
 		private readonly IInstagramConsole _console;
-
-		private static readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
-		{
-			PermitLimit = 10,
-			Window = TimeSpan.FromMinutes(1),
-			QueueLimit = 0
-		});
+		private readonly IDatabase _redis;
 
 		public CommentConsumer(
 			ILogger<CommentConsumer> logger,
 			AppDbContext db,
 			IInstagramService instaService,
 			IAiService aiService,
+			IConnectionMultiplexer redis,
 			IInstagramConsole console)
 		{
 			_logger = logger;
@@ -36,16 +31,33 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 			_instaService = instaService;
 			_aiService = aiService;
 			_console = console;
+			_redis = redis.GetDatabase();
 		}
 
 		public async Task Consume(ConsumeContext<InstagramCommentReceived> context)
 		{
-			using var lease = await _rateLimiter.AcquireAsync(1, context.CancellationToken);
-			if (!lease.IsAcquired) throw new Exception("Rate limit exceeded (Comments).");
-
 			var msg = context.Message;
 
-			// 1. Ищем настройки пользователя
+			// 1. ЗАЩИТА ОТ ДУБЛЕЙ ВЕБХУКА: не обрабатывать один коммент дважды (24 часа)
+			var lockKey = $"lock:ig_comment:{msg.CommentId}";
+			if (!await _redis.StringSetAsync(lockKey, "processing", TimeSpan.FromHours(24), When.NotExists))
+			{
+				_logger.LogInformation("[Comment] Комментарий {CommentId} уже обработан. Пропускаем дубль.", msg.CommentId);
+				return;
+			}
+
+			// 2. ПРАВИЛО: НЕ БОЛЕЕ 1 ОТВЕТА ОДНОМУ ПОЛЬЗОВАТЕЛЮ ПОД ОДНИМ ПОСТОМ (24 часа)
+			if (!string.IsNullOrEmpty(msg.MediaId))
+			{
+				var userPostKey = $"lock:ig_comment_user:{msg.MediaId}:{msg.Username}";
+				if (!await _redis.StringSetAsync(userPostKey, "answered", TimeSpan.FromHours(24), When.NotExists))
+				{
+					_logger.LogInformation("[Comment] Мы уже отвечали пользователю @{User} под постом {MediaId}. Пропускаем.", msg.Username, msg.MediaId);
+					return;
+				}
+			}
+
+			// 3. Ищем настройки аккаунта
 			var settings = await _db.InstagramSettings
 				.AsNoTracking()
 				.FirstOrDefaultAsync(s => s.InstagramBusinessId == msg.BusinessAccountId);
@@ -56,24 +68,25 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 				return;
 			}
 
-			// 1 = ИИ, 2 = Шаблоны (дефолт), 3 = Комбинированный
 			int replyMode = settings.CommentReplyMode > 0 ? settings.CommentReplyMode : 2;
 			string? replyText = null;
 
 			try
 			{
-				// === СЦЕНАРИЙ 2: ТОЛЬКО ШАБЛОНЫ (0 расхода токенов ИИ) ===
+				await _console.Log($"Обработка комментария от @{msg.Username}: '{msg.Text}' (Режим: {replyMode})", settings.UserId, settings.Id);
+
+				// === 1. ТОЛЬКО ШАБЛОНЫ (Spintax + Human Salt) ===
 				if (replyMode == 2)
 				{
-					replyText = GetRandomTemplate(settings.CommentTemplates);
+					replyText = InstagramCommentEngine.GetRandomTemplate(settings.CommentTemplates);
 					_logger.LogInformation("[Comment] Сформирован шаблонный ответ для @{User}", msg.Username);
 				}
-				// === СЦЕНАРИЙ 1: ТОЛЬКО ИИ ===
+				// === 2. ТОЛЬКО ИИ ===
 				else if (replyMode == 1)
 				{
 					replyText = await GenerateAiCommentReply(settings, msg);
 				}
-				// === СЦЕНАРИЙ 3: КОМБИНИРОВАННЫЙ (ИИ + РЕЗЕРВНЫЙ ШАБЛОН) ===
+				// === 3. КОМБИНИРОВАННЫЙ ===
 				else if (replyMode == 3)
 				{
 					try
@@ -85,45 +98,43 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 						_logger.LogWarning(aiEx, "[Comment] Сбой генерации ИИ для коммента {CommentId}. Переход на резервный шаблон.", msg.CommentId);
 					}
 
-					// Если у ИИ кончились кредиты или он вернул пустоту — берем шаблон!
 					if (string.IsNullOrWhiteSpace(replyText))
 					{
 						_logger.LogInformation("[Comment] Использован резервный шаблон для коммента {CommentId} из-за сбоя ИИ.", msg.CommentId);
-						replyText = GetRandomTemplate(settings.CommentTemplates);
+						replyText = InstagramCommentEngine.GetRandomTemplate(settings.CommentTemplates);
 					}
 				}
 
 				if (string.IsNullOrWhiteSpace(replyText))
 				{
-					_logger.LogWarning("[Comment] Не удалось сформировать текст ответа (шаблоны пусты) для {CommentId}", msg.CommentId);
+					_logger.LogWarning("[Comment] Не удалось сформировать текст ответа для {CommentId}", msg.CommentId);
 					return;
 				}
 
-				// 4. Отправляем ответ в Инстаграм
+				// =========================================================================
+				// 4. ОЧЕЛОВЕЧИВАНИЕ: ПАУЗА 20-35 СЕКУНД (ИМИТАЦИЯ ЧТЕНИЯ И НАБОРА)
+				// =========================================================================
+				int humanPauseSeconds = Random.Shared.Next(20, 36);
+				_logger.LogInformation("[Comment] ⏳ Пауза {Sec}с перед отправкой ответа для @{User}...", humanPauseSeconds, msg.Username);
+				await Task.Delay(TimeSpan.FromSeconds(humanPauseSeconds));
+
+				// 5. Отправляем ответ в Инстаграм
 				await _instaService.ReplyToCommentAsync(msg.CommentId, replyText, settings.AccessToken);
-				await _console.Log($"Ответ на комментарий @{msg.Username}: «{replyText}»", settings.UserId, settings.Id);
+				await _console.Log($"✅ Ответили на комментарий @{msg.Username}: «{replyText}»", settings.UserId, settings.Id);
 			}
 			catch (Exception ex)
 			{
 				await _console.LogError($"Ошибка при ответе на коммент {msg.CommentId}: {ex.Message}", settings.UserId, settings.Id);
-				throw; // Бросаем только сетевые ошибки самого Инстаграма, чтобы MassTransit повторил
+				throw; // Пробрасываем ошибку для ретрая в MassTransit
 			}
 		}
 
 		private async Task<string?> GenerateAiCommentReply(InstagramSettings settings, InstagramCommentReceived msg)
 		{
 			var fullPrompt = settings.CommentPrompt ?? "";
-			fullPrompt += $"\nYou are now replying to a PUBLIC COMMENT under your post. The user @{msg.Username} wrote: '{msg.Text}'. Reply politely and concisely.";
+			fullPrompt += $"\nYou are replying to a PUBLIC COMMENT on Instagram. User @{msg.Username} wrote: '{msg.Text}'. Reply politely, naturally, and concisely.";
 
 			return await _aiService.GeminiRequest(fullPrompt, null);
-		}
-
-		/// <summary>
-		/// Выбирает случайную фразу из шаблонов (строки через Enter или JSON-массив)
-		/// </summary>
-		public static string? GetRandomTemplate(string? rawTemplates)
-		{
-			return InstagramCommentEngine.GetRandomTemplate(rawTemplates);
 		}
 	}
 }
