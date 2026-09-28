@@ -101,6 +101,11 @@ namespace CrossChat.Worker.Consumers.BlueSky
 
 				if (!string.IsNullOrWhiteSpace(aiResponse))
 				{
+					// ДОБАВЛЯЕМ ПАУЗУ ПЕРЕД ОТПРАВКОЙ:
+					int typingPause = Random.Shared.Next(8, 16);
+					_logger.LogInformation("[BlueSky] 💬 Имитация набора сообщения в чат {ConvoId} ({Sec}с)...", msg.ConvoId, typingPause);
+					await Task.Delay(TimeSpan.FromSeconds(typingPause));
+
 					// 7. Отправка ответа в ЛС
 					var isSent = await _bskyService.SendChatMessageAsync(botModel, msg.ConvoId, aiResponse);
 
