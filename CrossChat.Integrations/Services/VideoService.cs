@@ -6,68 +6,8 @@ namespace CrossChat.Integrations.Services
 	public static class VideoService
 	{
 		/// <summary>
-		/// Мгновенно удаляет все метаданные и манифесты C2PA (метку ИИ) из MP4 файла без перекодирования (без потери качества).
-		/// </summary>
-		public static async Task<bool> StripAiMetadataAsync(string videoPath, ILogger? logger = null)
-		{
-			if (!File.Exists(videoPath)) return false;
-
-			string directory = Path.GetDirectoryName(videoPath)!;
-			string cleanFileName = $"clean_{Path.GetFileName(videoPath)}";
-			string cleanPath = Path.Combine(directory, cleanFileName);
-
-			try
-			{
-				// -y : перезаписывать файл назначения
-				// -map_metadata -1 : удалить все глобальные и потоковые метаданные (C2PA)
-				// -c copy : скопировать видео/аудио потоки без пережатия (0.1 секунды)
-				var startInfo = new ProcessStartInfo
-				{
-					FileName = "ffmpeg",
-					Arguments = $"-y -i \"{videoPath}\" -map_metadata -1 -c copy \"{cleanPath}\"",
-					RedirectStandardOutput = true,
-					RedirectStandardError = true,
-					UseShellExecute = false,
-					CreateNoWindow = true
-				};
-
-				using var process = new Process { StartInfo = startInfo };
-				process.Start();
-
-				// Читаем stderr, чтобы предотвратить дедлок процесса
-				var errorTask = process.StandardError.ReadToEndAsync();
-				await process.WaitForExitAsync();
-				string errorOutput = await errorTask;
-
-				if (process.ExitCode == 0 && File.Exists(cleanPath))
-				{
-					// Заменяем исходный файл очищенным
-					File.Delete(videoPath);
-					File.Move(cleanPath, videoPath);
-
-					logger?.LogInformation("✅ Метаданные ИИ успешно удалены из видео: {Path}", videoPath);
-					return true;
-				}
-
-				logger?.LogWarning("⚠️ FFmpeg завершился с кодом {Code}: {Error}", process.ExitCode, errorOutput);
-				return false;
-			}
-			catch (Exception ex)
-			{
-				logger?.LogError(ex, "❌ Ошибка при вызове FFmpeg для очистки метаданных видео: {Path}", videoPath);
-				return false; // В случае ошибки публикуем оригинальный файл как есть
-			}
-			finally
-			{
-				if (File.Exists(cleanPath))
-				{
-					try { File.Delete(cleanPath); } catch { }
-				}
-			}
-		}
-
-		/// <summary>
-		/// Мгновенно удаляет все метаданные и манифесты C2PA (метку ИИ) из массива байтов видео без пережатия (0.1 сек).
+		/// 1. Перегрузка для байтов: принимает видео в памяти, прогоняет через FFmpeg и возвращает чистые байты.
+		/// Именно её вызывает YouTubePublisher!
 		/// </summary>
 		public static async Task<byte[]> StripAiMetadataAsync(byte[] videoBytes, ILogger? logger = null)
 		{
@@ -77,12 +17,13 @@ namespace CrossChat.Integrations.Services
 
 			try
 			{
-				// Записываем во временный файл
+				// 1. Сбрасываем байты во временный файл
 				await File.WriteAllBytesAsync(tempFile, videoBytes);
 
-				// Вызываем наш проверенный метод очистки FFmpeg (-map_metadata -1 -c copy)
+				// 2. Вызываем наш основной метод с продвинутой очисткой FFmpeg
 				bool success = await StripAiMetadataAsync(tempFile, logger);
 
+				// 3. Если очистка прошла успешно — считываем обновленные байты
 				if (success && File.Exists(tempFile))
 				{
 					return await File.ReadAllBytesAsync(tempFile);
@@ -97,9 +38,73 @@ namespace CrossChat.Integrations.Services
 			}
 			finally
 			{
+				// 4. Обязательно удаляем временный файл с диска
 				if (File.Exists(tempFile))
 				{
 					try { File.Delete(tempFile); } catch { }
+				}
+			}
+		}
+
+		/// <summary>
+		/// 2. Базовый метод для работы с файлами на диске (используется InstagramService и методом выше).
+		/// Здесь выполняется глубокая очистка метаданных и наложение микро-шума против детектора SynthID.
+		/// </summary>
+		public static async Task<bool> StripAiMetadataAsync(string videoPath, ILogger? logger = null)
+		{
+			if (!File.Exists(videoPath)) return false;
+
+			string directory = Path.GetDirectoryName(videoPath)!;
+			string cleanFileName = $"clean_{Path.GetFileName(videoPath)}";
+			string cleanPath = Path.Combine(directory, cleanFileName);
+
+			try
+			{
+				// Флаги:
+				// -map_metadata -1 и -map_metadata:s -1 : срезают глобальные и потоковые заголовки C2PA
+				// -dn : удаляет скрытые дорожки данных (data streams)
+				// -vf "noise=alls=1:allf=t" : накладывает незаметный 1% микро-шум, ломающий пиксельный SynthID
+				// -c:v libx264 -crf 18 -preset veryfast : легкий пересчет без потери качества
+				// -c:a copy : аудио оставляем как есть
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-y -i \"{videoPath}\" -map_metadata -1 -map_metadata:s -1 -dn -vf \"noise=alls=1:allf=t\" -c:v libx264 -crf 18 -preset veryfast -c:a copy \"{cleanPath}\"",
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(cleanPath))
+				{
+					File.Delete(videoPath);
+					File.Move(cleanPath, videoPath);
+
+					logger?.LogInformation("✅ Глубокая очистка от ИИ успешно завершена для: {Path}", videoPath);
+					return true;
+				}
+
+				logger?.LogWarning("⚠️ FFmpeg завершился с кодом {Code}: {Error}", process.ExitCode, errorOutput);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "❌ Ошибка FFmpeg при глубокой очистке: {Path}", videoPath);
+				return false;
+			}
+			finally
+			{
+				if (File.Exists(cleanPath))
+				{
+					try { File.Delete(cleanPath); } catch { }
 				}
 			}
 		}
