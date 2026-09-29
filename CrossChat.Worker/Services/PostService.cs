@@ -319,6 +319,7 @@ namespace CrossChat.Worker.Services
 							dbState.FirstComment = kvp.Value.FirstComment;
 							dbState.LocationId = kvp.Value.LocationId;
 							dbState.LocationName = kvp.Value.LocationName;
+							dbState.PrivacyStatus = kvp.Value.PrivacyStatus ?? "public";
 						}
 					}
 					else
@@ -341,6 +342,7 @@ namespace CrossChat.Worker.Services
 								FirstComment = kvp.Value.FirstComment,
 								LocationId = kvp.Value.LocationId,
 								LocationName = kvp.Value.LocationName,
+								PrivacyStatus = kvp.Value.PrivacyStatus ?? "public"
 							});
 						}
 					}
@@ -451,6 +453,7 @@ namespace CrossChat.Worker.Services
 					FirstComment = state.FirstComment,
 					LocationId = state.LocationId,
 					LocationName = state.LocationName,
+					PrivacyStatus = state.PrivacyStatus ?? "public" ,
 				};
 			}
 
@@ -510,6 +513,7 @@ namespace CrossChat.Worker.Services
 					FirstComment = kvp.Value.FirstComment,
 					LocationId = kvp.Value.LocationId,
 					LocationName = kvp.Value.LocationName,
+					PrivacyStatus = kvp.Value.PrivacyStatus ?? "public",
 				});
 			}
 

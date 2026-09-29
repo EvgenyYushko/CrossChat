@@ -9,12 +9,20 @@ namespace CrossChat.Integrations.Interfaces
 		Task<(string? AccessToken, int ExpiresIn)?> RefreshAccessTokenAsync(string refreshToken);
 		Task<YouTubeChannelInfoDto?> GetChannelInfoAsync(string accessToken);
 
+		// Загрузка видео с выбором статуса приватности (public, unlisted, private)
 		Task<(bool Success, string? VideoId, string? ErrorMessage)> UploadVideoAsync(
 			byte[] videoBytes,
 			string title,
 			string description,
 			List<string> tags,
+			string privacyStatus,
 			string accessToken);
+
+		// Загрузка кастомной обложки (Custom Thumbnail)
+		Task<bool> SetThumbnailAsync(string videoId, byte[] imageBytes, string accessToken);
+
+		// Публикация первого комментария под видео
+		Task<bool> AddCommentAsync(string videoId, string commentText, string accessToken);
 	}
 
 	public class YouTubeChannelInfoDto

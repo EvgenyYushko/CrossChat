@@ -31,7 +31,7 @@ namespace CrossChat.Worker.Publishers
 
 		public async Task PublishAsync(NetworkStateEntity state, string caption, List<string> images)
 		{
-			// 1. Ищем подключенный канал в БД
+			// 1. Ищем канал в БД
 			var channel = await _db.YouTubeSettings.FirstOrDefaultAsync(x => x.Id == state.BotId);
 			if (channel == null)
 			{
@@ -41,21 +41,24 @@ namespace CrossChat.Worker.Publishers
 			_logger.LogInformation("Начало отправки публикации на YouTube канал '{Title}' (@{Handle}).",
 				channel.ChannelTitle, channel.CustomUrl);
 
-			// 2. Ищем видео среди медиафайлов
+			// 2. Ищем видео и возможную обложку (картинку)
 			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+			bool isImage(string s) => !isVideo(s) && !s.Contains("audio/");
+
 			var videoItem = images?.FirstOrDefault(isVideo);
+			var coverImageItem = images?.FirstOrDefault(isImage); // Картинка для кастомного постера
 
 			if (string.IsNullOrEmpty(videoItem))
 			{
 				throw new InvalidOperationException("Для публикации в YouTube требуется видеофайл. Текстовые посты и одиночные фото не поддерживаются.");
 			}
 
-			// 3. Проверяем и обновляем токен доступа, если он истекает в ближайшие 5 минут
+			// 3. Обновляем токен доступа при необходимости
 			if (!channel.TokenExpiresAt.HasValue || channel.TokenExpiresAt.Value <= DateTimeNow.AddMinutes(5))
 			{
 				if (!string.IsNullOrEmpty(channel.RefreshToken))
 				{
-					_logger.LogInformation("[YouTube] Токен для '{Title}' истекает. Обновляем перед публикацией...", channel.ChannelTitle);
+					_logger.LogInformation("[YouTube] Токен для '{Title}' истекает. Обновляем...", channel.ChannelTitle);
 					var refreshResult = await _youTubeService.RefreshAccessTokenAsync(channel.RefreshToken);
 
 					if (refreshResult != null && !string.IsNullOrEmpty(refreshResult.Value.AccessToken))
@@ -72,22 +75,20 @@ namespace CrossChat.Worker.Publishers
 				}
 			}
 
-			// 4. Достаем бинарные данные видео из Base64
+			// 4. Достаем бинарные данные видео и очищаем метаданные
 			string cleanBase64 = videoItem.Contains(",") ? videoItem.Split(',')[1] : videoItem;
 			byte[] videoBytes = Convert.FromBase64String(cleanBase64);
 
-			// === 4.1. ВАЖНО: УДАЛЯЕМ МЕТКУ ИИ (C2PA) ЧЕРЕЗ FFMPEG ===
-			_logger.LogInformation("[YouTube] Очистка видео от метаданных ИИ (C2PA) перед публикацией...");
+			_logger.LogInformation("[YouTube] Очистка видео от метаданных ИИ перед публикацией...");
 			videoBytes = await VideoService.StripAiMetadataAsync(videoBytes, _logger);
 
-			// 5. Формируем Заголовок, Описание и Теги
+			// 5. Заголовок, описание и теги
 			string fullCaption = caption ?? string.Empty;
 			string title = "Новое видео";
 			string description = fullCaption;
 
 			if (!string.IsNullOrWhiteSpace(fullCaption))
 			{
-				// Берем первую строку текста в качестве заголовка (до 90 символов)
 				var lines = fullCaption.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 				if (lines.Length > 0 && !string.IsNullOrWhiteSpace(lines[0]))
 				{
@@ -96,14 +97,12 @@ namespace CrossChat.Worker.Publishers
 				}
 			}
 
-			// Автоматически добавляем тег #Shorts, если его нет
 			if (!description.Contains("#shorts", StringComparison.OrdinalIgnoreCase) &&
 				!title.Contains("#shorts", StringComparison.OrdinalIgnoreCase))
 			{
 				description = (description + "\n\n#Shorts").Trim();
 			}
 
-			// Извлекаем хештеги в официальные теги видеоролика
 			var tags = new List<string>();
 			var matches = Regex.Matches(description, @"#(\w+)");
 			foreach (Match m in matches)
@@ -112,22 +111,58 @@ namespace CrossChat.Worker.Publishers
 				if (!tags.Contains(tag)) tags.Add(tag);
 			}
 
-			_logger.LogInformation("[YouTube] Загрузка видео ({Bytes} байт) с заголовком: «{Title}»...", videoBytes.Length, title);
+			string privacy = string.IsNullOrWhiteSpace(state.PrivacyStatus) ? "public" : state.PrivacyStatus;
 
-			// 6. Вызываем загрузку через YouTube Data API v3
+			_logger.LogInformation("[YouTube] Загрузка видео ({Bytes} байт), заголовок: «{Title}», приватность: {P}...", 
+				videoBytes.Length, title, privacy);
+
+			// 6. Загружаем видео через YouTube Data API v3
 			var uploadResult = await _youTubeService.UploadVideoAsync(
 				videoBytes,
 				title,
 				description,
 				tags,
+				privacy,
 				channel.AccessToken!);
 
-			if (!uploadResult.Success)
+			if (!uploadResult.Success || string.IsNullOrEmpty(uploadResult.VideoId))
 			{
 				throw new Exception($"Ошибка при публикации видео на YouTube: {uploadResult.ErrorMessage}");
 			}
 
-			_logger.LogInformation("🎉 Видео успешно опубликовано на YouTube! Ссылка: https://youtube.com/shorts/{VideoId}", uploadResult.VideoId);
+			string videoId = uploadResult.VideoId;
+			_logger.LogInformation("🎉 Видео успешно опубликовано! VideoId: {Id}", videoId);
+
+			// === 7. ФИЧА: УСТАНОВКА КАСТОМНОЙ ОБЛОЖКИ (THUMBNAIL) ===
+			if (!string.IsNullOrEmpty(coverImageItem))
+			{
+				try
+				{
+					_logger.LogInformation("[YouTube] Найдено изображение обложки. Загрузка постера для видео {VideoId}...", videoId);
+					string imgBase64 = coverImageItem.Contains(",") ? coverImageItem.Split(',')[1] : coverImageItem;
+					byte[] coverBytes = Convert.FromBase64String(imgBase64);
+
+					await _youTubeService.SetThumbnailAsync(videoId, coverBytes, channel.AccessToken!);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось установить кастомную обложку для {VideoId}. Видео осталось со стандартным превью.", videoId);
+				}
+			}
+
+			// === 8. ФИЧА: ПУБЛИКАЦИЯ ПЕРВОГО ЗАКРЕПЛЕННОГО КОММЕНТАРИЯ ===
+			if (!string.IsNullOrWhiteSpace(state.FirstComment))
+			{
+				try
+				{
+					_logger.LogInformation("[YouTube] Отправка первого комментария под видео {VideoId}...", videoId);
+					await _youTubeService.AddCommentAsync(videoId, state.FirstComment, channel.AccessToken!);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось опубликовать первый комментарий под видео {VideoId}", videoId);
+				}
+			}
 		}
 	}
 }

@@ -250,7 +250,8 @@ namespace CrossChat.Controllers
 							ButtonText = kvp.Value.ButtonText,
 							ButtonUrl = kvp.Value.ButtonUrl,
 							LocationId = kvp.Value.LocationId,
-							LocationName = kvp.Value.LocationName
+							LocationName = kvp.Value.LocationName,
+							PrivacyStatus = kvp.Value.PrivacyStatus,
 						};
 					}
 
@@ -754,6 +755,10 @@ namespace CrossChat.Controllers
 			int.TryParse(Request.Form["priceTelegram"], out int priceTelegram);
 			if (priceTelegram <= 0) priceTelegram = 50;
 
+			// Читаем выбранный статус приватности для YouTube (public / unlisted / private)
+			string youtubePrivacy = Request.Form["youtubePrivacy"].ToString();
+			if (string.IsNullOrWhiteSpace(youtubePrivacy)) youtubePrivacy = "public";
+
 			// Флаг: одинаковые ли настройки звезд для всех каналов (по умолчанию true)
 			bool isUnifiedTelegramPaid = Request.Form["isUnifiedTelegramPaid"] != "false";
 			// Флаг единого режима для кнопок-ссылок
@@ -806,6 +811,8 @@ namespace CrossChat.Controllers
 							}
 						}
 
+						bool isYouTube = parsedNet == NetworkType.YouTube;
+
 						if (post.Networks.ContainsKey(netKey))
 						{
 							post.Networks[netKey].Caption = finalCaption;
@@ -824,10 +831,10 @@ namespace CrossChat.Controllers
 									channelButtonText = Request.Form[$"tgButtonText_{netKey}"].FirstOrDefault();
 									channelButtonUrl = Request.Form[$"tgButtonUrl_{netKey}"].FirstOrDefault();
 
-									 if (!string.IsNullOrEmpty(channelButtonText) && channelButtonText.Contains(",")) 
+									if (!string.IsNullOrEmpty(channelButtonText) && channelButtonText.Contains(","))
 										channelButtonText = channelButtonText.Split(',')[0].Trim();
 
-									if (!string.IsNullOrEmpty(channelButtonUrl) && channelButtonUrl.Contains(",")) 
+									if (!string.IsNullOrEmpty(channelButtonUrl) && channelButtonUrl.Contains(","))
 										channelButtonUrl = channelButtonUrl.Split(',')[0].Trim();
 								}
 
@@ -843,6 +850,8 @@ namespace CrossChat.Controllers
 								post.Networks[netKey].LocationId = locationId;
 								post.Networks[netKey].LocationName = locationName;
 							}
+
+							post.Networks[netKey].PrivacyStatus = isYouTube ? youtubePrivacy : "public";
 
 							// ЕСЛИ БЫЛ В ОШИБКЕ ИЛИ НОВЫЙ — СБРАСЫВАЕМ В PENDING!
 							if (post.Networks[netKey].Status == SocialStatus.None || post.Networks[netKey].Status == SocialStatus.Error)
@@ -864,6 +873,7 @@ namespace CrossChat.Controllers
 								ButtonUrl = isTg && !string.IsNullOrWhiteSpace(tgButtonUrl) ? tgButtonUrl.Trim() : null,
 								LocationId = isInstaOrFb ? locationId : null,
 								LocationName = isInstaOrFb ? locationName : null,
+								PrivacyStatus = isYouTube ? youtubePrivacy : "public"
 							};
 						}
 					}

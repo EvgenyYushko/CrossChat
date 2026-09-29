@@ -52,5 +52,8 @@ namespace CrossChat.Data.Entities.Posting
 
 		[MaxLength(255)]
 		public string? LocationName { get; set; }
+
+		[MaxLength(20)]
+		public string PrivacyStatus { get; set; } = "public";
 	}
 }

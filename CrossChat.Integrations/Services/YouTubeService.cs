@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Models; // <-- Подключаем свои локальные модели!
+using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -17,7 +17,7 @@ namespace CrossChat.Integrations.Services
 		public YouTubeService(
 			HttpClient httpClient,
 			ILogger<YouTubeService> logger,
-			IOptions<YouTubeOptions> options) // <-- Принимаем YouTubeOptions
+			IOptions<YouTubeOptions> options)
 		{
 			_httpClient = httpClient;
 			_logger = logger;
@@ -30,6 +30,7 @@ namespace CrossChat.Integrations.Services
 			{
 				"https://www.googleapis.com/auth/youtube.readonly",
 				"https://www.googleapis.com/auth/youtube.upload",
+				"https://www.googleapis.com/auth/youtube.force-ssl", // Нужно для комментов и превью!
 				"openid",
 				"profile",
 				"email"
@@ -38,7 +39,7 @@ namespace CrossChat.Integrations.Services
 			var scopeString = Uri.EscapeDataString(string.Join(" ", scopes));
 
 			return $"https://accounts.google.com/o/oauth2/v2/auth?" +
-				   $"client_id={_options.ClientId}&" + // <-- используем _options.ClientId
+				   $"client_id={_options.ClientId}&" +
 				   $"redirect_uri={Uri.EscapeDataString(redirectUri)}&" +
 				   $"response_type=code&" +
 				   $"scope={scopeString}&" +
@@ -54,8 +55,8 @@ namespace CrossChat.Integrations.Services
 			var postData = new Dictionary<string, string>
 			{
 				{ "code", code },
-				{ "client_id", _options.ClientId },           // <-- _options.ClientId
-				{ "client_secret", _options.ClientSecret },   // <-- _options.ClientSecret
+				{ "client_id", _options.ClientId },
+				{ "client_secret", _options.ClientSecret },
 				{ "redirect_uri", redirectUri },
 				{ "grant_type", "authorization_code" }
 			};
@@ -93,8 +94,8 @@ namespace CrossChat.Integrations.Services
 
 			var postData = new Dictionary<string, string>
 			{
-				{ "client_id", _options.ClientId },           // <-- _options.ClientId
-				{ "client_secret", _options.ClientSecret },   // <-- _options.ClientSecret
+				{ "client_id", _options.ClientId },
+				{ "client_secret", _options.ClientSecret },
 				{ "refresh_token", refreshToken },
 				{ "grant_type", "refresh_token" }
 			};
@@ -200,10 +201,19 @@ namespace CrossChat.Integrations.Services
 			string title,
 			string description,
 			List<string> tags,
+			string privacyStatus,
 			string accessToken)
 		{
 			try
 			{
+				// Валидация приватности
+				string validPrivacy = privacyStatus?.ToLower() switch
+				{
+					"unlisted" => "unlisted",
+					"private" => "private",
+					_ => "public"
+				};
+
 				// 1. Формируем метаданные видеоролика
 				var metadata = new
 				{
@@ -212,19 +222,21 @@ namespace CrossChat.Integrations.Services
 						title = title,
 						description = description,
 						tags = tags,
-						categoryId = "22" // Категория по умолчанию: "People & Blogs"
+						categoryId = "22" // People & Blogs
 					},
 					status = new
 					{
-						privacyStatus = "public", // Сразу делаем публичным
-						selfDeclaredMadeForKids = false
+						privacyStatus = validPrivacy,
+						selfDeclaredMadeForKids = false,
+						embeddable = true,
+						containsSyntheticMedia = false
 					}
 				};
 
 				var jsonMetadata = JsonSerializer.Serialize(metadata);
 				var metadataContent = new StringContent(jsonMetadata, Encoding.UTF8, "application/json");
 
-				// 2. ЭТАП 1: Инициализация сессии загрузки (Resumable Upload)
+				// 2. Инициализация Resumable Upload
 				var initUrl = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
 				using var initReq = new HttpRequestMessage(HttpMethod.Post, initUrl)
 				{
@@ -243,14 +255,13 @@ namespace CrossChat.Integrations.Services
 					return (false, null, $"Init error: {err}");
 				}
 
-				// Google отдает URL для загрузки бинарника в заголовке Location
 				var uploadUrl = initResp.Headers.Location;
 				if (uploadUrl == null)
 				{
 					return (false, null, "Google не вернул заголовок Location для загрузки видео.");
 				}
 
-				// 3. ЭТАП 2: Загрузка самого видеофайла
+				// 3. Загрузка бинарных данных видео
 				using var videoContent = new ByteArrayContent(videoBytes);
 				videoContent.Headers.ContentType = new MediaTypeHeaderValue("video/mp4");
 
@@ -268,17 +279,101 @@ namespace CrossChat.Integrations.Services
 					return (false, null, $"Upload error: {responseJson}");
 				}
 
-				// Успешно! Достаем ID созданного видео
 				using var doc = JsonDocument.Parse(responseJson);
 				string videoId = doc.RootElement.GetProperty("id").GetString()!;
 
-				_logger.LogInformation("✅ [YouTube Upload] Видео успешно опубликовано! VideoId: {Id}", videoId);
+				_logger.LogInformation("✅ [YouTube Upload] Видео успешно опубликовано! VideoId: {Id}, Privacy: {P}", videoId, validPrivacy);
 				return (true, videoId, null);
 			}
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "[YouTube Upload] Исключение при загрузке видео");
 				return (false, null, ex.Message);
+			}
+		}
+
+		/// <summary>
+		/// Устанавливает кастомную обложку (Thumbnail) для опубликованного видео
+		/// </summary>
+		public async Task<bool> SetThumbnailAsync(string videoId, byte[] imageBytes, string accessToken)
+		{
+			try
+			{
+				var url = $"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={videoId}";
+
+				using var req = new HttpRequestMessage(HttpMethod.Post, url);
+				req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+				using var content = new ByteArrayContent(imageBytes);
+				content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+				req.Content = content;
+
+				var resp = await _httpClient.SendAsync(req);
+				if (resp.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("✅ [YouTube Thumbnail] Кастомная обложка успешно установлена для видео {VideoId}", videoId);
+					return true;
+				}
+
+				var err = await resp.Content.ReadAsStringAsync();
+				_logger.LogWarning("⚠️ [YouTube Thumbnail] Не удалось установить обложку для {VideoId}: {Err}", videoId, err);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [YouTube Thumbnail] Исключение при загрузке обложки");
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Публикует первый комментарий под видео от имени владельца канала
+		/// </summary>
+		public async Task<bool> AddCommentAsync(string videoId, string commentText, string accessToken)
+		{
+			if (string.IsNullOrWhiteSpace(commentText)) return false;
+
+			try
+			{
+				var url = "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet";
+
+				var payload = new
+				{
+					snippet = new
+					{
+						videoId = videoId,
+						topLevelComment = new
+						{
+							snippet = new
+							{
+								textOriginal = commentText
+							}
+						}
+					}
+				};
+
+				var json = JsonSerializer.Serialize(payload);
+				using var req = new HttpRequestMessage(HttpMethod.Post, url)
+				{
+					Content = new StringContent(json, Encoding.UTF8, "application/json")
+				};
+				req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+				var resp = await _httpClient.SendAsync(req);
+				if (resp.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("✅ [YouTube Comment] Первый комментарий успешно оставлен под видео {VideoId}", videoId);
+					return true;
+				}
+
+				var err = await resp.Content.ReadAsStringAsync();
+				_logger.LogWarning("⚠️ [YouTube Comment] Ошибка отправки комментария под {VideoId}: {Err}", videoId, err);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [YouTube Comment] Исключение при отправке первого комментария");
+				return false;
 			}
 		}
 	}
