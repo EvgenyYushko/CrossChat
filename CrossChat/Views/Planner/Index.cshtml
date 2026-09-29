@@ -2129,11 +2129,23 @@
                             syncFileInput();
                             renderGallery();
 
-                            const privacySelect = document.getElementById('youtubePrivacySelect');
-                            if (privacySelect && netData && netData.privacyStatus) {
-                                privacySelect.value = netData.privacyStatus;
+                            // === ПОДГРУЗКА ПРИВАТНОСТИ YOUTUBE (БЕЗОПАСНО ДЛЯ РЕЖИМА "ALL") ===
+                            let postYtPrivacy = 'public';
+                            for (let key in networks) {
+                                if (networks[key] && key.includes("YouTube")) {
+                                    postYtPrivacy = networks[key].privacyStatus || networks[key].PrivacyStatus || 'public';
+                                    break;
+                                }
                             }
-                            updateYouTubePrivacyVisibility();
+
+                            const privacySelect = document.getElementById('youtubePrivacySelect');
+                            if (privacySelect) {
+                                privacySelect.value = postYtPrivacy;
+                            }
+                            if (typeof updateYouTubePrivacyVisibility === 'function') {
+                                updateYouTubePrivacyVisibility();
+                            }
+                            // =================================================================
 
                             if (typeof updateTelegramVideoNoteVisibility === 'function') {
                                 updateTelegramVideoNoteVisibility();
