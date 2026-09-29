@@ -297,7 +297,7 @@ namespace CrossChat.Controllers
 			// Чтобы аватарка не пропадала через неделю
 			if (!string.IsNullOrEmpty(picUrl))
 			{
-				settings.ProfilePictureUrl = await DownloadImageAsBase64(picUrl);
+				settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(picUrl);
 			}
 
 			// 4. Сохраняем изменения
