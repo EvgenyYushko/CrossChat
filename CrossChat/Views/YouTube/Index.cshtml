@@ -252,11 +252,11 @@
                 border-radius: 50%;
             }
 
-        input:checked + .slider {
+        input:checked ~ .slider {
             background-color: #10b981;
         }
 
-            input:checked + .slider:before {
+            input:checked ~ .slider:before {
                 transform: translateX(24px);
             }
 
@@ -289,8 +289,30 @@
     <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Профиль</a>
 }
 
+@section Scripts {
+    <script>
+        function updateYtModeUi() {
+            const mode = document.getElementById('ytReplyModeSelect').value;
+            const templatesBox = document.getElementById('ytTemplatesBox');
+            const aiBox = document.getElementById('ytAiPromptBox');
+
+            if (mode === "1") {
+                templatesBox.style.display = "none";
+                aiBox.style.display = "block";
+            } else if (mode === "2") {
+                templatesBox.style.display = "block";
+                aiBox.style.display = "none";
+            } else {
+                templatesBox.style.display = "block";
+                aiBox.style.display = "block";
+            }
+        }
+    </script>
+}
+
 <div class="container">
     <div class="card">
+        <!-- ШАПКА КАНАЛА -->
         <div class="connected-header">
             @if (!string.IsNullOrEmpty(Model.ProfilePictureUrl))
             {
@@ -321,6 +343,7 @@
             </div>
         </div>
 
+        <!-- КНОПКИ ДЕЙСТВИЯ -->
         <div class="action-buttons-group">
             <a href="@channelUrl" target="_blank" class="btn btn-yt">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -333,29 +356,80 @@
             </a>
         </div>
 
+        <!-- ФОРМА НАСТРОЕК -->
         <div class="form-section">
             <form action="/youtube/update-settings" method="post">
                 <input type="hidden" name="botId" value="@Model.Id">
 
-                <h4 style="margin-bottom: 15px; color: var(--text-main);">Настройки канала</h4>
+                <h4 style="margin-bottom: 20px; color: var(--text-main); font-weight: 700;">Настройки канала</h4>
 
+                <!-- 1. ТУМБЛЕР АКТИВНОСТИ ДЛЯ АВТОПОСТИНГА (ИСПРАВЛЕН) -->
                 <div class="switch-container">
-                    <label style="margin: 0;">Включен для автопостинга</label>
+                    <label style="margin: 0; font-weight: 600; cursor: pointer;">Включен для автопостинга</label>
                     <label class="switch">
+                        <input type="hidden" name="isActive" value="false">
                         <input type="checkbox" name="isActive" value="true" @(Model.IsActive ? "checked" : "")>
                         <span class="slider"></span>
                     </label>
-                    <input type="hidden" name="isActive" value="false">
                 </div>
 
+                <!-- 2. БЛОК АВТООТВЕТОВ НА КОММЕНТАРИИ YOUTUBE -->
+                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label style="margin: 0; font-weight: 600; cursor: pointer;">🤖 Автоответы на комментарии (Shorts & Видео)</label>
+                        <label class="switch">
+                            <input type="checkbox" id="ytCommentsToggle" name="isCommentsEnabled" value="true" @(Model.IsCommentsEnabled ? "checked" : "")
+                                   onchange="document.getElementById('ytCommentsSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
+                            <span class="slider"></span>
+                        </label>
+                        <!-- Вынесли наружу из .switch: теперь он не ломает CSS-анимацию! -->
+                        <input type="hidden" name="isCommentsEnabled" value="false">
+                    </div>
+
+                    <!-- ВНУТРЕННИЕ НАСТРОЙКИ АВТООТВЕТОВ -->
+                    <div id="ytCommentsSettingsBlock" style="display: @(Model.IsCommentsEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Режим генерации ответов:</label>
+                            <select name="commentReplyMode" id="ytReplyModeSelect" class="select-input" style="font-weight: 600; cursor: pointer;" onchange="updateYtModeUi()">
+                                <option value="2" selected="@(Model.CommentReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
+                                <option value="3" selected="@(Model.CommentReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
+                                <option value="1" selected="@(Model.CommentReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
+                            </select>
+                        </div>
+
+                        <!-- ПОЛЕ ДЛЯ ШАБЛОНОВ СО SPINTAX -->
+                        <div id="ytTemplatesBox" style="display: @(Model.CommentReplyMode == 1 ? "none" : "block");" class="form-group">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                                Шаблоны ответов (со Spintax {вариант1|вариант2}):
+                            </label>
+                            <textarea name="commentTemplates" rows="3" class="select-input" style="font-size: 0.9rem;"
+                                      placeholder="{Спасибо|Благодарю}! ❤️&#10;Рады видеть на канале! ✨">@(Model.CommentTemplates ?? "{Спасибо|Благодарю}! ❤️\nРады видеть на канале! ✨")</textarea>
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Движок автоматически выбирает случайные фразы, чтобы исключить спам-фильтры YouTube.
+                            </small>
+                        </div>
+
+                        <!-- ПРОМПТ ДЛЯ ИИ-ОТВЕТОВ НА КОММЕНТАРИИ -->
+                        <div id="ytAiPromptBox" style="display: @(Model.CommentReplyMode == 2 ? "none" : "block");" class="form-group">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Промпт для ответов ИИ:</label>
+                            <textarea name="commentPrompt" rows="2" class="select-input" style="font-size: 0.9rem;">@Model.CommentPrompt</textarea>
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Инструкция нейросети, в каком стиле отвечать зрителям в комментариях.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. СИСТЕМНЫЙ ПРОМПТ ДЛЯ ПОСТИНГА (ВОССТАНОВЛЕН) -->
                 <div class="form-group">
-                    <label>Промпт для генерации описания и тегов (ИИ)</label>
-                    <textarea name="systemPrompt" rows="3">@Model.SystemPrompt</textarea>
+                    <label>Промпт для генерации описания и тегов к видео (ИИ)</label>
+                    <textarea name="systemPrompt" rows="3" class="select-input">@Model.SystemPrompt</textarea>
                     <small style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px; display: block;">
-                        Используется при автогенерации описаний к Shorts и видео.
+                        Используется при автогенерации заголовков и SEO-описаний к Shorts и длинным видео.
                     </small>
                 </div>
 
+                <!-- 4. ПРИВЯЗКА К ПРОФИЛЮ -->
                 <div class="form-group">
                     <label>Привязан к профилю</label>
                     <select name="profileId" class="select-input">
@@ -371,9 +445,10 @@
                     </select>
                 </div>
 
-                <button type="submit" class="btn btn-primary" style="margin-top: 10px;">Сохранить настройки</button>
+                <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Сохранить настройки</button>
             </form>
 
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ КАНАЛА -->
             <form action="/youtube/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить этот YouTube-канал от CrossChat?');">
                 <button type="submit" class="btn btn-danger">Отключить канал</button>
             </form>

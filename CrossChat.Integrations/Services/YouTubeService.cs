@@ -376,5 +376,105 @@ namespace CrossChat.Integrations.Services
 				return false;
 			}
 		}
+
+		public async Task<List<YouTubeCommentDto>> GetRecentCommentsAsync(string channelId, string accessToken, int maxResults = 20)
+		{
+			var result = new List<YouTubeCommentDto>();
+			var url = $"https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&allThreadsRelatedToChannelId={channelId}&order=time&maxResults={maxResults}";
+
+			try
+			{
+				using var req = new HttpRequestMessage(HttpMethod.Get, url);
+				req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+				var resp = await _httpClient.SendAsync(req);
+				if (!resp.IsSuccessStatusCode)
+				{
+					var err = await resp.Content.ReadAsStringAsync();
+					_logger.LogWarning("[YouTube] Ошибка опроса комментариев для канала {ChannelId}: {Err}", channelId, err);
+					return result;
+				}
+
+				var json = await resp.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+
+				if (!doc.RootElement.TryGetProperty("items", out var items)) return result;
+
+				foreach (var item in items.EnumerateArray())
+				{
+					var topComment = item.GetProperty("snippet").GetProperty("topLevelComment");
+					var commentId = topComment.GetProperty("id").GetString()!;
+					var snippet = topComment.GetProperty("snippet");
+
+					var videoId = snippet.TryGetProperty("videoId", out var vidProp) ? vidProp.GetString() ?? "" : "";
+					var author = snippet.GetProperty("authorDisplayName").GetString() ?? "User";
+					var text = snippet.GetProperty("textOriginal").GetString() ?? "";
+					var publishedAt = snippet.GetProperty("publishedAt").GetDateTime();
+
+					string? authorChanId = null;
+					if (snippet.TryGetProperty("authorChannelId", out var authorObj) &&
+						authorObj.TryGetProperty("value", out var valProp))
+					{
+						authorChanId = valProp.GetString();
+					}
+
+					result.Add(new YouTubeCommentDto
+					{
+						CommentId = commentId,
+						VideoId = videoId,
+						AuthorDisplayName = author,
+						AuthorChannelId = authorChanId,
+						Text = text,
+						PublishedAt = publishedAt
+					});
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[YouTube] Исключение при получении комментариев канала {ChannelId}", channelId);
+			}
+
+			return result;
+		}
+
+		public async Task<bool> ReplyToCommentAsync(string parentCommentId, string replyText, string accessToken)
+		{
+			var url = "https://www.googleapis.com/youtube/v3/comments?part=snippet";
+
+			try
+			{
+				var payload = new
+				{
+					snippet = new
+					{
+						parentId = parentCommentId,
+						textOriginal = replyText
+					}
+				};
+
+				var json = JsonSerializer.Serialize(payload);
+				using var req = new HttpRequestMessage(HttpMethod.Post, url)
+				{
+					Content = new StringContent(json, Encoding.UTF8, "application/json")
+				};
+				req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+				var resp = await _httpClient.SendAsync(req);
+				if (resp.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("✅ [YouTube Reply] Ответ успешно опубликован на комментарий {ParentId}", parentCommentId);
+					return true;
+				}
+
+				var err = await resp.Content.ReadAsStringAsync();
+				_logger.LogError("❌ [YouTube Reply] Ошибка отправки ответа: {Err}", err);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [YouTube Reply] Исключение при публикации ответа");
+				return false;
+			}
+		}
 	}
 }

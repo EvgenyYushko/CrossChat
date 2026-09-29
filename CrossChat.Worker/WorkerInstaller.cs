@@ -8,6 +8,7 @@ using CrossChat.Worker.Consumers.Facebook.Comments;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
 using CrossChat.Worker.Consumers.Threads;
+using CrossChat.Worker.Consumers.YouTube;
 using CrossChat.Worker.Facades;
 using CrossChat.Worker.Models;
 using CrossChat.Worker.Publishers;
@@ -39,6 +40,9 @@ namespace CrossChat.Worker
 			x.AddConsumer<FaceBookReplyConsumer>(typeof(FaceBookReplyDefinition));
 			x.AddConsumer<FacebookCommentConsumer>(typeof(FacebookCommentDefinition));
 			x.AddConsumer<FacebookWebhookConsumer>(typeof(FacebookWebhookDefinition));
+
+			x.AddConsumer<YouTubeReplyConsumer>(typeof(YouTubeReplyDefinition));
+			x.AddConsumer<YouTubePublishConsumer>(typeof(YouTubePublishDefinition));
 
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}

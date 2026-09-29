@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -41,5 +40,22 @@ namespace CrossChat.Data.Entities
 		public string SystemPrompt { get; set; } = "Ты ассистент YouTube канала. Пиши цепляющие описания и теги для видео.";
 
 		public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+		// === НАСТРОЙКИ АВТООТВЕТОВ НА КОММЕНТАРИИ ===
+
+		// Включен ли автоответчик
+		public bool IsCommentsEnabled { get; set; } = false;
+
+		// Режим ответов: 1 = Только ИИ, 2 = Только шаблоны (Spintax), 3 = Комбинированный
+		public int CommentReplyMode { get; set; } = 2;
+
+		// Шаблоны со Spintax
+		public string? CommentTemplates { get; set; } = "{Спасибо|Благодарю|Пасиб} за {отклик|комментарий}! ❤️\nРады видеть вас на нашем канале! ✨\n{Заглядывайте|Заходите} почаще 😊";
+
+		// Промпт для ИИ (Gemini)
+		public string CommentPrompt { get; set; } = "Ты автор YouTube канала. Отвечай на комментарии дружелюбно, живо и кратко на том же языке, на котором написан комментарий.";
+
+		// Дата последнего опроса, чтобы не запрашивать древние комментарии
+		public DateTime? LastCommentProcessedAt { get; set; }
 	}
 }

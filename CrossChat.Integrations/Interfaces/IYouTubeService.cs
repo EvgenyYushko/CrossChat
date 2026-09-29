@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace CrossChat.Integrations.Interfaces
 {
 	public interface IYouTubeService
@@ -23,6 +21,9 @@ namespace CrossChat.Integrations.Interfaces
 
 		// Публикация первого комментария под видео
 		Task<bool> AddCommentAsync(string videoId, string commentText, string accessToken);
+
+		Task<List<YouTubeCommentDto>> GetRecentCommentsAsync(string channelId, string accessToken, int maxResults = 20);
+		Task<bool> ReplyToCommentAsync(string parentCommentId, string replyText, string accessToken);
 	}
 
 	public class YouTubeChannelInfoDto
@@ -33,5 +34,15 @@ namespace CrossChat.Integrations.Interfaces
 		public string? AvatarUrl { get; set; }
 		public ulong SubscriberCount { get; set; }
 		public ulong VideoCount { get; set; }
+	}
+
+	public class YouTubeCommentDto
+	{
+		public string CommentId { get; set; } = string.Empty;
+		public string VideoId { get; set; } = string.Empty;
+		public string AuthorDisplayName { get; set; } = string.Empty;
+		public string? AuthorChannelId { get; set; }
+		public string Text { get; set; } = string.Empty;
+		public DateTime PublishedAt { get; set; }
 	}
 }

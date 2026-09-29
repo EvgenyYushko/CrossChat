@@ -185,6 +185,13 @@ builder.Services.AddQuartz(q =>
 		.WithIdentity($"{nameof(FacebookDailyStoryJob)}-Trigger")
 		.WithSimpleSchedule(x => x.WithIntervalInMinutes(2).RepeatForever()));
 
+	// 10
+	var youTubeStoryJobKey = new JobKey(nameof(YouTubeCommentsPollingJob));
+	q.AddJob<YouTubeCommentsPollingJob>(opts => opts.WithIdentity(youTubeStoryJobKey));
+	q.AddTrigger(opts => opts
+		.ForJob(youTubeStoryJobKey)
+		.WithIdentity($"{nameof(YouTubeCommentsPollingJob)}-Trigger")
+		 .WithCronSchedule("0 */5 * ? * *"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

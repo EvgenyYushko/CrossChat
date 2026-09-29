@@ -164,12 +164,18 @@ namespace CrossChat.Controllers
 				await _db.SaveChangesAsync();
 			}
 
-			return RedirectToAction("Profile", "Auth");
+			return RedirectToAction("Index", "YouTube");
 		}
 
 		// 5. Сохранение настроек канала
 		[HttpPost("update-settings")]
-		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
+		public async Task<IActionResult> UpdateSettings(
+			int botId,
+			string systemPrompt,
+			int profileId,
+			int commentReplyMode,
+			string? commentTemplates,
+			string commentPrompt)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -180,15 +186,27 @@ namespace CrossChat.Controllers
 
 			try
 			{
+				// 1. Бронебойное считывание активности автопостинга
 				var isActiveRaw = Request.Form["isActive"].ToString();
 				bool isActive = isActiveRaw.Contains("true");
+
+				// 2. Бронебойное считывание включения автоответов (не зависит от порядка hidden/checkbox)
+				var isCommentsRaw = Request.Form["isCommentsEnabled"].ToString();
+				bool isComments = isCommentsRaw.Contains("true");
 
 				settings.IsActive = isActive;
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.ProfileId = profileId;
 
+				// Сохраняем параметры автоответов:
+				settings.IsCommentsEnabled = isComments;
+				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
+				settings.CommentTemplates = commentTemplates;
+				settings.CommentPrompt = !string.IsNullOrWhiteSpace(commentPrompt) ? commentPrompt : settings.CommentPrompt;
+
 				await _db.SaveChangesAsync();
-				_logger.LogInformation("✅ [YouTube] Настройки канала '{Title}' обновлены.", settings.ChannelTitle);
+				_logger.LogInformation("✅ [YouTube] Настройки канала '{Title}' успешно сохранены. Автоответы: {Status}",
+					settings.ChannelTitle, isComments ? "ВКЛ" : "ВЫКЛ");
 			}
 			catch (Exception ex)
 			{
