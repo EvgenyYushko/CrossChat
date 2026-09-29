@@ -217,8 +217,7 @@ namespace CrossChat.Integrations.Services
 					status = new
 					{
 						privacyStatus = "public", // Сразу делаем публичным
-						selfDeclaredMadeForKids = false,
-						containsSyntheticMedia = false 
+						selfDeclaredMadeForKids = false
 					}
 				};
 
