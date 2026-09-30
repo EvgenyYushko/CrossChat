@@ -1,28 +1,39 @@
 using System.Security.Claims;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Telegram.Bot;
 
 namespace CrossChat.Controllers
 {
 	[Authorize]
 	[Route("telegram-channel")]
-	public class TelegramChannelController : Controller
+	public class TelegramChannelController : BaseController // <-- Наследуемся от BaseController
 	{
 		private readonly AppDbContext _db;
 		private readonly IDistributedCache _cache;
 		private readonly ILogger<TelegramChannelController> _logger;
+		private readonly ITelegramBotClient _botClient;
 
-		public TelegramChannelController(AppDbContext db, IDistributedCache cache, ILogger<TelegramChannelController> logger)
+		public TelegramChannelController(
+			AppDbContext db, 
+			IDistributedCache cache, 
+			ILogger<TelegramChannelController> logger,
+			ITelegramBotClient botClient)
 		{
 			_db = db;
 			_cache = cache;
 			_logger = logger;
+			_botClient = botClient;
 		}
 
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК КАНАЛА (/telegram-channel)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int? botId)
 		{
@@ -36,6 +47,13 @@ namespace CrossChat.Controllers
 			{
 				settings = await _db.TelegramChannelSettings
 					.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+				// МЕТОД BaseController: считаем посты для предупреждения перед отключением
+				ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.TelegramChannel, botId.Value);
+			}
+			else
+			{
+				ViewBag.LinkedPostsCount = 0;
 			}
 
 			ViewBag.Profiles = await _db.Profile.Where(p => p.UserId == userId).ToListAsync();
@@ -43,15 +61,16 @@ namespace CrossChat.Controllers
 			return View(settings);
 		}
 
-		// Генерация одноразового диплинка для связки Telegram аккаунта
+		// ==========================================================
+		// 2. ГЕНЕРАЦИЯ ДИПЛИНКА ДЛЯ ПРИВЯЗКИ TELEGRAM
+		// ==========================================================
 		[HttpPost("generate-link-code")]
 		public async Task<IActionResult> GenerateLinkCode()
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			var code = Guid.NewGuid().ToString("N")[..8]; // Одноразовый код
+			var code = Guid.NewGuid().ToString("N")[..8];
 
-			// Сохраняем связку код -> userId на 15 минут в Redis
 			await _cache.SetStringAsync($"tg_link:{code}", userId.ToString(), new DistributedCacheEntryOptions
 			{
 				AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15)
@@ -61,13 +80,15 @@ namespace CrossChat.Controllers
 			return Json(new { link = deepLink });
 		}
 
+		// ==========================================================
+		// 3. СОХРАНЕНИЕ НАСТРОЕК КАНАЛА
+		// ==========================================================
 		[HttpPost("update")]
 		[Authorize]
 		public async Task<IActionResult> Update(
 			int botId,
 			string systemPrompt,
 			int profileId,
-			// === НОВЫЕ ПАРАМЕТРЫ ЗАЯВОК ===
 			bool autoApproveJoinRequests,
 			bool notifyOnJoinRequests,
 			bool notifyOnMemberLeft)
@@ -84,30 +105,51 @@ namespace CrossChat.Controllers
 				channel.SystemPrompt = systemPrompt ?? "";
 				channel.ProfileId = profileId;
 
-				// Сохраняем настройки автоприема заявок:
 				channel.AutoApproveJoinRequests = autoApproveJoinRequests;
 				channel.NotifyOnJoinRequests = notifyOnJoinRequests;
 				channel.NotifyOnMemberLeft = notifyOnMemberLeft;
 
 				await _db.SaveChangesAsync();
+				_logger.LogInformation("✅ [Telegram Channel] Настройки канала '{Title}' обновлены.", channel.ChannelTitle);
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 
+		// ==========================================================
+		// 4. ОТКЛЮЧЕНИЕ КАНАЛА (С УМНОЙ ОЧИСТКОЙ ПОСТОВ ИЗ BaseController)
+		// ==========================================================
 		[HttpPost("disconnect")]
-		public async Task<IActionResult> Disconnect(int botId)
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-			var settings = await _db.TelegramChannelSettings.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+			var settings = await _db.TelegramChannelSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			if (settings != null)
 			{
+				// 1. Умная очистка публикаций и файлов Google Drive:
+				await CleanupLinkedPostsAsync(NetworkType.TelegramChannel, botId);
+
+				// 2. Бот вежливо выходит из канала в самом Telegram (если может)
+				try
+				{
+					await _botClient.LeaveChat(settings.ChannelId);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось выполнить LeaveChat для канала {ChannelId}", settings.ChannelId);
+				}
+
+				// 3. Удаляем канал из БД
 				_db.TelegramChannelSettings.Remove(settings);
 				await _db.SaveChangesAsync();
+
+				_logger.LogInformation("✅ [Telegram Channel] Канал '{Title}' успешно отключен с сайта.", settings.ChannelTitle);
 			}
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Profile", "Auth");
 		}
 	}
 }

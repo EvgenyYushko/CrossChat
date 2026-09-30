@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -52,9 +53,8 @@ namespace CrossChat.Controllers
 		{
 			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// Загружаем настройки, чтобы передать их во View
 			var settings = await _db.InstagramSettings
 				.Include(p => p.Profile)
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
@@ -63,7 +63,9 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
-			// Генерируем ссылки для кнопок (они нужны, если user.InstagramSettings == null)
+			// ИСПОЛЬЗУЕМ МЕТОД ИЗ BaseController: считаем посты для умного предупреждения в UI
+			ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.Instagram, botId);
+
 			var instaScopes = string.Join(",",
 				"instagram_business_basic",
 				"instagram_business_manage_messages",
@@ -73,7 +75,7 @@ namespace CrossChat.Controllers
 			);
 			ViewBag.InstaLoginUrl = $"https://www.instagram.com/oauth/authorize?" +
 						   $"client_id={InstagramAppId}&" +
-						   $"redirect_uri={RedirectUri}&" + // Важно: URI должен быть добавлен в Instagram Login Settings
+						   $"redirect_uri={RedirectUri}&" +
 						   $"response_type=code&" +
 						   $"force_reauth=true&" +
 						   $"scope={instaScopes}";
@@ -82,28 +84,35 @@ namespace CrossChat.Controllers
 		}
 
 		// ==========================================================
-		// 3. ОТКЛЮЧЕНИЕ АККАУНТА (ПОЛЬЗОВАТЕЛЕМ)
+		// 2. ОТКЛЮЧЕНИЕ АККАУНТА (С УМНОЙ ОЧИСТКОЙ ПОСТОВ)
 		// ==========================================================
 		[HttpPost("disconnect")]
 		[Authorize]
-		public async Task<IActionResult> Disconnect(int botId)
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 			var settings = await _db.InstagramSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
-			if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
+			if (settings != null)
 			{
-				// Сначала пытаемся честно отписаться от вебхуков
-				try
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И GOOGLE DRIVE ИЗ BaseController:
+				await CleanupLinkedPostsAsync(NetworkType.Instagram, botId);
+
+				// 2. Отписка от вебхуков Meta
+				if (!string.IsNullOrEmpty(settings.AccessToken))
 				{
-					await ManageWebhooksAsync(settings.AccessToken, false);
-				}
-				catch (Exception ex)
-				{
-					_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
+					try
+					{
+						await ManageWebhooksAsync(settings.AccessToken, false);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
+					}
 				}
 
+				// 3. Полное удаление аккаунта из БД
 				await DisconnectInstagramUser(settings.InstagramBusinessId, fullDataDelete: true);
 			}
 
@@ -111,7 +120,7 @@ namespace CrossChat.Controllers
 		}
 
 		// ==========================================================
-		// 2. ОБНОВЛЕНИЕ НАСТРОЕК (ПРОМПТ / ВКЛЮЧЕНИЕ)
+		// 3. ОБНОВЛЕНИЕ НАСТРОЕК
 		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
@@ -132,13 +141,11 @@ namespace CrossChat.Controllers
 			string dailyStoryTime,
 			bool isStoryOverlayTextEnabled,
 			string? storyOverlayText,
-			// === НОВЫЕ ПАРАМЕТРЫ ДЛЯ КОММЕНТАРИЕВ ===
 			int commentReplyMode,
 			string? commentTemplates)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// Ищем настройки бота по его Id И проверяем, что он принадлежит текущему юзеру
 			var settings = await _db.InstagramSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
@@ -147,10 +154,8 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Вычисляем новый общий статус активности
 				bool newIsActiveStatus = isDirectEnabled || isCommentsEnabled;
 
-				// 2. Управление вебхуками (если статус изменился)
 				if (settings.IsActive != newIsActiveStatus)
 				{
 					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {newIsActiveStatus}");
@@ -162,7 +167,6 @@ namespace CrossChat.Controllers
 					}
 				}
 
-				// 3. Обновляем модель
 				settings.IsActive = newIsActiveStatus;
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
@@ -178,7 +182,6 @@ namespace CrossChat.Controllers
 				settings.MaxAnswersTokensCount = maxAnswersTokensCount;
 				settings.ProfileId = profileId;
 
-				// Обновляем настройки авто-сторис:
 				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
 				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
 
@@ -207,18 +210,13 @@ namespace CrossChat.Controllers
 			return RedirectToAction("Index", new { botId = botId });
 		}
 
-		// ==========================================================
-		// ВСПОМОГАТЕЛЬНЫЙ МЕТОД: ПОДПИСКА НА ВЕБХУКИ
-		// ==========================================================
 		private async Task<bool> ManageWebhooksAsync(string accessToken, bool subscribe)
 		{
 			var url = $"https://graph.instagram.com/{GraphApiVersion}/me/subscribed_apps?access_token={accessToken}";
-
 			HttpResponseMessage response;
 
 			if (subscribe)
 			{
-				// === ПОДПИСКА (POST) ===
 				var payload = new
 				{
 					subscribed_fields = new[]
@@ -239,17 +237,13 @@ namespace CrossChat.Controllers
 
 				var json = System.Text.Json.JsonSerializer.Serialize(payload);
 				response = await _httpClient.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json"));
-				_logger.LogInformation("Subscribing to Webhooks...");
 			}
 			else
 			{
-				// === ОТПИСКА (DELETE) ===
 				response = await _httpClient.DeleteAsync(url);
-				_logger.LogInformation("Unsubscribing from Webhooks...");
 			}
 
 			var content = await response.Content.ReadAsStringAsync();
-
 			if (!response.IsSuccessStatusCode)
 			{
 				_logger.LogError($"Webhook Management Error ({subscribe}): {content}");
@@ -257,13 +251,11 @@ namespace CrossChat.Controllers
 			}
 
 			using var doc = JsonDocument.Parse(content);
-			// Успешный ответ обычно: { "success": true }
 			if (doc.RootElement.TryGetProperty("success", out var successProp))
 			{
 				return successProp.GetBoolean();
 			}
 
-			// Иногда ответ просто { "data": [] } при подписке, считаем успехом если 200 OK
 			return true;
 		}
 
@@ -275,7 +267,6 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Получаем Short Token
 				var cleanCode = code.Replace("#_", "");
 				var formData = new Dictionary<string, string>
 				{
@@ -296,7 +287,6 @@ namespace CrossChat.Controllers
 				using var shortDoc = JsonDocument.Parse(await shortResp.Content.ReadAsStringAsync());
 				var shortToken = shortDoc.RootElement.GetProperty("access_token").GetString();
 
-				// 2. Меняем на Long Token
 				var longUrl = $"https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret={InstagramAppSecret}&access_token={shortToken}";
 				var longResp = await _httpClient.GetAsync(longUrl);
 				if (!longResp.IsSuccessStatusCode)
@@ -308,13 +298,12 @@ namespace CrossChat.Controllers
 				using var longDoc = JsonDocument.Parse(await longResp.Content.ReadAsStringAsync());
 				var longAccessToken = longDoc.RootElement.GetProperty("access_token").GetString();
 				var expiresIn = longDoc.RootElement.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 5184000;
-				var expireDate = DateTimeNow.AddSeconds(expiresIn);
+				// СТРОГО UTC ДЛЯ ТОКЕНОВ:
+				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
-				// 3. Получаем данные пользователя (ID, Username, Avatar)
 				(string? username, string? instagramScopedUserId, string? profilePicUrl) = await _instagramService.GetMeInfo(longAccessToken);
 
-				// 4. Сохраняем в БД
-				var instaSettings = await SaveTokenToDatabase(longAccessToken, instagramScopedUserId, expireDate, profilePicUrl, username);
+				var instaSettings = await SaveTokenToDatabase(longAccessToken, instagramScopedUserId!, expireDate, profilePicUrl, username);
 
 				return RedirectToAction("Index", new { botId = instaSettings?.Id ?? 0 });
 			}
@@ -325,16 +314,11 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		/// <summary>
-		/// Эндпоинт для деавторизации (Instagram вызывает при отзыве доступа)
-		/// </summary>
 		[AllowAnonymous]
 		[HttpGet("deauth")]
 		[HttpPost("deauth")]
-		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null)
+		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null!)
 		{
-			_logger.LogInformation($"=== Deauthorization callback received ===");
-
 			try
 			{
 				if (string.IsNullOrEmpty(signed_request)) return Ok();
@@ -342,9 +326,6 @@ namespace CrossChat.Controllers
 				var instagramUserId = ParseSignedRequest(signed_request);
 				if (!string.IsNullOrEmpty(instagramUserId))
 				{
-					_logger.LogInformation($"User {instagramUserId} deauthorized app. Cleaning up token...");
-
-					// Вызываем наш метод очистки (false = не удалять всё, только токен)
 					await DisconnectInstagramUser(instagramUserId, fullDataDelete: true);
 				}
 
@@ -357,20 +338,16 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		/// <summary>
-		/// Эндпоинт для удаления данных пользователя (Data Deletion Request)
-		/// </summary>
 		[AllowAnonymous]
 		[HttpGet("data-deletion")]
 		[HttpPost("data-deletion")]
-		public async Task<IActionResult> DataDeletionCallback(
-			[FromForm] string signed_request = null)
+		public async Task<IActionResult> DataDeletionCallback([FromForm] string signed_request = null!)
 		{
 			_logger.LogInformation($"=== Data Deletion callback received ===");
 
 			try
 			{
-				string userId = null;
+				string? userId = null;
 				string confirmationCode = Guid.NewGuid().ToString("N");
 
 				if (!string.IsNullOrEmpty(signed_request))
@@ -380,23 +357,11 @@ namespace CrossChat.Controllers
 
 				if (!string.IsNullOrEmpty(userId))
 				{
-					_logger.LogInformation($"Processing FULL DATA DELETION for user: {userId}");
-
-					// Удаляем данные полностью (true)
 					await DisconnectInstagramUser(userId, fullDataDelete: true);
 				}
 
-				// Генерируем URL статуса (его нужно реализовать ниже)
 				var statusUrl = $"{APP_URL}/instagram/deletion-status/{confirmationCode}";
-
-				var response = new
-				{
-					url = statusUrl,
-					confirmation_code = confirmationCode,
-					status = "success" // Мы удалили данные синхронно, так что сразу success
-				};
-
-				return Ok(response);
+				return Ok(new { url = statusUrl, confirmation_code = confirmationCode, status = "success" });
 			}
 			catch (Exception ex)
 			{
@@ -405,7 +370,7 @@ namespace CrossChat.Controllers
 			}
 		}
 
-		private string ParseSignedRequest(string signedRequest)
+		private string? ParseSignedRequest(string signedRequest)
 		{
 			try
 			{
@@ -420,10 +385,10 @@ namespace CrossChat.Controllers
 				}
 
 				var payloadBytes = Convert.FromBase64String(payload);
-				var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+				var payloadJson = Encoding.UTF8.GetString(payloadBytes);
 
-				dynamic data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
-				return data.user_id?.ToString();
+				dynamic? data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
+				return data?.user_id?.ToString();
 			}
 			catch
 			{
@@ -442,18 +407,13 @@ namespace CrossChat.Controllers
 						<h1 style='color: green;'>Данные успешно удалены</h1>
 						<p>Ваш запрос на удаление данных был обработан.</p>
 						<p>Код подтверждения: <strong>{code}</strong></p>
-						<p>Дата: {DateTimeNow:g} (UTC)</p>
+						<p>Дата: {DateTime.UtcNow:g} (UTC)</p>
 					</body>
 				</html>";
 			return Content(html, "text/html");
 		}
 
-
-
-		// =========================================================
-		// ГЛАВНЫЙ МЕТОД СОХРАНЕНИЯ
-		// =========================================================
-		private async Task<InstagramSettings> SaveTokenToDatabase(
+		private async Task<InstagramSettings?> SaveTokenToDatabase(
 			string accessToken,
 			string instagramUserId,
 			DateTime expiresIn,
@@ -465,30 +425,29 @@ namespace CrossChat.Controllers
 
 			var userId = int.Parse(userIdStr);
 
-			// 1. Ищем, нет ли у этого пользователя уже настроек для этого конкретного Instagram-аккаунта
 			var settings = await _db.InstagramSettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.InstagramBusinessId == instagramUserId);
 
-			// 2. Если такого бота еще нет в базе — создаем нового
 			if (settings == null)
 			{
+				// БЕЗОПАСНЫЙ ПРОФИЛЬ ИЗ BaseController (БЕЗ ОШИБОК NULLABLE):
+				int profileId = await GetActiveProfileIdSafeAsync(_db, userId);
+
 				settings = new InstagramSettings
 				{
 					UserId = userId,
 					InstagramBusinessId = instagramUserId,
-					ProfileId = GetActiveProfileId().Value
+					ProfileId = profileId
 				};
 				_db.InstagramSettings.Add(settings);
 			}
 
-			// 3. Скачиваем картинку в Base64
 			string? base64Icon = null;
 			if (!string.IsNullOrEmpty(profilePicUrl))
 			{
 				base64Icon = await DownloadImageAsBase64ForHtml(profilePicUrl);
 			}
 
-			// 4. Обновляем данные бота
 			settings.AccessToken = accessToken;
 			settings.TokenExpiresAt = expiresIn;
 			settings.Username = username;
@@ -506,7 +465,6 @@ namespace CrossChat.Controllers
 
 		private async Task<bool> DisconnectInstagramUser(string instagramUserId, bool fullDataDelete)
 		{
-			// Ищем настройки, где BusinessId совпадает с ID из вебхука
 			var settings = await _db.InstagramSettings
 				.FirstOrDefaultAsync(s => s.InstagramBusinessId == instagramUserId);
 
@@ -520,28 +478,21 @@ namespace CrossChat.Controllers
 			{
 				try
 				{
-					// false = отписка (DELETE запрос)
-					// Мы не проверяем результат (true/false), потому что если юзер уже отозвал права,
-					// этот запрос вернет ошибку (Invalid Token), и это НОРМАЛЬНО.
 					await ManageWebhooksAsync(settings.AccessToken, false);
-					_logger.LogInformation($"Unsubscribe request sent for {instagramUserId}");
 				}
 				catch (Exception ex)
 				{
-					// Логируем, но не останавливаем удаление данных из БД
-					_logger.LogWarning($"Could not unsubscribe webhooks (token might be invalid): {ex.Message}");
+					_logger.LogWarning($"Could not unsubscribe webhooks: {ex.Message}");
 				}
 			}
 
 			if (fullDataDelete)
 			{
-				// ВАРИАНТ 1: Полное удаление настроек (Data Deletion)
 				_db.InstagramSettings.Remove(settings);
 				_logger.LogInformation($"Instagram settings deleted for BusinessId: {instagramUserId}");
 			}
 			else
 			{
-				// ВАРИАНТ 2: Просто отзыв токена (Deauth)
 				settings.AccessToken = null;
 				settings.IsActive = false;
 				settings.TokenExpiresAt = null;
@@ -560,17 +511,15 @@ namespace CrossChat.Controllers
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// 1. Проверяем, что бот принадлежит нам
 			var settings = await _db.InstagramSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
-			// 2. Проверяем, что целевой профиль тоже принадлежит нам
 			var profileExists = await _db.Profile
 				.AnyAsync(p => p.Id == targetProfileId && p.UserId == userId);
 
 			if (settings != null && profileExists)
 			{
-				settings.ProfileId = targetProfileId; // Магия: просто меняем ID профиля
+				settings.ProfileId = targetProfileId;
 				await _db.SaveChangesAsync();
 
 				_logger.LogInformation($"[Instagram] Бот {botId} перенесен в профиль {targetProfileId}");
@@ -580,9 +529,6 @@ namespace CrossChat.Controllers
 			return BadRequest("Не удалось перенести бота.");
 		}
 
-		// ==========================================================
-		// СТРАНИЦА АНАЛИТИКИ АККАУНТА (/instagram/analytics)
-		// ==========================================================
 		[HttpGet("analytics")]
 		public async Task<IActionResult> Analytics(int botId, string? after = null, string? before = null)
 		{
@@ -600,7 +546,6 @@ namespace CrossChat.Controllers
 			ViewBag.Username = settings.Username;
 			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
 
-			// Параллельно запрашиваем: ленту, аналитику за 28 дней и количество подписчиков профиля
 			var feedTask = _instagramService.GetAccountFeedAsync(settings.AccessToken, 24, after, before);
 			var insightsTask = _instagramService.GetAccountInsightsAsync(settings.AccessToken);
 			var profileTask = _httpClient.GetAsync($"https://graph.instagram.com/v21.0/me?fields=followers_count,media_count&access_token={settings.AccessToken}");
@@ -609,7 +554,6 @@ namespace CrossChat.Controllers
 
 			ViewBag.AccountInsights = await insightsTask;
 
-			// Читаем количество подписчиков для расчета ER
 			int followersCount = 0;
 			try
 			{
@@ -631,9 +575,6 @@ namespace CrossChat.Controllers
 			return View(await feedTask);
 		}
 
-		// ==========================================================
-		// БЫСТРЫЙ AJAX-ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ ИНСАЙТОВ ПОСТА
-		// ==========================================================
 		[HttpGet("analytics/insights")]
 		public async Task<IActionResult> GetPostInsights(int botId, string mediaId, string mediaType)
 		{
@@ -649,6 +590,6 @@ namespace CrossChat.Controllers
 
 			var insights = await _instagramService.GetMediaInsightsAsync(mediaId, mediaType, settings.AccessToken);
 			return Json(insights);
-		}
+		}		
 	}
 }

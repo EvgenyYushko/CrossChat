@@ -413,10 +413,14 @@
                 <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
             </form>
 
-            <!-- ПОНЯТНАЯ ИНФОРМАЦИЯ ВМЕСТО КНОПКИ УДАЛЕНИЯ -->
-            <div style="margin-top: 2.5rem; padding: 1rem; border-radius: 12px; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--glass-border); text-align: center; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5;">
-                ℹ️ <strong>Как отключить канал?</strong><br>
-                Чтобы удалить этот канал с сайта, просто откройте настройки канала в Telegram и удалите бота <strong style="color: #2AABEE;">@@Croshub_bot</strong> из списка Администраторов. Канал удалится автоматически.
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ КАНАЛА С САЙТА -->
+            <form action="/telegram-channel/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 2rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+                <button type="submit" class="btn btn-danger">Отключить канал</button>
+            </form>
+
+            <div style="margin-top: 1rem; text-align: center; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4;">
+                💡 <em>Или вы можете просто удалить бота @@cros_hub_bot из администраторов в Telegram — канал отключится автоматически.</em>
             </div>
         }
         else
@@ -481,6 +485,18 @@
             } catch (e) {
                 alert('Ошибка сети.');
             }
+        }
+
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этому каналу привязано ${postsCount} публикаций в планировщике.\n\n` +
+                    `При отключении канала эти посты будут автоматически удалены из календаря, а файлы очищены из облака.\n\n` +
+                    `Вы уверены, что хотите отключить канал?`
+                );
+            }
+            return confirm('Отключить этот Telegram-канал от CrossChat?');
         }
     </script>
 }

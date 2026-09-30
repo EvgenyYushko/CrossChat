@@ -504,6 +504,19 @@
             const box = document.getElementById('commentTemplatesBox');
             box.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
         }
+
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этому аккаунту BlueSky привязано публикаций в планировщике: ${postsCount} шт.\n\n` +
+                    `При отключении аккаунта эти посты будут автоматически удалены из календаря, чтобы исключить ошибки публикации.\n\n` +
+                    `Вы уверены, что хотите удалить аккаунт и связанные посты?`
+                );
+            }
+    
+            return confirm('Отключить этот аккаунт BlueSky от CrossChat?');
+        }
     </script>
 }
 
@@ -653,9 +666,9 @@
                 <button type="submit" class="btn btn-primary">Сохранить настройки</button>
             </form>
 
-            <form action="/bluesky/disconnect" method="post" onsubmit="return confirm('Отключить аккаунт BlueSky?');" style="margin-top: 1rem;">
-                <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Удалить интеграцию</button>
+            <form action="/bluesky/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 1rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
         }
     </div>

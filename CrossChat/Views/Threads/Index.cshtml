@@ -454,7 +454,9 @@
                 <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
             </form>
 
-            <form action="/threads/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить Threads?');" style="margin-top: 1rem;">
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ THREADS С ПРЕДУПРЕЖДЕНИЕМ -->
+            <form action="/threads/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 1rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
                 <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
         }
@@ -505,6 +507,18 @@
                 toast.style.display = 'block';
                 setTimeout(() => toast.style.display = 'none', 3000);
             }
+        }
+
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этому аккаунту Threads привязано публикаций в планировщике: ${postsCount} шт.\n\n` +
+                    `При отключении аккаунта эти посты будут автоматически удалены из календаря, а неиспользуемые файлы очищены из облака.\n\n` +
+                    `Вы уверены, что хотите отключить аккаунт?`
+                );
+            }
+            return confirm('Отключить этот аккаунт Threads от CrossChat?');
         }
     </script>
 }

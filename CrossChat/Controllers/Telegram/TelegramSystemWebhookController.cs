@@ -1,6 +1,9 @@
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Helpers;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Interfaces.Google;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -23,6 +26,7 @@ namespace CrossChat.Controllers
 		private readonly ITelegramBotClient _telegramBotClient;
 		private readonly IServiceScopeFactory _serviceScopeFactory;
 		private readonly ITelegramService _telegramService;
+		private readonly IGoogleDriveUploader _googleDriveUploader;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
@@ -30,8 +34,8 @@ namespace CrossChat.Controllers
 			ILogger<TelegramSystemWebhookController> logger,
 			ITelegramBotClient telegramBotClient,
 			IServiceScopeFactory serviceScopeFactory,
-			ITelegramService telegramService
-			)
+			ITelegramService telegramService,
+			IGoogleDriveUploader googleDriveUploader) // <-- ДОБАВЛЕНО
 		{
 			_db = db;
 			_cache = cache;
@@ -39,6 +43,7 @@ namespace CrossChat.Controllers
 			_telegramBotClient = telegramBotClient;
 			_serviceScopeFactory = serviceScopeFactory;
 			_telegramService = telegramService;
+			_googleDriveUploader = googleDriveUploader;
 		}
 
 		public async Task RunLocalBotListener()
@@ -265,22 +270,20 @@ namespace CrossChat.Controllers
 
 							if (existingChannel != null)
 							{
-								// Очищаем привязанные отложенные посты
-								int channelNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.TelegramChannel;
-								var orphanStates = await _db.NetworkStates
-									.Where(ns => ns.NetworkType == channelNetTypeId && ns.BotId == existingChannel.Id)
-									.ToListAsync();
+								// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ФАЙЛОВ В GOOGLE DRIVE:
+								await PostCleanupHelper.CleanupLinkedPostsAsync(
+									_db,
+									_googleDriveUploader,
+									NetworkType.TelegramChannel,
+									existingChannel.Id,
+									_logger);
 
-								if (orphanStates.Any())
-								{
-									_db.NetworkStates.RemoveRange(orphanStates);
-								}
-
+								// 2. Удаляем сам канал из БД
 								_db.TelegramChannelSettings.Remove(existingChannel);
 								await _db.SaveChangesAsync();
 
 								await SendBotMessageAsync(addedByTgUserId,
-									$"❌ <b>Канал «{channelTitle}» был отсоединен.</b>\n\nБот убран из администраторов. Канал и его настройки удалены с сайта.");
+									$"❌ <b>Канал «{channelTitle}» был отсоединен.</b>\n\nБот убран из администраторов. Канал, его настройки и невышедшие публикации удалены с сайта.");
 							}
 						}
 					}

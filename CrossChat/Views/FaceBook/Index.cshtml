@@ -495,9 +495,10 @@
 
             </div>
 
-            <form action="/facebook/disconnect" method="post" onsubmit="return confirm('Отключить эту страницу?');">
-                <input type="hidden" name="botId" value="@Model.Id" />
-                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Удалить интеграцию</button>
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ СТРАНИЦЫ FACEBOOK С ПРЕДУПРЕЖДЕНИЕМ -->
+            <form action="/facebook/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 2rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+                <button type="submit" class="btn btn-danger">Отключить страницу</button>
             </form>
         }
         else
@@ -530,6 +531,18 @@
             const mode = document.getElementById('directModeSelect').value;
             const box = document.getElementById('directTemplatesBox');
             box.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
+        }
+
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этой странице Facebook привязано публикаций в планировщике: ${postsCount} шт.\n\n` +
+                    `При отключении страницы эти публикации будут автоматически удалены из календаря, а неиспользуемые файлы очищены из облака.\n\n` +
+                    `Вы уверены, что хотите отключить страницу?`
+                );
+            }
+            return confirm('Отключить эту страницу Facebook от CrossChat?');
         }
     </script>
 }

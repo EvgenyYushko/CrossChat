@@ -4,12 +4,12 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
-using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
@@ -27,23 +27,29 @@ namespace CrossChat.Controllers
 		private readonly IDistributedCache _cache;
 		private readonly IBlueSkyService _blueSkyService;
 
-		public BlueSkyController(ILogger<BlueSkyController> logger, AppDbContext db, IDistributedCache cache, IBlueSkyService blueSkyService)
+		// Конструктор стал легким — никакой возни с Google Drive!
+		public BlueSkyController(
+			ILogger<BlueSkyController> logger,
+			AppDbContext db,
+			IDistributedCache cache,
+			IBlueSkyService blueSkyService)
 		{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
-			_cache = cache; // Используем кеш вместо сессии
+			_cache = cache;
 			_blueSkyService = blueSkyService;
 		}
 
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК (/bluesky)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int botId)
 		{
 			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-
-			//_logger.LogInformation($"botId = {botId}, userId = {userId}");
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
 			var settings = await _db.BlueSkySettings
 				.Include(p => p.Profile)
@@ -53,86 +59,42 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
+			// МЕТОД ИЗ BaseController: считаем посты для предупреждения перед удалением
+			ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.BlueSky, botId);
+
 			return View(settings);
 		}
 
-		[HttpGet("test-api")]
-		public async Task<IActionResult> TestApi()
+		// ==========================================================
+		// 2. ОТКЛЮЧЕНИЕ АККАУНТА (С УМНОЙ ОЧИСТКОЙ ИЗ BaseController)
+		// ==========================================================
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(s => s.UserId == userId);
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			if (settings == null || string.IsNullOrEmpty(settings.AccessToken) || string.IsNullOrEmpty(settings.PdsUrl))
-				return Content("Данные или PDS URL не найдены. Переподключите аккаунт.");
+			var settings = await _db.BlueSkySettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
-			// 1. Формируем URL и данные поста
-			var apiUrl = $"{settings.PdsUrl.TrimEnd('/')}/xrpc/com.atproto.repo.createRecord";
-			var payload = new
+			if (settings != null)
 			{
-				repo = settings.Did,
-				collection = "app.bsky.feed.post",
-				record = new
-				{
-					text = "Проверка связи! Бот CrossChat теперь умеет работать с DPoP Nonce 🛡️ #atproto",
-					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-				}
-			};
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ И ФАЙЛОВ GOOGLE DRIVE В 1 СТРОКУ:
+				await CleanupLinkedPostsAsync(NetworkType.BlueSky, botId);
 
-			try
-			{
-				// --- ПОПЫТКА №1 (без nonce) ---
-				var (dpopProof, _) = _blueSkyService.CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson, null, settings.AccessToken);
+				// 2. Удаляем сам аккаунт из БД
+				_db.BlueSkySettings.Remove(settings);
+				await _db.SaveChangesAsync();
 
-				var request = new HttpRequestMessage(HttpMethod.Post, apiUrl)
-				{
-					Content = JsonContent.Create(payload)
-				};
-				request.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
-				request.Headers.Add("DPoP", dpopProof);
-
-				var response = await _httpClient.SendAsync(request);
-				var json = await response.Content.ReadAsStringAsync();
-
-				// --- ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE ---
-				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
-				{
-					_logger.LogInformation("[BlueSky] PDS запросил Nonce. Повторяем запрос...");
-
-					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
-					{
-						var serverNonce = nonceValues.First();
-
-						// --- ПОПЫТКА №2 (с полученным nonce) ---
-						// Используем тот же ключ из настроек и метод POST
-						var (retryDpopProof, _) = _blueSkyService.CreateDPoPProof("POST", apiUrl, settings.PrivateKeyJson, serverNonce, settings.AccessToken);
-
-						// Создаем новый запрос (старый объект request использовать нельзя)
-						var retryRequest = new HttpRequestMessage(HttpMethod.Post, apiUrl)
-						{
-							Content = JsonContent.Create(payload)
-						};
-						retryRequest.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
-						retryRequest.Headers.Add("DPoP", retryDpopProof);
-
-						response = await _httpClient.SendAsync(retryRequest);
-						json = await response.Content.ReadAsStringAsync();
-					}
-				}
-
-				if (response.IsSuccessStatusCode)
-				{
-					return Content($"УСПЕХ! Пост создан. Ответ: {json}");
-				}
-
-				return Content($"Ошибка после повтора: {response.StatusCode} - {json}");
+				_logger.LogInformation("✅ [BlueSky] Бот @{Handle} и все связанные посты успешно удалены.", settings.Handle);
 			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "Критическая ошибка в TestApi");
-				return Content($"Критическая ошибка: {ex.Message}");
-			}
+
+			return RedirectToAction("Profile", "Auth");
 		}
 
+		// ==========================================================
+		// 3. ПОДКЛЮЧЕНИЕ (OAUTH PKCE)
+		// ==========================================================
 		[HttpPost("connect")]
 		public async Task<IActionResult> Connect(string handle)
 		{
@@ -147,8 +109,6 @@ namespace CrossChat.Controllers
 				var resolveJson = await resolveResp.Content.ReadFromJsonAsync<JsonElement>();
 				string did = resolveJson.GetProperty("did").GetString()!;
 
-				// 2. Узнаем PDS (Где реально лежат данные)
-				// Запрашиваем документ DID
 				var didDocResp = await _httpClient.GetAsync($"https://plc.directory/{did}");
 				var didDoc = await didDocResp.Content.ReadFromJsonAsync<JsonElement>();
 
@@ -163,7 +123,7 @@ namespace CrossChat.Controllers
 				var codeChallenge = GenerateCodeChallenge(codeVerifier);
 				var state = Guid.NewGuid().ToString("N");
 
-				// === ВАЖНО: Сохраняем данные в REDIS на 15 минут, привязывая к state ===
+				// Сохраняем параметры авторизации и ID профиля в Redis на 15 минут
 				var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) };
 				await _cache.SetStringAsync($"bsky_userId:{state}", userId, cacheOptions);
 				await _cache.SetStringAsync($"bsky_verifier:{state}", codeVerifier, cacheOptions);
@@ -171,53 +131,33 @@ namespace CrossChat.Controllers
 				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
 				await _cache.SetStringAsync($"bsky_pds:{state}", pdsUrl, cacheOptions);
 
+				// Безопасно сохраняем профиль:
+				int currentProfileId = await GetActiveProfileIdSafeAsync(_db, int.Parse(userId));
+				await _cache.SetStringAsync($"bsky_profileId:{state}", currentProfileId.ToString(), cacheOptions);
+
 				var scope = Uri.EscapeDataString("atproto transition:generic transition:chat.bsky");
 
 				var url = $"https://bsky.social/oauth/authorize?" +
 						  $"client_id={Uri.EscapeDataString(ClientId)}&" +
 						  $"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 						  $"response_type=code&" +
-						  $"scope={scope}&" + // Теперь тут есть чат
+						  $"scope={scope}&" +
 						  $"state={state}&" +
 						  $"code_challenge={codeChallenge}&" +
 						  $"code_challenge_method=S256&" +
 						  $"login_hint={handle}";
 
-				var activeProfileId = GetActiveProfileId();
-				if (activeProfileId.HasValue)
-				{
-					await _cache.SetStringAsync($"bsky_profileId:{state}", activeProfileId.Value.ToString(), cacheOptions);
-				}
-
 				return Redirect(url);
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex.ToString());
+				_logger.LogError(ex, "Ошибка при старте авторизации BlueSky");
 				return RedirectToAction("Index");
 			}
 		}
 
-		[HttpPost("disconnect")]
-		[Authorize]
-		public async Task<IActionResult> Disconnect([FromForm] int botId) // Добавили FromForm для надежности
-		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-
-			var settings = await _db.BlueSkySettings
-				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
-
-			if (settings != null)
-			{
-				_db.BlueSkySettings.Remove(settings);
-				await _db.SaveChangesAsync();
-			}
-
-			return RedirectToAction("Index");
-		}
-
 		// ==========================================================
-		// 2. ОБРАБОТКА ОТВЕТА (CALLBACK)
+		// 4. КОЛЛБЭК АВТОРИЗАЦИИ (CALLBACK)
 		// ==========================================================
 		[HttpGet("auth/callback")]
 		[AllowAnonymous]
@@ -225,22 +165,21 @@ namespace CrossChat.Controllers
 		{
 			_logger.LogInformation($"[BlueSky] Callback params -> Code: {code?.Length}, State: {state}");
 
-			// Достаем данные из кэша по ключу state
 			var codeVerifier = await _cache.GetStringAsync($"bsky_verifier:{state}");
-			var internalUserIdStr = await _cache.GetStringAsync($"bsky_userId:{state}"); // Наш ID
+			var internalUserIdStr = await _cache.GetStringAsync($"bsky_userId:{state}");
 			var handle = await _cache.GetStringAsync($"bsky_handle:{state}");
 			var did = await _cache.GetStringAsync($"bsky_did:{state}");
 			var pds = await _cache.GetStringAsync($"bsky_pds:{state}");
 			var profileIdStr = await _cache.GetStringAsync($"bsky_profileId:{state}");
-			int? savedProfileId = int.TryParse(profileIdStr, out var pid) ? pid : GetActiveProfileId();
 
 			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(internalUserIdStr))
 			{
-				_logger.LogError("[BlueSky] Не удалось найти UserId в сессии/кеше. Возможно, прошло > 15 мин.");
-				return BadRequest("Ошибка: сессия истекла.");
+				_logger.LogError("[BlueSky] Не удалось найти UserId в сессии/кеше. Время ожидания истекло.");
+				return BadRequest("Ошибка: сессия авторизации истекла.");
 			}
 
 			int internalUserId = int.Parse(internalUserIdStr);
+			int? profileId = int.TryParse(profileIdStr, out var pid) ? pid : null;
 
 			try
 			{
@@ -261,14 +200,12 @@ namespace CrossChat.Controllers
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
 
-				// 2. ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE
+				// Проверка на требование Nonce
 				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
 				{
 					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
 					{
 						var serverNonce = nonceValues.First();
-
-						// Используем ТОТ ЖЕ ключ (privateKey), что получили в первой попытке выше
 						var (newDpopProof, _) = _blueSkyService.CreateDPoPProof("POST", tokenUrl, privateKey, serverNonce);
 
 						var retryRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl) { Content = new FormUrlEncodedContent(values) };
@@ -285,21 +222,19 @@ namespace CrossChat.Controllers
 					return Content(json);
 				}
 
-				// 3. УСПЕХ! Парсим и сохраняем
 				var data = JsonDocument.Parse(json).RootElement;
 				var accessToken = data.GetProperty("access_token").GetString()!;
 				var refreshToken = data.GetProperty("refresh_token").GetString()!;
 				int expiresIn = data.GetProperty("expires_in").GetInt32();
+
+				// ВАЖНО: Срок жизни токена строго в UTC!
 				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
-				// --- НОВОЕ: Получаем данные профиля (аватарку) ---
+				// Подгружаем аватарку
 				string? avatarUrl = null;
 				try
 				{
 					var profileUrl = $"{pds.TrimEnd('/')}/xrpc/app.bsky.actor.getProfile?actor={did}";
-					_logger.LogInformation($"[BlueSky] Запрос профиля: {profileUrl}");
-
-					// 1. ПЕРВАЯ ПОПЫТКА (без nonce)
 					var (dpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, null, accessToken);
 
 					var profileRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
@@ -309,16 +244,11 @@ namespace CrossChat.Controllers
 					var profileResp = await _httpClient.SendAsync(profileRequest);
 					var profileJson = await profileResp.Content.ReadAsStringAsync();
 
-					// 2. ПРОВЕРКА НА NONCE (Рукопожатие)
 					if (!profileResp.IsSuccessStatusCode && profileJson.Contains("use_dpop_nonce"))
 					{
-						_logger.LogInformation("[BlueSky] Профиль запросил Nonce. Повторяем запрос...");
-
 						if (profileResp.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
 						{
 							var serverNonce = nonceValues.First();
-
-							// ВТОРАЯ ПОПЫТКА (с нонсом)
 							var (retryDpopProof, _) = _blueSkyService.CreateDPoPProof("GET", profileUrl, privateKey, serverNonce, accessToken);
 
 							var retryRequest = new HttpRequestMessage(HttpMethod.Get, profileUrl);
@@ -330,24 +260,22 @@ namespace CrossChat.Controllers
 						}
 					}
 
-					// 3. ОБРАБОТКА РЕЗУЛЬТАТА
 					if (profileResp.IsSuccessStatusCode)
 					{
 						using var profileDoc = JsonDocument.Parse(profileJson);
 						if (profileDoc.RootElement.TryGetProperty("avatar", out var av))
 						{
 							avatarUrl = av.GetString();
-							_logger.LogInformation($"[BlueSky] Аватар успешно получен после рукопожатия!");
+							_logger.LogInformation("[BlueSky] Аватар успешно получен после рукопожатия!");
 						}
 					}
-					else
-					{
-						_logger.LogWarning($"[BlueSky] Не удалось получить профиль даже после повтора. Код: {profileResp.StatusCode}");
-					}
 				}
-				catch (Exception ex) { _logger.LogWarning($"Не удалось подгрузить аватарку BlueSky: {ex.Message}"); }
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось подгрузить аватарку BlueSky");
+				}
 
-				// --- СОХРАНЯЕМ ---
+				// Сохраняем токен в БД
 				var settings = await SaveToken(
 					internalUserId,
 					accessToken,
@@ -358,69 +286,55 @@ namespace CrossChat.Controllers
 					pds!,
 					expireDate,
 					avatarUrl,
-					savedProfileId); // Передаем URL аватарки
+					profileId);
 
 				return RedirectToAction("Index", new { botId = settings.Id });
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Ошибка в Callback");
+				_logger.LogError(ex, "Ошибка в Callback BlueSky");
 				return RedirectToAction("Index");
 			}
 		}
 
-		// ==========================================================
-		// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ PKCE
-		// ==========================================================
-		private string GenerateRandomString(int length)
+		private async Task<BlueSkySettings> SaveToken(
+			int userId, 
+			string access, 
+			string refresh, 
+			string handle, 
+			string did, 
+			string privateKey, 
+			string pds, 
+			DateTime expireDate, 
+			string? profilePicUrl,
+			int? profileId = null)
 		{
-			const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-			return new string(Enumerable.Repeat(chars, length).Select(s => s[RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
-		}
-
-		private string GenerateCodeChallenge(string verifier)
-		{
-			using var sha256 = SHA256.Create();
-			var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(verifier));
-			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
-		}
-
-		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate, string? profilePicUrl, int? profileId = null)
-		{
-			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО BlueSky аккаунта (по DID)		
 			var settings = await _db.BlueSkySettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.Did == did);
 
 			bool isNew = false;
 			if (settings == null)
 			{
-				// 2. Если такого аккаунта еще нет — создаем
-				settings = new BlueSkySettings { UserId = userId, Did = did };
+				int targetProfileId = (profileId.HasValue && profileId.Value > 0)
+					? profileId.Value
+					: await GetActiveProfileIdSafeAsync(_db, userId);
+
+				settings = new BlueSkySettings
+				{
+					UserId = userId,
+					Did = did,
+					ProfileId = targetProfileId
+				};
 				_db.BlueSkySettings.Add(settings);
-
-				// БРОНЕБОЙНОЕ ОПРЕДЕЛЕНИЕ ПРОФИЛЯ (БЕЗ ОШИБОК NULLABLE):
-				if (profileId.HasValue && profileId.Value > 0)
-				{
-					settings.ProfileId = profileId.Value;
-				}
-				else
-				{
-					// Фоллбек: если кука слетела, берем первый попавшийся профиль пользователя из базы
-					var defaultProfile = await _db.Profile.FirstOrDefaultAsync(p => p.UserId == userId);
-					settings.ProfileId = defaultProfile?.Id ?? 0;
-				}
-
 				isNew = true;
 			}
 
-			// 3. Скачиваем аватарку в Base64 (чтобы не протухла ссылка)
 			string? base64Avatar = null;
 			if (!string.IsNullOrEmpty(profilePicUrl))
 			{
 				base64Avatar = await DownloadImageAsBase64ForHtml(profilePicUrl);
 			}
 
-			// 4. Обновляем данные
 			settings.AccessToken = access;
 			settings.RefreshToken = refresh;
 			settings.TokenExpiresAt = expireDate;
@@ -443,27 +357,9 @@ namespace CrossChat.Controllers
 			return settings;
 		}
 
-		[AllowAnonymous]
-		[HttpGet("client-metadata.json")]
-		public IActionResult GetMetadata()
-		{
-			return Ok(new
-			{
-				client_id = $"{APP_URL}/bluesky/client-metadata.json",
-				client_name = "CrossChat AI Bot",
-				client_uri = APP_URL,
-				redirect_uris = new[] { $"{APP_URL}/bluesky/auth/callback" },
-				scope = "atproto transition:generic transition:chat.bsky",
-				grant_types = new[] { "authorization_code", "refresh_token" },
-				response_types = new[] { "code" },
-				application_type = "web",
-				token_endpoint_auth_method = "none",
-
-				// === ВАЖНОЕ ДОБАВЛЕНИЕ ===
-				dpop_bound_access_tokens = true
-			});
-		}
-
+		// ==========================================================
+		// 5. СОХРАНЕНИЕ НАСТРОЕК (ПРОМПТЫ / АВТООТВЕТЫ)
+		// ==========================================================
 		[HttpPost("update")]
 		[Authorize]
 		public async Task<IActionResult> Update(
@@ -488,8 +384,8 @@ namespace CrossChat.Controllers
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
 
-				settings.SystemPrompt = systemPrompt;
-				settings.CommentPrompt = commentPrompt;
+				settings.SystemPrompt = systemPrompt ?? "";
+				settings.CommentPrompt = commentPrompt ?? "";
 				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
 				settings.CommentTemplates = commentTemplates;
 				settings.ProfileId = profileId;
@@ -499,6 +395,41 @@ namespace CrossChat.Controllers
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
+		}
+
+		[AllowAnonymous]
+		[HttpGet("client-metadata.json")]
+		public IActionResult GetMetadata()
+		{
+			return Ok(new
+			{
+				client_id = $"{APP_URL}/bluesky/client-metadata.json",
+				client_name = "CrossChat AI Bot",
+				client_uri = APP_URL,
+				redirect_uris = new[] { $"{APP_URL}/bluesky/auth/callback" },
+				scope = "atproto transition:generic transition:chat.bsky",
+				grant_types = new[] { "authorization_code", "refresh_token" },
+				response_types = new[] { "code" },
+				application_type = "web",
+				token_endpoint_auth_method = "none",
+				dpop_bound_access_tokens = true
+			});
+		}
+
+		// ==========================================================
+		// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ PKCE
+		// ==========================================================
+		private string GenerateRandomString(int length)
+		{
+			const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+			return new string(Enumerable.Repeat(chars, length).Select(s => s[RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
+		}
+
+		private string GenerateCodeChallenge(string verifier)
+		{
+			using var sha256 = SHA256.Create();
+			var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(verifier));
+			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 	}
 }

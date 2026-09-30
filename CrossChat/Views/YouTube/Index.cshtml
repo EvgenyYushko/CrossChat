@@ -307,6 +307,18 @@
                 aiBox.style.display = "block";
             }
         }
+
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этому YouTube-каналу привязано публикаций в планировщике: ${postsCount} шт.\n\n` +
+                    `При отключении канала эти видео и публикации будут удалены из календаря, а тяжелые видеофайлы очищены из Google Диска.\n\n` +
+                    `Вы уверены, что хотите отключить канал?`
+                );
+            }
+            return confirm('Отключить этот YouTube-канал от CrossChat?');
+        }
     </script>
 }
 
@@ -448,8 +460,9 @@
                 <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Сохранить настройки</button>
             </form>
 
-            <!-- КНОПКА ОТКЛЮЧЕНИЯ КАНАЛА -->
-            <form action="/youtube/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Отключить этот YouTube-канал от CrossChat?');">
+            <!-- КНОПКА ОТКЛЮЧЕНИЯ YOUTUBE С УМНЫМ ПРЕДУПРЕЖДЕНИЕМ -->
+            <form action="/youtube/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));">
+                <input type="hidden" name="botId" value="@Model.Id">
                 <button type="submit" class="btn btn-danger">Отключить канал</button>
             </form>
         </div>

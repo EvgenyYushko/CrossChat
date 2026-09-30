@@ -1,11 +1,11 @@
 using System.Security.Claims;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
@@ -30,21 +30,29 @@ namespace CrossChat.Controllers
 
 		private string GetRedirectUri() => $"{Request.Scheme}://{Request.Host}/youtube/callback";
 
-		// 1. Старт авторизации
+		// ==========================================================
+		// 1. СТАРТ АВТОРИЗАЦИИ (GOOGLE OAUTH 2.0)
+		// ==========================================================
 		[HttpGet("connect")]
-		public IActionResult Connect([FromQuery] int? profileId)
+		public async Task<IActionResult> Connect([FromQuery] int? profileId)
 		{
-			int activeProfileId = profileId ?? GetActiveProfileId() ?? 0;
+			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userIdStr)) return RedirectToAction("Login", "Auth");
+			int userId = int.Parse(userIdStr);
+
+			// БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ПРОФИЛЯ ИЗ BaseController
+			int activeProfileId = profileId ?? await GetActiveProfileIdSafeAsync(_db, userId);
 			if (activeProfileId == 0) return RedirectToAction("Profile", "Auth");
 
-			// Передаем ProfileId в state, чтобы после возврата из Google знать, к какому профилю привязать
 			string state = activeProfileId.ToString();
 			string authUrl = _youTubeService.GetAuthorizationUrl(state, GetRedirectUri());
 
 			return Redirect(authUrl);
 		}
 
-		// 2. Коллбэк от Google
+		// ==========================================================
+		// 2. КОЛЛБЭК ОТ GOOGLE (СОХРАНЕНИЕ ТОКЕНОВ В UTC)
+		// ==========================================================
 		[HttpGet("callback")]
 		public async Task<IActionResult> Callback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error)
 		{
@@ -54,14 +62,13 @@ namespace CrossChat.Controllers
 				return RedirectToAction("Profile", "Auth");
 			}
 
-			if (!int.TryParse(state, out int profileId))
-			{
-				profileId = GetActiveProfileId() ?? 0;
-			}
-
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// Обмениваем code на токены
+			if (!int.TryParse(state, out int profileId) || profileId == 0)
+			{
+				profileId = await GetActiveProfileIdSafeAsync(_db, userId);
+			}
+
 			var tokens = await _youTubeService.ExchangeCodeForTokensAsync(code, GetRedirectUri());
 			if (tokens == null)
 			{
@@ -69,7 +76,6 @@ namespace CrossChat.Controllers
 				return RedirectToAction("Profile", "Auth");
 			}
 
-			// Запрашиваем информацию о выбранном YouTube канале
 			var channelInfo = await _youTubeService.GetChannelInfoAsync(tokens.Value.AccessToken);
 			if (channelInfo == null)
 			{
@@ -77,7 +83,6 @@ namespace CrossChat.Controllers
 				return RedirectToAction("Profile", "Auth");
 			}
 
-			// Ищем, подключен ли уже этот канал
 			var existing = await _db.YouTubeSettings
 				.FirstOrDefaultAsync(y => y.ChannelId == channelInfo.ChannelId && y.UserId == userId);
 
@@ -86,6 +91,9 @@ namespace CrossChat.Controllers
 			{
 				base64Avatar = await DownloadImageAsBase64ForHtml(channelInfo.AvatarUrl);
 			}
+
+			// ВАЖНО: Срок годности токена строго в UTC!
+			var tokenExpireDateUtc = DateTime.UtcNow.AddSeconds(tokens.Value.ExpiresIn);
 
 			if (existing == null)
 			{
@@ -99,7 +107,7 @@ namespace CrossChat.Controllers
 					ProfilePictureUrl = base64Avatar ?? channelInfo.AvatarUrl,
 					AccessToken = tokens.Value.AccessToken,
 					RefreshToken = tokens.Value.RefreshToken,
-					TokenExpiresAt = DateTimeNow.AddSeconds(tokens.Value.ExpiresIn),
+					TokenExpiresAt = tokenExpireDateUtc,
 					SubscriberCount = channelInfo.SubscriberCount,
 					VideoCount = channelInfo.VideoCount,
 					IsActive = true
@@ -117,7 +125,7 @@ namespace CrossChat.Controllers
 				{
 					existing.RefreshToken = tokens.Value.RefreshToken;
 				}
-				existing.TokenExpiresAt = DateTimeNow.AddSeconds(tokens.Value.ExpiresIn);
+				existing.TokenExpiresAt = tokenExpireDateUtc;
 				existing.SubscriberCount = channelInfo.SubscriberCount;
 				existing.VideoCount = channelInfo.VideoCount;
 				existing.IsActive = true;
@@ -131,7 +139,9 @@ namespace CrossChat.Controllers
 			return RedirectToAction("Index", new { botId = existing.Id });
 		}
 
-		// 3. Страница управления каналом
+		// ==========================================================
+		// 3. СТРАНИЦА УПРАВЛЕНИЯ КАНАЛОМ (/youtube)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int botId)
 		{
@@ -147,12 +157,18 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
+			// МЕТОД ИЗ BaseController: считаем посты для предупреждения перед удалением
+			ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.YouTube, botId);
+
 			return View(settings);
 		}
 
-		// 4. Отключение канала
+		// ==========================================================
+		// 4. ОТКЛЮЧЕНИЕ КАНАЛА (С УМНОЙ ОЧИСТКОЙ ПОСТОВ И ОБЛАКА)
+		// ==========================================================
 		[HttpPost("disconnect")]
-		public async Task<IActionResult> Disconnect(int botId)
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 			var settings = await _db.YouTubeSettings
@@ -160,15 +176,24 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ВИДЕОФАЙЛОВ GOOGLE DRIVE:
+				await CleanupLinkedPostsAsync(NetworkType.YouTube, botId);
+
+				// 2. Удаление канала из базы данных
 				_db.YouTubeSettings.Remove(settings);
 				await _db.SaveChangesAsync();
+
+				_logger.LogInformation("✅ [YouTube] Канал '{Title}' (Id: {BotId}) и связанные посты успешно удалены.", settings.ChannelTitle, botId);
 			}
 
-			return RedirectToAction("Index", "YouTube");
+			return RedirectToAction("Profile", "Auth");
 		}
 
-		// 5. Сохранение настроек канала
+		// ==========================================================
+		// 5. СОХРАНЕНИЕ НАСТРОЕК КАНАЛА (ПРОМПТЫ / АВТООТВЕТЫ)
+		// ==========================================================
 		[HttpPost("update-settings")]
+		[Authorize]
 		public async Task<IActionResult> UpdateSettings(
 			int botId,
 			string systemPrompt,
@@ -186,11 +211,9 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Бронебойное считывание активности автопостинга
 				var isActiveRaw = Request.Form["isActive"].ToString();
 				bool isActive = isActiveRaw.Contains("true");
 
-				// 2. Бронебойное считывание включения автоответов (не зависит от порядка hidden/checkbox)
 				var isCommentsRaw = Request.Form["isCommentsEnabled"].ToString();
 				bool isComments = isCommentsRaw.Contains("true");
 
@@ -198,7 +221,6 @@ namespace CrossChat.Controllers
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.ProfileId = profileId;
 
-				// Сохраняем параметры автоответов:
 				settings.IsCommentsEnabled = isComments;
 				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
 				settings.CommentTemplates = commentTemplates;

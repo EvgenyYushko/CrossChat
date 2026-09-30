@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
 using MassTransit;
@@ -46,6 +47,9 @@ namespace CrossChat.Controllers
 		private string AppId => _settings.AppId;
 		private string AppSecret => _settings.AppSecret;
 
+		// ==========================================================
+		// ВЕБХУКИ FACEBOOK (MESSENGER & FEED)
+		// ==========================================================
 		[AllowAnonymous]
 		[HttpGet("webhook")]
 		public IActionResult VerifyWebhook(
@@ -89,16 +93,13 @@ namespace CrossChat.Controllers
 
 						if (settings == null || !settings.IsActive) continue;
 
-						// ===================================================================
-						// 1. ПЕРЕХВАТ ЛИЧНЫХ СООБЩЕНИЙ (MESSENGER / DIRECT)
-						// ===================================================================
+						// 1. ПЕРЕХВАТ ЛИЧНЫХ СООБЩЕНИЙ (MESSENGER)
 						if (settings.IsDirectEnabled && entry.TryGetProperty("messaging", out var messagingArr))
 						{
 							foreach (var mItem in messagingArr.EnumerateArray())
 							{
 								if (mItem.TryGetProperty("message", out var msgObj))
 								{
-									// Игнорируем эхо-сообщения от самого бота
 									if (msgObj.TryGetProperty("is_echo", out var isEcho) && isEcho.GetBoolean())
 										continue;
 
@@ -115,7 +116,6 @@ namespace CrossChat.Controllers
 
 									_logger.LogInformation($"[Facebook Webhook] Поймано ЛС от {senderId}: «{text}» (вложений: {attachCount})");
 
-									// Отправляем в Debounce-очередь накопителя!
 									await _publishEndpoint.Publish(new FacebookMessageReceived
 									{
 										BotDbId = settings.Id,
@@ -129,9 +129,7 @@ namespace CrossChat.Controllers
 							}
 						}
 
-						// ===================================================================
-						// 2. ПЕРЕХВАТ КОММЕНТАРИЕВ К ПУБЛИКАЦИЯМ (FEED)
-						// ===================================================================
+						// 2. ПЕРЕХВАТ КОММЕНТАРИЕВ К ПУБЛИКАЦИЯМ
 						if (settings.IsCommentsEnabled && entry.TryGetProperty("changes", out var changesArr))
 						{
 							foreach (var change in changesArr.EnumerateArray())
@@ -187,6 +185,9 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК СТРАНИЦЫ (/facebook)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int? botId)
 		{
@@ -200,6 +201,13 @@ namespace CrossChat.Controllers
 				settings = await _db.FacebookSettings
 					.Include(p => p.Profile)
 					.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+				// МЕТОД BaseController: считаем публикации для предупреждения перед отключением
+				ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.Facebook, botId.Value);
+			}
+			else
+			{
+				ViewBag.LinkedPostsCount = 0;
 			}
 
 			ViewBag.Profiles = await _db.Profile
@@ -212,6 +220,60 @@ namespace CrossChat.Controllers
 			return View(settings);
 		}
 
+		// ==========================================================
+		// 2. ОТКЛЮЧЕНИЕ СТРАНИЦЫ (С УМНОЙ ОЧИСТКОЙ ПОСТОВ)
+		// ==========================================================
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.FacebookSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"[Facebook] Попытка удаления ненайденной страницы {botId} пользователем {userId}");
+				return RedirectToAction("Profile", "Auth");
+			}
+
+			try
+			{
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И GOOGLE DRIVE ИЗ BaseController
+				await CleanupLinkedPostsAsync(NetworkType.Facebook, botId);
+
+				// 2. Отписка от вебхуков Facebook
+				if (!string.IsNullOrEmpty(settings.PageAccessToken))
+				{
+					try
+					{
+						var unsubscribeUrl = $"https://graph.facebook.com/v24.0/{settings.PageId}/subscribed_apps?access_token={settings.PageAccessToken}";
+						await _httpClient.DeleteAsync(unsubscribeUrl);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "[Facebook] Не удалось отписать страницу от вебхуков");
+					}
+				}
+
+				// 3. Удаляем саму интеграцию из базы данных
+				_db.FacebookSettings.Remove(settings);
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation($"✅ [Facebook] Страница '{settings.PageName}' (BotId: {botId}) успешно отключена.");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"[Facebook] Ошибка при отключении страницы {botId}");
+			}
+
+			return RedirectToAction("Profile", "Auth");
+		}
+
+		// ==========================================================
+		// 3. АВТОРИЗАЦИЯ И СОХРАНЕНИЕ СТРАНИЦ (CALLBACK)
+		// ==========================================================
 		[HttpGet("auth/callback")]
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string? code, string? error, string? error_description)
@@ -224,7 +286,6 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Получаем Short-Lived User Token (2 часа)
 				var shortTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 									$"client_id={AppId}&" +
 									$"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
@@ -234,7 +295,6 @@ namespace CrossChat.Controllers
 				var shortResp = await _httpClient.GetFromJsonAsync<JsonElement>(shortTokenUrl);
 				var shortUserToken = shortResp.GetProperty("access_token").GetString();
 
-				// 2. Обмениваем на 60-дневный Long-Lived User Token
 				var longTokenUrl = $"https://graph.facebook.com/v22.0/oauth/access_token?" +
 								   $"grant_type=fb_exchange_token&" +
 								   $"client_id={AppId}&" +
@@ -244,7 +304,6 @@ namespace CrossChat.Controllers
 				var longResp = await _httpClient.GetFromJsonAsync<JsonElement>(longTokenUrl);
 				var longUserToken = longResp.GetProperty("access_token").GetString();
 
-				// 3. Динамически запрашиваем ВСЕ страницы пользователя (личные и Meta Business Suite)
 				var accountsUrl = $"https://graph.facebook.com/v22.0/me/accounts?fields=name,id,access_token,picture{{url}}&access_token={longUserToken}";
 				var accountsResp = await _httpClient.GetFromJsonAsync<JsonElement>(accountsUrl);
 
@@ -258,7 +317,6 @@ namespace CrossChat.Controllers
 					}
 				}
 
-				// Если в me/accounts пусто, автоматически опрашиваем Meta Business Suite
 				if (pagesList.Count == 0)
 				{
 					try
@@ -301,12 +359,10 @@ namespace CrossChat.Controllers
 					return RedirectToAction("Index");
 				}
 
-				// 4. Проверяем авторизацию пользователя на нашем сайте
 				var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
 				if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
 				var userId = int.Parse(userIdStr);
 
-				// 5. Сохраняем все найденные страницы
 				List<FacebookSettings> settings = new();
 				foreach (var page in pagesList)
 				{
@@ -315,7 +371,6 @@ namespace CrossChat.Controllers
 
 				_logger.LogInformation($"[Facebook] Успешно подключено страниц: {settings.Count} для пользователя {userId}");
 
-				// Переходим на страницу первой подключенной страницы
 				var firstPageId = settings.FirstOrDefault()?.Id;
 				return firstPageId.HasValue
 					? RedirectToAction("Index", new { botId = firstPageId.Value })
@@ -328,6 +383,9 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// ==========================================================
+		// 4. ОБНОВЛЕНИЕ НАСТРОЕК
+		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
 		public async Task<IActionResult> UpdateSettings(
@@ -338,19 +396,15 @@ namespace CrossChat.Controllers
 			string dailyStoryTime,
 			bool isStoryOverlayTextEnabled,
 			string? storyOverlayText,
-			// === НАСТРОЙКИ ЛС (MESSENGER) ===
 			bool isDirectEnabled,
 			int directReplyMode,
 			string? directTemplates,
-			// === НАСТРОЙКИ КОММЕНТАРИЕВ ===
 			bool isCommentsEnabled,
 			int commentReplyMode,
 			string? commentTemplates,
 			string commentPrompt)
 		{
-			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
-			var userId = int.Parse(userIdClaim);
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
 			var settings = await _db.FacebookSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
@@ -359,22 +413,18 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// Главный статус: активен, если включено хоть одно направление
 				settings.IsActive = isDirectEnabled || isCommentsEnabled;
 
-				// ЛС:
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.DirectReplyMode = directReplyMode > 0 ? directReplyMode : 2;
 				settings.DirectTemplates = directTemplates;
 				settings.SystemPrompt = systemPrompt ?? "";
 
-				// Комментарии:
 				settings.IsCommentsEnabled = isCommentsEnabled;
 				settings.CommentReplyMode = commentReplyMode > 0 ? commentReplyMode : 2;
 				settings.CommentTemplates = commentTemplates;
 				settings.CommentPrompt = commentPrompt ?? "";
 
-				// Истории:
 				settings.IsDailyStoriesEnabled = isDailyStoriesEnabled;
 				settings.DailyStoryTime = string.IsNullOrWhiteSpace(dailyStoryTime) ? "12:00" : dailyStoryTime.Trim();
 				settings.IsStoryOverlayTextEnabled = isStoryOverlayTextEnabled;
@@ -406,7 +456,6 @@ namespace CrossChat.Controllers
 				pictureUrl = urlProp.GetString();
 			}
 
-			// 1. Подписываем страницу на вебхуки Messenger (для автоответов)
 			try
 			{
 				var subscribeUrl = $"https://graph.facebook.com/v24.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,feed&access_token={pageToken}";
@@ -417,17 +466,19 @@ namespace CrossChat.Controllers
 				_logger.LogWarning(ex, $"[Facebook] Не удалось подписать страницу {pageName} на вебхуки Messenger");
 			}
 
-			// 2. Ищем или создаем запись в БД
 			var settings = await _db.FacebookSettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.PageId == pageId);
 
 			if (settings == null)
 			{
+				// БЕЗОПАСНЫЙ ПРОФИЛЬ ИЗ BaseController (БЕЗ ОШИБКИ NULLABLE):
+				int profileId = await GetActiveProfileIdSafeAsync(_db, userId);
+
 				settings = new FacebookSettings
 				{
 					UserId = userId,
 					PageId = pageId,
-					ProfileId = GetActiveProfileId().Value
+					ProfileId = profileId
 				};
 				_db.FacebookSettings.Add(settings);
 			}
@@ -440,69 +491,14 @@ namespace CrossChat.Controllers
 			settings.PageName = pageName;
 			settings.PageAccessToken = pageToken;
 			settings.IsActive = true;
-
-			// Определяем, привязан ли к этой странице Instagram-аккаунт:
 			settings.LinkedInstagramBusinessId = await GetLinkedInstagramBusinessAccountIdAsync(pageId, pageToken);
-
-			if (!string.IsNullOrEmpty(settings.LinkedInstagramBusinessId))
-			{
-				_logger.LogInformation($"[Facebook] ✅ Страница '{pageName}' связана с Instagram Business ID: {settings.LinkedInstagramBusinessId}");
-			}
-
 
 			await _db.SaveChangesAsync();
 			_logger.LogInformation($"[Facebook] Страница '{pageName}' ({pageId}) сохранена в БД для пользователя {userId}");
 
 			return settings;
 		}
-
-		[HttpPost("disconnect")]
-		[Authorize]
-		public async Task<IActionResult> Disconnect([FromForm] int botId)
-		{
-			// 1. Получаем ID текущего авторизованного пользователя
-			var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-			if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
-			var userId = int.Parse(userIdClaim);
-
-			// 2. Ищем настройки конкретной страницы Facebook в БД, проверяя владельца
-			var settings = await _db.FacebookSettings
-				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
-
-			if (settings == null)
-			{
-				_logger.LogWarning($"[Facebook] Попытка удаления ненайденной или чужой страницы {botId} пользователем {userId}");
-				return RedirectToAction("Index");
-			}
-
-			try
-			{
-				// 3. Очищаем запланированные публикации в NetworkStates для этого бота,
-				// чтобы фоновая джоба (PostPublishingJob) не пыталась слать посты на удаленный аккаунт
-				int facebookNetTypeId = (int)CrossChat.Integrations.Enums.NetworkType.Facebook;
-				var orphanStates = await _db.NetworkStates
-					.Where(ns => ns.NetworkType == facebookNetTypeId && ns.BotId == botId)
-					.ToListAsync();
-
-				if (orphanStates.Any())
-				{
-					_db.NetworkStates.RemoveRange(orphanStates);
-				}
-
-				// 4. Удаляем саму интеграцию из базы данных
-				_db.FacebookSettings.Remove(settings);
-				await _db.SaveChangesAsync();
-
-				_logger.LogInformation($"[Facebook] Страница '{settings.PageName}' (BotId: {botId}) успешно отключена пользователем {userId}");
-			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, $"[Facebook] Ошибка при отключении страницы {botId} пользователя {userId}");
-			}
-
-			// Возвращаемся на главную страницу управления Facebook без выбранного botId
-			return RedirectToAction("Index");
-		}
+		
 
 		private async Task<string?> GetLinkedInstagramBusinessAccountIdAsync(string pageId, string pageToken)
 		{

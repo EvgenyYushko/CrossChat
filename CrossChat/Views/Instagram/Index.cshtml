@@ -508,6 +508,17 @@
             // Показываем поле шаблонов для Режима 2 (Шаблоны) и Режима 3 (Комбинированный)
             templatesBox.style.display = (mode === "2" || mode === "3") ? 'block' : 'none';
         }
+        function confirmDisconnect(postsCount) {
+            if (postsCount > 0) {
+                return confirm(
+                    `⚠️ ВНИМАНИЕ!\n\n` +
+                    `К этому аккаунту Instagram привязано публикаций в планировщике: ${postsCount} шт.\n\n` +
+                    `При отключении аккаунта эти публикации будут автоматически удалены из календаря, а файлы очищены из облака.\n\n` +
+                    `Вы уверены, что хотите отключить аккаунт и удалить связанные публикации?`
+                );
+            }
+            return confirm('Отключить этот Instagram-аккаунт от CrossChat?');
+        }
     </script>
 }
 
@@ -770,8 +781,9 @@
                 </form>
             </div>
 
-            <form action="/instagram/disconnect?botId=@Model.Id" method="post" onsubmit="return confirm('Вы уверены? Бот перестанет отвечать.');">
-                <button type="submit" class="btn btn-danger" style="margin-top: 20px;">Отключить аккаунт</button>
+            <form action="/instagram/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 2rem;">
+                <input type="hidden" name="botId" value="@Model.Id">
+                <button type="submit" class="btn btn-danger">Отключить аккаунт</button>
             </form>
         }
         else

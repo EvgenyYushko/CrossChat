@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
@@ -11,12 +13,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
 {
+	[Authorize]
 	[Route("threads")]
 	public class ThreadsController : BaseController
 	{
@@ -26,15 +28,18 @@ namespace CrossChat.Controllers
 		private readonly IThreadsService _threadsService;
 		private readonly HttpClient _httpClient;
 		private readonly SocialMediaSettings _settings;
-		private const string VerifyToken = "test"; // Задайте свой токен
+		private const string VerifyToken = "test";
 
-		// Специфичные настройки для Threads (нужно добавить в твой SocialMediaSettings класс)
 		private string ThreadsAppId => _settings.ThreadsAppId;
 		private string ThreadsAppSecret => _settings.ThreadsAppSecret;
 		private string RedirectUri => $"{APP_URL}/threads/auth/callback";
 
-		public ThreadsController(ILogger<ThreadsController> logger, AppDbContext db
-			, IOptions<SocialMediaSettings> options, IPublishEndpoint publishEndpoint, IThreadsService threadsService)
+		public ThreadsController(
+			ILogger<ThreadsController> logger, 
+			AppDbContext db,
+			IOptions<SocialMediaSettings> options, 
+			IPublishEndpoint publishEndpoint, 
+			IThreadsService threadsService)
 		{
 			_logger = logger;
 			_db = db;
@@ -44,6 +49,9 @@ namespace CrossChat.Controllers
 			_httpClient = new HttpClient();
 		}
 
+		// ==========================================================
+		// ВЕБХУКИ THREADS (REPLIES & MENTIONS)
+		// ==========================================================
 		[AllowAnonymous]
 		[HttpGet("webhook")]
 		public IActionResult VerifyWebhook(
@@ -56,8 +64,6 @@ namespace CrossChat.Controllers
 			if (mode == "subscribe" && token == VerifyToken)
 			{
 				_logger.LogInformation("Webhook verified successfully");
-
-				// 2. Возвращаем именно Content, чтобы это была чистая строка без HTML-оберток
 				return Ok(challenge);
 			}
 
@@ -114,24 +120,21 @@ namespace CrossChat.Controllers
 								if (string.IsNullOrEmpty(botThreadsId)) continue;
 
 								// 2. ГЛАВНАЯ ЗАЩИТА: РАЗРЫВ БЕСКОНЕЧНОЙ ЦЕПОЧКИ
-								// Если это ответ (reply), проверяем, на что именно ответил человек
 								if (field == "replies" && val.TryGetProperty("replied_to", out var repliedTo))
 								{
 									var repliedToId = repliedTo.TryGetProperty("id", out var rId) ? rId.GetString() : null;
 									var repliedToUsername = repliedTo.TryGetProperty("username", out var rUser) ? rUser.GetString() : null;
 
-									// А) Если человек ответил на комментарий бота — ИГНОРИРУЕМ!
 									if (!string.IsNullOrEmpty(repliedToUsername) &&
 										repliedToUsername.Equals(botUsername, StringComparison.OrdinalIgnoreCase))
 									{
-										_logger.LogInformation($"[Threads] Пользователь @{authorUsername} ответил на комментарий бота. Игнорируем, чтобы не создавать бесконечный диалог.");
+										_logger.LogInformation($"[Threads] Пользователь @{authorUsername} ответил на комментарий бота. Игнорируем.");
 										continue;
 									}
 
-									// Б) Если человек ответил на чей-то чужой комментарий (вложенная ветка), а не на сам пост
 									if (!string.IsNullOrEmpty(repliedToId) && !string.IsNullOrEmpty(rootPostId) && repliedToId != rootPostId)
 									{
-										_logger.LogInformation($"[Threads] Игнорируем вложенный реплай от @{authorUsername} (ответ на коммент {repliedToId}, а не на пост {rootPostId}).");
+										_logger.LogInformation($"[Threads] Игнорируем вложенный реплай от @{authorUsername}.");
 										continue;
 									}
 								}
@@ -141,7 +144,6 @@ namespace CrossChat.Controllers
 
 								_logger.LogInformation($"[Threads] Пойман {field} от {authorUsername}: {text}");
 
-								// Публикуем событие вместе с RootPostId
 								await _publishEndpoint.Publish(new ThreadsEventReceived
 								{
 									BotThreadsId = botThreadsId,
@@ -165,12 +167,15 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК (/threads)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int botId)
 		{
 			if (!User.Identity.IsAuthenticated) return RedirectToAction("Login", "Auth");
 
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
 			var settings = await _db.ThreadsSettings
 				.Include(p => p.Profile)
@@ -180,14 +185,16 @@ namespace CrossChat.Controllers
 				.Where(p => p.UserId == userId)
 				.ToListAsync();
 
-			// Формируем ссылку на авторизацию Threads
+			// МЕТОД ИЗ BaseController: считаем посты для предупреждения перед отключением
+			ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.Threads, botId);
+
 			var scopes = string.Join(",",
-				"threads_basic",            // Профиль
-				"threads_content_publish",  // Постить новые треды
-				"threads_manage_replies",   // Отвечать на реплаи
-				"threads_read_replies",     // ЧИТАТЬ реплаи пользователей (ВАЖНО!)
-				"threads_manage_mentions",  // Видеть упоминания (ВАЖНО!)
-				"threads_manage_insights"   // Статистика
+				"threads_basic",
+				"threads_content_publish",
+				"threads_manage_replies",
+				"threads_read_replies",
+				"threads_manage_mentions",
+				"threads_manage_insights"
 			);
 
 			ViewBag.LoginUrl = $"https://www.threads.net/oauth/authorize?" +
@@ -199,18 +206,41 @@ namespace CrossChat.Controllers
 			return View(settings);
 		}
 
+		// ==========================================================
+		// 2. ОТКЛЮЧЕНИЕ АККАУНТА (С УМНОЙ ОЧИСТКОЙ ПОСТОВ)
+		// ==========================================================
+		[HttpPost("disconnect")]
+		[Authorize]
+		public async Task<IActionResult> Disconnect([FromForm] int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings != null)
+			{
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ФАЙЛОВ GOOGLE DRIVE:
+				await CleanupLinkedPostsAsync(NetworkType.Threads, botId);
+
+				// 2. Отписка и удаление самого аккаунта
+				await DisconnectThreadUser(settings.ThreadsUserId, fullDataDelete: true);
+			}
+
+			return RedirectToAction("Profile", "Auth");
+		}
+
+		// ==========================================================
+		// 3. АВТОРИЗАЦИЯ И CALLBACK
+		// ==========================================================
 		[HttpGet("auth/callback")]
+		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string? code, string? error)
 		{
 			if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
 				return RedirectToAction("Index");
 
-			_logger.LogInformation(code);
-			_logger.LogInformation(error);
-
 			try
 			{
-				// 1. Обмен кода на Short-Lived Token (через graph.threads.net)
 				var formData = new Dictionary<string, string>
 				{
 					{ "client_id", ThreadsAppId },
@@ -225,29 +255,20 @@ namespace CrossChat.Controllers
 				using var shortDoc = JsonDocument.Parse(shortJson);
 				var shortToken = shortDoc.RootElement.GetProperty("access_token").GetString();
 
-				_logger.LogInformation(shortToken);
-
-
-				// 2. Обмен на Long-Lived Token (60 дней)
 				var longUrl = $"https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret={ThreadsAppSecret}&access_token={shortToken}";
 				var longResp = await _httpClient.GetAsync(longUrl);
 				var longJson = await longResp.Content.ReadAsStringAsync();
 				using var longDoc = JsonDocument.Parse(longJson);
 
-				_logger.LogInformation(longJson);
-
-				var longToken = longDoc.RootElement.GetProperty("access_token").GetString();
+				var longToken = longDoc.RootElement.GetProperty("access_token").GetString()!;
 				var expiresIn = longDoc.RootElement.GetProperty("expires_in").GetInt32();
 
-				// 3. Получение данных профиля
 				var profile = await _threadsService.GetThreadsUserProfileAsync(longToken);
 				if (profile == null)
 				{
-					// Если не смогли получить профиль, нет смысла идти дальше
 					return RedirectToAction("Index", new { error = "failed_to_get_profile" });
 				}
 
-				// 4. Сохранение в БД
 				var settings = await AddUserToDb(
 					longToken,
 					profile.Id,
@@ -266,41 +287,38 @@ namespace CrossChat.Controllers
 
 		private async Task<ThreadsSettings> AddUserToDb(string token, string threadsId, string username, string? picUrl, int expiresIn)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО Threads-аккаунта
-			// Ищем по ThreadsUserId, а не просто по UserId
 			var settings = await _db.ThreadsSettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.ThreadsUserId == threadsId);
 
 			bool isNew = false;
 			if (settings == null)
 			{
-				// 2. Если такого аккаунта еще нет у юзера — создаем новый объект
+				// БЕЗОПАСНЫЙ ПРОФИЛЬ ИЗ BaseController (БЕЗ ОШИБКИ NULLABLE):
+				int profileId = await GetActiveProfileIdSafeAsync(_db, userId);
+
 				settings = new ThreadsSettings
 				{
 					UserId = userId,
 					ThreadsUserId = threadsId,
-					ProfileId = GetActiveProfileId().Value
+					ProfileId = profileId
 				};
 				_db.ThreadsSettings.Add(settings);
 				isNew = true;
 			}
 
-			// 3. Обновляем данные (и для новых, и для существующих)
 			settings.AccessToken = token;
 			settings.Username = username;
-			settings.TokenExpiresAt = DateTimeNow.AddSeconds(expiresIn);
+			// ВАЖНО: Срок жизни токена строго в UTC!
+			settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
 			settings.IsActive = true;
 
-			// Рекомендую здесь тоже использовать скачивание в Base64, как мы делали для Инсты
-			// Чтобы аватарка не пропадала через неделю
 			if (!string.IsNullOrEmpty(picUrl))
 			{
 				settings.ProfilePictureUrl = await DownloadImageAsBase64ForHtml(picUrl);
 			}
 
-			// 4. Сохраняем изменения
 			await _db.SaveChangesAsync();
 
 			_logger.LogInformation(isNew
@@ -310,157 +328,24 @@ namespace CrossChat.Controllers
 			return settings;
 		}
 
-		[HttpPost("disconnect")]
-		[Authorize]
-		public async Task<IActionResult> Disconnect(int botId)
-		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = await _db.ThreadsSettings
-				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
-
-			if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
-			{
-				// Сначала пытаемся честно отписаться от вебхуков
-				try
-				{
-					//await ManageWebhooksAsync(settings.AccessToken, false);
-				}
-				catch (Exception ex)
-				{
-					_logger.LogWarning(ex, "Could not unsubscribe before disconnect. proceeding anyway.");
-				}
-
-				await DisconnectThreadUser(settings.ThreadsUserId, fullDataDelete: true);
-			}
-
-			return RedirectToAction("Profile", "Auth");
-		}
-
-		[AllowAnonymous]
-		[HttpGet("deauth")]
-		[HttpPost("deauth")]
-		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null)
-		{
-			_logger.LogInformation($"=== Deauthorization callback received ===");
-			_logger.LogInformation(signed_request);
-
-			try
-			{
-				if (string.IsNullOrEmpty(signed_request)) return Ok();
-
-				var threadUserId = ParseSignedRequest(signed_request);
-				if (!string.IsNullOrEmpty(threadUserId))
-				{
-					_logger.LogInformation($"User {threadUserId} deauthorized app. Cleaning up token...");
-
-					// Вызываем наш метод очистки (false = не удалять всё, только токен)
-					await DisconnectThreadUser(threadUserId, fullDataDelete: true);
-				}
-
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "Error processing deauthorization");
-				return Ok();
-			}
-		}
-
-		[AllowAnonymous]
-		[HttpGet("data-deletion")]
-		[HttpPost("data-deletion")]
-		public async Task<IActionResult> DataDeletionCallback(
-			[FromForm] string signed_request = null)
-		{
-			_logger.LogInformation($"=== Data Deletion callback received ===");
-			_logger.LogInformation(signed_request);
-
-			try
-			{
-				string userId = null;
-				string confirmationCode = Guid.NewGuid().ToString("N");
-
-				if (!string.IsNullOrEmpty(signed_request))
-				{
-					userId = ParseSignedRequest(signed_request);
-				}
-
-				if (!string.IsNullOrEmpty(userId))
-				{
-					_logger.LogInformation($"Processing FULL DATA DELETION for user: {userId}");
-
-					// Удаляем данные полностью (true)
-					await DisconnectThreadUser(userId, fullDataDelete: true);
-				}
-
-				// Генерируем URL статуса (его нужно реализовать ниже)
-				var statusUrl = $"{APP_URL}/instagram/deletion-status/{confirmationCode}";
-
-				var response = new
-				{
-					url = statusUrl,
-					confirmation_code = confirmationCode,
-					status = "success" // Мы удалили данные синхронно, так что сразу success
-				};
-
-				return Ok(response);
-			}
-			catch (Exception ex)
-			{
-				_logger.LogError(ex, "Error processing data deletion");
-				return Ok(new { url = $"{APP_URL}", confirmation_code = "error", status = "error" });
-			}
-		}
-
-		private string ParseSignedRequest(string signedRequest)
-		{
-			try
-			{
-				var parts = signedRequest.Split('.');
-				if (parts.Length != 2) return null;
-
-				var payload = parts[1].Replace('-', '+').Replace('_', '/');
-				switch (payload.Length % 4)
-				{
-					case 2: payload += "=="; break;
-					case 3: payload += "="; break;
-				}
-
-				var payloadBytes = Convert.FromBase64String(payload);
-				var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
-
-				dynamic data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
-				return data.user_id?.ToString();
-			}
-			catch
-			{
-				return null;
-			}
-		}
-
 		private async Task<bool> DisconnectThreadUser(string threadUserId, bool fullDataDelete)
 		{
-			// Ищем настройки, где BusinessId совпадает с ID из вебхука
 			var settings = await _db.ThreadsSettings
 				.FirstOrDefaultAsync(s => s.ThreadsUserId == threadUserId);
 
 			if (settings == null)
 			{
-				_logger.LogInformation($"[Threads] Попытка удаления для {threadUserId}, но данных в базе уже нет. Всё ок.");
+				_logger.LogInformation($"[Threads] Попытка удаления для {threadUserId}, но данных в базе уже нет.");
 				return true;
 			}
 
 			try
 			{
-				// Логика отписки (опционально)
-				if (!string.IsNullOrEmpty(settings.AccessToken))
-				{
-					_logger.LogInformation($"[Threads] Пытаемся отписать вебхуки для {threadUserId}...");
-					// Здесь будет твой вызов ManageWebhooksAsync, если он реализован
-				}
-
 				if (fullDataDelete)
 				{
+					// Если удаление вызвано пользователем или по GDPR вебхуку — чистим посты
+					await CleanupLinkedPostsAsync(NetworkType.Threads, settings.Id);
+
 					_db.ThreadsSettings.Remove(settings);
 					_logger.LogInformation($"[Threads] Удаление записи полностью для: {threadUserId}");
 				}
@@ -472,16 +357,12 @@ namespace CrossChat.Controllers
 					_logger.LogInformation($"[Threads] Очистка токена (Deauth) для: {threadUserId}");
 				}
 
-				// 2. Пытаемся сохранить изменения
 				await _db.SaveChangesAsync();
 				return true;
 			}
 			catch (DbUpdateConcurrencyException)
 			{
-				// 3. Если мы попали сюда, значит кто-то другой (параллельный запрос) 
-				// уже удалил или изменил эту запись. 
-				// В нашем случае это успех — данных больше нет.
-				_logger.LogWarning($"[Threads] Конфликт параллельного доступа при удалении {threadUserId}. Игнорируем, так как запись уже обработана.");
+				_logger.LogWarning($"[Threads] Конфликт параллельного доступа при удалении {threadUserId}.");
 				return true;
 			}
 			catch (Exception ex)
@@ -491,17 +372,19 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// ==========================================================
+		// 4. ОБНОВЛЕНИЕ НАСТРОЕК (ПРОМПТ / ШАБЛОНЫ / РЕЖИМЫ)
+		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
 		public async Task<IActionResult> UpdateSettings(
 			int botId,
 			string systemPrompt,
 			int profileId,
-			// === НОВЫЕ ПАРАМЕТРЫ РЕЖИМА И ШАБЛОНОВ ===
 			int replyMode,
 			string? replyTemplates)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
 			var settings = await _db.ThreadsSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
@@ -518,7 +401,6 @@ namespace CrossChat.Controllers
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.ProfileId = profileId;
 
-				// Сохраняем режим ответов и шаблоны со Spintax:
 				settings.ReplyMode = replyMode > 0 ? replyMode : 2;
 				settings.ReplyTemplates = replyTemplates;
 
@@ -531,6 +413,86 @@ namespace CrossChat.Controllers
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
+		}
+
+		[AllowAnonymous]
+		[HttpGet("deauth")]
+		[HttpPost("deauth")]
+		public async Task<IActionResult> DeauthorizationCallback([FromForm] string signed_request = null!)
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(signed_request)) return Ok();
+
+				var threadUserId = ParseSignedRequest(signed_request);
+				if (!string.IsNullOrEmpty(threadUserId))
+				{
+					await DisconnectThreadUser(threadUserId, fullDataDelete: true);
+				}
+
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error processing deauthorization");
+				return Ok();
+			}
+		}
+
+		[AllowAnonymous]
+		[HttpGet("data-deletion")]
+		[HttpPost("data-deletion")]
+		public async Task<IActionResult> DataDeletionCallback([FromForm] string signed_request = null!)
+		{
+			try
+			{
+				string? userId = null;
+				string confirmationCode = Guid.NewGuid().ToString("N");
+
+				if (!string.IsNullOrEmpty(signed_request))
+				{
+					userId = ParseSignedRequest(signed_request);
+				}
+
+				if (!string.IsNullOrEmpty(userId))
+				{
+					await DisconnectThreadUser(userId, fullDataDelete: true);
+				}
+
+				var statusUrl = $"{APP_URL}/instagram/deletion-status/{confirmationCode}";
+				return Ok(new { url = statusUrl, confirmation_code = confirmationCode, status = "success" });
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error processing data deletion");
+				return Ok(new { url = $"{APP_URL}", confirmation_code = "error", status = "error" });
+			}
+		}
+
+		private string? ParseSignedRequest(string signedRequest)
+		{
+			try
+			{
+				var parts = signedRequest.Split('.');
+				if (parts.Length != 2) return null;
+
+				var payload = parts[1].Replace('-', '+').Replace('_', '/');
+				switch (payload.Length % 4)
+				{
+					case 2: payload += "=="; break;
+					case 3: payload += "="; break;
+				}
+
+				var payloadBytes = Convert.FromBase64String(payload);
+				var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+
+				dynamic? data = JsonConvert.DeserializeObject<dynamic>(payloadJson);
+				return data?.user_id?.ToString();
+			}
+			catch
+			{
+				return null;
+			}
 		}
 	}
 }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -14,7 +15,6 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
-using static CrossChat.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -33,8 +33,12 @@ namespace CrossChat.Controllers
 		private string ClientSecret => _settings.XClientSecret;
 		private string RedirectUri => $"{APP_URL}/x/auth/callback";
 
-		public XController(AppDbContext db, IOptions<SocialMediaSettings> options, IDistributedCache cache
-			, ILogger<XController> logger, IXService xService)
+		public XController(
+			AppDbContext db, 
+			IOptions<SocialMediaSettings> options, 
+			IDistributedCache cache, 
+			ILogger<XController> logger, 
+			IXService xService)
 		{
 			_db = db;
 			_settings = options.Value;
@@ -44,13 +48,28 @@ namespace CrossChat.Controllers
 			_httpClient = new HttpClient();
 		}
 
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК (/x)
+		// ==========================================================
 		[HttpGet]
 		public async Task<IActionResult> Index(int? botId)
 		{
-			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-			var settings = botId.HasValue
-				? await _db.XSettings.Include(p => p.Profile).FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId)
-				: null;
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			XSettings? settings = null;
+			if (botId.HasValue)
+			{
+				settings = await _db.XSettings
+					.Include(p => p.Profile)
+					.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+				// МЕТОД ИЗ BaseController: считаем посты для предупреждения перед отключением
+				ViewBag.LinkedPostsCount = await GetLinkedPostsCountAsync(NetworkType.X, botId.Value);
+			}
+			else
+			{
+				ViewBag.LinkedPostsCount = 0;
+			}
 
 			ViewBag.Profiles = await _db.Profile
 				.Where(p => p.UserId == userId)
@@ -59,29 +78,35 @@ namespace CrossChat.Controllers
 			return View(settings);
 		}
 
+		// ==========================================================
+		// 2. СТАРТ АВТОРИЗАЦИИ (OAUTH 2.0 PKCE)
+		// ==========================================================
 		[HttpPost("connect")]
-		public async Task<IActionResult> Connect()
+		public async Task<IActionResult> Connect([FromQuery] int? profileId)
 		{
+			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+			int userId = int.Parse(userIdStr);
+
+			// Безопасное определение профиля
+			int activeProfileId = profileId ?? await GetActiveProfileIdSafeAsync(_db, userId);
+
 			var state = Guid.NewGuid().ToString("N");
-			// Code Verifier — случайная строка от 43 до 128 символов
 			var codeVerifier = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
 			var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
-			// Сохраняем в кеш (Redis), чтобы проверить в Callback
 			var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) };
 			await _cache.SetStringAsync($"x_state:{state}", state, cacheOptions);
 			await _cache.SetStringAsync($"x_verifier:{state}", codeVerifier, cacheOptions);
-			await _cache.SetStringAsync($"x_userId:{state}", User.FindFirstValue(ClaimTypes.NameIdentifier)!, cacheOptions);
+			await _cache.SetStringAsync($"x_userId:{state}", userIdStr, cacheOptions);
+			// Сохраняем ProfileId в Redis, чтобы не зависеть от кук при редиректе
+			await _cache.SetStringAsync($"x_profileId:{state}", activeProfileId.ToString(), cacheOptions);
 
-			// tweet.read - чтобы видеть свои посты
-			// tweet.write - чтобы бот мог постить
-			// users.read - чтобы получить имя и аватарку профиля
-			// offline.access - ЧТОБЫ ПОЛУЧИТЬ REFRESH TOKEN (Обязательно!)
 			var scopes = "tweet.read tweet.write users.read media.write offline.access";
 
 			var url = $"https://x.com/i/oauth2/authorize?" +
 					  $"response_type=code&" +
-					  $"client_id={ClientId}&" + // Твой ID со скрина
+					  $"client_id={ClientId}&" +
 					  $"redirect_uri={Uri.EscapeDataString(RedirectUri)}&" +
 					  $"scope={Uri.EscapeDataString(scopes)}&" +
 					  $"state={state}&" +
@@ -91,25 +116,33 @@ namespace CrossChat.Controllers
 			return Redirect(url);
 		}
 
+		// ==========================================================
+		// 3. КОЛЛБЭК АВТОРИЗАЦИИ (CALLBACK)
+		// ==========================================================
 		[HttpGet("auth/callback")]
 		[AllowAnonymous]
 		public async Task<IActionResult> Callback(string? code, string? state, string? error)
 		{
-			// 1. Достаем данные из кеша по state
 			var verifier = await _cache.GetStringAsync($"x_verifier:{state}");
 			var internalUserId = await _cache.GetStringAsync($"x_userId:{state}");
+			var profileIdStr = await _cache.GetStringAsync($"x_profileId:{state}");
 
-			if (string.IsNullOrEmpty(verifier)) return BadRequest("Сессия истекла");
+			if (string.IsNullOrEmpty(verifier) || string.IsNullOrEmpty(internalUserId))
+			{
+				_logger.LogWarning("[X] Сессия авторизации устарела");
+				return BadRequest("Сессия авторизации истекла. Попробуйте снова.");
+			}
 
-			// 2. Формируем запрос к X
+			int userId = int.Parse(internalUserId);
+			int? profileId = int.TryParse(profileIdStr, out var pid) ? pid : null;
+
 			var request = new HttpRequestMessage(HttpMethod.Post, "https://api.twitter.com/2/oauth2/token");
 
-			// Авторизация приложения (Basic Auth)
 			var authHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
 			request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authHeader);
 
 			var formData = new Dictionary<string, string> {
-				{ "code", code },
+				{ "code", code! },
 				{ "grant_type", "authorization_code" },
 				{ "client_id", ClientId },
 				{ "redirect_uri", RedirectUri },
@@ -117,43 +150,52 @@ namespace CrossChat.Controllers
 			};
 			request.Content = new FormUrlEncodedContent(formData);
 
-			// 3. Получаем токены
 			var response = await _httpClient.SendAsync(request);
 			var json = await response.Content.ReadAsStringAsync();
 
-			if (!response.IsSuccessStatusCode) return Content($"Ошибка X: {json}");
+			if (!response.IsSuccessStatusCode)
+			{
+				_logger.LogError("[X] Ошибка получения токена: {Json}", json);
+				return Content($"Ошибка авторизации в X: {json}");
+			}
 
 			var data = JsonDocument.Parse(json).RootElement;
 
-			// 4. Сохраняем в БД (AccessToken, RefreshToken, ExpiresIn)
-			var settings = await SaveXTokenToDb(int.Parse(internalUserId), data);
+			var settings = await SaveXTokenToDb(userId, data, profileId);
 
 			return RedirectToAction("Index", new { botId = settings?.Id ?? 0 });
 		}
 
+		// ==========================================================
+		// 4. ОТКЛЮЧЕНИЕ АККАУНТА (С УМНОЙ ОЧИСТКОЙ ПОСТОВ)
+		// ==========================================================
 		[HttpPost("disconnect")]
 		[Authorize]
 		public async Task<IActionResult> Disconnect([FromForm] int botId)
 		{
-			// 1. Получаем ID текущего пользователя
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-			// 2. Ищем конкретную настройку X, принадлежащую этому пользователю
 			var settings = await _db.XSettings
 				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
 
 			if (settings != null)
 			{
-				// 3. Удаляем запись из базы
+				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ФАЙЛОВ GOOGLE DRIVE:
+				await CleanupLinkedPostsAsync(NetworkType.X, botId);
+
+				// 2. Удаляем сам аккаунт из БД
 				_db.XSettings.Remove(settings);
 				await _db.SaveChangesAsync();
 
-				_logger.LogInformation($"[X] Пользователь {userId} отключил аккаунт @{settings.ScreenName}");
+				_logger.LogInformation("✅ [X] Аккаунт @{ScreenName} (Id: {BotId}) и связанные публикации успешно удалены.", settings.ScreenName, botId);
 			}
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Profile", "Auth");
 		}
 
+		// ==========================================================
+		// 5. СОХРАНЕНИЕ НАСТРОЕК
+		// ==========================================================
 		[HttpPost("update-settings")]
 		[Authorize]
 		public async Task<IActionResult> UpdateSettings(int botId, string systemPrompt, int profileId)
@@ -165,7 +207,6 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
-				// Безопасно считываем состояние тумблера из формы
 				var isActiveRaw = Request.Form["isActive"].ToString();
 				bool isActive = isActiveRaw.Contains("true");
 
@@ -174,55 +215,59 @@ namespace CrossChat.Controllers
 				settings.ProfileId = profileId;
 
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[X] Настройки аккаунта @{settings.ScreenName} обновлены. Активность: {isActive}");
+				_logger.LogInformation("✅ [X] Настройки аккаунта @{ScreenName} обновлены.", settings.ScreenName);
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
 		}
 
-		private async Task<XSettings> SaveXTokenToDb(int userId, JsonElement data)
+		private async Task<XSettings> SaveXTokenToDb(int userId, JsonElement data, int? profileId)
 		{
-			// 1. Извлекаем данные о токенах из ответа X
-			var accessToken = data.GetProperty("access_token").GetString();
-			var refreshToken = data.GetProperty("refresh_token").GetString();
+			var accessToken = data.GetProperty("access_token").GetString()!;
+			var refreshToken = data.GetProperty("refresh_token").GetString()!;
 			var expiresIn = data.GetProperty("expires_in").GetInt32();
-			var tokenExpiresAt = DateTimeNow.AddSeconds(expiresIn);
 
-			// 2. Получаем данные профиля пользователя из X API v2
+			// ВАЖНО: Срок жизни токена сохраняем строго в UTC!
+			var tokenExpiresAtUtc = DateTime.UtcNow.AddSeconds(expiresIn);
+
 			string? xUserId = null;
 			string? screenName = null;
 			string? profilePicUrl = null;
 
 			try
 			{
-				var profile =  await _xService.GetXUserProfileAsync(accessToken);
+				var profile = await _xService.GetXUserProfileAsync(accessToken);
 				xUserId = profile.Id;
 				screenName = profile.Username;
 				profilePicUrl = profile.ProfilePictureUrl;
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[X] Не удалось получить данные профиля после авторизации");
+				_logger.LogError(ex, "[X] Не удалось получить профиль пользователя X");
 			}
 
-			// --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Поиск по паре UserId + XUserId ---
-			// Это позволит одному пользователю иметь несколько аккаунтов X в системе
 			var settings = await _db.XSettings
 				.FirstOrDefaultAsync(s => s.UserId == userId && s.XUserId == xUserId);
 
 			bool isNew = false;
 			if (settings == null)
 			{
-				settings = new XSettings { UserId = userId, XUserId = xUserId, ProfileId = GetActiveProfileId().Value };
+				int targetProfileId = (profileId.HasValue && profileId.Value > 0)
+					? profileId.Value
+					: await GetActiveProfileIdSafeAsync(_db, userId);
+
+				settings = new XSettings 
+				{ 
+					UserId = userId, 
+					XUserId = xUserId, 
+					ProfileId = targetProfileId 
+				};
 				_db.XSettings.Add(settings);
 				isNew = true;
 			}
 
-			// 3. Скачиваем аватарку в Base64 (как и в других соцсетях)
 			if (!string.IsNullOrEmpty(profilePicUrl))
 			{
-				// Twitter часто присылает маленькие картинки _normal. 
-				// Если хочешь побольше, можно заменить: profilePicUrl = profilePicUrl.Replace("_normal", "_400x400");
 				var base64Avatar = await DownloadImageAsBase64ForHtml(profilePicUrl);
 				if (base64Avatar != null)
 				{
@@ -230,10 +275,9 @@ namespace CrossChat.Controllers
 				}
 			}
 
-			// 4. Обновляем поля
 			settings.AccessToken = accessToken;
 			settings.RefreshToken = refreshToken;
-			settings.TokenExpiresAt = tokenExpiresAt;
+			settings.TokenExpiresAt = tokenExpiresAtUtc;
 			settings.ScreenName = screenName;
 			settings.IsActive = false;
 
@@ -246,7 +290,6 @@ namespace CrossChat.Controllers
 			return settings;
 		}
 
-		// Вспомогательный метод для PKCE (такой же как в BlueSky)
 		private string GenerateCodeChallenge(string verifier)
 		{
 			using var sha256 = SHA256.Create();
