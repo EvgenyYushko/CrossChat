@@ -37,7 +37,30 @@ namespace CrossChat.Worker.Publishers
 
 			await _console.Log($"Пост успешно опубликован в профиль {settings.Username}.", settings.UserId, state.BotId);
 
-			// 2. ПУБЛИКАЦИЯ ПЕРВОГО КОММЕНТАРИЯ (если задан)
+			// 2. ПУБЛИКАЦИЯ ИСТОРИИ (STORY) ===
+			if (images.Any())
+			{
+				try
+				{
+					var firstPhoto = images.First();
+					await _console.Log("Публикация первого фото в истории страницы Facebook...", settings.UserId, state.BotId);
+					var storyId = await _service.PublishStoryFromBase64(firstPhoto, settings.AccessToken);
+					if (storyId is not null)
+					{
+						await _console.Log($"История StoryId={storyId} успешно опубликована!", settings.UserId, state.BotId);
+					}
+					else
+					{
+						await _console.Log("⚠️ Не удалось опубликовать историю (основной пост опубликован).", settings.UserId, state.BotId);
+					}
+				}
+				catch (Exception ex)
+				{
+					await _console.Log($"⚠️ Ошибка при создании истории: {ex.Message}", settings.UserId, state.BotId);
+				}
+			}
+
+			// 3. ПУБЛИКАЦИЯ ПЕРВОГО КОММЕНТАРИЯ (если задан)
 			if (!string.IsNullOrWhiteSpace(state.FirstComment))
 			{
 				try
