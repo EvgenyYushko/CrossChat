@@ -1,6 +1,5 @@
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Services;
 using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -16,6 +15,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 		private readonly IBlueSkyConsole _console;
 		private readonly IDatabase _redis;
 		private readonly ILogger<BlueSkyCommentConsumer> _logger;
+		private readonly IBlueSkyTokenManager _tokenManager;
 
 		public BlueSkyCommentConsumer(
 			AppDbContext db,
@@ -23,7 +23,8 @@ namespace CrossChat.Worker.Consumers.BlueSky
 			IAiService aiService,
 			IBlueSkyConsole console,
 			IConnectionMultiplexer redis,
-			ILogger<BlueSkyCommentConsumer> logger)
+			ILogger<BlueSkyCommentConsumer> logger,
+			IBlueSkyTokenManager tokenManager)
 		{
 			_db = db;
 			_bskyService = bskyService;
@@ -31,6 +32,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 			_console = console;
 			_redis = redis.GetDatabase();
 			_logger = logger;
+			_tokenManager = tokenManager;
 		}
 
 		public async Task Consume(ConsumeContext<BlueSkyCommentReceived> context)
@@ -56,34 +58,20 @@ namespace CrossChat.Worker.Consumers.BlueSky
 				}
 			}
 
+			var botModel = await _tokenManager.GetValidTokenAsync(msg.BotDbId);
+			if (botModel == null)
+			{
+				_logger.LogError("[BlueSky] Не удалось получить валидный токен для бота {BotId}", msg.BotDbId);
+				return;
+			}
+
 			// 3. Загружаем настройки бота
 			var bot = await _db.BlueSkySettings.FindAsync(msg.BotDbId);
 			if (bot == null || !bot.IsActive || !bot.IsCommentsEnabled || string.IsNullOrEmpty(bot.AccessToken))
 				return;
 
-			var botModel = new BlueSkyModel
-			{
-				AccessToken = bot.AccessToken!,
-				RefreshToken = bot.RefreshToken,
-				Handle = bot.Handle,
-				PrivateKeyJson = bot.PrivateKeyJson!,
-				TokenExpiresAt = bot.TokenExpiresAt,
-				Did = bot.Did!,
-				PdsUrl = bot.PdsUrl!
-			};
-
 			try
 			{
-				// 4. ВАЖНО: Проверяем и обновляем токен перед запросом к API
-				await _bskyService.GetValidTokenAsync(botModel);
-				if (bot.AccessToken != botModel.AccessToken)
-				{
-					bot.AccessToken = botModel.AccessToken;
-					bot.RefreshToken = botModel.RefreshToken;
-					bot.TokenExpiresAt = botModel.TokenExpiresAt;
-					await _db.SaveChangesAsync();
-				}
-
 				int replyMode = bot.CommentReplyMode > 0 ? bot.CommentReplyMode : 2;
 				string? replyText = null;
 

@@ -110,6 +110,7 @@ namespace CrossChat.Worker
 			services.AddKeyedScoped<ISocialPublisher, YouTubePublisher>(NetworkType.YouTube);
 
 			services.AddScoped<TrendRadarService>();
+			services.AddSingleton<IBlueSkyTokenManager, BlueSkyTokenManager>();
 		}
 	}
 }

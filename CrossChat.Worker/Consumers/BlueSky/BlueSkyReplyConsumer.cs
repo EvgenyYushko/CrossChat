@@ -17,6 +17,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 		private readonly IDatabase _redis;
 		private readonly IBlueSkyConsole _console;
 		private readonly ILogger<BlueSkyReplyConsumer> _logger;
+		private readonly IBlueSkyTokenManager _tokenManager;
 
 		public BlueSkyReplyConsumer(
 			AppDbContext db,
@@ -24,7 +25,8 @@ namespace CrossChat.Worker.Consumers.BlueSky
 			IAiService aiService,
 			IConnectionMultiplexer redis,
 			IBlueSkyConsole console,
-			ILogger<BlueSkyReplyConsumer> logger)
+			ILogger<BlueSkyReplyConsumer> logger,
+			IBlueSkyTokenManager tokenManager)
 		{
 			_db = db;
 			_bskyService = bskyService;
@@ -32,6 +34,7 @@ namespace CrossChat.Worker.Consumers.BlueSky
 			_redis = redis.GetDatabase();
 			_console = console;
 			_logger = logger;
+			_tokenManager = tokenManager;
 		}
 
 		public async Task Consume(ConsumeContext<BlueSkyProcessReply> context)
@@ -39,38 +42,21 @@ namespace CrossChat.Worker.Consumers.BlueSky
 			var msg = context.Message;
 
 			// 1. Достаем настройки бота из БД
+			var botModel = await _tokenManager.GetValidTokenAsync(msg.BotDbId);
+			if (botModel == null)
+			{
+				await ReleaseLockAsync(msg.ConvoId);
+				return;
+			}
+
 			var bot = await _db.BlueSkySettings.FindAsync(msg.BotDbId);
 			if (bot == null || !bot.IsActive || !bot.IsDirectEnabled)
 			{
-				// Если бот отключен — сразу освобождаем замок и выходим
-				await ReleaseLockAsync(msg.ConvoId);
 				return;
 			}
 
 			try
 			{
-				var botModel = new BlueSkyModel
-				{
-					AccessToken = bot.AccessToken!,
-					RefreshToken = bot.RefreshToken,
-					Handle = bot.Handle,
-					PrivateKeyJson = bot.PrivateKeyJson!,
-					TokenExpiresAt = bot.TokenExpiresAt,
-					Did = bot.Did!,
-					PdsUrl = bot.PdsUrl!,
-					SystemPrompt = bot.SystemPrompt
-				};
-
-				// 2. ВАЖНО: Гарантируем, что токен свежий перед походом в API
-				await _bskyService.GetValidTokenAsync(botModel);
-				if (bot.AccessToken != botModel.AccessToken)
-				{
-					bot.AccessToken = botModel.AccessToken;
-					bot.RefreshToken = botModel.RefreshToken;
-					bot.TokenExpiresAt = botModel.TokenExpiresAt;
-					await _db.SaveChangesAsync();
-				}
-
 				// 3. Получаем историю сообщений диалога
 				var messages = await _bskyService.GetMessagesAsync(botModel, msg.ConvoId, 10);
 				if (messages == null || !messages.Any())

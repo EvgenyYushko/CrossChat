@@ -1,6 +1,6 @@
 using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Services;
 using CrossChat.Worker.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +28,7 @@ public class TokenRefreshJob : IJob
 	private readonly IXConsole _xConsole;
 	private readonly IEmailService _emailService;
 	private readonly IYouTubeService _youTubeService;
+	private readonly IBlueSkyTokenManager _tokenManager;
 	private readonly IHostEnvironment _env;
 	private readonly ILogger<TokenRefreshJob> _logger;
 	private readonly IDatabase _redis;
@@ -49,7 +50,8 @@ public class TokenRefreshJob : IJob
 		IXConsole xConsole,
 		IEmailService emailService,
 		IHostEnvironment env,
-		IYouTubeService youTubeService
+		IYouTubeService youTubeService,
+		IBlueSkyTokenManager tokenManager
 		)
 	{
 		_db = db;
@@ -64,6 +66,7 @@ public class TokenRefreshJob : IJob
 		_xConsole = xConsole;
 		_emailService = emailService;
 		_youTubeService = youTubeService;
+		_tokenManager = tokenManager;
 		_env = env;
 		_logger = logger;
 		_redis = redis.GetDatabase();
@@ -241,46 +244,23 @@ public class TokenRefreshJob : IJob
 
 		foreach (var bot in bskyUsers)
 		{
-			var lockKey = $"lock:bsky_token_refresh:{bot.Id}";
-			var lockValue = Guid.NewGuid().ToString("N");
-
-			// Берем тот же самый Redis Lock, что и в BluesSkyAnswerJob
-			bool isLockAcquired = await _redis.StringSetAsync(lockKey, lockValue, TimeSpan.FromSeconds(30), When.NotExists);
-
-			if (!isLockAcquired)
-			{
-				_logger.LogInformation($"[TokenRefreshJob] BlueSky: @{bot.Handle} сейчас обрабатывается другой джобой. Пропускаем.");
-				continue;
-			}
-
 			try
 			{
-				// Перечитываем актуальные данные из БД
-				await _db.Entry(bot).ReloadAsync();
-
-				var botModel = new BlueSkyModel
+				// 1. Получаем свежий токен через менеджер с распределенным локом
+				var botModel = await _tokenManager.GetValidTokenAsync(bot.Id);
+				if (botModel == null)
 				{
-					AccessToken = bot.AccessToken!,
-					RefreshToken = bot.RefreshToken,
-					Handle = bot.Handle,
-					PrivateKeyJson = bot.PrivateKeyJson!,
-					TokenExpiresAt = bot.TokenExpiresAt,
-					Did = bot.Did!,
-					PdsUrl = bot.PdsUrl!
-				};
-
-				// 1. Проверяем и обновляем токен через единый метод (если истекает)
-				await _blueSkyService.GetValidTokenAsync(botModel);
-
-				// Если токен был обновлен — фиксируем изменения в сущности
-				if (bot.AccessToken != botModel.AccessToken)
-				{
-					bot.AccessToken = botModel.AccessToken;
-					bot.RefreshToken = botModel.RefreshToken;
-					bot.TokenExpiresAt = botModel.TokenExpiresAt;
+					_logger.LogError($"[TokenRefreshJob] ❌ Не удалось получить токен для @{bot.Handle}. Отправляем уведомление владельцу...");
+					await SendErrorEmailSafeAsync(bot);
+					continue; // Переходим к следующему боту!
 				}
 
-				// 2. Запрашиваем актуальные данные профиля (аватарку и никнейм)
+				// 2. ВАЖНО ДЛЯ EF CORE: Перечитываем сущность из базы данных!
+				// Это гарантирует, что bot подтянет новые токены, сохраненные TokenManager'ом,
+				// и мы случайно не перезапишем их старыми значениями при сохранении аватарки.
+				await _db.Entry(bot).ReloadAsync();
+
+				// 3. Запрашиваем актуальные данные профиля (аватарку и никнейм)
 				var profile = await _blueSkyService.GetProfileAsync(botModel);
 				if (profile != null)
 				{
@@ -295,7 +275,7 @@ public class TokenRefreshJob : IJob
 					}
 				}
 
-				// Сохраняем изменения в БД сразу
+				// 4. Сохраняем обновленные данные профиля в БД
 				await _db.SaveChangesAsync();
 
 				_logger.LogInformation($"✅ [TokenRefreshJob] Данные профиля и токен BlueSky успешно синхронизированы для @{bot.Handle}");
@@ -304,24 +284,38 @@ public class TokenRefreshJob : IJob
 			{
 				_logger.LogError(ex, $"❌ [TokenRefreshJob] Ошибка обновления BlueSky для @{bot.Handle}");
 
-				if (bot.User != null)
-				{
-					try
-					{
-						await _emailService.SendErrorRefreshToken(bot.User.Email, bot.User.Name, bot.Id, bot.Handle ?? "BlueSky", "BlueSky");
-					}
-					catch { }
-				}
+				// КРИТИЧЕСКИ ВАЖНО: Сбрасываем незавершенные изменения в трекере EF Core!
+				// Если на этом боте произошел сбой, сброс очистит контекст,
+				// и следующий бот в цикле обновится АБСОЛЮТНО ЧИСТО без ошибок.
+				_db.ChangeTracker.Clear();
+
+				// Отправляем письмо с уведомлением об ошибке
+				await SendErrorEmailSafeAsync(bot);
 			}
-			finally
-			{
-				// Освобождаем Redis Lock
-				var currentLock = await _redis.StringGetAsync(lockKey);
-				if (currentLock == lockValue)
-				{
-					await _redis.KeyDeleteAsync(lockKey);
-				}
-			}
+		}
+	}
+
+	/// <summary>
+	/// Безопасная отправка письма пользователю с перехватом ошибок почты
+	/// </summary>
+	private async Task SendErrorEmailSafeAsync(BlueSkySettings bot)
+	{
+		if (bot?.User == null || string.IsNullOrEmpty(bot.User.Email)) return;
+
+		try
+		{
+			await _emailService.SendErrorRefreshToken(
+				bot.User.Email,
+				bot.User.Name,
+				bot.Id,
+				bot.Handle ?? "BlueSky",
+				"BlueSky");
+
+			_logger.LogInformation($"📧 Уведомление об ошибке токена успешно отправлено на {bot.User.Email}");
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, $"Не удалось отправить письмо об ошибке токена для @{bot.Handle}");
 		}
 	}
 
