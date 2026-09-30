@@ -192,6 +192,14 @@ builder.Services.AddQuartz(q =>
 		.ForJob(youTubeStoryJobKey)
 		.WithIdentity($"{nameof(YouTubeCommentsPollingJob)}-Trigger")
 		 .WithCronSchedule("0 */5 * ? * *"));
+
+	// 11
+	var driveGcKey = new JobKey(nameof(GoogleDriveMaintenanceJob));
+	q.AddJob<GoogleDriveMaintenanceJob>(opts => opts.WithIdentity(driveGcKey));
+	q.AddTrigger(opts => opts
+		.ForJob(driveGcKey)
+		.WithIdentity($"{nameof(GoogleDriveMaintenanceJob)}-Trigger")
+		.WithCronSchedule("0 0 4 1 * ?"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
@@ -287,10 +295,10 @@ builder.Services.AddSingleton<IEmailService, EmailService>();
 
 builder.Services.Configure<YouTubeOptions>(options =>
 {
-    // Если ключи лежат в секции SocialMediaSettings:
-    var section = builder.Configuration.GetSection("SocialMedia");
-    options.ClientId = section["YouTubeClientId"] ?? "";
-    options.ClientSecret = section["YouTubeClientSecret"] ?? "";
+	// Если ключи лежат в секции SocialMediaSettings:
+	var section = builder.Configuration.GetSection("SocialMedia");
+	options.ClientId = section["YouTubeClientId"] ?? "";
+	options.ClientSecret = section["YouTubeClientSecret"] ?? "";
 });
 builder.Services.AddHttpClient<IYouTubeService, YouTubeService>();
 

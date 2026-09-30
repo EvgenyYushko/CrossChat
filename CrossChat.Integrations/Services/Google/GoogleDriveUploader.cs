@@ -122,14 +122,37 @@ namespace CrossChat.Integrations.Services.Google
 
 		public async Task<IList<File>> GetAllFilesInFolderAsync(string folderId)
 		{
-			var listRequest = _driveService.Files.List();
-			listRequest.Q = $"'{folderId}' in parents and trashed = false";
-			listRequest.Fields = "files(id, name, mimeType, size, createdTime, modifiedTime, webViewLink)";
-			listRequest.IncludeItemsFromAllDrives = true;
-			listRequest.SupportsAllDrives = true;
+			var allFiles = new List<File>();
+			string? pageToken = null;
 
-			var result = await listRequest.ExecuteAsync();
-			return result.Files;
+			try
+			{
+				do
+				{
+					var listRequest = _driveService.Files.List();
+					listRequest.Q = $"'{folderId}' in parents and trashed = false";
+					// Запрашиваем токен следующей страницы и метаданные
+					listRequest.Fields = "nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, webViewLink)";
+					listRequest.IncludeItemsFromAllDrives = true;
+					listRequest.SupportsAllDrives = true;
+					listRequest.PageSize = 1000; // Берем максимум за один сетевой запрос
+					listRequest.PageToken = pageToken;
+
+					var result = await listRequest.ExecuteAsync();
+					if (result.Files != null && result.Files.Any())
+					{
+						allFiles.AddRange(result.Files);
+					}
+
+					pageToken = result.NextPageToken; // Если файлов больше 1000, переходим к следующей пачке
+				} while (!string.IsNullOrEmpty(pageToken));
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Ошибка при получении файлов папки {folderId}: {ex.Message}");
+			}
+
+			return allFiles;
 		}
 
 		private string GetMimeType(string fileName)

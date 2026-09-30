@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.EnvConstants;
 
 namespace CrossChat.Controllers
 {
@@ -26,8 +27,6 @@ namespace CrossChat.Controllers
 		private readonly IPostService _postService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly ILogger<PlannerController> _logger;
-
-		private const string GOOGLE_POSTS_FOLDER_ID = "1BCXzh7k4_eZM3bWVRy8BFmSx6y4fsigu";
 
 		public PlannerController(
 			AppDbContext db,
