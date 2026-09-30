@@ -183,6 +183,12 @@ namespace CrossChat.Controllers
 						  $"code_challenge_method=S256&" +
 						  $"login_hint={handle}";
 
+				var activeProfileId = GetActiveProfileId();
+				if (activeProfileId.HasValue)
+				{
+					await _cache.SetStringAsync($"bsky_profileId:{state}", activeProfileId.Value.ToString(), cacheOptions);
+				}
+
 				return Redirect(url);
 			}
 			catch (Exception ex)
@@ -225,6 +231,8 @@ namespace CrossChat.Controllers
 			var handle = await _cache.GetStringAsync($"bsky_handle:{state}");
 			var did = await _cache.GetStringAsync($"bsky_did:{state}");
 			var pds = await _cache.GetStringAsync($"bsky_pds:{state}");
+			var profileIdStr = await _cache.GetStringAsync($"bsky_profileId:{state}");
+			int? savedProfileId = int.TryParse(profileIdStr, out var pid) ? pid : GetActiveProfileId();
 
 			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(internalUserIdStr))
 			{
@@ -349,7 +357,8 @@ namespace CrossChat.Controllers
 					privateKey,
 					pds!,
 					expireDate,
-					avatarUrl); // Передаем URL аватарки
+					avatarUrl,
+					savedProfileId); // Передаем URL аватарки
 
 				return RedirectToAction("Index", new { botId = settings.Id });
 			}
@@ -376,7 +385,7 @@ namespace CrossChat.Controllers
 			return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
 		}
 
-		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate, string? profilePicUrl)
+		private async Task<BlueSkySettings> SaveToken(int userId, string access, string refresh, string handle, string did, string privateKey, string pds, DateTime expireDate, string? profilePicUrl, int? profileId = null)
 		{
 			// 1. Ищем, нет ли у этого пользователя уже настроек для этого КОНКРЕТНОГО BlueSky аккаунта (по DID)		
 			var settings = await _db.BlueSkySettings
@@ -388,7 +397,19 @@ namespace CrossChat.Controllers
 				// 2. Если такого аккаунта еще нет — создаем
 				settings = new BlueSkySettings { UserId = userId, Did = did };
 				_db.BlueSkySettings.Add(settings);
-				settings.ProfileId = GetActiveProfileId().Value; ;
+
+				// БРОНЕБОЙНОЕ ОПРЕДЕЛЕНИЕ ПРОФИЛЯ (БЕЗ ОШИБОК NULLABLE):
+				if (profileId.HasValue && profileId.Value > 0)
+				{
+					settings.ProfileId = profileId.Value;
+				}
+				else
+				{
+					// Фоллбек: если кука слетела, берем первый попавшийся профиль пользователя из базы
+					var defaultProfile = await _db.Profile.FirstOrDefaultAsync(p => p.UserId == userId);
+					settings.ProfileId = defaultProfile?.Id ?? 0;
+				}
+
 				isNew = true;
 			}
 
