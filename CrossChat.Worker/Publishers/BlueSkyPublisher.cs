@@ -2,7 +2,6 @@ using CrossChat.Data;
 using CrossChat.Data.Entities.Posting;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Services;
 using CrossChat.Worker.Publishers.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,36 +11,36 @@ public class BlueSkyPublisher : ISocialPublisher
 
 	private readonly AppDbContext _db;
 	private readonly IBlueSkyService _service;
+	private readonly IBlueSkyTokenManager _tokenManager; // <-- ВНЕДРЯЕМ МЕНЕДЖЕР
 	private readonly IBlueSkyConsole _console;
 
-	public BlueSkyPublisher(AppDbContext db, IBlueSkyService service, IBlueSkyConsole console)
+	public BlueSkyPublisher(
+		AppDbContext db,
+		IBlueSkyService service,
+		IBlueSkyTokenManager tokenManager,
+		IBlueSkyConsole console)
 	{
 		_db = db;
 		_service = service;
+		_tokenManager = tokenManager;
 		_console = console;
 	}
 
 	public async Task PublishAsync(NetworkStateEntity state, string caption, List<string> images)
 	{
+		if (!state.BotId.HasValue)
+			throw new Exception("BotId не указан для публикации в BlueSky");
+
+		// 1. ПОЛУЧАЕМ ГАРАНТИРОВАННО СВЕЖИЙ ТОКЕН ЧЕРЕЗ МЕНЕДЖЕР (С АВТО-СОХРАНЕНИЕМ В БД!)
+		var botModel = await _tokenManager.GetValidTokenAsync(state.BotId.Value);
+		if (botModel == null)
+			throw new Exception($"Не удалось получить валидный токен для BlueSky (BotId: {state.BotId})");
+
 		var settings = await _db.BlueSkySettings.FirstOrDefaultAsync(x => x.Id == state.BotId);
 		if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
 			throw new Exception($"Не найдены настройки для BlueSky (BotId: {state.BotId})");
 
-		await _console.Log($"Начало отправки поста в BlueSky @{settings.Handle}.", settings.UserId, state.BotId);
-
-		var botModel = new BlueSkyModel
-		{
-			AccessToken = settings.AccessToken,
-			RefreshToken = settings.RefreshToken,
-			Handle = settings.Handle,
-			PrivateKeyJson = settings.PrivateKeyJson,
-			TokenExpiresAt = settings.TokenExpiresAt,
-			Did = settings.Did,
-			PdsUrl = settings.PdsUrl,
-			SystemPrompt = settings.SystemPrompt
-		};
-
-		await _service.GetValidTokenAsync(botModel);
+		await _console.Log($"Начало отправки поста в BlueSky @{botModel.Handle}.", 0, state.BotId);
 
 		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
 		var videoItem = images?.FirstOrDefault(isVideo);
@@ -81,17 +80,17 @@ public class BlueSkyPublisher : ISocialPublisher
 
 		if (!success)
 		{
-			throw new Exception($"Ошибка при публикации поста в BlueSky @{settings.Handle}");
+			throw new Exception($"Ошибка при публикации поста в BlueSky @{botModel.Handle}");
 		}
 
-		await _console.Log($"Пост успешно опубликован в BlueSky @{settings.Handle}.", settings.UserId, state.BotId);
+		await _console.Log($"Пост успешно опубликован в BlueSky @{botModel.Handle}.", 0, state.BotId);
 
 		// === 4. ПУБЛИКАЦИЯ ПЕРВОГО КОММЕНТАРИЯ (ВЕТКА В BLUESKY) ===
 		if (!string.IsNullOrWhiteSpace(state.FirstComment) && !string.IsNullOrEmpty(postUri) && !string.IsNullOrEmpty(postCid))
 		{
 			try
 			{
-				await _console.Log("Публикация первого комментария (Reply) в BlueSky...", settings.UserId, state.BotId);
+				await _console.Log("Публикация первого комментария (Reply) в BlueSky...", 0, state.BotId);
 
 				// Пауза 1.5 сек для фиксации корневого поста в репозитории PDS
 				await Task.Delay(1500);
@@ -99,16 +98,16 @@ public class BlueSkyPublisher : ISocialPublisher
 				bool replySuccess = await _service.CreateReplyAsync(state.FirstComment.Trim(), postUri, postCid, botModel);
 				if (replySuccess)
 				{
-					await _console.Log("Первый комментарий в BlueSky успешно опубликован!", settings.UserId, state.BotId);
+					await _console.Log("Первый комментарий в BlueSky успешно опубликован!", 0, state.BotId);
 				}
 				else
 				{
-					await _console.Log("⚠️ Не удалось опубликовать первый комментарий в BlueSky (основной пост опубликован).", settings.UserId, state.BotId);
+					await _console.Log("⚠️ Не удалось опубликовать первый комментарий в BlueSky (основной пост опубликован).", 0, state.BotId);
 				}
 			}
 			catch (Exception ex)
 			{
-				await _console.Log($"⚠️ Ошибка при создании первого комментария в BlueSky: {ex.Message}", settings.UserId, state.BotId);
+				await _console.Log($"⚠️ Ошибка при создании первого комментария в BlueSky: {ex.Message}", 0, state.BotId);
 			}
 		}
 	}

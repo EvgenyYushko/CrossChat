@@ -290,7 +290,7 @@ namespace CrossChat.Controllers
 				var accessToken = data.GetProperty("access_token").GetString()!;
 				var refreshToken = data.GetProperty("refresh_token").GetString()!;
 				int expiresIn = data.GetProperty("expires_in").GetInt32();
-				var expireDate = DateTimeNow.AddSeconds(expiresIn);
+				var expireDate = DateTime.UtcNow.AddSeconds(expiresIn);
 
 				// --- НОВОЕ: Получаем данные профиля (аватарку) ---
 				string? avatarUrl = null;

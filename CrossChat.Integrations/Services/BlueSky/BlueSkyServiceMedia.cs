@@ -196,7 +196,7 @@ namespace CrossChat.Integrations.Services
 			{
 				Text = postText,
 				Facets = facets.Any() ? facets : null,
-				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+				CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
 				Embed = embedPayload
 			};
 
@@ -232,7 +232,7 @@ namespace CrossChat.Integrations.Services
 			{
 				Text = postText,
 				Facets = facets.Any() ? facets : null,
-				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 			};
 
 			var payload = new { repo = setting.Did, collection = "app.bsky.feed.post", record = record };
@@ -288,7 +288,7 @@ namespace CrossChat.Integrations.Services
 					text = postText,
 					facets = facets.Any() ? facets : null,
 					reply = replyPayload,
-					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+					createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 				};
 
 				var payload = new
@@ -384,7 +384,7 @@ namespace CrossChat.Integrations.Services
 			{
 				Text = postText,
 				Facets = facets.Any() ? facets : null,
-				CreatedAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+				CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
 				Embed = embedPayload
 			};
 

@@ -72,8 +72,6 @@ namespace CrossChat.Integrations.Services
 
 			try
 			{
-				// --- ПОПЫТКА №1 (без nonce) ---
-				// 'ath' здесь не нужен, так как мы работаем с токеном обновления, а не доступа
 				var (dpopProof, _) = CreateDPoPProof("POST", tokenUrl, privateKeyJson);
 
 				var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
@@ -85,16 +83,13 @@ namespace CrossChat.Integrations.Services
 				var response = await _httpClient.SendAsync(request);
 				var json = await response.Content.ReadAsStringAsync();
 
-				// --- ПРОВЕРКА НА ТРЕБОВАНИЕ NONCE ---
 				if (!response.IsSuccessStatusCode && json.Contains("use_dpop_nonce"))
 				{
-					Console.WriteLine("[BlueSky] Refresh: Сервер запросил Nonce. Повторяем...");
+					_logger.LogInformation("[BlueSky] Refresh: Сервер запросил Nonce. Повторяем...");
 
 					if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
 					{
 						var serverNonce = nonceValues.First();
-
-						// --- ПОПЫТКА №2 (с полученным nonce) ---
 						var (retryDpopProof, _) = CreateDPoPProof("POST", tokenUrl, privateKeyJson, serverNonce);
 
 						var retryRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
@@ -110,11 +105,10 @@ namespace CrossChat.Integrations.Services
 
 				if (!response.IsSuccessStatusCode)
 				{
-					Console.WriteLine($"[BlueSky] Ошибка обновления токена: {json}");
+					_logger.LogError("[BlueSky] Ошибка обновления токена: {Json}", json);
 					return null;
 				}
 
-				// --- УСПЕХ! ---
 				var data = JsonDocument.Parse(json).RootElement;
 
 				return (
@@ -125,7 +119,7 @@ namespace CrossChat.Integrations.Services
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine(ex + "[BlueSky] Критическая ошибка при RefreshToken");
+				_logger.LogError(ex, "[BlueSky] Критическая ошибка при RefreshToken");
 				return null;
 			}
 		}
@@ -136,15 +130,11 @@ namespace CrossChat.Integrations.Services
 
 			if (string.IsNullOrEmpty(existingKeyJson))
 			{
-				// Создаем новый ключ
 				ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 			}
 			else
 			{
-				// Восстанавливаем ключ из нашего DTO
 				var keyDto = JsonSerializer.Deserialize<BlueSkyKeyDto>(existingKeyJson);
-
-				// ВАЖНО: Координаты X и Y передаются через структуру ECPoint в поле Q
 				var params_ = new ECParameters
 				{
 					Curve = ECCurve.NamedCurves.nistP256,
@@ -161,7 +151,6 @@ namespace CrossChat.Integrations.Services
 			var signingKey = new ECDsaSecurityKey(ecdsa);
 			var jwk = JsonWebKeyConverter.ConvertFromSecurityKey(signingKey);
 
-			// Публичная часть для заголовка (только X и Y)
 			var publicJwkDict = new Dictionary<string, object> {
 				{ "kty", "EC" }, { "crv", "P-256" }, { "x", jwk.X }, { "y", jwk.Y }, { "alg", "ES256" }
 			};
@@ -171,6 +160,7 @@ namespace CrossChat.Integrations.Services
 			header["typ"] = "dpop+jwt";
 			header["jwk"] = publicJwkDict;
 
+			// ВАЖНО: iat строго в UTC
 			var payload = new JwtPayload {
 				{ "jti", Guid.NewGuid().ToString("N") },
 				{ "htm", method.ToUpper() },
@@ -179,17 +169,12 @@ namespace CrossChat.Integrations.Services
 			};
 
 			if (!string.IsNullOrEmpty(nonce)) payload["nonce"] = nonce;
-
-			if (!string.IsNullOrEmpty(aud))
-			{
-				payload["aud"] = aud;
-			}
+			if (!string.IsNullOrEmpty(aud)) payload["aud"] = aud;
 
 			if (!string.IsNullOrEmpty(accessToken))
 			{
 				using var sha256 = SHA256.Create();
 				var hashBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(accessToken));
-				// Кодируем хэш в Base64Url (без лишних символов)
 				var ath = Base64UrlEncoder.Encode(hashBytes);
 				payload["ath"] = ath;
 			}
@@ -197,7 +182,6 @@ namespace CrossChat.Integrations.Services
 			var token = new JwtSecurityToken(header, payload);
 			var proof = handler.WriteToken(token);
 
-			// Экспортируем параметры в наш DTO для сохранения
 			var p = ecdsa.ExportParameters(true);
 			var exportDto = new BlueSkyKeyDto
 			{
@@ -219,18 +203,14 @@ namespace CrossChat.Integrations.Services
 				req.Headers.Add("Authorization", $"DPoP {settings.AccessToken}");
 				req.Headers.Add("DPoP", proof);
 
-				// УМНЫЙ АВТО-ВЫБОР ПРОКСИ ДЛЯ AT PROTOCOL:
 				if (url.Contains("/chat.bsky."))
 				{
-					// Личные сообщения (Чат) направляем на сервис чатов
 					req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
 				}
 				else if (url.Contains("/app.bsky."))
 				{
-					// Уведомления, ленту и реплаи направляем на главный AppView!
 					req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.app#bsky_appview");
 				}
-				// Для /com.atproto.repo.* (создание постов и загрузка блобов) заголовок не нужен — PDS обрабатывает сам
 
 				if (body != null)
 				{
@@ -247,11 +227,9 @@ namespace CrossChat.Integrations.Services
 				return req;
 			}
 
-			// 1. Первая попытка отправки
 			var request = await CreateRequest();
 			var response = await _httpClient.SendAsync(request);
 
-			// 2. Если сервер просит Nonce — обновляем DPoP-токен и повторяем
 			if (!response.IsSuccessStatusCode)
 			{
 				var responseContent = await response.Content.ReadAsStringAsync();
@@ -267,35 +245,34 @@ namespace CrossChat.Integrations.Services
 
 		public async Task<string> GetValidTokenAsync(BlueSkyModel settings)
 		{
-			// 1. Если токен еще действует больше 15 минут — отдаем текущий без лишних сетевых запросов
-			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTimeNow.AddMinutes(15))
+			// Проверяем срок действия строго в UTC
+			if (settings.TokenExpiresAt.HasValue && settings.TokenExpiresAt.Value > DateTime.UtcNow.AddMinutes(10))
 			{
 				return settings.AccessToken!;
 			}
 
-			_logger.LogInformation($"[BlueSky] Токен для @{settings.Handle} требует обновления (осталось < 15 мин или истек). Обновляем...");
+			_logger.LogInformation($"[BlueSky] Токен для @{settings.Handle} требует обновления. Обновляем...");
 
 			if (string.IsNullOrEmpty(settings.RefreshToken))
 			{
-				throw new InvalidOperationException($"[BlueSky] Отсутствует RefreshToken для @{settings.Handle}. Требуется повторный вход.");
+				throw new InvalidOperationException($"[BlueSky] Отсутствует RefreshToken для @{settings.Handle}.");
 			}
 
-			// 2. Вызываем единый механизм рефреша
 			var result = await RefreshTokenAsync(settings.RefreshToken, settings.PrivateKeyJson!);
 
 			if (result != null)
 			{
-				// 3. Обновляем модель в памяти
 				settings.AccessToken = result.Value.AccessToken;
 				settings.RefreshToken = result.Value.RefreshToken;
-				settings.TokenExpiresAt = DateTimeNow.AddSeconds(result.Value.ExpiresIn);
+				// ВАЖНО: сохраняем срок жизни строго в UTC
+				settings.TokenExpiresAt = DateTime.UtcNow.AddSeconds(result.Value.ExpiresIn);
 
-				_logger.LogInformation($"[BlueSky] Токен успешно обновлен для @{settings.Handle}. Новый срок истечения: {settings.TokenExpiresAt}");
+				_logger.LogInformation($"[BlueSky] Токен успешно обновлен для @{settings.Handle}. Истекает: {settings.TokenExpiresAt:yyyy-MM-dd HH:mm:ss} UTC");
 
 				return settings.AccessToken;
 			}
 
-			throw new Exception($"Не удалось обновить токен BlueSky для @{settings.Handle}. Сервер отклонил RefreshToken.");
+			throw new Exception($"Не удалось обновить токен BlueSky для @{settings.Handle}.");
 		}
 
 		public async Task<List<Convo>> GetUnreadConversationsAsync(BlueSkyModel settings)
@@ -303,56 +280,38 @@ namespace CrossChat.Integrations.Services
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.listConvos";
 
-			//var accessToken = settings.AccessToken;
-
 			try
 			{
-				// В SendWithDPoPAsync (который мы писали раньше) 
-				// убедись, что используется правильный заголовок прокси.
 				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
-
 				if (response.IsSuccessStatusCode)
 				{
 					var json = await response.Content.ReadAsStringAsync();
 					var result = JsonSerializer.Deserialize<ConvoListResponse>(json);
 					return result?.Convos.Where(c => c.UnreadCount > 0).ToList() ?? new List<Convo>();
 				}
-				else
-				{
-					var err = await response.Content.ReadAsStringAsync();
-					_logger.LogError($"[BlueSky] Ошибка чата: {response.StatusCode} - {err}");
-				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "[BlueSky] Критическая ошибка GetUnreadConversations");
+				_logger.LogError(ex, "[BlueSky] Ошибка GetUnreadConversations");
 			}
 
 			return new List<Convo>();
 		}
 
-
 		public async Task<List<MessageBlueSky>> GetMessagesAsync(BlueSkyModel settings, string convoId, int limit = 15)
 		{
-			// 1. Формируем URL. Важно: шлем на PDS.
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.getMessages?convoId={convoId}&limit={limit}";
 
-			// 2. Используем наш универсальный метод с DPoP и прокси-заголовком
 			var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
 
 			if (response.IsSuccessStatusCode)
 			{
 				var json = await response.Content.ReadAsStringAsync();
-
-				// В BlueSky этот метод возвращает объект { "messages": [...], "cursor": "..." }
 				using var doc = JsonDocument.Parse(json);
 				if (doc.RootElement.TryGetProperty("messages", out var messagesArray))
 				{
 					var messages = JsonSerializer.Deserialize<List<MessageBlueSky>>(messagesArray.GetRawText());
-
-					// ВАЖНО: API отдает сообщения от новых к старым.
-					// Для ИИ нам нужно перевернуть их, чтобы диалог шел по порядку.
 					if (messages != null)
 					{
 						messages.Reverse();
@@ -369,10 +328,8 @@ namespace CrossChat.Integrations.Services
 			return new List<MessageBlueSky>();
 		}
 
-
 		public async Task<bool> SendChatMessageAsync(BlueSkyModel settings, string convoId, string text)
 		{
-			// 1. ПРАВИЛЬНЫЙ URL: запрос идет на твой PDS (как и в получении списка чатов)
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.sendMessage";
 
@@ -382,11 +339,7 @@ namespace CrossChat.Integrations.Services
 				message = new { text = text }
 			};
 
-			// 2. Вызываем наш универсальный метод
-			// Убедись, что внутри SendWithDPoPAsync РАСКОММЕНТИРОВАН заголовок:
-			// req.Headers.TryAddWithoutValidation("atproto-proxy", "did:web:api.bsky.chat#bsky_chat");
 			var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
-
 			if (response.IsSuccessStatusCode)
 			{
 				_logger.LogInformation($"[BlueSky] ✅ Сообщение отправлено в чат {convoId}");
@@ -398,16 +351,13 @@ namespace CrossChat.Integrations.Services
 			return false;
 		}
 
-		// =================================================================
-		// 3. ПОМЕТИТЬ КАК ПРОЧИТАННОЕ
-		// =================================================================
 		public async Task MarkConvoAsReadAsync(BlueSkyModel settings, string convoId, string lastMessageId)
 		{
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.updateRead";
 
 			var payload = new { convoId = convoId, messageId = lastMessageId };
-
+			
 			var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
 			if (response.IsSuccessStatusCode)
 			{
@@ -419,9 +369,6 @@ namespace CrossChat.Integrations.Services
 			_logger.LogError($"[BlueSky] ❌ Ошибка пеметки сообщеня как прочитанное: {err}");
 		}
 
-		/// <summary>
-		/// Получает список непрочитанных уведомлений (реплаи и меншены)
-		/// </summary>
 		public async Task<List<Notification>> GetUnreadNotificationsAsync(BlueSkyModel settings)
 		{
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
@@ -436,13 +383,9 @@ namespace CrossChat.Integrations.Services
 					var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 					var result = JsonSerializer.Deserialize<NotificationListResponse>(json, options);
 
-					if (result?.Notifications == null || !result.Notifications.Any())
-						return new List<Notification>();
-
-					// Отдаем реплаи и меншены (фильтрацию по времени сделает джоба через базу данных!)
-					return result.Notifications
+					return result?.Notifications?
 						.Where(n => n.Reason == "reply" || n.Reason == "mention")
-						.ToList();
+						.ToList() ?? new List<Notification>();
 				}
 				else
 				{
@@ -458,9 +401,6 @@ namespace CrossChat.Integrations.Services
 			return new List<Notification>();
 		}
 
-		/// <summary>
-		/// Отправляет ответ на конкретный комментарий пользователя в ветке BlueSky
-		/// </summary>
 		public async Task<bool> ReplyToThreadCommentAsync(string postText, string parentUri, string parentCid, string rootUri, string rootCid, BlueSkyModel setting)
 		{
 			if (string.IsNullOrEmpty(setting.AccessToken) || string.IsNullOrEmpty(setting.PdsUrl)) return false;
@@ -471,10 +411,8 @@ namespace CrossChat.Integrations.Services
 				var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 				var postEndpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
 
-				// Превращаем хештеги в кликабельные фасеты
 				List<Facet> facets = TryGetFacets(postText);
 
-				// Связываем: root — корень всей ветки, parent — комментарий, на который отвечаем!
 				var replyPayload = new
 				{
 					root = new { uri = rootUri, cid = rootCid },
@@ -486,7 +424,8 @@ namespace CrossChat.Integrations.Services
 					text = postText,
 					facets = facets.Any() ? facets : null,
 					reply = replyPayload,
-					createdAt = DateTimeNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+					// ИСПРАВЛЕНО: строго UTC дата!
+					createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 				};
 
 				var payload = new
@@ -509,15 +448,12 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		/// <summary>
-		/// Помечает уведомления прочитанными
-		/// </summary>
 		public async Task UpdateNotificationsSeenAsync(BlueSkyModel settings, DateTime seenAt)
 		{
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
 			var endpoint = $"{pdsUrl}/xrpc/app.bsky.notification.updateSeen";
 
-			// ВАЖНО: Принудительно конвертируем в UTC, чтобы не отправить локальное время в будущее!
+			// ИСПРАВЛЕНО: строго UTC
 			DateTime utcTime = seenAt.Kind == DateTimeKind.Utc ? seenAt : seenAt.ToUniversalTime();
 			string utcString = utcTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
