@@ -217,7 +217,7 @@ public partial class ThreadsService : IThreadsService
 	}
 
 	/// <summary>
-	/// Получает ленту постов Threads с курсорной пагинацией
+	/// Получает ленту постов Threads с предзагрузкой инсайтов (лайки, комменты, ER прямо на карточках)
 	/// </summary>
 	public async Task<ThreadsFeedPageDto> GetAccountFeedAsync(string accessToken, int limit = 12, string? after = null, string? before = null)
 	{
@@ -263,6 +263,24 @@ public partial class ThreadsService : IThreadsService
 
 					result.Posts.Add(post);
 				}
+
+				// ПАРАЛЛЕЛЬНАЯ ПОДГРУЗКА ИНСАЙТОВ ДЛЯ КАРТОЧЕК:
+				// Быстро запрашиваем метрики (views, likes, replies, reposts) для всех постов пачки
+				var insightTasks = result.Posts.Select(async p =>
+				{
+					try
+					{
+						var ins = await GetThreadInsightsAsync(p.Id, accessToken);
+						p.Views = ins.Views;
+						p.Likes = ins.Likes;
+						p.Replies = ins.Replies;
+						p.Reposts = ins.Reposts;
+						p.Quotes = ins.Quotes;
+					}
+					catch { }
+				});
+
+				await Task.WhenAll(insightTasks);
 			}
 
 			if (root.TryGetProperty("paging", out var paging) && paging.TryGetProperty("cursors", out var cursors))
@@ -370,47 +388,63 @@ public partial class ThreadsService : IThreadsService
 	}
 
 	/// <summary>
-	/// Получает сводную аналитику аккаунта Threads (суммарные просмотры, лайки, репосты и количество подписчиков)
+	/// Получает сводную аналитику аккаунта Threads за последние 28 дней
 	/// </summary>
 	public async Task<ThreadsAccountInsightsDto> GetAccountInsightsAsync(string accessToken)
 	{
 		var insights = new ThreadsAccountInsightsDto();
+
+		// ВАЖНО: Указываем окно за 28 дней в Unix Timestamp!
+		// Без since и until Meta отдает данные только за последние 24 часа.
+		long since = DateTimeOffset.UtcNow.AddDays(-28).ToUnixTimeSeconds();
+		long until = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
 		string metrics = "views,likes,replies,reposts,quotes,followers_count";
-		string url = $"https://graph.threads.net/v1.0/me/threads_insights?metric={metrics}&access_token={accessToken}";
+		string url = $"https://graph.threads.net/v1.0/me/threads_insights?metric={metrics}&since={since}&until={until}&access_token={accessToken}";
 
 		try
 		{
 			var response = await _httpClient.GetAsync(url);
-			if (response.IsSuccessStatusCode)
+
+			// Если с диапазоном 28 дней возникла заминка (аккаунт новый), пробуем без диапазона
+			if (!response.IsSuccessStatusCode)
 			{
-				var json = await response.Content.ReadAsStringAsync();
-				using var doc = JsonDocument.Parse(json);
+				url = $"https://graph.threads.net/v1.0/me/threads_insights?metric={metrics}&access_token={accessToken}";
+				response = await _httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return insights;
+			}
 
-				if (doc.RootElement.TryGetProperty("data", out var dataArr))
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+
+			if (doc.RootElement.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var m in dataArr.EnumerateArray())
 				{
-					foreach (var m in dataArr.EnumerateArray())
+					var name = m.GetProperty("name").GetString();
+					int val = 0;
+
+					// Суммируем значения из массива за 28 дней
+					if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
 					{
-						var name = m.GetProperty("name").GetString();
-						int val = 0;
+						foreach (var dayVal in vals.EnumerateArray())
+						{
+							if (dayVal.TryGetProperty("value", out var v)) val += v.GetInt32();
+						}
+					}
+					else if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var tv))
+					{
+						val = tv.GetInt32();
+					}
 
-						if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var v))
-						{
-							val = v.GetInt32();
-						}
-						else if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
-						{
-							val = vals[0].GetProperty("value").GetInt32();
-						}
-
-						switch (name)
-						{
-							case "views": insights.Views = val; break;
-							case "likes": insights.Likes = val; break;
-							case "replies": insights.Replies = val; break;
-							case "reposts": insights.Reposts = val; break;
-							case "quotes": insights.Quotes = val; break;
-							case "followers_count": insights.FollowersCount = val; break;
-						}
+					switch (name)
+					{
+						case "views": insights.Views = val; break;
+						case "likes": insights.Likes = val; break;
+						case "replies": insights.Replies = val; break;
+						case "reposts": insights.Reposts = val; break;
+						case "quotes": insights.Quotes = val; break;
+						case "followers_count": insights.FollowersCount = val; break;
 					}
 				}
 			}

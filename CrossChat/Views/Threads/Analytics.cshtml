@@ -40,12 +40,12 @@
             height: 64px;
             border-radius: 50%;
             object-fit: cover;
-            border: 3px solid #000;
+            border: 3px solid #ffffff;
             padding: 2px;
-            background: #fff;
+            background: #000;
         }
 
-        /* KPI КАРТОЧКИ */
+        /* KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) */
         .overview-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -126,9 +126,9 @@
         }
 
             .filter-btn:hover, .filter-btn.active {
-                background: #000;
+                background: var(--accent-color, #6366f1);
                 color: #fff;
-                border-color: #555;
+                border-color: var(--accent-color, #6366f1);
             }
 
         .select-sort {
@@ -158,6 +158,7 @@
             display: flex;
             flex-direction: column;
             transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
         }
 
             .post-card:hover {
@@ -180,12 +181,54 @@
                 object-fit: cover;
             }
 
+        /* БЕЙДЖИ НА ПРЕВЬЮ */
+        .badge-er {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            z-index: 2;
+        }
+
+        .badge-type {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            z-index: 2;
+        }
+
         .post-body {
             padding: 16px;
             display: flex;
             flex-direction: column;
             flex: 1;
-            gap: 12px;
+            gap: 10px;
+        }
+
+        /* СТРОКА СТАТИСТИКИ КАРТОЧКИ (КАК В ИНСТАГРАМ) */
+        .post-stats-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--glass-border);
         }
 
         .post-text-content {
@@ -193,7 +236,7 @@
             line-height: 1.45;
             color: var(--text-main);
             display: -webkit-box;
-            -webkit-line-clamp: 4;
+            -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
             flex: 1;
@@ -201,7 +244,7 @@
 
         .btn-insights {
             width: 100%;
-            padding: 10px;
+            padding: 9px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--glass-border);
             border-radius: 10px;
@@ -214,12 +257,13 @@
             align-items: center;
             justify-content: center;
             gap: 6px;
+            margin-top: 4px;
         }
 
             .btn-insights:hover {
                 background: #000;
                 color: #fff;
-                border-color: #444;
+                border-color: #555;
             }
 
         /* МОДАЛКА */
@@ -324,7 +368,7 @@
             <div>
                 <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Username</h2>
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
-                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Официальная аналитика Threads
+                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Статистика Threads за 28 дней
                 </div>
             </div>
         </div>
@@ -335,17 +379,17 @@
         </div>
     </div>
 
-    <!-- СВОДНЫЕ KPI КАРТОЧКИ -->
+    <!-- СВОДНЫЕ KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) -->
     <div class="overview-grid">
         <div class="kpi-card">
-            <div class="kpi-header"><span>Просмотры</span><span>👁️</span></div>
+            <div class="kpi-header"><span>Просмотры (28 дн)</span><span>👁️</span></div>
             <div class="kpi-value" style="color: #38bdf8;">@accountStats.Views.ToString("N0")</div>
             <div class="kpi-subtitle">Показов тредов в ленте</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-header"><span>Лайки</span><span>❤️</span></div>
             <div class="kpi-value" style="color: #ef4444;">@accountStats.Likes.ToString("N0")</div>
-            <div class="kpi-subtitle">Суммарно на всех тредах</div>
+            <div class="kpi-subtitle">Получено отметок нравится</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-header"><span>Репосты</span><span>🔁</span></div>
@@ -355,11 +399,11 @@
         <div class="kpi-card">
             <div class="kpi-header"><span>Реплаи</span><span>💬</span></div>
             <div class="kpi-value" style="color: #f59e0b;">@accountStats.Replies.ToString("N0")</div>
-            <div class="kpi-subtitle">Ответов в дискуссиях</div>
+            <div class="kpi-subtitle">Ответов в ветках</div>
         </div>
     </div>
 
-    <!-- ТУЛБАР ФИЛЬТРОВ -->
+    <!-- ТУЛБАР ФИЛЬТРОВ И СОРТИРОВКИ -->
     <div class="toolbar-box">
         <div class="filter-btn-group">
             <button type="button" class="filter-btn active" data-type="ALL" onclick="setFilter('ALL', this)">Все форматы</button>
@@ -369,10 +413,14 @@
         </div>
 
         <div style="display:flex; align-items:center; gap:8px;">
-            <select id="sortBySelect" class="select-sort" onchange="applySorting()">
-                <option value="date" selected>📅 По дате</option>
+            <select id="sortBySelect" class="select-sort" onchange="applyFiltersAndSorting()">
+                <option value="er" selected>⚡ По рейтингу ER</option>
+                <option value="views">👁️ По просмотрам</option>
+                <option value="likes">❤️ По лайкам</option>
+                <option value="replies">💬 По реплаям</option>
+                <option value="date">📅 По дате</option>
             </select>
-            <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary);">
+            <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary); margin-left: 4px;">
                 Всего: @Model.Posts.Count
             </span>
         </div>
@@ -392,26 +440,63 @@
         <div class="posts-grid" id="postsGrid">
             @foreach (var post in Model.Posts)
             {
-                <div class="post-card" data-type="@post.MediaType" data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
+                // Расчет True ER прямо для карточки
+                int interactions = post.Likes + post.Replies + post.Reposts + post.Quotes;
+                double postEr = post.Views > 0
+                ? Math.Round(((double)interactions / post.Views) * 100.0, 1)
+                : (followersCount > 0 ? Math.Round(((double)interactions / followersCount) * 100.0, 1) : 0);
+
+                string erColor = postEr >= 7.0 ? "#f43f5e" : (postEr >= 3.0 ? "#10b981" : "#38bdf8");
+
+                <div class="post-card"
+                     data-id="@post.Id"
+                     data-type="@post.MediaType"
+                     data-likes="@post.Likes"
+                     data-replies="@post.Replies"
+                     data-views="@post.Views"
+                     data-er="@postEr.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
+                     data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
+
+                    <!-- ПРЕВЬЮ КАРТИНКИ ИЛИ ПЛАШКА ER ДЛЯ ТЕКСТА -->
                     @if (!string.IsNullOrEmpty(post.MediaUrl) || !string.IsNullOrEmpty(post.ThumbnailUrl))
                     {
                         <div class="post-thumb-wrapper">
+                            @if (postEr > 0)
+                            {
+                                <span class="badge-er" style="color: @erColor; border: 1px solid @erColor;">
+                                    ⚡ ER @postEr%
+                                </span>
+                            }
+                            <span class="badge-type">@post.MediaType.Replace("_", " ")</span>
                             <img src="@(post.ThumbnailUrl ?? post.MediaUrl)" alt="Media" loading="lazy">
                         </div>
                     }
 
                     <div class="post-body">
-                        <div style="font-size:0.75rem; color:var(--text-secondary); display:flex; justify-content:space-between;">
-                            <span>@post.Timestamp.ToString("dd.MM.yyyy HH:mm")</span>
-                            <span style="font-weight:700; text-transform:uppercase;">@post.MediaType.Replace("_", " ")</span>
+                        <!-- СТРОКА С ЛАЙКАМИ, РЕПЛАЯМИ И ПРОСМОТРАМИ НА КАРТОЧКЕ -->
+                        <div class="post-stats-row">
+                            <span style="color: #ef4444;">❤️ @post.Likes.ToString("N0")</span>
+                            <span style="color: #f59e0b;">💬 @post.Replies.ToString("N0")</span>
+                            <span style="color: #38bdf8;">👁️ @post.Views.ToString("N0")</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM")</span>
                         </div>
 
+                        <!-- ЕСЛИ ПОСТ БЕЗ КАРТИНКИ — ПОКАЗЫВАЕМ ER ЗДЕСЬ -->
+                        @if (string.IsNullOrEmpty(post.MediaUrl) && string.IsNullOrEmpty(post.ThumbnailUrl) && postEr > 0)
+                        {
+                            <div>
+                                <span style="font-size:0.75rem; font-weight:800; color:@erColor; background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:6px; border:1px solid @erColor;">
+                                    ⚡ True ER: @postEr%
+                                </span>
+                            </div>
+                        }
+
                         <div class="post-text-content">
-                            @(string.IsNullOrWhiteSpace(post.Text) ? "Без текста" : post.Text)
+                            @(string.IsNullOrWhiteSpace(post.Text) ? "Медиафайл без подписи" : post.Text)
                         </div>
 
                         <button type="button" class="btn-insights" onclick="openInsightsModal('@post.Id', '@post.Permalink')">
-                            📊 Инсайты и True ER
+                            📊 Полная статистика и репосты
                         </button>
                     </div>
                 </div>
@@ -431,11 +516,11 @@
     }
 </div>
 
-<!-- МОДАЛКА ИНСАЙТОВ ТРЕДА -->
+<!-- МОДАЛКА ДЕТАЛЬНЫХ ИНСАЙТОВ ТРЕДА -->
 <div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
     <div class="insights-modal" onclick="event.stopPropagation()">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика треда</h3>
+            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика публикации Threads</h3>
             <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>
 
@@ -448,7 +533,7 @@
             <div style="background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:14px; padding:14px; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">True ER (по просмотрам)</span>
+                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">True ER (вовлеченность к просмотрам)</span>
                         <div style="font-size:1.6rem; font-weight:900;" id="modalErValue">0%</div>
                     </div>
                     <span id="modalErBadge" style="font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:20px; border:1px solid transparent;">-</span>
@@ -484,7 +569,7 @@
 
             <div style="margin-top:1.25rem;">
                 <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block; padding:10px;">
-                    🔗 Открыть тред в Threads
+                    🔗 Открыть тред в приложении Threads
                 </a>
             </div>
         </div>
@@ -500,16 +585,58 @@
             currentFilter = type;
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            applyFiltersAndSorting();
+        }
 
-            const cards = document.querySelectorAll('.post-card');
+        function applyFiltersAndSorting() {
+            const grid = document.getElementById('postsGrid');
+            if (!grid) return;
+
+            const cards = Array.from(grid.querySelectorAll('.post-card'));
+            const sortBy = document.getElementById('sortBySelect').value;
             let visible = 0;
+
             cards.forEach(card => {
                 const match = currentFilter === 'ALL' || card.dataset.type === currentFilter;
                 card.style.display = match ? 'flex' : 'none';
                 if (match) visible++;
             });
+
+            cards.sort((a, b) => {
+                let valA, valB;
+                switch (sortBy) {
+                    case 'er':
+                        valA = parseFloat(a.dataset.er) || 0;
+                        valB = parseFloat(b.dataset.er) || 0;
+                        break;
+                    case 'views':
+                        valA = parseInt(a.dataset.views) || 0;
+                        valB = parseInt(b.dataset.views) || 0;
+                        break;
+                    case 'likes':
+                        valA = parseInt(a.dataset.likes) || 0;
+                        valB = parseInt(b.dataset.likes) || 0;
+                        break;
+                    case 'replies':
+                        valA = parseInt(a.dataset.replies) || 0;
+                        valB = parseInt(b.dataset.replies) || 0;
+                        break;
+                    case 'date':
+                    default:
+                        valA = parseInt(a.dataset.timestamp) || 0;
+                        valB = parseInt(b.dataset.timestamp) || 0;
+                        break;
+                }
+                return valB - valA; // По убыванию
+            });
+
+            cards.forEach(c => grid.appendChild(c));
             document.getElementById('visibleCountText').textContent = `Показано: ${visible} из ${cards.length}`;
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyFiltersAndSorting();
+        });
 
         async function openInsightsModal(mediaId, permalink) {
             const overlay = document.getElementById('insightsModalOverlay');
