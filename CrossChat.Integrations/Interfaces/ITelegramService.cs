@@ -1,3 +1,4 @@
+using CrossChat.Integrations.Models;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -34,5 +35,8 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html);
 		InlineKeyboardMarkup? BuildInlineButton(string? text, string? url);
+
+		Task<int> GetChatMemberCountAsync(long channelId);
+		Task<List<TelegramChannelPostDto>> GetPublicChannelPostsAsync(string channelUsername, int subscribersCount);
 	}
 }

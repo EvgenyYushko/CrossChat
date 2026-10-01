@@ -1,4 +1,5 @@
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Configuration;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -32,7 +33,7 @@ namespace CrossChat.Integrations.Services.Telegram
 
 		public Task<Message> SendMessageToAdmin(string text, ReplyMarkup replyMarkup = null)
 		{
-			return SendMessage(text, ADMIN_ID, replyMarkup: replyMarkup,  parseMode: ParseMode.Html);
+			return SendMessage(text, ADMIN_ID, replyMarkup: replyMarkup, parseMode: ParseMode.Html);
 		}
 
 		public Task<Message> SendMessage(string text
@@ -505,6 +506,147 @@ namespace CrossChat.Integrations.Services.Telegram
 				return null;
 
 			return new InlineKeyboardMarkup(InlineKeyboardButton.WithUrl(text, url));
+		}
+
+		public async Task<int> GetChatMemberCountAsync(long channelId)
+		{
+			try
+			{
+				return await _telegramBotClient.GetChatMemberCount(channelId);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram API] Не удалось получить число подписчиков: {ex.Message}");
+				return 0;
+			}
+		}
+
+		/// <summary>
+		/// Быстрый и надежный парсинг постов, просмотров и реакций из публичной витрины Telegram (t.me/s/username)
+		/// </summary>
+		public async Task<List<TelegramChannelPostDto>> GetPublicChannelPostsAsync(string channelUsername, int subscribersCount)
+		{
+			var posts = new List<TelegramChannelPostDto>();
+			if (string.IsNullOrWhiteSpace(channelUsername)) return posts;
+
+			string cleanUser = channelUsername.Replace("@", "").Trim();
+			string url = $"https://t.me/s/{cleanUser}";
+
+			try
+			{
+				using var client = new HttpClient();
+				client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+				var html = await client.GetStringAsync(url);
+
+				// Разбиваем страницу на отдельные блоки постов
+				var messageWraps = html.Split(new[] { "js-widget_message_wrap" }, StringSplitOptions.RemoveEmptyEntries);
+
+				foreach (var block in messageWraps)
+				{
+					// Ищем ID сообщения
+					var matchPost = System.Text.RegularExpressions.Regex.Match(block, @"data-post=""[^/]+/(\d+)""");
+					if (!matchPost.Success) continue;
+					string msgId = matchPost.Groups[1].Value;
+
+					// Просмотры
+					int views = 0;
+					var matchViews = System.Text.RegularExpressions.Regex.Match(block, @"<span class=""tgme_widget_message_views"">([^<]+)</span>");
+					if (matchViews.Success)
+					{
+						views = ParseTelegramMetric(matchViews.Groups[1].Value);
+					}
+
+					// Реакции (суммируем все эмодзи)
+					int reactions = 0;
+					var matchReactions = System.Text.RegularExpressions.Regex.Matches(block, @"<span class=""[a-zA-Z0-9_]*reaction_count[a-zA-Z0-9_]*"">([^<]+)</span>");
+					foreach (System.Text.RegularExpressions.Match rm in matchReactions)
+					{
+						reactions += ParseTelegramMetric(rm.Groups[1].Value);
+					}
+
+					// Дата публикации
+					DateTime postDate = DateTime.UtcNow;
+					var matchDate = System.Text.RegularExpressions.Regex.Match(block, @"<time datetime=""([^""]+)""");
+					if (matchDate.Success && DateTime.TryParse(matchDate.Groups[1].Value, out var dt))
+					{
+						postDate = dt.ToUniversalTime();
+					}
+
+					// Текст публикации
+					string? text = null;
+					var matchText = System.Text.RegularExpressions.Regex.Match(block, @"<div class=""tgme_widget_message_text[^""]*""[^>]*>([\s\S]*?)</div>");
+					if (matchText.Success)
+					{
+						string rawHtml = matchText.Groups[1].Value;
+						// Очищаем HTML теги и декодируем сущности (&quot;, &amp;)
+						text = System.Net.WebUtility.HtmlDecode(
+							System.Text.RegularExpressions.Regex.Replace(rawHtml, "<.*?>", string.Empty)
+						).Trim();
+					}
+
+					// Определение медиафайлов
+					string mediaType = "TEXT";
+					string? mediaUrl = null;
+
+					var matchPhoto = System.Text.RegularExpressions.Regex.Match(block, @"background-image:url\('([^']+)'\)");
+					if (matchPhoto.Success)
+					{
+						mediaUrl = matchPhoto.Groups[1].Value;
+						mediaType = block.Contains("tgme_widget_message_video") ? "VIDEO" : "PHOTO";
+					}
+
+					// Расчет True ER: отношение просмотров к подписчикам (или реакций к просмотрам)
+					double er = views > 0 && reactions > 0
+						? Math.Round(((double)reactions / views) * 100.0, 1)
+						: (subscribersCount > 0 && views > 0 ? Math.Round(((double)views / subscribersCount) * 100.0, 1) : 0);
+
+					posts.Add(new TelegramChannelPostDto
+					{
+						MessageId = msgId,
+						Text = text,
+						Timestamp = postDate,
+						Views = views,
+						Reactions = reactions,
+						MediaType = mediaType,
+						MediaUrl = mediaUrl,
+						PostUrl = $"https://t.me/{cleanUser}/{msgId}",
+						EngagementRate = er
+					});
+				}
+
+				// Сортируем: свежие посты сверху
+				posts = posts.OrderByDescending(p => p.Timestamp).ToList();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Telegram Web Parser] Ошибка парсинга витрины @{cleanUser}: {ex.Message}");
+			}
+
+			return posts;
+		}
+
+		private int ParseTelegramMetric(string raw)
+		{
+			if (string.IsNullOrWhiteSpace(raw)) return 0;
+			raw = raw.ToUpperInvariant().Trim();
+
+			if (raw.EndsWith("K"))
+			{
+				if (double.TryParse(raw.Replace("K", ""), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double kVal))
+					return (int)(kVal * 1000);
+			}
+			else if (raw.EndsWith("M"))
+			{
+				if (double.TryParse(raw.Replace("M", ""), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double mVal))
+					return (int)(mVal * 1000000);
+			}
+			else if (int.TryParse(raw, out int val))
+			{
+				return val;
+			}
+
+			return 0;
 		}
 
 		public async Task SetWebhookAsync(string token, string webhookUrl)

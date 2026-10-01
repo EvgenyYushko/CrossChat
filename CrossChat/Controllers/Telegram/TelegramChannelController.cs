@@ -2,6 +2,8 @@ using System.Security.Claims;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
+using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,17 +20,20 @@ namespace CrossChat.Controllers
 		private readonly IDistributedCache _cache;
 		private readonly ILogger<TelegramChannelController> _logger;
 		private readonly ITelegramBotClient _botClient;
+		private readonly ITelegramService _telegramService;
 
 		public TelegramChannelController(
-			AppDbContext db, 
-			IDistributedCache cache, 
+			AppDbContext db,
+			IDistributedCache cache,
 			ILogger<TelegramChannelController> logger,
-			ITelegramBotClient botClient)
+			ITelegramBotClient botClient,
+			ITelegramService telegramService) // <-- ДОБАВЛЕНО
 		{
 			_db = db;
 			_cache = cache;
 			_logger = logger;
 			_botClient = botClient;
+			_telegramService = telegramService;
 		}
 
 		// ==========================================================
@@ -150,6 +155,57 @@ namespace CrossChat.Controllers
 			}
 
 			return RedirectToAction("Profile", "Auth");
+		}
+
+		// ==========================================================
+		// СТРАНИЦА АНАЛИТИКИ TELEGRAM КАНАЛА (/telegram-channel/analytics)
+		// ==========================================================
+		[HttpGet("analytics")]
+		public async Task<IActionResult> Analytics(int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			// Проверяем принадлежность канала пользователю
+			var channel = await _db.TelegramChannelSettings
+				.Include(c => c.Profile)
+				.FirstOrDefaultAsync(c => c.Id == botId && c.UserId == userId);
+
+			if (channel == null) return RedirectToAction("Index");
+
+			// 1. ВСЕГДА получаем живое число подписчиков прямо из Telegram Bot API!
+			int liveSubscribers = await _telegramService.GetChatMemberCountAsync(channel.ChannelId);
+
+			var model = new TelegramChannelAnalyticsPageDto
+			{
+				Stats = new TelegramChannelStatsDto
+				{
+					ChannelId = channel.ChannelId,
+					ChannelTitle = channel.ChannelTitle,
+					ChannelUsername = channel.ChannelUsername,
+					ProfilePictureUrl = channel.ProfilePictureUrl,
+					SubscribersCount = liveSubscribers,
+					AutoApproveJoinRequests = channel.AutoApproveJoinRequests
+				}
+			};
+
+			// 2. ЕСЛИ КАНАЛ ПУБЛИЧНЫЙ — ПАРСИМ РЕАЛЬНЫЕ ПОСТЫ, ПРОСМОТРЫ И РЕАКЦИИ
+			if (!string.IsNullOrEmpty(channel.ChannelUsername))
+			{
+				var posts = await _telegramService.GetPublicChannelPostsAsync(channel.ChannelUsername, liveSubscribers);
+				model.Posts = posts;
+
+				if (posts.Any())
+				{
+					model.Stats.TotalViewsOnFeed = posts.Sum(p => p.Views);
+					model.Stats.TotalReactionsOnFeed = posts.Sum(p => p.Reactions);
+
+					var validEr = posts.Where(p => p.EngagementRate > 0).ToList();
+					model.Stats.AverageEr = validEr.Any() ? Math.Round(validEr.Average(p => p.EngagementRate), 1) : 0;
+				}
+			}
+
+			ViewBag.BotId = botId;
+			return View(model);
 		}
 	}
 }

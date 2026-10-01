@@ -317,13 +317,16 @@
                 </div>
             </div>
 
-            <!-- ГРУППА КНОПОК УПРАВЛЕНИЯ -->
-            <div class="action-buttons-group">
-                <a href="/auth/console?provider=telegramchannel&botId=@Model.Id&username=@Model.ChannelTitle" class="btn btn-console">
-                    💻 Консоль канала
+            <!-- ТРИ КНОПКИ ДЕЙСТВИЯ -->
+            <div class="action-buttons-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 1.5rem; margin-bottom: 1rem;">
+                <a href="/auth/console?provider=telegramchannel&botId=@Model.Id&username=@Model.ChannelTitle" class="btn btn-console" style="padding: 12px 6px;">
+                    💻 Консоль
                 </a>
-                <a href="/planner?profileId=@Model.ProfileId&network=TelegramChannel&botId=@Model.Id" class="btn btn-autoposting">
-                    📅 Автопостинг
+                <a href="/planner?profileId=@Model.ProfileId&network=TelegramChannel&botId=@Model.Id" class="btn btn-autoposting" style="padding: 12px 6px;">
+                    📅 Постинг
+                </a>
+                <a href="/telegram-channel/analytics?botId=@Model.Id" class="btn btn-tg" style="padding: 12px 6px;">
+                    📊 Аналитика
                 </a>
             </div>
 
