@@ -357,13 +357,16 @@
                 </div>
             </div>
 
-            <!-- ГРУППА КНОПОК ДЕЙСТВИЯ -->
-            <div class="action-buttons-group">
-                <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn btn-console">
-                    💻 Консоль бота
+            <!-- ТРИ КНОПКИ ДЕЙСТВИЯ -->
+            <div class="action-buttons-group" style="grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn btn-console" style="padding: 12px 6px;">
+                    💻 Консоль
                 </a>
-                <a href="/planner?profileId=@Model.ProfileId&network=Facebook&botId=@Model.Id" class="btn btn-autoposting">
-                    📅 Автопостинг
+                <a href="/planner?profileId=@Model.ProfileId&network=Facebook&botId=@Model.Id" class="btn btn-autoposting" style="padding: 12px 6px;">
+                    📅 Постинг
+                </a>
+                <a href="/facebook/analytics?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #1877F2 0%, #0c56c2 100%); color: white; padding: 12px 6px;">
+                    📊 Аналитика
                 </a>
             </div>
 

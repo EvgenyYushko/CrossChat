@@ -1,10 +1,10 @@
-@model CrossChat.Integrations.Models.Threads.ThreadsFeedPageDto
+@model CrossChat.Integrations.Models.FacebookFeedPageDto
 @{
-    ViewData["Title"] = "Аналитика @" + ViewBag.Username;
+    ViewData["Title"] = "Аналитика: " + ViewBag.PageName;
     int botId = ViewBag.BotId;
     int followersCount = ViewBag.FollowersCount ?? 0;
-    var accountStats = ViewBag.AccountInsights as CrossChat.Integrations.Models.Threads.ThreadsAccountInsightsDto
-        ?? new CrossChat.Integrations.Models.Threads.ThreadsAccountInsightsDto();
+    var pageStats = ViewBag.PageInsights as CrossChat.Integrations.Models.FacebookPageInsightsDto
+        ?? new CrossChat.Integrations.Models.FacebookPageInsightsDto();
 }
 
 @section Styles {
@@ -40,9 +40,9 @@
             height: 64px;
             border-radius: 50%;
             object-fit: cover;
-            border: 3px solid #ffffff;
+            border: 3px solid #1877F2;
             padding: 2px;
-            background: #000;
+            background: #fff;
         }
 
         /* KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) */
@@ -67,7 +67,7 @@
 
             .kpi-card:hover {
                 transform: translateY(-2px);
-                border-color: rgba(255, 255, 255, 0.2);
+                border-color: rgba(24, 119, 242, 0.3);
             }
 
         .kpi-header {
@@ -126,9 +126,9 @@
         }
 
             .filter-btn:hover, .filter-btn.active {
-                background: var(--accent-color, #6366f1);
+                background: #1877F2;
                 color: #fff;
-                border-color: var(--accent-color, #6366f1);
+                border-color: #1877F2;
             }
 
         .select-sort {
@@ -143,7 +143,7 @@
             cursor: pointer;
         }
 
-        /* СЕТКА ТРЕДОВ */
+        /* СЕТКА ПОСТОВ */
         .posts-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
@@ -164,12 +164,12 @@
             .post-card:hover {
                 transform: translateY(-3px);
                 box-shadow: 0 12px 25px -5px rgba(0, 0, 0, 0.3);
-                border-color: rgba(255, 255, 255, 0.3);
+                border-color: rgba(24, 119, 242, 0.4);
             }
 
         .post-thumb-wrapper {
             width: 100%;
-            height: 180px;
+            height: 190px;
             position: relative;
             background: rgba(0, 0, 0, 0.3);
             overflow: hidden;
@@ -181,7 +181,6 @@
                 object-fit: cover;
             }
 
-        /* БЕЙДЖИ НА ПРЕВЬЮ */
         .badge-er {
             position: absolute;
             top: 10px;
@@ -192,9 +191,6 @@
             padding: 4px 8px;
             border-radius: 6px;
             backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            gap: 4px;
             z-index: 2;
         }
 
@@ -220,7 +216,6 @@
             gap: 10px;
         }
 
-        /* СТРОКА СТАТИСТИКИ КАРТОЧКИ (КАК В ИНСТАГРАМ) */
         .post-stats-row {
             display: flex;
             align-items: center;
@@ -232,7 +227,7 @@
         }
 
         .post-text-content {
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             line-height: 1.45;
             color: var(--text-main);
             display: -webkit-box;
@@ -245,10 +240,10 @@
         .btn-insights {
             width: 100%;
             padding: 9px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--glass-border);
+            background: rgba(24, 119, 242, 0.1);
+            border: 1px solid rgba(24, 119, 242, 0.3);
             border-radius: 10px;
-            color: var(--text-main);
+            color: #38bdf8;
             font-size: 0.85rem;
             font-weight: 700;
             cursor: pointer;
@@ -261,9 +256,9 @@
         }
 
             .btn-insights:hover {
-                background: #000;
+                background: #1877F2;
                 color: #fff;
-                border-color: #555;
+                border-color: #1877F2;
             }
 
         /* МОДАЛКА */
@@ -287,7 +282,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             width: 100%;
-            max-width: 440px;
+            max-width: 460px;
             padding: 1.75rem;
             position: relative;
         }
@@ -303,15 +298,22 @@
             margin-bottom: 8px;
         }
 
-        .metric-title {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+        .reactions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 12px;
         }
 
-        .metric-value {
-            font-size: 1.15rem;
-            font-weight: 800;
-            color: var(--text-main);
+        .reaction-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            padding: 8px;
+            text-align: center;
+            font-size: 0.85rem;
+            font-weight: 700;
         }
 
         @@media (max-width: 850px) {
@@ -347,14 +349,14 @@
 }
 
 @section NavbarActions {
-    <a href="/threads?botId=@botId" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
-        ← Назад
+    <a href="/facebook?botId=@botId" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
+        ← Назад в настройки
     </a>
 }
 
 <div class="analytics-container">
 
-    <!-- ШАПКА THREADS -->
+    <!-- ШАПКА СТРАНИЦЫ FACEBOOK -->
     <div class="header-box">
         <div class="user-meta">
             @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
@@ -363,18 +365,18 @@
             }
             else
             {
-                <div class="user-avatar" style="background:#000;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">TH</div>
+                <div class="user-avatar" style="background:#1877F2;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">FB</div>
             }
             <div>
-                <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Username</h2>
+                <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@ViewBag.PageName</h2>
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
-                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Статистика Threads за 28 дней
+                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Официальная аналитика Meta
                 </div>
             </div>
         </div>
         <div>
-            <a href="/threads?botId=@botId" class="btn btn-console" style="text-decoration:none; padding:8px 16px; border-radius:10px; font-size:0.85rem;">
-                ← В настройки Threads
+            <a href="/facebook?botId=@botId" class="btn btn-console" style="text-decoration:none; padding:8px 16px; border-radius:10px; font-size:0.85rem;">
+                ← В настройки Facebook
             </a>
         </div>
     </div>
@@ -382,42 +384,42 @@
     <!-- СВОДНЫЕ KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) -->
     <div class="overview-grid">
         <div class="kpi-card">
-            <div class="kpi-header"><span>Просмотры (28 дн)</span><span>👁️</span></div>
-            <div class="kpi-value" style="color: #38bdf8;">@accountStats.Views.ToString("N0")</div>
-            <div class="kpi-subtitle">Показов тредов в ленте</div>
+            <div class="kpi-header"><span>Охват (28 дн)</span><span>👥</span></div>
+            <div class="kpi-value" style="color: #10b981;">@pageStats.Reach28Days.ToString("N0")</div>
+            <div class="kpi-subtitle">Уникальных зрителей</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-header"><span>Лайки</span><span>❤️</span></div>
-            <div class="kpi-value" style="color: #ef4444;">@accountStats.Likes.ToString("N0")</div>
-            <div class="kpi-subtitle">Получено отметок нравится</div>
+            <div class="kpi-header"><span>Вовлеченные люди</span><span>🔥</span></div>
+            <div class="kpi-value" style="color: #f43f5e;">@pageStats.EngagedUsers28Days.ToString("N0")</div>
+            <div class="kpi-subtitle">Проявили активность</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-header"><span>Репосты</span><span>🔁</span></div>
-            <div class="kpi-value" style="color: #10b981;">@accountStats.Reposts.ToString("N0")</div>
-            <div class="kpi-subtitle">Вирусных репостов тредов</div>
+            <div class="kpi-header"><span>Взаимодействия</span><span>💬</span></div>
+            <div class="kpi-value" style="color: #38bdf8;">@pageStats.PostEngagements28Days.ToString("N0")</div>
+            <div class="kpi-subtitle">Реакций, комментов, кликов</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-header"><span>Реплаи</span><span>💬</span></div>
-            <div class="kpi-value" style="color: #f59e0b;">@accountStats.Replies.ToString("N0")</div>
-            <div class="kpi-subtitle">Ответов в ветках</div>
+            <div class="kpi-header"><span>Подписчики</span><span>👍</span></div>
+            <div class="kpi-value" style="color: #1877F2;">@followersCount.ToString("N0")</div>
+            <div class="kpi-subtitle">Аудитория страницы</div>
         </div>
     </div>
 
     <!-- ТУЛБАР ФИЛЬТРОВ И СОРТИРОВКИ -->
     <div class="toolbar-box">
         <div class="filter-btn-group">
-            <button type="button" class="filter-btn active" data-type="ALL" onclick="setFilter('ALL', this)">Все форматы</button>
-            <button type="button" class="filter-btn" data-type="TEXT_POST" onclick="setFilter('TEXT_POST', this)">📝 Только текст</button>
-            <button type="button" class="filter-btn" data-type="IMAGE" onclick="setFilter('IMAGE', this)">📷 С фото</button>
-            <button type="button" class="filter-btn" data-type="VIDEO" onclick="setFilter('VIDEO', this)">🎬 Видео</button>
+            <button type="button" class="filter-btn active" data-type="ALL" onclick="setFilter('ALL', this)">Все публикации</button>
+            <button type="button" class="filter-btn" data-type="PHOTO" onclick="setFilter('PHOTO', this)">📷 Фото</button>
+            <button type="button" class="filter-btn" data-type="VIDEO" onclick="setFilter('VIDEO', this)">🎬 Видео / Reels</button>
+            <button type="button" class="filter-btn" data-type="STATUS" onclick="setFilter('STATUS', this)">📝 Текст</button>
         </div>
 
         <div style="display:flex; align-items:center; gap:8px;">
             <select id="sortBySelect" class="select-sort" onchange="applyFiltersAndSorting()">
                 <option value="er" selected>⚡ По рейтингу ER</option>
-                <option value="views">👁️ По просмотрам</option>
-                <option value="likes">❤️ По лайкам</option>
-                <option value="replies">💬 По реплаям</option>
+                <option value="likes">❤️ По реакциям</option>
+                <option value="comments">💬 По комментариям</option>
+                <option value="shares">↗️ По репостам</option>
                 <option value="date">📅 По дате</option>
             </select>
             <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary); margin-left: 4px;">
@@ -426,13 +428,13 @@
         </div>
     </div>
 
-    <!-- СЕТКА ТРЕДОВ -->
+    <!-- СЕТКА ПОСТОВ -->
     @if (!Model.Posts.Any())
     {
         <div style="text-align:center; padding:4rem 1rem; color:var(--text-secondary); background:var(--card-bg); border-radius:20px; border:1px dashed var(--glass-border);">
-            <div style="font-size:3rem; margin-bottom:1rem;">🧵</div>
-            <h3>Тредов не найдено</h3>
-            <p style="font-size:0.9rem;">В этом профиле пока нет опубликованных тредов.</p>
+            <div style="font-size:3rem; margin-bottom:1rem;">📘</div>
+            <h3>Постов не найдено</h3>
+            <p style="font-size:0.9rem;">На этой странице Facebook пока нет опубликованных постов.</p>
         </div>
     }
     else
@@ -440,25 +442,24 @@
         <div class="posts-grid" id="postsGrid">
             @foreach (var post in Model.Posts)
             {
-                // Расчет True ER прямо для карточки
-                int interactions = post.Likes + post.Replies + post.Reposts + post.Quotes;
-                double postEr = post.Views > 0
-                ? Math.Round(((double)interactions / post.Views) * 100.0, 1)
-                : (followersCount > 0 ? Math.Round(((double)interactions / followersCount) * 100.0, 1) : 0);
+                int totalInteractions = post.LikesCount + post.CommentsCount + post.SharesCount;
+                double postEr = followersCount > 0
+                ? Math.Round(((double)totalInteractions / followersCount) * 100.0, 1)
+                : 0;
 
-                string erColor = postEr >= 7.0 ? "#f43f5e" : (postEr >= 3.0 ? "#10b981" : "#38bdf8");
+                string erColor = postEr >= 6.0 ? "#f43f5e" : (postEr >= 2.5 ? "#10b981" : "#38bdf8");
 
                 <div class="post-card"
                      data-id="@post.Id"
                      data-type="@post.MediaType"
-                     data-likes="@post.Likes"
-                     data-replies="@post.Replies"
-                     data-views="@post.Views"
+                     data-likes="@post.LikesCount"
+                     data-comments="@post.CommentsCount"
+                     data-shares="@post.SharesCount"
                      data-er="@postEr.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
                      data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
 
-                    <!-- ПРЕВЬЮ КАРТИНКИ ИЛИ ПЛАШКА ER ДЛЯ ТЕКСТА -->
-                    @if (!string.IsNullOrEmpty(post.MediaUrl) || !string.IsNullOrEmpty(post.ThumbnailUrl))
+                    <!-- ПРЕВЬЮ ПОСТА -->
+                    @if (!string.IsNullOrEmpty(post.PictureUrl))
                     {
                         <div class="post-thumb-wrapper">
                             @if (postEr > 0)
@@ -467,36 +468,36 @@
                                     ⚡ ER @postEr%
                                 </span>
                             }
-                            <span class="badge-type">@post.MediaType.Replace("_", " ")</span>
-                            <img src="@(post.ThumbnailUrl ?? post.MediaUrl)" alt="Media" loading="lazy">
+                            <span class="badge-type">@post.MediaType</span>
+                            <img src="@post.PictureUrl" alt="Post thumbnail" loading="lazy">
                         </div>
                     }
 
                     <div class="post-body">
-                        <!-- СТРОКА С ЛАЙКАМИ, РЕПЛАЯМИ И ПРОСМОТРАМИ НА КАРТОЧКЕ -->
+                        <!-- СТРОКА РЕАКЦИЙ, КОММЕНТАРИЕВ И РЕПОСТОВ -->
                         <div class="post-stats-row">
-                            <span style="color: #ef4444;">❤️ @post.Likes.ToString("N0")</span>
-                            <span style="color: #f59e0b;">💬 @post.Replies.ToString("N0")</span>
-                            <span style="color: #38bdf8;">👁️ @post.Views.ToString("N0")</span>
+                            <span style="color: #1877F2;">👍 @post.LikesCount.ToString("N0")</span>
+                            <span style="color: #38bdf8;">💬 @post.CommentsCount.ToString("N0")</span>
+                            <span style="color: #a855f7;">↗️ @post.SharesCount.ToString("N0")</span>
                             <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM")</span>
                         </div>
 
-                        <!-- ЕСЛИ ПОСТ БЕЗ КАРТИНКИ — ПОКАЗЫВАЕМ ER ЗДЕСЬ -->
-                        @if (string.IsNullOrEmpty(post.MediaUrl) && string.IsNullOrEmpty(post.ThumbnailUrl) && postEr > 0)
+                        <!-- ЕСЛИ ПОСТ БЕЗ КАРТИНКИ — ПОКАЗЫВАЕМ ПЛАШКУ ER ЗДЕСЬ -->
+                        @if (string.IsNullOrEmpty(post.PictureUrl) && postEr > 0)
                         {
                             <div>
                                 <span style="font-size:0.75rem; font-weight:800; color:@erColor; background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:6px; border:1px solid @erColor;">
-                                    ⚡ True ER: @postEr%
+                                    ⚡ Public ER: @postEr%
                                 </span>
                             </div>
                         }
 
                         <div class="post-text-content">
-                            @(string.IsNullOrWhiteSpace(post.Text) ? "Медиафайл без подписи" : post.Text)
+                            @(string.IsNullOrWhiteSpace(post.Message) ? "Медиафайл без текста" : post.Message)
                         </div>
 
-                        <button type="button" class="btn-insights" onclick="openInsightsModal('@post.Id', '@post.Permalink')">
-                            📊 Полная статистика и репосты
+                        <button type="button" class="btn-insights" onclick="openInsightsModal('@post.Id', '@post.PermalinkUrl')">
+                            📊 Инсайты, клики и эмодзи
                         </button>
                     </div>
                 </div>
@@ -506,70 +507,73 @@
         <div style="display:flex; justify-content:center; gap:15px; margin-top:2.5rem;">
             @if (Model.HasPrevious)
             {
-                <a href="/threads/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">⬅ Назад</a>
+                <a href="/facebook/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">⬅ Назад</a>
             }
             @if (Model.HasNext)
             {
-                <a href="/threads/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">Вперед ➡</a>
+                <a href="/facebook/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">Вперед ➡</a>
             }
         </div>
     }
 </div>
 
-<!-- МОДАЛКА ДЕТАЛЬНЫХ ИНСАЙТОВ ТРЕДА -->
+<!-- МОДАЛКА ГЛУБОКИХ ИНСАЙТОВ FACEBOOK -->
 <div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
     <div class="insights-modal" onclick="event.stopPropagation()">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика публикации Threads</h3>
+            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика публикации Facebook</h3>
             <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>
 
         <div id="insightsLoading" style="text-align:center; padding:2rem 0; color:var(--text-secondary);">
-            ⏳ Загрузка инсайтов Threads...
+            ⏳ Загрузка инсайтов из Meta...
         </div>
 
         <div id="insightsContent" style="display:none;">
-            <!-- TRUE ER -->
-            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:14px; padding:14px; margin-bottom:15px;">
+            <!-- TRUE ER ПО ОХВАТУ -->
+            <div style="background:rgba(24, 119, 242, 0.08); border:1px solid rgba(24, 119, 242, 0.25); border-radius:14px; padding:14px; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">True ER (вовлеченность к просмотрам)</span>
+                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">True ER (по охвату)</span>
                         <div style="font-size:1.6rem; font-weight:900;" id="modalErValue">0%</div>
                     </div>
                     <span id="modalErBadge" style="font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:20px; border:1px solid transparent;">-</span>
                 </div>
             </div>
 
-            <div class="metric-card">
-                <div class="metric-title">👁️ Просмотры (Views)</div>
-                <div class="metric-value" id="modalViews" style="color:#38bdf8;">0</div>
-            </div>
-
+            <!-- ОСНОВНЫЕ ИНСАЙТЫ -->
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                 <div class="metric-card">
-                    <div class="metric-title">❤️ Лайки</div>
-                    <div class="metric-value" id="modalLikes" style="color:#ef4444;">0</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">👥 Охват (Reach)</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#10b981;" id="modalReach">0</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-title">💬 Реплаи</div>
-                    <div class="metric-value" id="modalReplies" style="color:#f59e0b;">0</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">🔗 Клики (Clicks)</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#38bdf8;" id="modalClicks">0</div>
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <div class="metric-card">
-                    <div class="metric-title">🔁 Репосты</div>
-                    <div class="metric-value" id="modalReposts" style="color:#10b981;">0</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">💭 Цитаты</div>
-                    <div class="metric-value" id="modalQuotes" style="color:#a855f7;">0</div>
+            <div class="metric-card" style="margin-top:4px;">
+                <div style="font-size:0.85rem; color:var(--text-secondary);">🔥 Вовлеченные зрители (Engaged)</div>
+                <div style="font-size:1.15rem; font-weight:800; color:#f43f5e;" id="modalEngaged">0</div>
+            </div>
+
+            <!-- УНИКАЛЬНАЯ РАСКЛАДКА ЭМОДЗИ РЕАКЦИЙ FACEBOOK -->
+            <div style="margin-top:12px;">
+                <span style="font-size:0.8rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Реакции пользователей:</span>
+                <div class="reactions-grid">
+                    <div class="reaction-item"><span style="color:#1877F2;">👍</span> <span id="reactLike">0</span></div>
+                    <div class="reaction-item"><span style="color:#ef4444;">❤️</span> <span id="reactLove">0</span></div>
+                    <div class="reaction-item"><span style="color:#fbbf24;">😂</span> <span id="reactHaha">0</span></div>
+                    <div class="reaction-item"><span style="color:#f59e0b;">😮</span> <span id="reactWow">0</span></div>
+                    <div class="reaction-item"><span style="color:#60a5fa;">😢</span> <span id="reactSad">0</span></div>
+                    <div class="reaction-item"><span style="color:#f97316;">😡</span> <span id="reactAngry">0</span></div>
                 </div>
             </div>
 
-            <div style="margin-top:1.25rem;">
-                <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block; padding:10px;">
-                    🔗 Открыть тред в приложении Threads
+            <div style="margin-top:1rem;">
+                <a id="modalPermalink" href="#" target="_blank" class="btn btn-fb" style="text-decoration:none; text-align:center; display:block; padding:10px;">
+                    🔗 Открыть публикацию в Facebook
                 </a>
             </div>
         </div>
@@ -609,17 +613,17 @@
                         valA = parseFloat(a.dataset.er) || 0;
                         valB = parseFloat(b.dataset.er) || 0;
                         break;
-                    case 'views':
-                        valA = parseInt(a.dataset.views) || 0;
-                        valB = parseInt(b.dataset.views) || 0;
-                        break;
                     case 'likes':
                         valA = parseInt(a.dataset.likes) || 0;
                         valB = parseInt(b.dataset.likes) || 0;
                         break;
-                    case 'replies':
-                        valA = parseInt(a.dataset.replies) || 0;
-                        valB = parseInt(b.dataset.replies) || 0;
+                    case 'comments':
+                        valA = parseInt(a.dataset.comments) || 0;
+                        valB = parseInt(b.dataset.comments) || 0;
+                        break;
+                    case 'shares':
+                        valA = parseInt(a.dataset.shares) || 0;
+                        valB = parseInt(b.dataset.shares) || 0;
                         break;
                     case 'date':
                     default:
@@ -627,7 +631,7 @@
                         valB = parseInt(b.dataset.timestamp) || 0;
                         break;
                 }
-                return valB - valA; // По убыванию
+                return valB - valA;
             });
 
             cards.forEach(c => grid.appendChild(c));
@@ -638,7 +642,7 @@
             applyFiltersAndSorting();
         });
 
-        async function openInsightsModal(mediaId, permalink) {
+        async function openInsightsModal(postId, permalink) {
             const overlay = document.getElementById('insightsModalOverlay');
             const loading = document.getElementById('insightsLoading');
             const content = document.getElementById('insightsContent');
@@ -649,14 +653,21 @@
             content.style.display = 'none';
 
             try {
-                const res = await fetch(`/threads/analytics/insights?botId=${botId}&mediaId=${mediaId}`);
+                const res = await fetch(`/facebook/analytics/insights?botId=${botId}&postId=${postId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    document.getElementById('modalViews').textContent = Number(data.views).toLocaleString();
-                    document.getElementById('modalLikes').textContent = Number(data.likes).toLocaleString();
-                    document.getElementById('modalReplies').textContent = Number(data.replies).toLocaleString();
-                    document.getElementById('modalReposts').textContent = Number(data.reposts).toLocaleString();
-                    document.getElementById('modalQuotes').textContent = Number(data.quotes).toLocaleString();
+                    document.getElementById('modalReach').textContent = Number(data.reach || 0).toLocaleString();
+                    document.getElementById('modalClicks').textContent = Number(data.clicks || 0).toLocaleString();
+                    document.getElementById('modalEngaged').textContent = Number(data.engagedUsers || 0).toLocaleString();
+
+                    // Раскладка эмоций
+                    const reacts = data.reactions || {};
+                    document.getElementById('reactLike').textContent = Number(reacts.like || 0).toLocaleString();
+                    document.getElementById('reactLove').textContent = Number(reacts.love || 0).toLocaleString();
+                    document.getElementById('reactHaha').textContent = Number(reacts.haha || 0).toLocaleString();
+                    document.getElementById('reactWow').textContent = Number(reacts.wow || 0).toLocaleString();
+                    document.getElementById('reactSad').textContent = Number(reacts.sad || 0).toLocaleString();
+                    document.getElementById('reactAngry').textContent = Number(reacts.angry || 0).toLocaleString();
 
                     const er = data.engagementRate || 0;
                     document.getElementById('modalErValue').textContent = er + '%';

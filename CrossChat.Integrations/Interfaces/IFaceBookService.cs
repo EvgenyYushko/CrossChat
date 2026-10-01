@@ -19,6 +19,10 @@ namespace CrossChat.Integrations.Interfaces
 		Task<bool> ReplyToCommentAsync(string commentId, string text, string pageAccessToken);
 		Task<List<FbMessageItem>> GetMessagesBySenderIdAsync(string pageId, string senderId, string token, int limit = 10);
 		Task SetTypingStatusAsync(string recipientId, string token);
+
+		Task<FacebookFeedPageDto> GetPageFeedAsync(string pageId, string pageAccessToken, int limit = 12, string? after = null, string? before = null);
+		Task<FacebookPostInsightsDto> GetPostInsightsAsync(string postId, string pageAccessToken);
+		Task<FacebookPageInsightsDto> GetPageInsightsAsync(string pageId, string pageAccessToken);
 	}
 
 	public class FbUser

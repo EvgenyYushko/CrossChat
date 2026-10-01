@@ -3,6 +3,7 @@ using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
+using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Models;
 using MassTransit;
@@ -26,6 +27,7 @@ namespace CrossChat.Controllers
 		private readonly HttpClient _httpClient;
 		private readonly AppDbContext _db;
 		private readonly IDatabase _redis;
+		private readonly IFaceBookService _faceBookService;
 
 		private string RedirectUri => $"{APP_URL}/facebook/auth/callback";
 
@@ -34,13 +36,15 @@ namespace CrossChat.Controllers
 			IOptions<SocialMediaSettings> options,
 			IPublishEndpoint publishEndpoint,
 			AppDbContext db,
-			IConnectionMultiplexer redis)
+			IConnectionMultiplexer redis,
+			IFaceBookService faceBookService)
 		{
 			_logger = logger;
 			_publishEndpoint = publishEndpoint;
 			_settings = options.Value;
 			_db = db;
 			_redis = redis.GetDatabase();
+			_faceBookService = faceBookService;
 			_httpClient = new HttpClient();
 		}
 
@@ -498,7 +502,58 @@ namespace CrossChat.Controllers
 
 			return settings;
 		}
-		
+
+		// ==========================================================
+		// СТРАНИЦА АНАЛИТИКИ СТРАНИЦЫ FACEBOOK (/facebook/analytics)
+		// ==========================================================
+		[HttpGet("analytics")]
+		public async Task<IActionResult> Analytics(int botId, string? after = null, string? before = null)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.FacebookSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+			{
+				return RedirectToAction("Index");
+			}
+
+			ViewBag.BotId = botId;
+			ViewBag.PageName = settings.PageName;
+			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
+
+			// Параллельно запрашиваем ленту постов страницы и сводные KPI за 28 дней
+			var feedTask = _faceBookService.GetPageFeedAsync(settings.PageId, settings.PageAccessToken, 24, after, before);
+			var insightsTask = _faceBookService.GetPageInsightsAsync(settings.PageId, settings.PageAccessToken);
+
+			await Task.WhenAll(feedTask, insightsTask);
+
+			ViewBag.PageInsights = await insightsTask;
+			ViewBag.FollowersCount = (await insightsTask).FollowersCount;
+
+			return View(await feedTask);
+		}
+
+		// ==========================================================
+		// БЫСТРЫЙ AJAX-ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ ИНСАЙТОВ И ЭМОДЗИ ПОСТА
+		// ==========================================================
+		[HttpGet("analytics/insights")]
+		public async Task<IActionResult> GetPostInsights(int botId, string postId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.FacebookSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+			{
+				return Unauthorized();
+			}
+
+			var insights = await _faceBookService.GetPostInsightsAsync(postId, settings.PageAccessToken);
+			return Json(insights);
+		}
 
 		private async Task<string?> GetLinkedInstagramBusinessAccountIdAsync(string pageId, string pageToken)
 		{
