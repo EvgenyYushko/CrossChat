@@ -191,7 +191,7 @@ builder.Services.AddQuartz(q =>
 	q.AddTrigger(opts => opts
 		.ForJob(youTubeStoryJobKey)
 		.WithIdentity($"{nameof(YouTubeCommentsPollingJob)}-Trigger")
-		 .WithCronSchedule("0 */5 * ? * *"));
+		 .WithCronSchedule("0 */10 * ? * *"));
 
 	// 11
 	var driveGcKey = new JobKey(nameof(GoogleDriveMaintenanceJob));
