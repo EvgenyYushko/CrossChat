@@ -5,9 +5,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
 {
@@ -357,7 +357,7 @@ namespace CrossChat.Integrations.Services
 			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.updateRead";
 
 			var payload = new { convoId = convoId, messageId = lastMessageId };
-			
+
 			var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
 			if (response.IsSuccessStatusCode)
 			{
@@ -459,6 +459,161 @@ namespace CrossChat.Integrations.Services
 
 			var payload = new { seenAt = utcString };
 			await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
+		}
+
+		/// <summary>
+		/// Получает расширенный профиль аккаунта BlueSky со счетчиками подписчиков, подписок и постов
+		/// </summary>
+		public async Task<BlueSkyFullProfileDto?> GetFullProfileAsync(BlueSkyModel settings)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var profileUrl = $"{pdsUrl}/xrpc/app.bsky.actor.getProfile?actor={settings.Did}";
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, profileUrl, settings, null);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+					var root = doc.RootElement;
+
+					return new BlueSkyFullProfileDto
+					{
+						Did = root.GetProperty("did").GetString() ?? settings.Did,
+						Handle = root.TryGetProperty("handle", out var h) ? h.GetString() ?? settings.Handle ?? "" : settings.Handle ?? "",
+						DisplayName = root.TryGetProperty("displayName", out var dn) ? dn.GetString() : null,
+						AvatarUrl = root.TryGetProperty("avatar", out var av) ? av.GetString() : null,
+						FollowersCount = root.TryGetProperty("followersCount", out var fc) ? fc.GetInt32() : 0,
+						FollowsCount = root.TryGetProperty("followsCount", out var fwc) ? fwc.GetInt32() : 0,
+						PostsCount = root.TryGetProperty("postsCount", out var pc) ? pc.GetInt32() : 0
+					};
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка получения профиля для {Did}", settings.Did);
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Получает ленту постов автора в BlueSky с лайками, репостами и реплаями за 1 сетевой запрос
+		/// </summary>
+		public async Task<BlueSkyFeedPageDto> GetAuthorFeedAsync(BlueSkyModel settings, int limit = 24, string? cursor = null)
+		{
+			var result = new BlueSkyFeedPageDto();
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+
+			// Запрашиваем посты автора (filter=posts_and_author_threads исключает чужие ответы)
+			var url = $"{pdsUrl}/xrpc/app.bsky.feed.getAuthorFeed?actor={settings.Did}&limit={limit}&filter=posts_and_author_threads";
+			if (!string.IsNullOrEmpty(cursor))
+			{
+				url += $"&cursor={Uri.EscapeDataString(cursor)}";
+			}
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, url, settings, null);
+				if (!response.IsSuccessStatusCode)
+				{
+					var err = await response.Content.ReadAsStringAsync();
+					_logger.LogError("[BlueSky Analytics] Ошибка загрузки ленты: {Err}", err);
+					return result;
+				}
+
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+				var root = doc.RootElement;
+
+				if (root.TryGetProperty("feed", out var feedArr))
+				{
+					foreach (var item in feedArr.EnumerateArray())
+					{
+						if (!item.TryGetProperty("post", out var postElem)) continue;
+
+						var postUri = postElem.GetProperty("uri").GetString()!;
+						var postCid = postElem.GetProperty("cid").GetString()!;
+
+						string? text = null;
+						DateTime timestamp = DateTime.UtcNow;
+
+						if (postElem.TryGetProperty("record", out var recordElem))
+						{
+							if (recordElem.TryGetProperty("text", out var t)) text = t.GetString();
+							if (recordElem.TryGetProperty("createdAt", out var ca) && DateTime.TryParse(ca.GetString(), out var dt))
+							{
+								timestamp = dt.ToUniversalTime();
+							}
+						}
+
+						// Счётчики вовлеченности
+						int likes = postElem.TryGetProperty("likeCount", out var lc) ? lc.GetInt32() : 0;
+						int reposts = postElem.TryGetProperty("repostCount", out var rc) ? rc.GetInt32() : 0;
+						int replies = postElem.TryGetProperty("replyCount", out var rpc) ? rpc.GetInt32() : 0;
+						int quotes = postElem.TryGetProperty("quoteCount", out var qc) ? qc.GetInt32() : 0;
+
+						// Определение медиа
+						string mediaType = "TEXT";
+						string? mediaUrl = null;
+						string? thumbUrl = null;
+
+						if (postElem.TryGetProperty("embed", out var embedElem))
+						{
+							var embedType = embedElem.TryGetProperty("$type", out var et) ? et.GetString() ?? "" : "";
+
+							// Картинки
+							if (embedType.Contains("embed.images") && embedElem.TryGetProperty("images", out var imgArr) && imgArr.GetArrayLength() > 0)
+							{
+								mediaType = "IMAGE";
+								var firstImg = imgArr[0];
+								thumbUrl = firstImg.TryGetProperty("thumb", out var th) ? th.GetString() : null;
+								mediaUrl = firstImg.TryGetProperty("fullsize", out var fs) ? fs.GetString() : thumbUrl;
+							}
+							// Видео
+							else if (embedType.Contains("embed.video"))
+							{
+								mediaType = "VIDEO";
+								thumbUrl = embedElem.TryGetProperty("thumbnail", out var vth) ? vth.GetString() : null;
+								mediaUrl = thumbUrl;
+							}
+						}
+
+						// Формируем красивую веб-ссылку: https://bsky.app/profile/{handle}/post/{rkey}
+						string rkey = postUri.Split('/').Last();
+						string handle = settings.Handle ?? settings.Did;
+						string permalink = $"https://bsky.app/profile/{handle}/post/{rkey}";
+
+						result.Posts.Add(new BlueSkyFeedPostDto
+						{
+							Uri = postUri,
+							Cid = postCid,
+							Text = text,
+							MediaType = mediaType,
+							MediaUrl = mediaUrl,
+							ThumbnailUrl = thumbUrl,
+							Permalink = permalink,
+							Timestamp = timestamp,
+							LikesCount = likes,
+							RepostsCount = reposts,
+							RepliesCount = replies,
+							QuotesCount = quotes
+						});
+					}
+				}
+
+				if (root.TryGetProperty("cursor", out var cProp))
+				{
+					result.Cursor = cProp.GetString();
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky Analytics] Исключение при парсинге ленты");
+			}
+
+			return result;
 		}
 	}
 

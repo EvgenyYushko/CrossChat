@@ -6,6 +6,7 @@ using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,19 +27,20 @@ namespace CrossChat.Controllers
 		private string RedirectUri => $"{APP_URL}/bluesky/auth/callback";
 		private readonly IDistributedCache _cache;
 		private readonly IBlueSkyService _blueSkyService;
-
-		// Конструктор стал легким — никакой возни с Google Drive!
+		private readonly IBlueSkyTokenManager _tokenManager;
 		public BlueSkyController(
 			ILogger<BlueSkyController> logger,
 			AppDbContext db,
 			IDistributedCache cache,
-			IBlueSkyService blueSkyService)
+			IBlueSkyService blueSkyService,
+			IBlueSkyTokenManager tokenManager) // <-- ВНЕДРЯЕМ МЕНЕДЖЕР ТОКЕНОВ
 		{
 			_logger = logger;
 			_db = db;
 			_httpClient = new HttpClient();
 			_cache = cache;
 			_blueSkyService = blueSkyService;
+			_tokenManager = tokenManager;
 		}
 
 		// ==========================================================
@@ -298,14 +300,14 @@ namespace CrossChat.Controllers
 		}
 
 		private async Task<BlueSkySettings> SaveToken(
-			int userId, 
-			string access, 
-			string refresh, 
-			string handle, 
-			string did, 
-			string privateKey, 
-			string pds, 
-			DateTime expireDate, 
+			int userId,
+			string access,
+			string refresh,
+			string handle,
+			string did,
+			string privateKey,
+			string pds,
+			DateTime expireDate,
 			string? profilePicUrl,
 			int? profileId = null)
 		{
@@ -414,6 +416,60 @@ namespace CrossChat.Controllers
 				token_endpoint_auth_method = "none",
 				dpop_bound_access_tokens = true
 			});
+		}
+
+		// ==========================================================
+		// СТРАНИЦА АНАЛИТИКИ АККАУНТА BLUESKY (/bluesky/analytics)
+		// ==========================================================
+		[HttpGet("analytics")]
+		public async Task<IActionResult> Analytics(int botId, string? cursor = null)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			// Проверяем принадлежность аккаунта пользователю
+			var settings = await _db.BlueSkySettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+			{
+				return RedirectToAction("Index");
+			}
+
+			// Получаем гарантированно свежий токен через менеджер
+			var botModel = await _tokenManager.GetValidTokenAsync(botId);
+			if (botModel == null)
+			{
+				return RedirectToAction("Index", new { botId });
+			}
+
+			ViewBag.BotId = botId;
+			ViewBag.Handle = botModel.Handle;
+			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
+
+			// Параллельно запрашиваем расширенный профиль со счетчиками и ленту постов
+			var profileTask = _blueSkyService.GetFullProfileAsync(botModel);
+			var feedTask = _blueSkyService.GetAuthorFeedAsync(botModel, 24, cursor);
+
+			await Task.WhenAll(profileTask, feedTask);
+
+			var profile = await profileTask;
+			var feed = await feedTask;
+
+			var insights = new BlueSkyAccountInsightsDto
+			{
+				FollowersCount = profile?.FollowersCount ?? 0,
+				FollowsCount = profile?.FollowsCount ?? 0,
+				PostsCount = profile?.PostsCount ?? 0,
+				TotalLikesOnFeed = feed.Posts.Sum(p => p.LikesCount),
+				TotalRepostsOnFeed = feed.Posts.Sum(p => p.RepostsCount),
+				TotalRepliesOnFeed = feed.Posts.Sum(p => p.RepliesCount),
+				TotalQuotesOnFeed = feed.Posts.Sum(p => p.QuotesCount)
+			};
+
+			ViewBag.AccountInsights = insights;
+			ViewBag.FollowersCount = insights.FollowersCount;
+
+			return View(feed);
 		}
 
 		// ==========================================================

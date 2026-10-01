@@ -1,0 +1,664 @@
+@model CrossChat.Integrations.Models.BlueSkyFeedPageDto
+@{
+    ViewData["Title"] = "Аналитика @" + ViewBag.Handle;
+    int botId = ViewBag.BotId;
+    int followersCount = ViewBag.FollowersCount ?? 0;
+    var stats = ViewBag.AccountInsights as CrossChat.Integrations.Models.BlueSkyAccountInsightsDto
+        ?? new CrossChat.Integrations.Models.BlueSkyAccountInsightsDto();
+}
+
+@section Styles {
+    <style>
+        .analytics-container {
+            max-width: 1000px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+            box-sizing: border-box;
+        }
+
+        .header-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .user-meta {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #0085ff;
+            padding: 2px;
+            background: #fff;
+        }
+
+        /* KPI КАРТОЧКИ */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 1.5rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .kpi-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 16px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            min-width: 0;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+            .kpi-card:hover {
+                transform: translateY(-2px);
+                border-color: rgba(0, 133, 255, 0.4);
+            }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .kpi-value {
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--text-main);
+            line-height: 1.1;
+        }
+
+        .kpi-subtitle {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ТУЛБАР */
+        .toolbar-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 12px 18px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .filter-btn-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .filter-btn:hover, .filter-btn.active {
+                background: #0085ff;
+                color: #fff;
+                border-color: #0085ff;
+            }
+
+        .select-sort {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* СЕТКА ПОСТОВ */
+        .posts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            gap: 20px;
+        }
+
+        .post-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+
+            .post-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 12px 25px -5px rgba(0, 0, 0, 0.3);
+                border-color: rgba(0, 133, 255, 0.4);
+            }
+
+        .post-thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+            .post-thumb-wrapper img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+        .badge-er {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            z-index: 2;
+        }
+
+        .badge-type {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            z-index: 2;
+        }
+
+        .post-body {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 10px;
+        }
+
+        .post-stats-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .post-text-content {
+            font-size: 0.95rem;
+            line-height: 1.45;
+            color: var(--text-main);
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .btn-insights {
+            width: 100%;
+            padding: 9px;
+            background: rgba(0, 133, 255, 0.08);
+            border: 1px solid rgba(0, 133, 255, 0.25);
+            border-radius: 10px;
+            color: #38bdf8;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+            .btn-insights:hover {
+                background: #0085ff;
+                color: #fff;
+                border-color: #0085ff;
+            }
+
+        /* МОДАЛКА */
+        .insights-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 5000;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .insights-modal {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            padding: 1.75rem;
+            position: relative;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        @@media (max-width: 992px) {
+            .overview-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @@media (max-width: 600px) {
+            .analytics-container {
+                margin-top: 4.5rem;
+                padding: 0 0.75rem;
+            }
+
+            .header-box {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .user-meta {
+                flex-direction: column;
+            }
+
+            .overview-grid {
+                grid-template-columns: 1fr 1fr !important;
+                gap: 8px;
+            }
+
+            .kpi-card {
+                padding: 12px 10px;
+            }
+
+            .kpi-value {
+                font-size: 1.3rem;
+            }
+
+            .toolbar-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .posts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/bluesky?botId=@botId" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
+        ← Назад
+    </a>
+}
+
+<div class="analytics-container">
+
+    <!-- ШАПКА BLUESKY -->
+    <div class="header-box">
+        <div class="user-meta">
+            @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
+            {
+                <img src="@ViewBag.AvatarUrl" class="user-avatar" alt="Avatar">
+            }
+            else
+            {
+                <div class="user-avatar" style="background:#0085ff;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">BS</div>
+            }
+            <div>
+                <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Handle</h2>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Подписок: <strong>@stats.FollowsCount.ToString("N0")</strong> • Постов: <strong>@stats.PostsCount.ToString("N0")</strong>
+                </div>
+            </div>
+        </div>
+        <div>
+            <a href="/bluesky?botId=@botId" class="btn btn-console" style="text-decoration:none; padding:8px 16px; border-radius:10px; font-size:0.85rem;">
+                ← В настройки BlueSky
+            </a>
+        </div>
+    </div>
+
+    <!-- СВОДНЫЕ KPI КАРТОЧКИ ПО ЛЕНТЕ -->
+    <div class="overview-grid">
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Лайки на ленте</span><span>❤️</span></div>
+            <div class="kpi-value" style="color: #ef4444;">@stats.TotalLikesOnFeed.ToString("N0")</div>
+            <div class="kpi-subtitle">Отметок «Нравится»</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Репосты</span><span>🔁</span></div>
+            <div class="kpi-value" style="color: #10b981;">@stats.TotalRepostsOnFeed.ToString("N0")</div>
+            <div class="kpi-subtitle">Поделились в ленте</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Реплаи</span><span>💬</span></div>
+            <div class="kpi-value" style="color: #38bdf8;">@stats.TotalRepliesOnFeed.ToString("N0")</div>
+            <div class="kpi-subtitle">Ответов в ветках</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Цитаты</span><span>💭</span></div>
+            <div class="kpi-value" style="color: #f59e0b;">@stats.TotalQuotesOnFeed.ToString("N0")</div>
+            <div class="kpi-subtitle">Постов с цитатами</div>
+        </div>
+    </div>
+
+    <!-- ТУЛБАР ФИЛЬТРОВ И СОРТИРОВКИ -->
+    <div class="toolbar-box">
+        <div class="filter-btn-group">
+            <button type="button" class="filter-btn active" data-type="ALL" onclick="setFilter('ALL', this)">Все посты</button>
+            <button type="button" class="filter-btn" data-type="TEXT" onclick="setFilter('TEXT', this)">📝 Только текст</button>
+            <button type="button" class="filter-btn" data-type="IMAGE" onclick="setFilter('IMAGE', this)">📷 С фото</button>
+            <button type="button" class="filter-btn" data-type="VIDEO" onclick="setFilter('VIDEO', this)">🎬 Видео</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+            <select id="sortBySelect" class="select-sort" onchange="applyFiltersAndSorting()">
+                <option value="er" selected>⚡ По рейтингу ER</option>
+                <option value="likes">❤️ По лайкам</option>
+                <option value="reposts">🔁 По репостам</option>
+                <option value="replies">💬 По реплаям</option>
+                <option value="date">📅 По дате</option>
+            </select>
+            <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary); margin-left: 4px;">
+                Всего: @Model.Posts.Count
+            </span>
+        </div>
+    </div>
+
+    <!-- СЕТКА ПОСТОВ -->
+    @if (!Model.Posts.Any())
+    {
+        <div style="text-align:center; padding:4rem 1rem; color:var(--text-secondary); background:var(--card-bg); border-radius:20px; border:1px dashed var(--glass-border);">
+            <div style="font-size:3rem; margin-bottom:1rem;">🦋</div>
+            <h3>Постов не найдено</h3>
+            <p style="font-size:0.9rem;">В этом профиле BlueSky пока нет опубликованных записей.</p>
+        </div>
+    }
+    else
+    {
+        <div class="posts-grid" id="postsGrid">
+            @foreach (var post in Model.Posts)
+            {
+                int totalInteractions = post.LikesCount + post.RepostsCount + post.RepliesCount + post.QuotesCount;
+                double postEr = followersCount > 0
+                ? Math.Round(((double)totalInteractions / followersCount) * 100.0, 1)
+                : 0;
+
+                string erColor = postEr >= 8.0 ? "#f43f5e" : (postEr >= 3.0 ? "#10b981" : "#38bdf8");
+
+                <div class="post-card"
+                     data-uri="@post.Uri"
+                     data-type="@post.MediaType"
+                     data-likes="@post.LikesCount"
+                     data-reposts="@post.RepostsCount"
+                     data-replies="@post.RepliesCount"
+                     data-er="@postEr.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
+                     data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
+
+                    <!-- ПРЕВЬЮ КАРТИНКИ ИЛИ ПЛАШКА ER -->
+                    @if (!string.IsNullOrEmpty(post.ThumbnailUrl) || !string.IsNullOrEmpty(post.MediaUrl))
+                    {
+                        <div class="post-thumb-wrapper">
+                            @if (postEr > 0)
+                            {
+                                <span class="badge-er" style="color: @erColor; border: 1px solid @erColor;">
+                                    ⚡ ER @postEr%
+                                </span>
+                            }
+                            <span class="badge-type">@post.MediaType</span>
+                            <img src="@(post.ThumbnailUrl ?? post.MediaUrl)" alt="Media" loading="lazy">
+                        </div>
+                    }
+
+                    <div class="post-body">
+                        <!-- СТРОКА СЧЕТЧИКОВ НА КАРТОЧКЕ -->
+                        <div class="post-stats-row">
+                            <span style="color: #ef4444;">❤️ @post.LikesCount.ToString("N0")</span>
+                            <span style="color: #10b981;">🔁 @post.RepostsCount.ToString("N0")</span>
+                            <span style="color: #38bdf8;">💬 @post.RepliesCount.ToString("N0")</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM")</span>
+                        </div>
+
+                        <!-- ДЛЯ ТЕКСТОВЫХ ПОСТОВ: ER В ВИДЕ ПЛАШКИ -->
+                        @if (string.IsNullOrEmpty(post.ThumbnailUrl) && string.IsNullOrEmpty(post.MediaUrl) && postEr > 0)
+                        {
+                            <div>
+                                <span style="font-size:0.75rem; font-weight:800; color:@erColor; background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:6px; border:1px solid @erColor;">
+                                    ⚡ True ER: @postEr%
+                                </span>
+                            </div>
+                        }
+
+                        <div class="post-text-content">
+                            @(string.IsNullOrWhiteSpace(post.Text) ? "Медиафайл без подписи" : post.Text)
+                        </div>
+
+                        <button type="button" class="btn-insights"
+                                onclick="openInsightsModal('@post.LikesCount', '@post.RepostsCount', '@post.RepliesCount', '@post.QuotesCount', '@postEr', '@erColor', '@post.Permalink')">
+                            🦋 Детали публикации
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (Model.HasNext)
+        {
+            <div style="display:flex; justify-content:center; margin-top:2.5rem;">
+                <a href="/bluesky/analytics?botId=@botId&cursor=@Model.Cursor" class="btn btn-console" style="text-decoration:none; padding:10px 24px; border-radius:12px;">
+                    Загрузить следующие посты ➡
+                </a>
+            </div>
+        }
+    }
+</div>
+
+<!-- МОДАЛКА ДЕТАЛЕЙ ПОСТА BLUESKY -->
+<div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
+    <div class="insights-modal" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">🦋 Статистика поста BlueSky</h3>
+            <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+
+        <div>
+            <!-- TRUE ER -->
+            <div style="background:rgba(0, 133, 255, 0.08); border:1px solid rgba(0, 133, 255, 0.25); border-radius:14px; padding:14px; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">Рейтинг вовлеченности (ER)</span>
+                        <div style="font-size:1.6rem; font-weight:900;" id="modalErValue">0%</div>
+                    </div>
+                    <span id="modalErBadge" style="font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:20px; border:1px solid transparent;">-</span>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="metric-card">
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">❤️ Лайки</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#ef4444;" id="modalLikes">0</div>
+                </div>
+                <div class="metric-card">
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">🔁 Репосты</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#10b981;" id="modalReposts">0</div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="metric-card">
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">💬 Реплаи</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#38bdf8;" id="modalReplies">0</div>
+                </div>
+                <div class="metric-card">
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">💭 Цитаты</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#f59e0b;" id="modalQuotes">0</div>
+                </div>
+            </div>
+
+            <div style="margin-top:1.25rem;">
+                <a id="modalPermalink" href="#" target="_blank" class="btn" style="background:#0085ff; color:white; text-decoration:none; text-align:center; display:block; padding:11px; border-radius:10px; font-weight:700;">
+                    🦋 Открыть пост в BlueSky
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentFilter = 'ALL';
+
+        function setFilter(type, btn) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyFiltersAndSorting();
+        }
+
+        function applyFiltersAndSorting() {
+            const grid = document.getElementById('postsGrid');
+            if (!grid) return;
+
+            const cards = Array.from(grid.querySelectorAll('.post-card'));
+            const sortBy = document.getElementById('sortBySelect').value;
+            let visible = 0;
+
+            cards.forEach(card => {
+                const match = currentFilter === 'ALL' || card.dataset.type === currentFilter;
+                card.style.display = match ? 'flex' : 'none';
+                if (match) visible++;
+            });
+
+            cards.sort((a, b) => {
+                let valA, valB;
+                switch (sortBy) {
+                    case 'er':
+                        valA = parseFloat(a.dataset.er) || 0;
+                        valB = parseFloat(b.dataset.er) || 0;
+                        break;
+                    case 'likes':
+                        valA = parseInt(a.dataset.likes) || 0;
+                        valB = parseInt(b.dataset.likes) || 0;
+                        break;
+                    case 'reposts':
+                        valA = parseInt(a.dataset.reposts) || 0;
+                        valB = parseInt(b.dataset.reposts) || 0;
+                        break;
+                    case 'replies':
+                        valA = parseInt(a.dataset.replies) || 0;
+                        valB = parseInt(b.dataset.replies) || 0;
+                        break;
+                    case 'date':
+                    default:
+                        valA = parseInt(a.dataset.timestamp) || 0;
+                        valB = parseInt(b.dataset.timestamp) || 0;
+                        break;
+                }
+                return valB - valA; // По убыванию
+            });
+
+            cards.forEach(c => grid.appendChild(c));
+            document.getElementById('visibleCountText').textContent = `Показано: ${visible} из ${cards.length}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyFiltersAndSorting();
+        });
+
+        function openInsightsModal(likes, reposts, replies, quotes, er, color, permalink) {
+            document.getElementById('modalLikes').textContent = Number(likes).toLocaleString();
+            document.getElementById('modalReposts').textContent = Number(reposts).toLocaleString();
+            document.getElementById('modalReplies').textContent = Number(replies).toLocaleString();
+            document.getElementById('modalQuotes').textContent = Number(quotes).toLocaleString();
+
+            document.getElementById('modalErValue').textContent = er + '%';
+            document.getElementById('modalErValue').style.color = color;
+
+            const badge = document.getElementById('modalErBadge');
+            const erNum = parseFloat(er);
+            badge.textContent = erNum >= 8.0 ? '🚀 Вирусный хит' : (erNum >= 3.0 ? '🔥 Высокий отклик' : '👍 Норма');
+            badge.style.color = color;
+            badge.style.borderColor = color;
+
+            document.getElementById('modalPermalink').href = permalink || '#';
+            document.getElementById('insightsModalOverlay').style.display = 'flex';
+        }
+
+        function closeInsightsModal(e) {
+            document.getElementById('insightsModalOverlay').style.display = 'none';
+        }
+    </script>
+}

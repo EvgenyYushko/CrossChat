@@ -1,3 +1,4 @@
+using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Services;
 
 namespace CrossChat.Integrations.Interfaces;
@@ -28,4 +29,7 @@ public interface IBlueSkyService
 	Task<List<Notification>> GetUnreadNotificationsAsync(BlueSkyModel settings);
 	Task<bool> ReplyToThreadCommentAsync(string postText, string parentUri, string parentCid, string rootUri, string rootCid, BlueSkyModel setting);
 	Task UpdateNotificationsSeenAsync(BlueSkyModel settings, DateTime seenAt);
+
+	Task<BlueSkyFullProfileDto?> GetFullProfileAsync(BlueSkyModel settings);
+	Task<BlueSkyFeedPageDto> GetAuthorFeedAsync(BlueSkyModel settings, int limit = 24, string? cursor = null);
 }
