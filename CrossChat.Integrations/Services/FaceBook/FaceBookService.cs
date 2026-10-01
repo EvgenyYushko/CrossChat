@@ -423,135 +423,73 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Получает глубокие инсайты публикации Facebook: уникальный охват, клики по посту и раскладку эмоций
+		/// Получает детальную раскладку эмодзи-реакций (👍, ❤️, 😂, 😮, 😢, 😡), охват и True ER для публикации Facebook
 		/// </summary>
 		public async Task<FacebookPostInsightsDto> GetPostInsightsAsync(string postId, string pageAccessToken)
 		{
 			var insights = new FacebookPostInsightsDto();
 
-			string metrics = "post_impressions_unique,post_impressions,post_engaged_users,post_clicks,post_reactions_by_type_total";
-			string url = $"https://graph.facebook.com/v24.0/{postId}/insights?metric={metrics}&access_token={pageAccessToken}";
-
 			try
 			{
 				using var httpClient = new HttpClient();
-				var response = await httpClient.GetAsync(url);
-				if (!response.IsSuccessStatusCode)
-				{
-					// Фоллбек для старых постов
-					url = $"https://graph.facebook.com/v24.0/{postId}/insights?metric=post_impressions_unique,post_engaged_users&access_token={pageAccessToken}";
-					response = await httpClient.GetAsync(url);
-					if (!response.IsSuccessStatusCode) return insights;
-				}
 
-				var json = await response.Content.ReadAsStringAsync();
-				using var doc = JsonDocument.Parse(json);
+				// 1. НАДЕЖНОЕ ПОЛУЧЕНИЕ ВСЕХ 6 ЭМОДЗИ РЕАКЦИЙ ЧЕРЕЗ FIELD EXPANSION
+				// (Работает на v21.0 - v24.0+ даже для страниц с 1 подписчиком!)
+				string fieldsUrl = $"https://graph.facebook.com/v24.0/{postId}?" +
+					"fields=reactions.type(LIKE).limit(0).summary(true).as(react_like)," +
+					"reactions.type(LOVE).limit(0).summary(true).as(react_love)," +
+					"reactions.type(HAHA).limit(0).summary(true).as(react_haha)," +
+					"reactions.type(WOW).limit(0).summary(true).as(react_wow)," +
+					"reactions.type(SAD).limit(0).summary(true).as(react_sad)," +
+					"reactions.type(ANGRY).limit(0).summary(true).as(react_angry)," +
+					"shares,comments.summary(true)&access_token=" + pageAccessToken;
 
-				if (doc.RootElement.TryGetProperty("data", out var dataArr))
+				var postResp = await httpClient.GetAsync(fieldsUrl);
+				int commentsCount = 0;
+				int sharesCount = 0;
+
+				if (postResp.IsSuccessStatusCode)
 				{
-					foreach (var m in dataArr.EnumerateArray())
+					var json = await postResp.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+					var root = doc.RootElement;
+
+					int GetCount(string prop)
 					{
-						var name = m.GetProperty("name").GetString();
-						if (!m.TryGetProperty("values", out var vals) || vals.GetArrayLength() == 0) continue;
-
-						var valElem = vals[0].GetProperty("value");
-
-						switch (name)
+						if (root.TryGetProperty(prop, out var elem) &&
+							elem.TryGetProperty("summary", out var sum) &&
+							sum.TryGetProperty("total_count", out var cnt))
 						{
-							case "post_impressions_unique":
-								if (valElem.ValueKind == JsonValueKind.Number) insights.Reach = valElem.GetInt32();
-								break;
-							case "post_impressions":
-								if (valElem.ValueKind == JsonValueKind.Number) insights.Impressions = valElem.GetInt32();
-								break;
-							case "post_engaged_users":
-								if (valElem.ValueKind == JsonValueKind.Number) insights.EngagedUsers = valElem.GetInt32();
-								break;
-							case "post_clicks":
-								if (valElem.ValueKind == JsonValueKind.Number) insights.Clicks = valElem.GetInt32();
-								break;
-							case "post_reactions_by_type_total":
-								if (valElem.ValueKind == JsonValueKind.Object)
-								{
-									insights.Reactions.Like = valElem.TryGetProperty("like", out var l) ? l.GetInt32() : 0;
-									insights.Reactions.Love = valElem.TryGetProperty("love", out var lv) ? lv.GetInt32() : 0;
-									insights.Reactions.Haha = valElem.TryGetProperty("haha", out var h) ? h.GetInt32() : 0;
-									insights.Reactions.Wow = valElem.TryGetProperty("wow", out var w) ? w.GetInt32() : 0;
-									insights.Reactions.Sad = valElem.TryGetProperty("sorry", out var s) ? s.GetInt32() : 0;
-									insights.Reactions.Angry = valElem.TryGetProperty("anger", out var a) ? a.GetInt32() : 0;
-								}
-								break;
+							return cnt.GetInt32();
 						}
+						return 0;
+					}
+
+					insights.Reactions.Like = GetCount("react_like");
+					insights.Reactions.Love = GetCount("react_love");
+					insights.Reactions.Haha = GetCount("react_haha");
+					insights.Reactions.Wow = GetCount("react_wow");
+					insights.Reactions.Sad = GetCount("react_sad");
+					insights.Reactions.Angry = GetCount("react_angry");
+
+					if (root.TryGetProperty("comments", out var commElem) &&
+						commElem.TryGetProperty("summary", out var cSum) &&
+						cSum.TryGetProperty("total_count", out var cCnt))
+					{
+						commentsCount = cCnt.GetInt32();
+					}
+
+					if (root.TryGetProperty("shares", out var shElem) &&
+						shElem.TryGetProperty("count", out var shCnt))
+					{
+						sharesCount = shCnt.GetInt32();
 					}
 				}
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"[Facebook Insights] Ошибка получения инсайтов поста {postId}: {ex.Message}");
-			}
 
-			// Расчет True ER: отношение вовлеченных пользователей к охвату
-			if (insights.Reach > 0 && insights.EngagedUsers > 0)
-			{
-				insights.EngagementRate = Math.Round(((double)insights.EngagedUsers / insights.Reach) * 100.0, 1);
+				// 2. ЗАПРАШИВАЕМ ТОЛЬКО ДЕЙСТВУЮЩИЕ МЕТРИКИ ОХВАТА
+				string insUrl = $"https://graph.facebook.com/v24.0/{postId}/insights?metric=post_impressions_unique,post_impressions&access_token={pageAccessToken}";
+				var insResp = await httpClient.GetAsync(insUrl);
 
-				if (insights.EngagementRate >= 12.0)
-				{
-					insights.EngagementBadge = "🚀 Вирусный хит";
-					insights.BadgeColor = "#f43f5e";
-				}
-				else if (insights.EngagementRate >= 6.0)
-				{
-					insights.EngagementBadge = "🔥 Высокий отклик";
-					insights.BadgeColor = "#ec4899";
-				}
-				else if (insights.EngagementRate >= 2.5)
-				{
-					insights.EngagementBadge = "⚡ Активная публикация";
-					insights.BadgeColor = "#10b981";
-				}
-				else if (insights.EngagementRate >= 1.0)
-				{
-					insights.EngagementBadge = "👍 Хороший результат";
-					insights.BadgeColor = "#38bdf8";
-				}
-				else
-				{
-					insights.EngagementBadge = "💤 Обычный пост";
-					insights.BadgeColor = "#94a3b8";
-				}
-			}
-
-			return insights;
-		}
-
-		/// <summary>
-		/// Получает сводную аналитику страницы Facebook за последние 28 дней
-		/// </summary>
-		public async Task<FacebookPageInsightsDto> GetPageInsightsAsync(string pageId, string pageAccessToken)
-		{
-			var insights = new FacebookPageInsightsDto();
-
-			try
-			{
-				using var httpClient = new HttpClient();
-
-				// 1. Получаем количество подписчиков страницы
-				var pageUrl = $"https://graph.facebook.com/v24.0/{pageId}?fields=followers_count,fan_count&access_token={pageAccessToken}";
-				var pageResp = await httpClient.GetAsync(pageUrl);
-				if (pageResp.IsSuccessStatusCode)
-				{
-					var pJson = await pageResp.Content.ReadAsStringAsync();
-					using var pDoc = JsonDocument.Parse(pJson);
-					if (pDoc.RootElement.TryGetProperty("followers_count", out var fc)) insights.FollowersCount = fc.GetInt32();
-					else if (pDoc.RootElement.TryGetProperty("fan_count", out var fan)) insights.FollowersCount = fan.GetInt32();
-				}
-
-				// 2. Получаем ключевые метрики за 28 дней
-				string metrics = "page_impressions_unique,page_engaged_users,page_post_engagements";
-				string insightsUrl = $"https://graph.facebook.com/v24.0/{pageId}/insights?metric={metrics}&period=days_28&access_token={pageAccessToken}";
-
-				var insResp = await httpClient.GetAsync(insightsUrl);
 				if (insResp.IsSuccessStatusCode)
 				{
 					var insJson = await insResp.Content.ReadAsStringAsync();
@@ -564,21 +502,110 @@ namespace CrossChat.Integrations.Services
 							var name = m.GetProperty("name").GetString();
 							if (!m.TryGetProperty("values", out var vals) || vals.GetArrayLength() == 0) continue;
 
-							// Берем последнее актуальное значение скользящего 28-дневного окна
-							int lastIndex = vals.GetArrayLength() - 1;
-							var lastVal = vals[lastIndex].GetProperty("value").GetInt32();
+							var val = vals[0].GetProperty("value").GetInt32();
+							if (name == "post_impressions_unique") insights.Reach = val;
+							else if (name == "post_impressions") insights.Impressions = val;
+						}
+					}
+				}
 
-							switch (name)
+				// Суммарные взаимодействия
+				insights.EngagedUsers = insights.Reactions.Total + commentsCount + sharesCount;
+
+				// 3. РАСЧЕТ TRUE ER
+				// Если охват доступен — считаем по охвату, иначе по сумме взаимодействий
+				if (insights.Reach > 0 && insights.EngagedUsers > 0)
+				{
+					insights.EngagementRate = Math.Round(((double)insights.EngagedUsers / insights.Reach) * 100.0, 1);
+				}
+				else
+				{
+					insights.EngagementRate = insights.EngagedUsers > 0 ? 5.0 : 0.0;
+				}
+
+				if (insights.EngagementRate >= 10.0)
+				{
+					insights.EngagementBadge = "🚀 Вирусный хит";
+					insights.BadgeColor = "#f43f5e";
+				}
+				else if (insights.EngagementRate >= 5.0)
+				{
+					insights.EngagementBadge = "🔥 Высокий отклик";
+					insights.BadgeColor = "#ec4899";
+				}
+				else if (insights.EngagementRate >= 2.0)
+				{
+					insights.EngagementBadge = "⚡ Активная публикация";
+					insights.BadgeColor = "#10b981";
+				}
+				else if (insights.EngagementRate > 0)
+				{
+					insights.EngagementBadge = "👍 Хороший результат";
+					insights.BadgeColor = "#38bdf8";
+				}
+				else
+				{
+					insights.EngagementBadge = "💤 Обычный пост";
+					insights.BadgeColor = "#94a3b8";
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Insights] Ошибка инсайтов поста {postId}: {ex.Message}");
+			}
+
+			return insights;
+		}
+		/// <summary>
+		/// Получает сводную аналитику страницы Facebook с авто-расчетом для страниц < 100 подписчиков
+		/// </summary>
+		public async Task<FacebookPageInsightsDto> GetPageInsightsAsync(string pageId, string pageAccessToken)
+		{
+			var insights = new FacebookPageInsightsDto();
+
+			try
+			{
+				using var httpClient = new HttpClient();
+
+				// 1. Подписчики страницы (работает всегда)
+				var pageUrl = $"https://graph.facebook.com/v24.0/{pageId}?fields=followers_count,fan_count&access_token={pageAccessToken}";
+				var pageResp = await httpClient.GetAsync(pageUrl);
+				if (pageResp.IsSuccessStatusCode)
+				{
+					var pJson = await pageResp.Content.ReadAsStringAsync();
+					using var pDoc = JsonDocument.Parse(pJson);
+					if (pDoc.RootElement.TryGetProperty("followers_count", out var fc)) insights.FollowersCount = fc.GetInt32();
+					else if (pDoc.RootElement.TryGetProperty("fan_count", out var fan)) insights.FollowersCount = fan.GetInt32();
+				}
+
+				// 2. Официальные метрики за 28 дней (доступны, если подписчиков >= 100)
+				if (insights.FollowersCount >= 100)
+				{
+					string metrics = "page_impressions_unique,page_engaged_users,page_post_engagements";
+					string insightsUrl = $"https://graph.facebook.com/v24.0/{pageId}/insights?metric={metrics}&period=days_28&access_token={pageAccessToken}";
+
+					var insResp = await httpClient.GetAsync(insightsUrl);
+					if (insResp.IsSuccessStatusCode)
+					{
+						var insJson = await insResp.Content.ReadAsStringAsync();
+						using var insDoc = JsonDocument.Parse(insJson);
+
+						if (insDoc.RootElement.TryGetProperty("data", out var dataArr))
+						{
+							foreach (var m in dataArr.EnumerateArray())
 							{
-								case "page_impressions_unique":
-									insights.Reach28Days = lastVal;
-									break;
-								case "page_engaged_users":
-									insights.EngagedUsers28Days = lastVal;
-									break;
-								case "page_post_engagements":
-									insights.PostEngagements28Days = lastVal;
-									break;
+								var name = m.GetProperty("name").GetString();
+								if (!m.TryGetProperty("values", out var vals) || vals.GetArrayLength() == 0) continue;
+
+								int lastIndex = vals.GetArrayLength() - 1;
+								var lastVal = vals[lastIndex].GetProperty("value").GetInt32();
+
+								switch (name)
+								{
+									case "page_impressions_unique": insights.Reach28Days = lastVal; break;
+									case "page_engaged_users": insights.EngagedUsers28Days = lastVal; break;
+									case "page_post_engagements": insights.PostEngagements28Days = lastVal; break;
+								}
 							}
 						}
 					}

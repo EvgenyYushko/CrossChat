@@ -45,52 +45,81 @@
             background: #fff;
         }
 
-        /* KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) */
+        /* ИСПРАВЛЕННАЯ СЕТКА KPI КАРТОЧЕК (НИЧЕГО НЕ ВЫЛЕЗАЕТ ЗА КРАЯ) */
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 14px;
             margin-bottom: 1.5rem;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .kpi-card {
             background: var(--card-bg, #1e293b);
             border: 1px solid var(--glass-border);
             border-radius: 16px;
-            padding: 18px 20px;
+            padding: 16px 14px; /* Чуть уменьшили боковой padding */
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            min-width: 0; /* Разрешает карточке сжиматься */
+            overflow: hidden;
             transition: transform 0.2s, border-color 0.2s;
         }
-
-            .kpi-card:hover {
-                transform: translateY(-2px);
-                border-color: rgba(24, 119, 242, 0.3);
-            }
 
         .kpi-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.03em;
             color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .kpi-value {
-            font-size: 1.75rem;
+            font-size: 1.5rem;
             font-weight: 900;
             color: var(--text-main);
             line-height: 1.1;
         }
 
         .kpi-subtitle {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* АДАПТИВНОСТЬ ДЛЯ СРЕДНИХ И МАЛЕНЬКИХ ЭКРАНОВ */
+        @@media (max-width: 992px) {
+            .overview-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 12px;
+            }
+        }
+
+        @@media (max-width: 600px) {
+            .overview-grid {
+                grid-template-columns: 1fr 1fr !important;
+                gap: 8px;
+            }
+
+            .kpi-card {
+                padding: 12px 10px;
+            }
+
+            .kpi-value {
+                font-size: 1.3rem;
+            }
         }
 
         /* ТУЛБАР */
@@ -350,7 +379,7 @@
 
 @section NavbarActions {
     <a href="/facebook?botId=@botId" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
-        ← Назад в настройки
+        ← Назад
     </a>
 }
 
@@ -384,9 +413,13 @@
     <!-- СВОДНЫЕ KPI КАРТОЧКИ (ЗА 28 ДНЕЙ) -->
     <div class="overview-grid">
         <div class="kpi-card">
-            <div class="kpi-header"><span>Охват (28 дн)</span><span>👥</span></div>
-            <div class="kpi-value" style="color: #10b981;">@pageStats.Reach28Days.ToString("N0")</div>
-            <div class="kpi-subtitle">Уникальных зрителей</div>
+            <div class="kpi-header"><span>Охват страницы</span><span>👥</span></div>
+            <div class="kpi-value" style="color: #10b981;">
+                @(pageStats.Reach28Days > 0 ? pageStats.Reach28Days.ToString("N0") : (followersCount >= 100 ? "0" : "< 100"))
+            </div>
+            <div class="kpi-subtitle">
+                @(followersCount < 100 ? "Доступно от 100 подп." : "Уникальных зрителей")
+            </div>
         </div>
         <div class="kpi-card">
             <div class="kpi-header"><span>Вовлеченные люди</span><span>🔥</span></div>

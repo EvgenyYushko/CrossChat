@@ -523,16 +523,26 @@ namespace CrossChat.Controllers
 			ViewBag.PageName = settings.PageName;
 			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
 
-			// Параллельно запрашиваем ленту постов страницы и сводные KPI за 28 дней
 			var feedTask = _faceBookService.GetPageFeedAsync(settings.PageId, settings.PageAccessToken, 24, after, before);
 			var insightsTask = _faceBookService.GetPageInsightsAsync(settings.PageId, settings.PageAccessToken);
 
 			await Task.WhenAll(feedTask, insightsTask);
 
-			ViewBag.PageInsights = await insightsTask;
-			ViewBag.FollowersCount = (await insightsTask).FollowersCount;
+			var feed = await feedTask;
+			var pageInsights = await insightsTask;
 
-			return View(await feedTask);
+			// ЕСЛИ У СТРАНИЦЫ < 100 ПОДПИСЧИКОВ:
+			// Meta блокирует официальные инсайты за 28 дней, поэтому суммируем активность по загруженным постам!
+			if (pageInsights.Reach28Days == 0 && feed.Posts.Any())
+			{
+				pageInsights.PostEngagements28Days = feed.Posts.Sum(p => p.LikesCount + p.CommentsCount + p.SharesCount);
+				pageInsights.EngagedUsers28Days = feed.Posts.Count(p => (p.LikesCount + p.CommentsCount) > 0);
+			}
+
+			ViewBag.PageInsights = pageInsights;
+			ViewBag.FollowersCount = pageInsights.FollowersCount;
+
+			return View(feed);
 		}
 
 		// ==========================================================
