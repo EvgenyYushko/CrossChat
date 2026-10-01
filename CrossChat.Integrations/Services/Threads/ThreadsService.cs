@@ -3,6 +3,7 @@ using System.Text.Json;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Models.Threads;
 using Microsoft.Extensions.Logging;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
@@ -213,5 +214,212 @@ public partial class ThreadsService : IThreadsService
 			_logger.LogError(ex, "[TokenRefresh] Критическая ошибка запроса.");
 			return null;
 		}
+	}
+
+	/// <summary>
+	/// Получает ленту постов Threads с курсорной пагинацией
+	/// </summary>
+	public async Task<ThreadsFeedPageDto> GetAccountFeedAsync(string accessToken, int limit = 12, string? after = null, string? before = null)
+	{
+		var result = new ThreadsFeedPageDto();
+		var fields = "id,text,media_type,media_url,thumbnail_url,permalink,timestamp";
+		var url = $"https://graph.threads.net/v1.0/me/threads?fields={fields}&limit={limit}&access_token={accessToken}";
+
+		if (!string.IsNullOrEmpty(after)) url += $"&after={after}";
+		else if (!string.IsNullOrEmpty(before)) url += $"&before={before}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogError("[Threads Analytics] Ошибка загрузки ленты: {Err}", err);
+				return result;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			if (root.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var item in dataArr.EnumerateArray())
+				{
+					var post = new ThreadsFeedPostDto
+					{
+						Id = item.GetProperty("id").GetString()!,
+						MediaType = item.TryGetProperty("media_type", out var mt) ? mt.GetString() ?? "TEXT_POST" : "TEXT_POST",
+						MediaUrl = item.TryGetProperty("media_url", out var mu) ? mu.GetString() : null,
+						ThumbnailUrl = item.TryGetProperty("thumbnail_url", out var tu) ? tu.GetString() : null,
+						Permalink = item.TryGetProperty("permalink", out var pl) ? pl.GetString() : null,
+						Text = item.TryGetProperty("text", out var t) ? t.GetString() : null
+					};
+
+					if (item.TryGetProperty("timestamp", out var ts) && DateTime.TryParse(ts.GetString(), out var dt))
+					{
+						post.Timestamp = dt;
+					}
+
+					result.Posts.Add(post);
+				}
+			}
+
+			if (root.TryGetProperty("paging", out var paging) && paging.TryGetProperty("cursors", out var cursors))
+			{
+				if (cursors.TryGetProperty("after", out var afterProp)) result.AfterCursor = afterProp.GetString();
+				if (cursors.TryGetProperty("before", out var beforeProp)) result.BeforeCursor = beforeProp.GetString();
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Threads Analytics] Исключение при получении ленты");
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Получает детальные инсайты конкретного треда (просмотры, лайки, реплаи, репосты, цитаты) и рассчитывает True ER
+	/// </summary>
+	public async Task<ThreadsPostInsightsDto> GetThreadInsightsAsync(string threadMediaId, string accessToken)
+	{
+		var insights = new ThreadsPostInsightsDto();
+		string metrics = "views,likes,replies,reposts,quotes";
+		string url = $"https://graph.threads.net/v1.0/{threadMediaId}/insights?metric={metrics}&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				// Фоллбек без quotes, если тред старый
+				url = $"https://graph.threads.net/v1.0/{threadMediaId}/insights?metric=views,likes,replies,reposts&access_token={accessToken}";
+				response = await _httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode) return insights;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+
+			if (doc.RootElement.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var m in dataArr.EnumerateArray())
+				{
+					var name = m.GetProperty("name").GetString();
+					int val = 0;
+
+					if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var v))
+					{
+						val = v.GetInt32();
+					}
+					else if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
+					{
+						val = vals[0].GetProperty("value").GetInt32();
+					}
+
+					switch (name)
+					{
+						case "views": insights.Views = val; break;
+						case "likes": insights.Likes = val; break;
+						case "replies": insights.Replies = val; break;
+						case "reposts": insights.Reposts = val; break;
+						case "quotes": insights.Quotes = val; break;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "[Threads Insights] Не удалось получить статистику треда {MediaId}", threadMediaId);
+		}
+
+		// Расчет True ER по просмотрам (Views)
+		if (insights.Views > 0 && insights.TotalInteractions > 0)
+		{
+			insights.EngagementRate = Math.Round(((double)insights.TotalInteractions / insights.Views) * 100.0, 2);
+
+			if (insights.EngagementRate >= 15.0)
+			{
+				insights.EngagementBadge = "🚀 Вирусный тред";
+				insights.BadgeColor = "#f43f5e"; // Неоновый рубин
+			}
+			else if (insights.EngagementRate >= 7.0)
+			{
+				insights.EngagementBadge = "🔥 Высокий отклик";
+				insights.BadgeColor = "#ec4899"; // Фуксия
+			}
+			else if (insights.EngagementRate >= 3.0)
+			{
+				insights.EngagementBadge = "⚡ Активная дискуссия";
+				insights.BadgeColor = "#10b981"; // Изумрудный зеленый
+			}
+			else if (insights.EngagementRate >= 1.0)
+			{
+				insights.EngagementBadge = "👍 Хороший результат";
+				insights.BadgeColor = "#38bdf8"; // Небесно-голубой
+			}
+			else
+			{
+				insights.EngagementBadge = "💤 Обычный тред";
+				insights.BadgeColor = "#94a3b8"; // Нейтральный
+			}
+		}
+
+		return insights;
+	}
+
+	/// <summary>
+	/// Получает сводную аналитику аккаунта Threads (суммарные просмотры, лайки, репосты и количество подписчиков)
+	/// </summary>
+	public async Task<ThreadsAccountInsightsDto> GetAccountInsightsAsync(string accessToken)
+	{
+		var insights = new ThreadsAccountInsightsDto();
+		string metrics = "views,likes,replies,reposts,quotes,followers_count";
+		string url = $"https://graph.threads.net/v1.0/me/threads_insights?metric={metrics}&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (response.IsSuccessStatusCode)
+			{
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+
+				if (doc.RootElement.TryGetProperty("data", out var dataArr))
+				{
+					foreach (var m in dataArr.EnumerateArray())
+					{
+						var name = m.GetProperty("name").GetString();
+						int val = 0;
+
+						if (m.TryGetProperty("total_value", out var totalVal) && totalVal.TryGetProperty("value", out var v))
+						{
+							val = v.GetInt32();
+						}
+						else if (m.TryGetProperty("values", out var vals) && vals.GetArrayLength() > 0)
+						{
+							val = vals[0].GetProperty("value").GetInt32();
+						}
+
+						switch (name)
+						{
+							case "views": insights.Views = val; break;
+							case "likes": insights.Likes = val; break;
+							case "replies": insights.Replies = val; break;
+							case "reposts": insights.Reposts = val; break;
+							case "quotes": insights.Quotes = val; break;
+							case "followers_count": insights.FollowersCount = val; break;
+						}
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "[Threads Account Insights] Ошибка получения сводной аналитики аккаунта");
+		}
+
+		return insights;
 	}
 }

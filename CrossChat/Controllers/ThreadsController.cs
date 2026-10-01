@@ -35,10 +35,10 @@ namespace CrossChat.Controllers
 		private string RedirectUri => $"{APP_URL}/threads/auth/callback";
 
 		public ThreadsController(
-			ILogger<ThreadsController> logger, 
+			ILogger<ThreadsController> logger,
 			AppDbContext db,
-			IOptions<SocialMediaSettings> options, 
-			IPublishEndpoint publishEndpoint, 
+			IOptions<SocialMediaSettings> options,
+			IPublishEndpoint publishEndpoint,
 			IThreadsService threadsService)
 		{
 			_logger = logger;
@@ -493,6 +493,58 @@ namespace CrossChat.Controllers
 			{
 				return null;
 			}
+		}
+
+		// ==========================================================
+		// СТРАНИЦА АНАЛИТИКИ АККАУНТА THREADS (/threads/analytics)
+		// ==========================================================
+		[HttpGet("analytics")]
+		public async Task<IActionResult> Analytics(int botId, string? after = null, string? before = null)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+			{
+				return RedirectToAction("Index");
+			}
+
+			ViewBag.BotId = botId;
+			ViewBag.Username = settings.Username;
+			ViewBag.AvatarUrl = settings.ProfilePictureUrl;
+
+			// Параллельно запрашиваем ленту и сводные инсайты аккаунта
+			var feedTask = _threadsService.GetAccountFeedAsync(settings.AccessToken, 24, after, before);
+			var insightsTask = _threadsService.GetAccountInsightsAsync(settings.AccessToken);
+
+			await Task.WhenAll(feedTask, insightsTask);
+
+			ViewBag.AccountInsights = await insightsTask;
+			ViewBag.FollowersCount = (await insightsTask).FollowersCount;
+
+			return View(await feedTask);
+		}
+
+		// ==========================================================
+		// БЫСТРЫЙ AJAX-ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ ИНСАЙТОВ ТРЕДА
+		// ==========================================================
+		[HttpGet("analytics/insights")]
+		public async Task<IActionResult> GetPostInsights(int botId, string mediaId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.ThreadsSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+			{
+				return Unauthorized();
+			}
+
+			var insights = await _threadsService.GetThreadInsightsAsync(mediaId, settings.AccessToken);
+			return Json(insights);
 		}
 	}
 }

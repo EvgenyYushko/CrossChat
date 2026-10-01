@@ -1,0 +1,557 @@
+@model CrossChat.Integrations.Models.Threads.ThreadsFeedPageDto
+@{
+    ViewData["Title"] = "Аналитика @" + ViewBag.Username;
+    int botId = ViewBag.BotId;
+    int followersCount = ViewBag.FollowersCount ?? 0;
+    var accountStats = ViewBag.AccountInsights as CrossChat.Integrations.Models.Threads.ThreadsAccountInsightsDto
+        ?? new CrossChat.Integrations.Models.Threads.ThreadsAccountInsightsDto();
+}
+
+@section Styles {
+    <style>
+        .analytics-container {
+            max-width: 1000px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .header-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .user-meta {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #000;
+            padding: 2px;
+            background: #fff;
+        }
+
+        /* KPI КАРТОЧКИ */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 1.5rem;
+        }
+
+        .kpi-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+            .kpi-card:hover {
+                transform: translateY(-2px);
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .kpi-value {
+            font-size: 1.75rem;
+            font-weight: 900;
+            color: var(--text-main);
+            line-height: 1.1;
+        }
+
+        .kpi-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* ТУЛБАР */
+        .toolbar-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 12px 18px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .filter-btn-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .filter-btn:hover, .filter-btn.active {
+                background: #000;
+                color: #fff;
+                border-color: #555;
+            }
+
+        .select-sort {
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* СЕТКА ТРЕДОВ */
+        .posts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            gap: 20px;
+        }
+
+        .post-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+            .post-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 12px 25px -5px rgba(0, 0, 0, 0.3);
+                border-color: rgba(255, 255, 255, 0.3);
+            }
+
+        .post-thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+            .post-thumb-wrapper img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+        .post-body {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 12px;
+        }
+
+        .post-text-content {
+            font-size: 0.95rem;
+            line-height: 1.45;
+            color: var(--text-main);
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .btn-insights {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-insights:hover {
+                background: #000;
+                color: #fff;
+                border-color: #444;
+            }
+
+        /* МОДАЛКА */
+        .insights-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 5000;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .insights-modal {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            padding: 1.75rem;
+            position: relative;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .metric-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .metric-value {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        @@media (max-width: 850px) {
+            .overview-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 650px) {
+            .analytics-container {
+                margin-top: 4.5rem;
+            }
+
+            .header-box {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .user-meta {
+                flex-direction: column;
+            }
+
+            .toolbar-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .posts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/threads?botId=@botId" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
+        ← Назад в настройки
+    </a>
+}
+
+<div class="analytics-container">
+
+    <!-- ШАПКА THREADS -->
+    <div class="header-box">
+        <div class="user-meta">
+            @if (!string.IsNullOrEmpty(ViewBag.AvatarUrl))
+            {
+                <img src="@ViewBag.AvatarUrl" class="user-avatar" alt="Avatar">
+            }
+            else
+            {
+                <div class="user-avatar" style="background:#000;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">TH</div>
+            }
+            <div>
+                <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0;">@@@ViewBag.Username</h2>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                    Подписчиков: <strong style="color:var(--text-main);">@followersCount.ToString("N0")</strong> • Официальная аналитика Threads
+                </div>
+            </div>
+        </div>
+        <div>
+            <a href="/threads?botId=@botId" class="btn btn-console" style="text-decoration:none; padding:8px 16px; border-radius:10px; font-size:0.85rem;">
+                ← В настройки Threads
+            </a>
+        </div>
+    </div>
+
+    <!-- СВОДНЫЕ KPI КАРТОЧКИ -->
+    <div class="overview-grid">
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Просмотры</span><span>👁️</span></div>
+            <div class="kpi-value" style="color: #38bdf8;">@accountStats.Views.ToString("N0")</div>
+            <div class="kpi-subtitle">Показов тредов в ленте</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Лайки</span><span>❤️</span></div>
+            <div class="kpi-value" style="color: #ef4444;">@accountStats.Likes.ToString("N0")</div>
+            <div class="kpi-subtitle">Суммарно на всех тредах</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Репосты</span><span>🔁</span></div>
+            <div class="kpi-value" style="color: #10b981;">@accountStats.Reposts.ToString("N0")</div>
+            <div class="kpi-subtitle">Вирусных репостов тредов</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-header"><span>Реплаи</span><span>💬</span></div>
+            <div class="kpi-value" style="color: #f59e0b;">@accountStats.Replies.ToString("N0")</div>
+            <div class="kpi-subtitle">Ответов в дискуссиях</div>
+        </div>
+    </div>
+
+    <!-- ТУЛБАР ФИЛЬТРОВ -->
+    <div class="toolbar-box">
+        <div class="filter-btn-group">
+            <button type="button" class="filter-btn active" data-type="ALL" onclick="setFilter('ALL', this)">Все форматы</button>
+            <button type="button" class="filter-btn" data-type="TEXT_POST" onclick="setFilter('TEXT_POST', this)">📝 Только текст</button>
+            <button type="button" class="filter-btn" data-type="IMAGE" onclick="setFilter('IMAGE', this)">📷 С фото</button>
+            <button type="button" class="filter-btn" data-type="VIDEO" onclick="setFilter('VIDEO', this)">🎬 Видео</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+            <select id="sortBySelect" class="select-sort" onchange="applySorting()">
+                <option value="date" selected>📅 По дате</option>
+            </select>
+            <span id="visibleCountText" style="font-size:0.75rem; color:var(--text-secondary);">
+                Всего: @Model.Posts.Count
+            </span>
+        </div>
+    </div>
+
+    <!-- СЕТКА ТРЕДОВ -->
+    @if (!Model.Posts.Any())
+    {
+        <div style="text-align:center; padding:4rem 1rem; color:var(--text-secondary); background:var(--card-bg); border-radius:20px; border:1px dashed var(--glass-border);">
+            <div style="font-size:3rem; margin-bottom:1rem;">🧵</div>
+            <h3>Тредов не найдено</h3>
+            <p style="font-size:0.9rem;">В этом профиле пока нет опубликованных тредов.</p>
+        </div>
+    }
+    else
+    {
+        <div class="posts-grid" id="postsGrid">
+            @foreach (var post in Model.Posts)
+            {
+                <div class="post-card" data-type="@post.MediaType" data-timestamp="@(((DateTimeOffset)post.Timestamp).ToUnixTimeSeconds())">
+                    @if (!string.IsNullOrEmpty(post.MediaUrl) || !string.IsNullOrEmpty(post.ThumbnailUrl))
+                    {
+                        <div class="post-thumb-wrapper">
+                            <img src="@(post.ThumbnailUrl ?? post.MediaUrl)" alt="Media" loading="lazy">
+                        </div>
+                    }
+
+                    <div class="post-body">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); display:flex; justify-content:space-between;">
+                            <span>@post.Timestamp.ToString("dd.MM.yyyy HH:mm")</span>
+                            <span style="font-weight:700; text-transform:uppercase;">@post.MediaType.Replace("_", " ")</span>
+                        </div>
+
+                        <div class="post-text-content">
+                            @(string.IsNullOrWhiteSpace(post.Text) ? "Без текста" : post.Text)
+                        </div>
+
+                        <button type="button" class="btn-insights" onclick="openInsightsModal('@post.Id', '@post.Permalink')">
+                            📊 Инсайты и True ER
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div style="display:flex; justify-content:center; gap:15px; margin-top:2.5rem;">
+            @if (Model.HasPrevious)
+            {
+                <a href="/threads/analytics?botId=@botId&before=@Model.BeforeCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">⬅ Назад</a>
+            }
+            @if (Model.HasNext)
+            {
+                <a href="/threads/analytics?botId=@botId&after=@Model.AfterCursor" class="btn btn-console" style="text-decoration:none; padding:8px 18px; border-radius:10px;">Вперед ➡</a>
+            }
+        </div>
+    }
+</div>
+
+<!-- МОДАЛКА ИНСАЙТОВ ТРЕДА -->
+<div id="insightsModalOverlay" class="insights-modal-overlay" onclick="closeInsightsModal(event)">
+    <div class="insights-modal" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; font-size:1.15rem; font-weight:800;">📊 Статистика треда</h3>
+            <button type="button" onclick="closeInsightsModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+
+        <div id="insightsLoading" style="text-align:center; padding:2rem 0; color:var(--text-secondary);">
+            ⏳ Загрузка инсайтов Threads...
+        </div>
+
+        <div id="insightsContent" style="display:none;">
+            <!-- TRUE ER -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:14px; padding:14px; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">True ER (по просмотрам)</span>
+                        <div style="font-size:1.6rem; font-weight:900;" id="modalErValue">0%</div>
+                    </div>
+                    <span id="modalErBadge" style="font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:20px; border:1px solid transparent;">-</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">👁️ Просмотры (Views)</div>
+                <div class="metric-value" id="modalViews" style="color:#38bdf8;">0</div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="metric-card">
+                    <div class="metric-title">❤️ Лайки</div>
+                    <div class="metric-value" id="modalLikes" style="color:#ef4444;">0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">💬 Реплаи</div>
+                    <div class="metric-value" id="modalReplies" style="color:#f59e0b;">0</div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="metric-card">
+                    <div class="metric-title">🔁 Репосты</div>
+                    <div class="metric-value" id="modalReposts" style="color:#10b981;">0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">💭 Цитаты</div>
+                    <div class="metric-value" id="modalQuotes" style="color:#a855f7;">0</div>
+                </div>
+            </div>
+
+            <div style="margin-top:1.25rem;">
+                <a id="modalPermalink" href="#" target="_blank" class="btn btn-autoposting" style="text-decoration:none; text-align:center; display:block; padding:10px;">
+                    🔗 Открыть тред в Threads
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const botId = @botId;
+        let currentFilter = 'ALL';
+
+        function setFilter(type, btn) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const cards = document.querySelectorAll('.post-card');
+            let visible = 0;
+            cards.forEach(card => {
+                const match = currentFilter === 'ALL' || card.dataset.type === currentFilter;
+                card.style.display = match ? 'flex' : 'none';
+                if (match) visible++;
+            });
+            document.getElementById('visibleCountText').textContent = `Показано: ${visible} из ${cards.length}`;
+        }
+
+        async function openInsightsModal(mediaId, permalink) {
+            const overlay = document.getElementById('insightsModalOverlay');
+            const loading = document.getElementById('insightsLoading');
+            const content = document.getElementById('insightsContent');
+
+            document.getElementById('modalPermalink').href = permalink || '#';
+            overlay.style.display = 'flex';
+            loading.style.display = 'block';
+            content.style.display = 'none';
+
+            try {
+                const res = await fetch(`/threads/analytics/insights?botId=${botId}&mediaId=${mediaId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('modalViews').textContent = Number(data.views).toLocaleString();
+                    document.getElementById('modalLikes').textContent = Number(data.likes).toLocaleString();
+                    document.getElementById('modalReplies').textContent = Number(data.replies).toLocaleString();
+                    document.getElementById('modalReposts').textContent = Number(data.reposts).toLocaleString();
+                    document.getElementById('modalQuotes').textContent = Number(data.quotes).toLocaleString();
+
+                    const er = data.engagementRate || 0;
+                    document.getElementById('modalErValue').textContent = er + '%';
+                    document.getElementById('modalErValue').style.color = data.badgeColor || '#10b981';
+
+                    const badge = document.getElementById('modalErBadge');
+                    badge.textContent = data.engagementBadge || 'Норма';
+                    badge.style.color = data.badgeColor || '#10b981';
+                    badge.style.borderColor = data.badgeColor || '#10b981';
+
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+                } else {
+                    loading.textContent = '⚠️ Не удалось загрузить инсайты (Meta не предоставила данные)';
+                }
+            } catch {
+                loading.textContent = '❌ Ошибка сети';
+            }
+        }
+
+        function closeInsightsModal(e) {
+            document.getElementById('insightsModalOverlay').style.display = 'none';
+        }
+    </script>
+}
