@@ -3,6 +3,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
@@ -14,15 +15,24 @@ namespace CrossChat.Worker.Jobs
 	{
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ILogger<InstagramDailyStoryJob> _logger;
+		private readonly IHostEnvironment _env;
 
-		public InstagramDailyStoryJob(IServiceScopeFactory scopeFactory, ILogger<InstagramDailyStoryJob> logger)
+		public InstagramDailyStoryJob(IServiceScopeFactory scopeFactory
+			, ILogger<InstagramDailyStoryJob> logger
+			, IHostEnvironment env)
 		{
 			_scopeFactory = scopeFactory;
 			_logger = logger;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			using var scope = _scopeFactory.CreateScope();
 			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 			var instaService = scope.ServiceProvider.GetRequiredService<IInstagramService>();

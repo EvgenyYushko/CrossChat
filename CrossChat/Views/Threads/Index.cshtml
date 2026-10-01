@@ -8,12 +8,12 @@
     <style>
         /* Уникальные стили для страницы Threads */
 
-        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ */
         .container {
             max-width: 800px;
             width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
+            box-sizing: border-box;
         }
 
         .card {
@@ -21,6 +21,8 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
+            box-sizing: border-box;
+            overflow: hidden; /* Защита от распирания карточки */
         }
 
         h1 {
@@ -28,7 +30,6 @@
             margin-bottom: 0.5rem;
         }
 
-        /* HEADER ПОДКЛЮЧЕННОГО */
         .connected-header {
             display: flex;
             flex-direction: column;
@@ -53,9 +54,9 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
+            color: var(--text-main);
         }
 
-        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -67,6 +68,44 @@
             display: block;
             margin-bottom: 0.5rem;
             color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* === АДАПТИВНЫЕ ПОЛЯ ВВОДА И СЕЛЕКТЫ (ИСПРАВЛЕНО ДЛЯ МОБИЛОК) === */
+        .text-input, .select-input {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            display: block;
+        }
+
+        /* Стилизация выпадающих списков с аккуратной стрелочкой */
+        select.text-input, select.select-input {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.1em;
+            padding-right: 2.5rem !important;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .text-input:focus, .select-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
         }
 
         textarea {
@@ -105,7 +144,6 @@
             box-sizing: border-box;
         }
 
-        /* Группа верхних кнопок управления */
         .action-buttons-group {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -115,7 +153,6 @@
             box-sizing: border-box;
         }
 
-        /* Стилизация кнопки консоли бота (стеклянный стиль) */
         .btn-console {
             background: rgba(15, 23, 42, 0.4) !important;
             border: 1px solid var(--glass-border) !important;
@@ -129,7 +166,6 @@
                 transform: translateY(-1px);
             }
 
-        /* Стилизация кнопки автопостинга (Индиго-градиент) */
         .btn-autoposting {
             background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
             color: #ffffff !important;
@@ -142,7 +178,6 @@
                 transform: translateY(-1px);
             }
 
-        /* Стилизация кнопки авторизации в Threads */
         .btn-threads {
             background: #000000 !important;
             color: #ffffff !important;
@@ -214,6 +249,8 @@
             padding: 15px;
             border-radius: 12px;
             border: 1px solid var(--glass-border);
+            box-sizing: border-box;
+            width: 100%;
         }
 
         .switch {
@@ -254,11 +291,11 @@
                 border-radius: 50%;
             }
 
-        input:checked + .slider {
+        input:checked ~ .slider {
             background-color: #10b981;
         }
 
-            input:checked + .slider:before {
+            input:checked ~ .slider:before {
                 transform: translateX(24px);
             }
 
@@ -299,30 +336,28 @@
 
         /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container
+            .container {
+                margin-top: 5rem;
+                padding: 0 0.75rem;
+            }
 
-        {
-            margin-top: 5rem;
+            .card {
+                padding: 1.25rem;
+            }
+
+            .action-buttons-group {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            /* Компактный размер шрифта для мобилок */
+            .text-input, .select-input {
+                font-size: 0.85rem !important;
+                padding: 0.65rem 0.85rem !important;
+                padding-right: 2.2rem !important;
+            }
         }
 
-        .card {
-            padding: 1.5rem;
-        }
-
-        .btn {
-            padding: 12px 10px;
-            font-size: 0.9rem;
-        }
-
-        /* Складываем кнопки управления в один ряд вертикально на мобилках */
-        .action-buttons-group {
-            grid-template-columns: 1fr !important;
-            gap: 10px !important;
-        }
-
-        }
-
-        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК --- */
+        /* СВЕТЛАЯ ТЕМА */
         [data-theme="light"] .btn-console {
             background: #ffffff !important;
             border-color: #cbd5e1 !important;
@@ -334,7 +369,6 @@
                 border-color: #94a3b8 !important;
             }
 
-        /* В светлой теме кнопка авторизации Threads */
         [data-theme="light"] .btn-threads {
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
@@ -384,7 +418,7 @@
                 </div>
             </div>
 
-            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <!-- ГРУППА КНОПОК ДЕЙСТВИЯ -->
             <div class="action-buttons-group">
                 <a href="/auth/console?provider=threads&botId=@Model.Id&username=@Model.Username" class="btn btn-console">
                     💻 Консоль бота
@@ -396,23 +430,24 @@
 
             <form action="/threads/update-settings" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id">
+
                 <!-- АВТООТВЕТЫ В THREADS С ВЫБОРОМ РЕЖИМА -->
                 <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label style="margin: 0; font-weight: 600; cursor: pointer;">Автоответы на комментарии (Replies)</label>
                         <label class="switch">
-                            <input type="hidden" name="isActive" value="false" />
                             <input type="checkbox" id="threadsActiveToggle" name="isActive" value="true" @(Model.IsActive ? "checked" : "")
                                    onchange="document.getElementById('threadsSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
                             <span class="slider"></span>
                         </label>
+                        <input type="hidden" name="isActive" value="false" />
                     </div>
 
                     <!-- ПОДРОБНЫЕ НАСТРОЙКИ СПОСОБА ОТВЕТА -->
-                    <div id="threadsSettingsBlock" style="display: @(Model.IsActive ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
-                        <div>
+                    <div id="threadsSettingsBlock" style="display: @(Model.IsActive ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border); width: 100%;">
+                        <div style="width: 100%;">
                             <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа:</label>
-                            <select name="replyMode" id="threadsReplyModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateThreadsModeUi()">
+                            <select name="replyMode" id="threadsReplyModeSelect" class="text-input" style="font-weight: 600;" onchange="updateThreadsModeUi()">
                                 <option value="2" selected="@(Model.ReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
                                 <option value="3" selected="@(Model.ReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
                                 <option value="1" selected="@(Model.ReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
@@ -420,7 +455,7 @@
                         </div>
 
                         <!-- ПОЛЕ ДЛЯ ШАБЛОНОВ СО SPINTAX -->
-                        <div id="threadsTemplatesBox" style="display: @(Model.ReplyMode == 1 ? "none" : "block");">
+                        <div id="threadsTemplatesBox" style="display: @(Model.ReplyMode == 1 ? "none" : "block"); width: 100%;">
                             <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
                                 Шаблоны ответов (поддерживает {вариант1|вариант2} и перенос строк):
                             </label>
@@ -433,13 +468,13 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" style="width: 100%;">
                     <label>Системный промпт (Инструкция)</label>
                     <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
                 </div>
 
-                <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
-                    <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
+                <div class="form-group" style="text-align:left; margin-bottom: 1.5rem; width: 100%;">
+                    <h4 style="margin-top: 30px; margin-bottom: 10px;">Привязан к профилю</h4>
 
                     <select name="profileId" class="select-input">
                         @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
@@ -498,6 +533,16 @@
         function toggleInstruction() {
             var block = document.getElementById('instructionBlock');
             block.style.display = (block.style.display === 'block') ? 'none' : 'block';
+        }
+
+        // ПЕРЕКЛЮЧЕНИЕ ВИДИМОСТИ ШАБЛОНОВ ДЛЯ THREADS
+        function updateThreadsModeUi() {
+            const mode = document.getElementById('threadsReplyModeSelect').value;
+            const templatesBox = document.getElementById('threadsTemplatesBox');
+            if (templatesBox) {
+                // Если выбран режим "1" (Только ИИ) — прячем шаблоны, иначе показываем
+                templatesBox.style.display = (mode === "1") ? "none" : "block";
+            }
         }
 
         const urlParams = new URLSearchParams(window.location.search);

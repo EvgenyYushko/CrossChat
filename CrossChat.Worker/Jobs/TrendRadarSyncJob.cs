@@ -2,6 +2,7 @@ using CrossChat.Data;
 using CrossChat.Worker.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -12,15 +13,25 @@ namespace CrossChat.Worker.Jobs
 	{
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ILogger<TrendRadarSyncJob> _logger;
+		private readonly IHostEnvironment _env;
 
-		public TrendRadarSyncJob(IServiceScopeFactory scopeFactory, ILogger<TrendRadarSyncJob> logger)
+		public TrendRadarSyncJob(IServiceScopeFactory scopeFactory
+			, ILogger<TrendRadarSyncJob> logger
+			, IHostEnvironment env
+			)
 		{
 			_scopeFactory = scopeFactory;
 			_logger = logger;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			_logger.LogInformation("[TrendRadarJob] Запуск плановой проверки трендовых хештегов...");
 
 			using var scope = _scopeFactory.CreateScope();

@@ -5,10 +5,11 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using File = Google.Apis.Drive.v3.Data.File;
 using static CrossChat.Infrastructure.Constants.EnvConstants;
+using File = Google.Apis.Drive.v3.Data.File;
 
 namespace CrossChat.Worker.Jobs
 {
@@ -19,21 +20,30 @@ namespace CrossChat.Worker.Jobs
 		private readonly IGoogleDriveUploader _driveUploader;
 		private readonly ITelegramService _telegramService;
 		private readonly ILogger<GoogleDriveMaintenanceJob> _logger;
-				
+		private readonly IHostEnvironment _env;
+
 		public GoogleDriveMaintenanceJob(
 			IServiceScopeFactory scopeFactory,
 			IGoogleDriveUploader driveUploader,
 			ITelegramService telegramService,
-			ILogger<GoogleDriveMaintenanceJob> logger)
+			ILogger<GoogleDriveMaintenanceJob> logger,
+			IHostEnvironment env
+			)
 		{
 			_scopeFactory = scopeFactory;
 			_driveUploader = driveUploader;
 			_telegramService = telegramService;
 			_logger = logger;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			var stopwatch = Stopwatch.StartNew();
 			_logger.LogInformation("🧹 [Drive GC] Запуск планового обслуживания Google Диска...");
 

@@ -4,6 +4,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Facades;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
@@ -14,16 +15,26 @@ namespace CrossChat.Worker.Jobs
 	public class PostPublishingJob : IJob
 	{
 		private readonly ILogger<PostPublishingJob> _logger;
+		private readonly IHostEnvironment _env;
 		private readonly IServiceScopeFactory _scopeFactory;
 
-		public PostPublishingJob(IServiceScopeFactory scopeFactory, ILogger<PostPublishingJob> logger)
+		public PostPublishingJob(IServiceScopeFactory scopeFactory
+			, ILogger<PostPublishingJob> logger
+			, IHostEnvironment env
+			)
 		{
 			_scopeFactory = scopeFactory;
 			_logger = logger;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			var now = DateTimeNow;
 			List<int> pendingStateIds;
 

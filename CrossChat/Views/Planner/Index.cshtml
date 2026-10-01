@@ -1092,6 +1092,18 @@
                             }
                         }
 
+                        <!-- BlueSky -->
+                        @if (Model.BlueSkySettingsList != null)
+                        {
+                            @foreach (var bot in Model.BlueSkySettingsList)
+                            {
+                                <label>
+                                    <input type="checkbox" name="selectedNetworks" value="BlueSky_@bot.Id" data-title="@@@bot.Handle">
+                                    <span>@bot.Handle</span>
+                                </label>
+                            }
+                        }
+
                         <!-- Telegram Channels -->
                         @if (Model.TelegramChannelSettingsList != null)
                         {
@@ -1106,19 +1118,7 @@
                                     <span>@channelDisplayName</span>
                                 </label>
                             }
-                        }
-
-                        <!-- BlueSky -->
-                        @if (Model.BlueSkySettingsList != null)
-                        {
-                            @foreach (var bot in Model.BlueSkySettingsList)
-                            {
-                                <label>
-                                    <input type="checkbox" name="selectedNetworks" value="BlueSky_@bot.Id" data-title="@@@bot.Handle">
-                                    <span>@bot.Handle</span>
-                                </label>
-                            }
-                        }
+                        }                        
 
                         <!-- X (Twitter) -->
                         @if (Model.XSettingsList != null)

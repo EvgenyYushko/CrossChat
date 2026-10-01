@@ -6,6 +6,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
@@ -17,15 +18,25 @@ namespace CrossChat.Worker.Jobs
 	{
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ILogger<FacebookDailyStoryJob> _logger;
+		private readonly IHostEnvironment _env;
 
-		public FacebookDailyStoryJob(IServiceScopeFactory scopeFactory, ILogger<FacebookDailyStoryJob> logger)
+		public FacebookDailyStoryJob(IServiceScopeFactory scopeFactory
+			, ILogger<FacebookDailyStoryJob> logger
+			, IHostEnvironment env
+			)
 		{
 			_scopeFactory = scopeFactory;
 			_logger = logger;
+			_env = env;
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			using var scope = _scopeFactory.CreateScope();
 			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 			var fbService = scope.ServiceProvider.GetRequiredService<IFaceBookService>();

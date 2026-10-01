@@ -5,12 +5,13 @@ using CrossChat.Integrations.Interfaces.Google;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using StackExchange.Redis;
 using Telegram.Bot.Types.ReplyMarkups;
-using static CrossChat.Worker.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Jobs
 {
@@ -21,6 +22,7 @@ namespace CrossChat.Worker.Jobs
 		private readonly IGoogleDriveUploader _driveUploader;
 		private readonly ITelegramService _telegramService;
 		private readonly ILogger<PostCleanupJob> _logger;
+		private readonly IHostEnvironment _env;
 		private readonly IDatabase _redis;
 
 		public PostCleanupJob(
@@ -29,17 +31,25 @@ namespace CrossChat.Worker.Jobs
 			ITelegramService telegramService,
 			IConnectionMultiplexer redis,
 			IConfiguration configuration,
-			ILogger<PostCleanupJob> logger)
+			ILogger<PostCleanupJob> logger,
+			IHostEnvironment env
+			)
 		{
 			_scopeFactory = scopeFactory;
 			_driveUploader = driveUploader;
 			_telegramService = telegramService;
 			_logger = logger;
+			_env = env;
 			_redis = redis.GetDatabase();
 		}
 
 		public async Task Execute(IJobExecutionContext context)
 		{
+			if (_env.IsDevelopment())
+			{
+				return;
+			}
+
 			_logger.LogInformation("[PostCleanup] Запуск плановой очистки устаревших постов...");
 
 			using var scope = _scopeFactory.CreateScope();

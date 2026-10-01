@@ -4,6 +4,7 @@ using CrossChat.Worker.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using static CrossChat.Worker.Helpers.TimeZoneHelper;
@@ -15,18 +16,28 @@ public class YouTubeCommentsPollingJob : IJob
 {
 	private readonly IServiceScopeFactory _scopeFactory;
 	private readonly ILogger<YouTubeCommentsPollingJob> _logger;
+	private readonly IHostEnvironment _env;
 
 	// Смещение для Минска/Москвы (+3 часа), чтобы в логах Render видеть привычное время
 	private static readonly TimeSpan BelarusOffset = TimeSpan.FromHours(3);
 
-	public YouTubeCommentsPollingJob(IServiceScopeFactory scopeFactory, ILogger<YouTubeCommentsPollingJob> logger)
+	public YouTubeCommentsPollingJob(IServiceScopeFactory scopeFactory
+		, ILogger<YouTubeCommentsPollingJob> logger
+		, IHostEnvironment env
+		)
 	{
 		_scopeFactory = scopeFactory;
 		_logger = logger;
+		_env = env;
 	}
 
 	public async Task Execute(IJobExecutionContext context)
 	{
+		if (_env.IsDevelopment())
+		{
+			return;
+		}
+
 		using var scope = _scopeFactory.CreateScope();
 		var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 		var ytService = scope.ServiceProvider.GetRequiredService<IYouTubeService>();

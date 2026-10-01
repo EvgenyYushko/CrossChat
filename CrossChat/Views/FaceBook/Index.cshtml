@@ -8,12 +8,12 @@
     <style>
         /* Уникальные стили для страницы Facebook */
 
-        /* 1. ИСПРАВЛЕНИЕ ШИРИНЫ И ОТСТУПОВ */
         .container {
             max-width: 800px;
             width: 100%;
             margin: 6rem auto 3rem;
             padding: 0 1rem;
+            box-sizing: border-box;
         }
 
         .card {
@@ -21,9 +21,10 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 2.5rem;
+            box-sizing: border-box;
+            overflow: hidden; /* Защита от вылета любых элементов */
         }
 
-        /* 2. ИСПРАВЛЕНИЕ АВАТАРКИ (ЦЕНТРИРОВАНИЕ) */
         .connected-header {
             display: flex;
             flex-direction: column;
@@ -50,7 +51,6 @@
             color: var(--text-main);
         }
 
-        /* ФОРМА */
         .form-section {
             margin-top: 2rem;
             border-top: 1px solid var(--glass-border);
@@ -62,6 +62,44 @@
             display: block;
             margin-bottom: 0.5rem;
             color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* === АДАПТИВНЫЕ ПОЛЯ ВВОДА И ВЫПАДАЮЩИЕ СПИСКИ (ИСПРАВЛЕНО ДЛЯ МОБИЛОК) === */
+        .text-input, .select-input {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            background: var(--input-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            display: block;
+        }
+
+        /* Стилизация выпадающих списков со стрелочкой и защитой от переполнения */
+        select.text-input, select.select-input {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.1em;
+            padding-right: 2.5rem !important;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .text-input:focus, .select-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
         }
 
         textarea {
@@ -74,7 +112,7 @@
             border-radius: 12px;
             font-family: inherit;
             resize: vertical;
-            min-height: 150px;
+            min-height: 120px;
         }
 
             textarea:focus {
@@ -100,7 +138,6 @@
             box-sizing: border-box;
         }
 
-        /* Группа верхних кнопок управления */
         .action-buttons-group {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -110,7 +147,6 @@
             box-sizing: border-box;
         }
 
-        /* Стилизация кнопки консоли бота (стеклянный стиль) */
         .btn-console {
             background: rgba(15, 23, 42, 0.4) !important;
             border: 1px solid var(--glass-border) !important;
@@ -124,7 +160,6 @@
                 transform: translateY(-1px);
             }
 
-        /* Стилизация кнопки автопостинга (Индиго-градиент) */
         .btn-autoposting {
             background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%) !important;
             color: #ffffff !important;
@@ -161,7 +196,6 @@
                 border-color: rgba(239, 68, 68, 0.4);
             }
 
-        /* СТАТУСЫ */
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -192,7 +226,7 @@
             background-color: currentColor;
         }
 
-        /* ТОГГЛ */
+        /* ТОГГЛЫ */
         .switch-container {
             display: flex;
             align-items: center;
@@ -202,6 +236,8 @@
             padding: 15px;
             border-radius: 12px;
             border: 1px solid var(--glass-border);
+            box-sizing: border-box;
+            width: 100%;
         }
 
         .switch {
@@ -209,6 +245,7 @@
             display: inline-block;
             width: 50px;
             height: 26px;
+            flex-shrink: 0;
         }
 
             .switch input {
@@ -241,35 +278,37 @@
                 border-radius: 50%;
             }
 
-        input:checked + .slider {
+        input:checked ~ .slider {
             background-color: #10b981;
         }
 
-            input:checked + .slider:before {
+            input:checked ~ .slider:before {
                 transform: translateX(24px);
             }
 
         /* МОБИЛЬНАЯ АДАПТАЦИЯ */
         @@media (max-width: 600px) {
-            .container
+            .container {
+                margin-top: 5rem;
+                padding: 0 0.75rem;
+            }
 
-        {
-            margin-top: 5rem;
+            .card {
+                padding: 1.25rem;
+            }
+
+            .action-buttons-group {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            /* Компактный размер шрифта для мобилок, чтобы опции не обрезались слишком рано */
+            .text-input, .select-input {
+                font-size: 0.85rem !important;
+                padding: 0.65rem 0.85rem !important;
+                padding-right: 2.2rem !important;
+            }
         }
 
-        .card {
-            padding: 1.5rem;
-        }
-
-        /* Складываем кнопки управления в один ряд вертикально на мобилках */
-        .action-buttons-group {
-            grid-template-columns: 1fr !important;
-            gap: 10px !important;
-        }
-
-        }
-
-        /* --- СВЕТЛАЯ ТЕМА ДЛЯ КНОПОК --- */
         [data-theme="light"] .btn-console {
             background: #ffffff !important;
             border-color: #cbd5e1 !important;
@@ -318,7 +357,7 @@
                 </div>
             </div>
 
-            <!-- НОВАЯ СИММЕТРИЧНАЯ ГРУППА КНОПОК ДЕЙСТВИЯ -->
+            <!-- ГРУППА КНОПОК ДЕЙСТВИЯ -->
             <div class="action-buttons-group">
                 <a href="/auth/console?provider=facebook&botId=@Model.Id&username=@Model.PageName" class="btn btn-console">
                     💻 Консоль бота
@@ -352,17 +391,18 @@
                             <input type="hidden" name="isDirectEnabled" value="false">
                         </div>
 
-                        <div id="directSettingsBlock" style="display: @(Model.IsDirectEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
-                            <div>
+                        <!-- Выпадающий блок ЛС -->
+                        <div id="directSettingsBlock" style="display: @(Model.IsDirectEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border); width: 100%;">
+                            <div style="width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа в ЛС:</label>
-                                <select name="directReplyMode" id="directModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateDirectModeUi()">
+                                <select name="directReplyMode" id="directModeSelect" class="text-input" style="font-weight: 600;" onchange="updateDirectModeUi()">
                                     <option value="2" selected="@(Model.DirectReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
                                     <option value="3" selected="@(Model.DirectReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
                                     <option value="1" selected="@(Model.DirectReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
                                 </select>
                             </div>
 
-                            <div id="directTemplatesBox" style="display: @(Model.DirectReplyMode == 1 ? "none" : "block");">
+                            <div id="directTemplatesBox" style="display: @(Model.DirectReplyMode == 1 ? "none" : "block"); width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
                                     Шаблоны ответов для ЛС (Spintax {вариант1|вариант2}):
                                 </label>
@@ -370,7 +410,7 @@
                                       placeholder="{Здравствуйте|Привет}! 😊 Чем могу {помочь|быть полезна}?&#10;{Спасибо|Благодарю} за сообщение! ✨">@(Model.DirectTemplates ?? "{Здравствуйте|Привет}! 😊 Чем могу {помочь|быть полезна}?\n{Спасибо|Благодарю} за сообщение! ✨")</textarea>
                             </div>
 
-                            <div>
+                            <div style="width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Системный промпт для ЛС (ИИ)</label>
                                 <textarea name="systemPrompt" rows="2" class="text-input" style="font-size: 0.9rem;">@Model.SystemPrompt</textarea>
                             </div>
@@ -397,24 +437,25 @@
                             <input type="hidden" name="isCommentsEnabled" value="false">
                         </div>
 
-                        <div id="commentsSettingsBlock" style="display: @(Model.IsCommentsEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
-                            <div>
+                        <!-- Выпадающий блок комментариев -->
+                        <div id="commentsSettingsBlock" style="display: @(Model.IsCommentsEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border); width: 100%;">
+                            <div style="width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Способ генерации ответа на комментарии:</label>
-                                <select name="commentReplyMode" id="commentModeSelect" class="text-input" style="font-weight: 600; cursor: pointer;" onchange="updateFbCommentModeUi()">
+                                <select name="commentReplyMode" id="commentModeSelect" class="text-input" style="font-weight: 600;" onchange="updateFbCommentModeUi()">
                                     <option value="2" selected="@(Model.CommentReplyMode == 2)">📝 Только шаблоны (Бесплатно, Spintax)</option>
                                     <option value="3" selected="@(Model.CommentReplyMode == 3)">⚡ Комбинированный (ИИ ➔ при сбое Шаблон)</option>
                                     <option value="1" selected="@(Model.CommentReplyMode == 1)">🤖 Только ИИ (Gemini)</option>
                                 </select>
                             </div>
 
-                            <div id="commentTemplatesBox" style="display: @(Model.CommentReplyMode == 1 ? "none" : "block");">
+                            <div id="commentTemplatesBox" style="display: @(Model.CommentReplyMode == 1 ? "none" : "block"); width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
                                     Шаблоны ответов на комментарии:
                                 </label>
                                 <textarea name="commentTemplates" rows="3" class="text-input" style="font-size: 0.9rem;">@(Model.CommentTemplates ?? "{Спасибо|Благодарю}! ❤️\nРады видеть вас на нашей странице! ✨")</textarea>
                             </div>
 
-                            <div>
+                            <div style="width: 100%;">
                                 <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Промпт для комментариев (ИИ)</label>
                                 <textarea name="commentPrompt" rows="2" class="text-input" style="font-size: 0.9rem;">@Model.CommentPrompt</textarea>
                             </div>
@@ -422,7 +463,6 @@
                     </div>
 
                     <!-- 3. БЛОК СТОРИС -->
-                    <!-- БЛОК ЕЖЕДНЕВНЫХ ИСТОРИЙ FACEBOOK (STORIES) -->
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">🌟 Ежедневные истории (Stories)</h4>
                     <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -445,14 +485,14 @@
                         </div>
 
                         <!-- Разворачивающиеся настройки времени и надписи -->
-                        <div id="storySettingsBox" style="display: @(Model.IsDailyStoriesEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                        <div id="storySettingsBox" style="display: @(Model.IsDailyStoriesEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border); width: 100%;">
                             <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
                                 <label style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Время публикации (по Минску):</label>
                                 <input type="time" name="dailyStoryTime" value="@(Model.DailyStoryTime ?? "12:00")" class="text-input" style="width: 120px; padding: 6px 10px; font-weight: bold; margin: 0;">
                             </div>
 
                             <!-- ТУМБЛЕР И ПОЛЕ НАДПИСИ ПОВЕРХ ФОТО -->
-                            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <label style="font-size: 0.85rem; font-weight: 600; margin: 0; color: var(--text-main); cursor: pointer;" for="overlayTextToggle">
                                         💬 Текст-стикер поверх фото
@@ -466,7 +506,7 @@
                                     <input type="hidden" name="isStoryOverlayTextEnabled" value="false">
                                 </div>
 
-                                <div id="overlayInputBox" style="display: @(Model.IsStoryOverlayTextEnabled ? "block" : "none");">
+                                <div id="overlayInputBox" style="display: @(Model.IsStoryOverlayTextEnabled ? "block" : "none"); width: 100%;">
                                     <label style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; display: block;">
                                         Надписи для историй (каждая с новой строки или со Spintax {вариант1|вариант2}):
                                     </label>
@@ -480,8 +520,9 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem; margin-top: 20px;">
-                        <h4>Привязан к профилю</h4>
+                    <!-- 4. ПРИВЯЗКА К ПРОФИЛЮ -->
+                    <div class="form-group" style="text-align:left; margin-bottom: 1.5rem; margin-top: 20px; width: 100%;">
+                        <h4 style="margin-bottom: 8px;">Привязан к профилю</h4>
                         <select name="profileId" class="select-input">
                             @foreach (var p in (List<CrossChat.Data.Entities.Profile>)ViewBag.Profiles)
                             {
@@ -492,7 +533,6 @@
 
                     <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                 </form>
-
             </div>
 
             <!-- КНОПКА ОТКЛЮЧЕНИЯ СТРАНИЦЫ FACEBOOK С ПРЕДУПРЕЖДЕНИЕМ -->
