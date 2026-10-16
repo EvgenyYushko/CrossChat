@@ -27,6 +27,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly IInstagramService _instaService;
 	private readonly IAiService _aiService;
 	private readonly IInstagramConsole _console;
+	private readonly IInboxService _inboxService;
 
 	// Статический лимитер (один на всё приложение)
 	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
@@ -42,13 +43,14 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	IDatabase _redis;
 	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
 	public ReplyConsumer(ILogger<ReplyConsumer> logger, AppDbContext db, IInstagramService instaService,
-		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsole console)
+		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsole console, IInboxService inboxService)
 	{
 		_logger = logger;
 		_db = db;
 		_instaService = instaService;
 		_aiService = aiService;
 		_console = console;
+		_inboxService = inboxService;
 		_redis = redisMux.GetDatabase();
 	}
 
@@ -209,6 +211,44 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 				return;
 			}
+			
+			// ==================================================================================
+			// 1. СИНХРОНИЗАЦИЯ С ЕДИНЫМ ИНБОКСОМ КЛИЕНТА (CROSSCHAT UNIFIED INBOX)
+			// ==================================================================================
+			// 1. Получаем DTO диалога:
+			int networkTypeInstagram = 1;
+			var conversation = await _inboxService.GetOrCreateConversationAsync(
+				settings.ProfileId,
+				networkTypeInstagram,
+				settings.Id,
+				senderId,
+				customer.Username,
+				customer.Username,
+				customer.ProfilePictureUrl);
+
+			// 2. Сохраняем входящее (передаем conversation.Id):
+			if (messages.Count > 0 && lastSenderId != businessAccountId)
+			{
+				await _inboxService.SaveIncomingMessageAsync(
+					conversation.Id, // <-- ТЕПЕРЬ ПРОСТО ID
+					lastMsg.Id,
+					lastMsg.Text ?? "[Медиа]");
+			}
+
+			// 3. Проверка Human Takeover (DTO знает эти поля!):
+			if (conversation.IsHumanTakeover)
+			{
+				if (conversation.HumanTakeoverUntil.HasValue && conversation.HumanTakeoverUntil.Value > DateTime.UtcNow)
+				{
+					await _console.LogInfo($"👤 Диалог с @{customer.Username} перехвачен менеджером на сайте (до {conversation.HumanTakeoverUntil.Value:HH:mm} UTC). Бот молчит.");
+					return;
+				}
+				else if (!conversation.HumanTakeoverUntil.HasValue)
+				{
+					await _console.LogInfo($"👤 Диалог с @{customer.Username} в ручном режиме. Бот молчит.");
+					return;
+				}
+			}
 
 			int unreadCount = 0;
 			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
@@ -318,6 +358,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				// 5. Отправляем ответ в Инстаграм
 				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
+
+				// 🚀 Сохраняем ответ ИИ-бота в Единый Инбокс, чтобы менеджер на сайте видел ответ в чате!
+				await _inboxService.SaveBotReplyAsync(conversation.Id, aiResponse);
 
 				// Если мы это сообщение УЖЕ обработали — выходим
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);

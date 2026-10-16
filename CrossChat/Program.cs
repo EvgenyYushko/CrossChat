@@ -290,8 +290,8 @@ builder.Services.AddSingleton<IThreadsConsole, ThreadsConsole>();
 builder.Services.AddSingleton<IXConsole, XConsole>();
 builder.Services.AddSingleton<IBlueSkyConsole, BlueSkyConsole>();
 builder.Services.AddSingleton<ITelegramChannelConsole, TelegramChannelConsole>();
-
 builder.Services.AddSingleton<IEmailService, EmailService>();
+builder.Services.AddScoped<IInboxService, InboxService>();
 
 builder.Services.Configure<YouTubeOptions>(options =>
 {
@@ -368,6 +368,7 @@ app.UseAuthorization();  // Можно ли тебе сюда?
 app.MapRazorPages();
 app.MapControllers();
 app.MapHub<LogHub>("/loghub");
+app.MapHub<InboxHub>("/inboxHub");
 
 app.Run();
 

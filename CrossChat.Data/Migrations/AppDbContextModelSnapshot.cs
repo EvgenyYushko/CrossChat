@@ -214,6 +214,119 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("FacebookSettings");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxConversation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text");
+
+                    b.Property<int>("BotId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExternalChatId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("HumanTakeoverUntil")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsHumanTakeover")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastMessageAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LastMessageSnippet")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("NetworkType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnreadCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Username")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("NetworkType", "BotId", "ExternalUserId");
+
+                    b.ToTable("InboxConversations");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("IsIncoming")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsReadByManager")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSentByBot")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MediaType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("MediaUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("ExternalMessageId");
+
+                    b.ToTable("InboxMessages");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>
                 {
                     b.Property<int>("Id")
@@ -1067,6 +1180,28 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxConversation", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Profile");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxMessage", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.Inbox.InboxConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.InstagramSettings", "InstagramSettings")
@@ -1286,6 +1421,11 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("Profile");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxConversation", b =>
+                {
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>

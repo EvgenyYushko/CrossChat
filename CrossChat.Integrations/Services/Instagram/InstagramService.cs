@@ -748,4 +748,98 @@ public partial class InstagramService : IInstagramService
 
 		return insights;
 	}
+
+	/// <summary>
+	/// Запрашивает последние открытые диалоги страницы в Instagram Direct
+	/// </summary>
+	public async Task<List<InstagramConversationSummaryDto>> GetRecentConversationsAsync(string accessToken, int limit = 15)
+	{
+		var result = new List<InstagramConversationSummaryDto>();
+
+		// Запрашиваем ID диалога, участников и последнее сообщение
+		string fields = "id,updated_time,participants,messages.limit(1){id,message,created_time,from}";
+		string url = $"{ApiVersion}/me/conversations?platform=instagram&fields={fields}&limit={limit}&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			if (!response.IsSuccessStatusCode)
+			{
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogWarning("[Instagram Sync] Не удалось получить диалоги страницы: {Err}", err);
+				return result;
+			}
+
+			var json = await response.Content.ReadAsStringAsync();
+			using var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			if (!root.TryGetProperty("data", out var dataArr)) return result;
+
+			foreach (var convo in dataArr.EnumerateArray())
+			{
+				var convoId = convo.GetProperty("id").GetString()!;
+
+				// Ищем клиента среди участников диалога
+				string? clientId = null;
+				string? clientUsername = null;
+
+				if (convo.TryGetProperty("participants", out var parts) &&
+					parts.TryGetProperty("data", out var pArr))
+				{
+					foreach (var p in pArr.EnumerateArray())
+					{
+						clientId = p.GetProperty("id").GetString();
+						if (p.TryGetProperty("username", out var u)) clientUsername = u.GetString();
+						break;
+					}
+				}
+
+				if (string.IsNullOrEmpty(clientId)) continue;
+
+				// Достаем последнее сообщение
+				string? lastMsgId = null;
+				string? lastMsgText = null;
+				DateTime msgTime = DateTime.UtcNow;
+				bool isFromClient = true;
+
+				if (convo.TryGetProperty("messages", out var msgs) &&
+					msgs.TryGetProperty("data", out var mArr) && mArr.GetArrayLength() > 0)
+				{
+					var lastMsg = mArr[0];
+					lastMsgId = lastMsg.TryGetProperty("id", out var mid) ? mid.GetString() : null;
+					lastMsgText = lastMsg.TryGetProperty("message", out var mt) ? mt.GetString() : "[Медиа / Вложение]";
+
+					if (lastMsg.TryGetProperty("created_time", out var ct) && DateTime.TryParse(ct.GetString(), out var dt))
+					{
+						msgTime = dt.ToUniversalTime();
+					}
+
+					if (lastMsg.TryGetProperty("from", out var fromObj) &&
+						fromObj.TryGetProperty("id", out var fromId))
+					{
+						// Если отправитель равен clientId — значит писал клиент
+						isFromClient = fromId.GetString() == clientId;
+					}
+				}
+
+				result.Add(new InstagramConversationSummaryDto
+				{
+					ConversationId = convoId,
+					ClientId = clientId,
+					ClientUsername = clientUsername,
+					LastMessageId = lastMsgId,
+					LastMessageText = lastMsgText,
+					LastMessageTime = msgTime,
+					IsLastMessageFromClient = isFromClient
+				});
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram Sync] Исключение при синхронизации диалогов");
+		}
+
+		return result;
+	}
 }

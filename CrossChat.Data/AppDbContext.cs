@@ -1,4 +1,5 @@
 using CrossChat.Data.Entities;
+using CrossChat.Data.Entities.Inbox;
 using CrossChat.Data.Entities.Posting;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +21,7 @@ namespace CrossChat.Data
 		public DbSet<InstagramBotCustomer> InstagramBotCustomers { get; set; }
 		public DbSet<BotResponseLog> BotResponseLogs { get; set; }
 		public DbSet<Profile> Profile { get; set; }
-		
+
 		public DbSet<PostEntity> Posts { get; set; }
 		public DbSet<PostMediaEntity> PostMedia { get; set; }
 		public DbSet<NetworkStateEntity> NetworkStates { get; set; }
@@ -34,11 +35,28 @@ namespace CrossChat.Data
 
 		public DbSet<YouTubeSettings> YouTubeSettings { get; set; }
 
+		public DbSet<InboxConversation> InboxConversations { get; set; }
+		public DbSet<InboxMessage> InboxMessages { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
+			base.OnModelCreating(modelBuilder);
+
 			// Ускоряем поиск при входе
 			modelBuilder.Entity<User>().HasIndex(u => u.GoogleId).IsUnique();
 			modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
+
+			// Ускоряем поиск диалога конкретного клиента в соцсети
+			modelBuilder.Entity<InboxConversation>()
+				.HasIndex(c => new { c.NetworkType, c.BotId, c.ExternalUserId });
+
+			// Ускоряем фильтрацию по профилю
+			modelBuilder.Entity<InboxConversation>()
+				.HasIndex(c => c.ProfileId);
+
+			// Защита от дублей сообщений
+			modelBuilder.Entity<InboxMessage>()
+				.HasIndex(m => m.ExternalMessageId);
 		}
 	}
 }

@@ -1,0 +1,972 @@
+@{
+    ViewData["Title"] = "Единый Инбокс";
+    int activeProfileId = ViewBag.ActiveProfileId ?? 0;
+}
+
+@section Styles {
+    <style>
+        /* ГЛОБАЛЬНЫЙ КОНТЕЙНЕР СТРОГО ПО ВЫСОТЕ ВЬЮПОРТА */
+        .inbox-wrapper {
+            max-width: 1300px;
+            margin: 5rem auto 1.5rem;
+            padding: 0 1rem;
+            height: calc(100vh - 7.5rem);
+            min-height: 550px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .inbox-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            flex: 1;
+            height: 100%;
+            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО: Разрешает дочерним элементам сжиматься */
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            overflow: hidden;
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        /* ЛЕВАЯ КОЛОНКА */
+        .inbox-sidebar {
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 23, 42, 0.4);
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .search-input-box {
+            position: relative;
+            width: 100%;
+        }
+
+            .search-input-box input {
+                width: 100%;
+                box-sizing: border-box;
+                background: var(--input-bg, rgba(255, 255, 255, 0.05));
+                border: 1px solid var(--glass-border);
+                border-radius: 10px;
+                padding: 8px 12px 8px 32px;
+                color: var(--text-main);
+                font-size: 0.85rem;
+                outline: none;
+            }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .network-filter-pills {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            padding-bottom: 2px;
+        }
+
+            .network-filter-pills::-webkit-scrollbar {
+                display: none;
+            }
+
+        .pill-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+            .pill-btn:hover, .pill-btn.active {
+                background: var(--accent-color, #6366f1);
+                border-color: var(--accent-color, #6366f1);
+                color: #fff;
+            }
+
+        .dialogs-list {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .dialog-item {
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+        }
+
+            .dialog-item:hover {
+                background: rgba(255, 255, 255, 0.03);
+            }
+
+            .dialog-item.active {
+                background: rgba(99, 102, 241, 0.12);
+                border-left: 3px solid var(--accent-color, #6366f1);
+            }
+
+        .avatar-wrapper {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+        }
+
+        .chat-avatar {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .network-badge-mini {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--card-bg, #1e293b);
+            font-size: 9px;
+        }
+
+        .dialog-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .dialog-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dialog-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-main);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .dialog-time {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        .dialog-bottom-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dialog-snippet {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        .unread-count-badge {
+            background: var(--accent-color, #6366f1);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: bold;
+            border-radius: 10px;
+            padding: 2px 6px;
+            min-width: 16px;
+            text-align: center;
+        }
+
+        /* ПРАВАЯ КОЛОНКА (ОБЛАСТЬ ЧАТА) */
+        .inbox-chat-area {
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 23, 42, 0.15);
+            position: relative;
+            height: 100%;
+            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО ДЛЯ ГРИДА */
+            overflow: hidden;
+        }
+
+        /* ОБЕРТКА АКТИВНОГО ДИАЛОГА */
+        .active-chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО ДЛЯ СКРОЛЛА */
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 0.85rem 1.5rem;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(15, 23, 42, 0.4);
+            gap: 12px;
+            flex-shrink: 0; /* Запрещает шапке сжиматься */
+            z-index: 5;
+        }
+
+        .chat-user-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .back-to-list-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-main);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        /* HUMAN TAKEOVER */
+        .human-takeover-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            padding: 6px 12px;
+            border-radius: 12px;
+            flex-shrink: 0;
+        }
+
+        .takeover-status-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 22px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked ~ .slider {
+            background-color: #f43f5e;
+        }
+
+            input:checked ~ .slider:before {
+                transform: translateX(22px);
+            }
+
+        /* ЛЕНТА СООБЩЕНИЙ — ТЕПЕРЬ СТРОГО СКРОЛЛИТСЯ И НЕ ВЫТАЛКИВАЕТ ПАНЕЛЬ ВВОДА */
+        .messages-stream {
+            flex: 1 1 0;
+            min-height: 0; /* РАЗРЕШАЕТ ВНУТРЕННИЙ СКРОЛЛ */
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            scrollbar-width: thin;
+        }
+
+        .msg-bubble {
+            max-width: 70%;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .msg-incoming {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-outgoing-bot {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: var(--text-main);
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-outgoing-human {
+            align-self: flex-end;
+            background: var(--accent-color, #6366f1);
+            color: #ffffff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 5px;
+            font-size: 0.68rem;
+            opacity: 0.65;
+        }
+
+        .sender-tag {
+            font-size: 0.68rem;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        /* ПАНЕЛЬ ВВОДА — НАМЕРТВО ЗАФИКСИРОВАНА ВНИЗУ */
+        .chat-input-panel {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--glass-border);
+            background: rgba(15, 23, 42, 0.7);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0; /* КРИТИЧЕСКИ ВАЖНО: НИКОГДА НЕ СЖИМАЕТСЯ И НЕ ВЫТАЛКИВАЕТСЯ */
+            z-index: 5;
+        }
+
+        .input-tools-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-textarea {
+            flex: 1;
+            background: var(--input-bg, rgba(255, 255, 255, 0.04));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            padding: 10px 14px;
+            font-size: 0.92rem;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            min-height: 42px;
+            font-family: inherit;
+        }
+
+            .chat-textarea:focus {
+                border-color: var(--accent-color, #6366f1);
+            }
+
+        .btn-send {
+            background: var(--accent-color, #6366f1);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            width: 44px;
+            height: 42px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+            .btn-send:hover {
+                transform: scale(1.05);
+                background: #4f46e5;
+            }
+
+        .empty-chat-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            gap: 12px;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        @@media (max-width: 768px) {
+            .inbox-card {
+                grid-template-columns: 1fr;
+            }
+
+            .inbox-chat-area {
+                display: none;
+            }
+
+            .inbox-card.mobile-chat-open .inbox-sidebar {
+                display: none;
+            }
+
+            .inbox-card.mobile-chat-open .inbox-chat-area {
+                display: flex;
+            }
+
+            .back-to-list-btn {
+                display: block;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
+        ← Профили
+    </a>
+}
+
+<div class="inbox-wrapper">
+    <div class="inbox-card" id="inboxCard">
+
+        <!-- 1. ЛЕВАЯ КОЛОНКА (ДИАЛОГИ) -->
+        <div class="inbox-sidebar">
+            <div class="sidebar-header">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <div class="search-input-box" style="flex: 1;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" placeholder="Поиск по имени или тексту..." oninput="onSearchInput(this.value)">
+                    </div>
+                    <!-- КНОПКА СИНХРОНИЗАЦИИ -->
+                    <button type="button" class="pill-btn" onclick="syncInbox()" id="syncBtn" title="Синхронизировать диалоги из соцсетей" style="padding: 8px 10px; font-size: 0.9rem;">
+                        🔄
+                    </button>
+                </div>
+
+                <!-- Фильтры соцсетей -->
+                <div class="network-filter-pills">
+                    <button type="button" class="pill-btn active" data-net="ALL" onclick="filterNetwork('ALL', this)">Все</button>
+                    <button type="button" class="pill-btn" data-net="INSTAGRAM" onclick="filterNetwork('INSTAGRAM', this)">📸 Instagram</button>
+                    <button type="button" class="pill-btn" data-net="TELEGRAM" onclick="filterNetwork('TELEGRAM', this)">✈️ Telegram</button>
+                    <button type="button" class="pill-btn" data-net="FACEBOOK" onclick="filterNetwork('FACEBOOK', this)">📘 Messenger</button>
+                    <button type="button" class="pill-btn" data-net="BLUESKY" onclick="filterNetwork('BLUESKY', this)">🦋 BlueSky</button>
+                    <button type="button" class="pill-btn" data-net="THREADS" onclick="filterNetwork('THREADS', this)">🧵 Threads</button>
+                </div>
+            </div>
+
+            <!-- Список реальных диалогов -->
+            <div class="dialogs-list" id="dialogsContainer">
+                <div id="dialogsLoading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    ⏳ Загрузка диалогов...
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. ПРАВАЯ КОЛОНКА (ПЕРЕПИСКА) -->
+        <div class="inbox-chat-area" id="chatArea">
+
+            <!-- Заглушка, когда диалог не выбран -->
+            <div class="empty-chat-state" id="emptyChatState">
+                <div style="font-size: 3rem;">💬</div>
+                <h3 style="margin: 0; color: var(--text-main);">Выберите диалог</h3>
+                <p style="font-size: 0.85rem; max-width: 320px; margin: 0;">
+                    Выберите переписку из списка слева, чтобы просмотреть историю и ответить клиенту.
+                </p>
+            </div>
+
+            <!-- Реальная область чата (с классом .active-chat-wrapper вместо инлайна) -->
+            <div id="activeChatWrapper" class="active-chat-wrapper" style="display: none;">
+
+                <!-- Шапка чата -->
+                <div class="chat-header">
+                    <div class="chat-user-meta">
+                        <button type="button" class="back-to-list-btn" onclick="closeMobileChat()">←</button>
+                        <div class="avatar-wrapper" style="width: 38px; height: 38px;">
+                            <div class="chat-avatar" id="activeAvatar">U</div>
+                            <div class="network-badge-mini" id="activeNetBadge">📸</div>
+                        </div>
+                        <div style="min-width: 0;">
+                            <div id="activeChatName" style="font-weight:700; font-size:0.95rem; color:var(--text-main);">Имя Клиента</div>
+                            <div id="activeChatHandle" style="font-size:0.75rem; color:var(--text-secondary);">@@username</div>
+                        </div>
+                    </div>
+
+                    <!-- HUMAN TAKEOVER -->
+                    <div class="human-takeover-box">
+                        <div style="text-align: right;">
+                            <div class="takeover-status-label" id="takeoverLabel" style="color: #10b981;">🤖 ИИ активен</div>
+                            <div style="font-size: 0.68rem; color: var(--text-secondary);" id="takeoverSubLabel">Бот отвечает сам</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="takeoverToggle" onchange="onTakeoverToggleChanged(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Сообщения со скроллом -->
+                <div class="messages-stream" id="messagesStream"></div>
+
+                <!-- Панель отправки (всегда видна внизу) -->
+                <div class="chat-input-panel">
+                    <div class="input-tools-row">
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);" id="replyingAsNotice">
+                            ✍️ Вы отвечаете клиенту
+                        </span>
+                    </div>
+
+                    <div class="input-row">
+                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите ответ клиенту (Enter для отправки)..." onkeydown="handleInputKeydown(event)"></textarea>
+                        <button type="button" class="btn-send" onclick="sendManualMessage()">➤</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+
+    <script>
+        const profileId = @activeProfileId;
+        let currentNetworkFilter = 'ALL';
+        let currentConversationId = null;
+        let allLoadedDialogs = [];
+
+        // 1. SIGNALR
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/inboxHub")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("ReceiveInboxMessage", (payload) => {
+            console.log("⚡ [SignalR] Новое сообщение:", payload);
+
+            if (currentConversationId === payload.conversationId) {
+                appendMessageBubble(payload.text, payload.isIncoming, payload.isSentByBot, payload.time);
+                scrollChatToBottom();
+            }
+
+            updateDialogSnippet(payload.conversationId, payload.lastSnippet, payload.time, payload.unreadCount);
+        });
+
+        connection.on("TakeoverStatusChanged", (conversationId, isTakeover) => {
+            if (currentConversationId === conversationId) {
+                updateTakeoverUi(isTakeover);
+            }
+        });
+
+        connection.start().then(() => {
+            console.log("✅ SignalR подключен к InboxHub!");
+            if (profileId > 0) {
+                connection.invoke("JoinProfileRoom", profileId);
+            }
+        }).catch(err => console.error("Ошибка подключения SignalR:", err));
+
+        // 2. ЗАГРУЗКА ДИАЛОГОВ
+        async function loadDialogs() {
+            const container = document.getElementById('dialogsContainer');
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">⏳ Загрузка диалогов...</div>';
+
+            try {
+                const res = await fetch(`/inbox/dialogs?profileId=${profileId}&network=${currentNetworkFilter}`);
+                if (!res.ok) throw new Error("Ошибка запроса");
+
+                allLoadedDialogs = await res.json();
+                renderDialogsList(allLoadedDialogs);
+            } catch (err) {
+                container.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Ошибка загрузки диалогов</div>';
+            }
+        }
+
+        function renderDialogsList(dialogs) {
+            const container = document.getElementById('dialogsContainer');
+            container.innerHTML = '';
+
+            if (!dialogs || dialogs.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 3rem 1rem; color: var(--text-secondary);">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
+                        <div style="font-weight: 700; color: var(--text-main);">Диалогов пока нет в базе</div>
+                        <div style="font-size: 0.75rem; margin-top: 6px; margin-bottom: 15px;">Нажмите кнопку ниже, чтобы синхронизировать диалоги.</div>
+                        <button type="button" class="pill-btn" onclick="syncInbox()" style="margin: 0 auto; background: var(--accent-color); color: #fff; padding: 8px 16px;">
+                            🔄 Синхронизировать диалоги
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            dialogs.forEach(d => {
+                const item = document.createElement('div');
+                item.className = `dialog-item ${currentConversationId === d.id ? 'active' : ''}`;
+                item.dataset.id = d.id;
+                item.onclick = () => selectDialog(d.id);
+
+                const badge = getNetworkBadge(d.networkType);
+                const avatarContent = d.avatar
+                    ? `<img src="${d.avatar}" class="chat-avatar" alt="Avatar">`
+                    : `<div class="chat-avatar" style="background:${badge.color};">${getInitials(d.name)}</div>`;
+
+                item.innerHTML = `
+                    <div class="avatar-wrapper">
+                        ${avatarContent}
+                        <div class="network-badge-mini" style="background:${badge.color};">${badge.icon}</div>
+                    </div>
+                    <div class="dialog-info">
+                        <div class="dialog-top-row">
+                            <span class="dialog-title">${escapeHtml(d.name)}</span>
+                            <span class="dialog-time" id="time_${d.id}">${d.time}</span>
+                        </div>
+                        <div class="dialog-bottom-row">
+                            <span class="dialog-snippet" id="snippet_${d.id}">${escapeHtml(d.snippet || "Вложение")}</span>
+                            ${d.unreadCount > 0 ? `<span class="unread-count-badge" id="unread_${d.id}">${d.unreadCount}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(item);
+            });
+        }
+
+        // 3. ОТКРЫТИЕ ДИАЛОГА
+        async function selectDialog(conversationId) {
+            currentConversationId = conversationId;
+
+            document.querySelectorAll('.dialog-item').forEach(el => el.classList.remove('active'));
+            const activeEl = document.querySelector(`.dialog-item[data-id="${conversationId}"]`);
+            if (activeEl) {
+                activeEl.classList.add('active');
+                const unread = document.getElementById(`unread_${conversationId}`);
+                if (unread) unread.remove();
+            }
+
+            document.getElementById('emptyChatState').style.display = 'none';
+            const chatWrapper = document.getElementById('activeChatWrapper');
+            chatWrapper.style.display = 'flex';
+
+            const stream = document.getElementById('messagesStream');
+            stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">⏳ Загрузка сообщений...</div>';
+
+            try {
+                const res = await fetch(`/inbox/messages/${conversationId}`);
+                if (!res.ok) throw new Error("Не удалось загрузить сообщения");
+
+                const data = await res.json();
+
+                const badge = getNetworkBadge(data.networkType);
+                document.getElementById('activeChatName').textContent = data.name;
+                document.getElementById('activeChatHandle').textContent = `${badge.name} • ${data.username ? '@@' + data.username : ''}`;
+                document.getElementById('activeNetBadge').textContent = badge.icon;
+                document.getElementById('activeNetBadge').style.background = badge.color;
+
+                const avatarElem = document.getElementById('activeAvatar');
+                if (data.avatar) {
+                    avatarElem.outerHTML = `<img src="${data.avatar}" id="activeAvatar" class="chat-avatar" alt="Avatar">`;
+                } else {
+                    avatarElem.textContent = getInitials(data.name);
+                    avatarElem.style.background = badge.color;
+                }
+
+                document.getElementById('replyingAsNotice').innerHTML = `✍️ Вы отвечаете в <strong>${badge.name}</strong>`;
+
+                updateTakeoverUi(data.isTakeover);
+
+                stream.innerHTML = '';
+                if (data.messages && data.messages.length > 0) {
+                    data.messages.forEach(m => {
+                        appendMessageBubble(m.text, m.isIncoming, m.isSentByBot, m.time);
+                    });
+                } else {
+                    stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
+                }
+
+                // Гарантированная плавная прокрутка вниз
+                scrollChatToBottom();
+
+                document.getElementById('inboxCard').classList.add('mobile-chat-open');
+
+            } catch (err) {
+                stream.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Ошибка загрузки переписки</div>';
+            }
+        }
+
+        // 4. РУЧНАЯ ОТПРАВКА
+        async function sendManualMessage() {
+            if (!currentConversationId) return;
+
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            appendMessageBubble(text, false, false, timeStr);
+            scrollChatToBottom();
+            input.value = '';
+
+            updateTakeoverUi(true);
+
+            try {
+                const res = await fetch('/inbox/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversationId: currentConversationId, text: text })
+                });
+
+                if (!res.ok) {
+                    const err = await res.text();
+                    alert("Ошибка отправки: " + err);
+                }
+            } catch (err) {
+                alert("Ошибка сети при отправке сообщения");
+            }
+        }
+
+        // 5. HUMAN TAKEOVER
+        async function onTakeoverToggleChanged(isChecked) {
+            if (!currentConversationId) return;
+            updateTakeoverUi(isChecked);
+
+            try {
+                await fetch('/inbox/takeover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversationId: currentConversationId, isTakeover: isChecked })
+                });
+            } catch (err) {
+                console.error("Ошибка смены статуса takeover:", err);
+            }
+        }
+
+        function updateTakeoverUi(isTakeover) {
+            const toggle = document.getElementById('takeoverToggle');
+            const label = document.getElementById('takeoverLabel');
+            const subLabel = document.getElementById('takeoverSubLabel');
+
+            if (toggle) toggle.checked = isTakeover;
+
+            if (isTakeover) {
+                label.textContent = "👤 Ручной режим";
+                label.style.color = "#f43f5e";
+                subLabel.textContent = "ИИ отключен для этого чата";
+            } else {
+                label.textContent = "🤖 ИИ активен";
+                label.style.color = "#10b981";
+                subLabel.textContent = "Бот отвечает сам";
+            }
+        }
+
+        // 6. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        function appendMessageBubble(text, isIncoming, isSentByBot, time) {
+            const stream = document.getElementById('messagesStream');
+            const bubble = document.createElement('div');
+
+            if (isIncoming) {
+                bubble.className = 'msg-bubble msg-incoming';
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span>${time}</span></div>`;
+            } else if (isSentByBot) {
+                bubble.className = 'msg-bubble msg-outgoing-bot';
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
+            } else {
+                bubble.className = 'msg-bubble msg-outgoing-human';
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
+            }
+
+            stream.appendChild(bubble);
+        }
+
+        function updateDialogSnippet(convId, snippet, time, unreadCount) {
+            const snipElem = document.getElementById(`snippet_${convId}`);
+            const timeElem = document.getElementById(`time_${convId}`);
+            if (snipElem) snipElem.textContent = snippet;
+            if (timeElem) timeElem.textContent = time;
+
+            const item = document.querySelector(`.dialog-item[data-id="${convId}"]`);
+            const container = document.getElementById('dialogsContainer');
+            if (item && container) {
+                container.prepend(item);
+            }
+        }
+
+        function getNetworkBadge(networkType) {
+            switch (networkType) {
+                case 1: return { name: "Instagram Direct", icon: "📸", color: "#e1306c" };
+                case 2: return { name: "Facebook Messenger", icon: "📘", color: "#1877F2" };
+                case 3: return { name: "Telegram", icon: "✈️", color: "#2AABEE" };
+                case 4: return { name: "Threads", icon: "🧵", color: "#000000" };
+                case 5: return { name: "BlueSky", icon: "🦋", color: "#0085ff" };
+                default: return { name: "Соцсеть", icon: "💬", color: "#6366f1" };
+            }
+        }
+
+        function getInitials(name) {
+            if (!name) return "U";
+            const parts = name.trim().split(' ');
+            return parts.length > 1 ? (parts[0][0] + parts[1][0]) : name.substring(0, 2);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+
+        // НАДЕЖНАЯ ПРОКРУТКА ВНИЗ
+        function scrollChatToBottom() {
+            const stream = document.getElementById('messagesStream');
+            if (stream) {
+                setTimeout(() => {
+                    stream.scrollTop = stream.scrollHeight;
+                }, 50);
+            }
+        }
+
+        function handleInputKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendManualMessage();
+            }
+        }
+
+        function closeMobileChat() {
+            document.getElementById('inboxCard').classList.remove('mobile-chat-open');
+        }
+
+        function filterNetwork(net, btn) {
+            currentNetworkFilter = net;
+            document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadDialogs();
+        }
+
+        function onSearchInput(query) {
+            query = query.toLowerCase().trim();
+            document.querySelectorAll('.dialog-item').forEach(item => {
+                const title = item.querySelector('.dialog-title')?.textContent.toLowerCase() || '';
+                const snippet = item.querySelector('.dialog-snippet')?.textContent.toLowerCase() || '';
+                item.style.display = (title.includes(query) || snippet.includes(query)) ? 'flex' : 'none';
+            });
+        }
+
+        async function syncInbox() {
+            const syncBtn = document.getElementById('syncBtn');
+            if (syncBtn) {
+                syncBtn.style.transform = 'rotate(360deg)';
+                syncBtn.style.transition = 'transform 0.8s ease';
+            }
+
+            try {
+                const res = await fetch(`/inbox/sync?profileId=${profileId}`, { method: 'POST' });
+                if (res.ok) {
+                    await loadDialogs();
+                } else {
+                    alert("Не удалось синхронизировать диалоги");
+                }
+            } catch {
+                alert("Ошибка сети при синхронизации");
+            } finally {
+                if (syncBtn) {
+                    setTimeout(() => {
+                        syncBtn.style.transform = 'none';
+                        syncBtn.style.transition = 'none';
+                    }, 800);
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDialogs();
+        });
+    </script>
+}
