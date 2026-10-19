@@ -30,16 +30,51 @@ namespace CrossChat.Services
 		}
 
 		public async Task<InboxConversationDto> GetOrCreateConversationAsync(
-			int profileId,
-			int networkType,
-			int botId,
-			string externalUserId,
-			string? username,
-			string? fullName,
-			string? avatarUrl)
+	int profileId,
+	int networkType,
+	int botId,
+	string externalUserId,
+	string? username,
+	string? fullName,
+	string? avatarUrl)
 		{
 			var conversation = await _db.InboxConversations
 				.FirstOrDefaultAsync(c => c.NetworkType == networkType && c.BotId == botId && c.ExternalUserId == externalUserId);
+
+			// АВТО-ПОДГРУЗКА АВАТАРКИ И ЮЗЕРНЕЙМА ДЛЯ INSTAGRAM, ЕСЛИ ИХ НЕТ:
+			if ((string.IsNullOrEmpty(avatarUrl) || username == "instagram_user" || string.IsNullOrEmpty(username))
+				&& networkType == (int)NetworkType.Instagram)
+			{
+				try
+				{
+					var settings = await _db.InstagramSettings.FindAsync(botId);
+					if (settings != null && !string.IsNullOrEmpty(settings.AccessToken))
+					{
+						var userProfile = await _instaService.GetInstagramUserProfileAsync(externalUserId, settings.AccessToken);
+						if (userProfile != null)
+						{
+							if (!string.IsNullOrEmpty(userProfile.Username)) username = userProfile.Username;
+							fullName = !string.IsNullOrEmpty(userProfile.Name) ? userProfile.Name : username;
+							if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl)) avatarUrl = userProfile.ProfilePicUrl;
+
+							// Сохраняем в кэш клиентов
+							var customer = await _db.InstagramBotCustomers
+								.FirstOrDefaultAsync(c => c.InstagramSettingsId == botId && c.InstagramSenderId == externalUserId);
+
+							if (customer != null)
+							{
+								customer.Username = username;
+								customer.ProfilePictureUrl = avatarUrl;
+								await _db.SaveChangesAsync();
+							}
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось получить профиль клиента Instagram {UserId}", externalUserId);
+				}
+			}
 
 			if (conversation == null)
 			{
@@ -50,7 +85,7 @@ namespace CrossChat.Services
 					BotId = botId,
 					ExternalUserId = externalUserId,
 					Username = username,
-					FullName = fullName,
+					FullName = fullName ?? username,
 					AvatarUrl = avatarUrl,
 					CreatedAt = DateTime.UtcNow,
 					LastMessageAt = DateTime.UtcNow
@@ -67,7 +102,6 @@ namespace CrossChat.Services
 				if (isUpdated) await _db.SaveChangesAsync();
 			}
 
-			// Маппим в чистый DTO для слоя интеграций
 			return new InboxConversationDto
 			{
 				Id = conversation.Id,
@@ -241,9 +275,8 @@ namespace CrossChat.Services
 		{
 			int totalSynced = 0;
 
-			// 1. Ищем все активные аккаунты Instagram текущего профиля
 			var instaAccounts = await _db.InstagramSettings
-				.Where(s => s.ProfileId == profileId && s.IsActive && !string.IsNullOrEmpty(s.AccessToken))
+				.Where(s => s.ProfileId == profileId && s.IsActive && !string.IsNullOrEmpty(s.AccessToken) && !string.IsNullOrEmpty(s.InstagramBusinessId))
 				.ToListAsync();
 
 			foreach (var account in instaAccounts)
@@ -251,26 +284,21 @@ namespace CrossChat.Services
 				try
 				{
 					_logger.LogInformation("🔄 [Inbox Sync] Опрос диалогов Instagram для @{User}...", account.Username);
-					var convos = await _instaService.GetRecentConversationsAsync(account.AccessToken!, 15);
+
+					// ПЕРЕДАЕМ InstagramBusinessId ДЛЯ ФИЛЬТРАЦИИ САМОГО СЕБЯ:
+					var convos = await _instaService.GetRecentConversationsAsync(account.AccessToken!, account.InstagramBusinessId!, 15);
 
 					foreach (var c in convos)
 					{
-						if (string.IsNullOrEmpty(c.ClientId)) continue;
+						if (string.IsNullOrEmpty(c.ClientId) || c.ClientId == account.InstagramBusinessId) continue;
 
-						// Ищем или создаем диалог в нашей БД
-						var conversation = await _db.InboxConversations
-							.FirstOrDefaultAsync(x => x.NetworkType == (int)NetworkType.Instagram &&
-													  x.BotId == account.Id &&
-													  x.ExternalUserId == c.ClientId);
-
-						// Ищем клиента в InstagramBotCustomers
 						var customer = await _db.InstagramBotCustomers
 							.FirstOrDefaultAsync(cust => cust.InstagramSettingsId == account.Id && cust.InstagramSenderId == c.ClientId);
 
 						string username = c.ClientUsername ?? customer?.Username ?? "instagram_user";
 						string? avatar = customer?.ProfilePictureUrl;
 
-						// === [НОВОЕ] ЕСЛИ АВАТАРКА НЕ НАЙДЕНА — ЗАПРАШИВАЕМ ИЗ INSTAGRAM API ===
+						// Если данных нет — запрашиваем профиль
 						if (string.IsNullOrEmpty(avatar) || username == "instagram_user")
 						{
 							try
@@ -281,7 +309,6 @@ namespace CrossChat.Services
 									if (!string.IsNullOrEmpty(userProfile.Username)) username = userProfile.Username;
 									if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl)) avatar = userProfile.ProfilePicUrl;
 
-									// Кэшируем данные в таблицу клиентов
 									if (customer == null)
 									{
 										customer = new InstagramBotCustomer
@@ -301,11 +328,13 @@ namespace CrossChat.Services
 									await _db.SaveChangesAsync();
 								}
 							}
-							catch (Exception ex)
-							{
-								_logger.LogWarning(ex, "Не удалось подгрузить профиль Instagram для {ClientId}", c.ClientId);
-							}
+							catch { }
 						}
+
+						var conversation = await _db.InboxConversations
+							.FirstOrDefaultAsync(x => x.NetworkType == (int)NetworkType.Instagram &&
+													  x.BotId == account.Id &&
+													  x.ExternalUserId == c.ClientId);
 
 						if (conversation == null)
 						{
@@ -331,14 +360,12 @@ namespace CrossChat.Services
 						}
 						else
 						{
-							// Обновляем метаданные и аватарку, если они появились
-							if (!string.IsNullOrEmpty(avatar) && conversation.AvatarUrl != avatar) conversation.AvatarUrl = avatar;
-							if (!string.IsNullOrEmpty(username) && conversation.Username != username) conversation.Username = username;
+							if (!string.IsNullOrEmpty(avatar)) conversation.AvatarUrl = avatar;
+							if (!string.IsNullOrEmpty(username)) conversation.Username = username;
 							conversation.LastMessageSnippet = c.LastMessageText ?? conversation.LastMessageSnippet;
 							conversation.LastMessageAt = c.LastMessageTime;
 						}
 
-						// Сохраняем сообщение в историю, если его еще нет
 						if (!string.IsNullOrEmpty(c.LastMessageId))
 						{
 							bool msgExists = await _db.InboxMessages.AnyAsync(m => m.ExternalMessageId == c.LastMessageId);

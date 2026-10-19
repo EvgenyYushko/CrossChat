@@ -752,11 +752,10 @@ public partial class InstagramService : IInstagramService
 	/// <summary>
 	/// Запрашивает последние открытые диалоги страницы в Instagram Direct
 	/// </summary>
-	public async Task<List<InstagramConversationSummaryDto>> GetRecentConversationsAsync(string accessToken, int limit = 15)
+	public async Task<List<InstagramConversationSummaryDto>> GetRecentConversationsAsync(string accessToken, string businessAccountId, int limit = 15)
 	{
 		var result = new List<InstagramConversationSummaryDto>();
 
-		// Запрашиваем ID диалога, участников и последнее сообщение
 		string fields = "id,updated_time,participants,messages.limit(1){id,message,created_time,from}";
 		string url = $"{ApiVersion}/me/conversations?platform=instagram&fields={fields}&limit={limit}&access_token={accessToken}";
 
@@ -766,7 +765,7 @@ public partial class InstagramService : IInstagramService
 			if (!response.IsSuccessStatusCode)
 			{
 				var err = await response.Content.ReadAsStringAsync();
-				_logger.LogWarning("[Instagram Sync] Не удалось получить диалоги страницы: {Err}", err);
+				_logger.LogWarning("[Instagram Sync] Не удалось получить диалоги: {Err}", err);
 				return result;
 			}
 
@@ -780,24 +779,29 @@ public partial class InstagramService : IInstagramService
 			{
 				var convoId = convo.GetProperty("id").GetString()!;
 
-				// Ищем клиента среди участников диалога
 				string? clientId = null;
 				string? clientUsername = null;
 
+				// Ищем СОБЕСЕДНИКА (исключая самого бота!)
 				if (convo.TryGetProperty("participants", out var parts) &&
 					parts.TryGetProperty("data", out var pArr))
 				{
 					foreach (var p in pArr.EnumerateArray())
 					{
-						clientId = p.GetProperty("id").GetString();
+						var pId = p.GetProperty("id").GetString();
+
+						// КРИТИЧЕСКИ ВАЖНО: Пропускаем свой собственный аккаунт!
+						if (pId == businessAccountId) continue;
+
+						clientId = pId;
 						if (p.TryGetProperty("username", out var u)) clientUsername = u.GetString();
-						break;
+						break; // Нашли реального клиента — выходим из цикла участников
 					}
 				}
 
-				if (string.IsNullOrEmpty(clientId)) continue;
+				// Если клиента не нашли (например, диалог сам с собой) — пропускаем
+				if (string.IsNullOrEmpty(clientId) || clientId == businessAccountId) continue;
 
-				// Достаем последнее сообщение
 				string? lastMsgId = null;
 				string? lastMsgText = null;
 				DateTime msgTime = DateTime.UtcNow;
@@ -818,7 +822,6 @@ public partial class InstagramService : IInstagramService
 					if (lastMsg.TryGetProperty("from", out var fromObj) &&
 						fromObj.TryGetProperty("id", out var fromId))
 					{
-						// Если отправитель равен clientId — значит писал клиент
 						isFromClient = fromId.GetString() == clientId;
 					}
 				}
