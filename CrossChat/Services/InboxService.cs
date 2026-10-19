@@ -1,4 +1,5 @@
 using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Data.Entities.Inbox;
 using CrossChat.Hubs;
 using CrossChat.Integrations.Enums;
@@ -262,15 +263,52 @@ namespace CrossChat.Services
 													  x.BotId == account.Id &&
 													  x.ExternalUserId == c.ClientId);
 
+						// Ищем клиента в InstagramBotCustomers
+						var customer = await _db.InstagramBotCustomers
+							.FirstOrDefaultAsync(cust => cust.InstagramSettingsId == account.Id && cust.InstagramSenderId == c.ClientId);
+
+						string username = c.ClientUsername ?? customer?.Username ?? "instagram_user";
+						string? avatar = customer?.ProfilePictureUrl;
+
+						// === [НОВОЕ] ЕСЛИ АВАТАРКА НЕ НАЙДЕНА — ЗАПРАШИВАЕМ ИЗ INSTAGRAM API ===
+						if (string.IsNullOrEmpty(avatar) || username == "instagram_user")
+						{
+							try
+							{
+								var userProfile = await _instaService.GetInstagramUserProfileAsync(c.ClientId, account.AccessToken!);
+								if (userProfile != null)
+								{
+									if (!string.IsNullOrEmpty(userProfile.Username)) username = userProfile.Username;
+									if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl)) avatar = userProfile.ProfilePicUrl;
+
+									// Кэшируем данные в таблицу клиентов
+									if (customer == null)
+									{
+										customer = new InstagramBotCustomer
+										{
+											InstagramSettingsId = account.Id,
+											InstagramSenderId = c.ClientId,
+											Username = username,
+											ProfilePictureUrl = avatar
+										};
+										_db.InstagramBotCustomers.Add(customer);
+									}
+									else
+									{
+										customer.Username = username;
+										customer.ProfilePictureUrl = avatar;
+									}
+									await _db.SaveChangesAsync();
+								}
+							}
+							catch (Exception ex)
+							{
+								_logger.LogWarning(ex, "Не удалось подгрузить профиль Instagram для {ClientId}", c.ClientId);
+							}
+						}
+
 						if (conversation == null)
 						{
-							// Пробуем найти аватарку и ник в InstagramBotCustomers
-							var customer = await _db.InstagramBotCustomers
-								.FirstOrDefaultAsync(cust => cust.InstagramSettingsId == account.Id && cust.InstagramSenderId == c.ClientId);
-
-							string username = c.ClientUsername ?? customer?.Username ?? "instagram_user";
-							string? avatar = customer?.ProfilePictureUrl;
-
 							conversation = new InboxConversation
 							{
 								ProfileId = profileId,
@@ -293,7 +331,9 @@ namespace CrossChat.Services
 						}
 						else
 						{
-							// Обновляем последнее сообщение
+							// Обновляем метаданные и аватарку, если они появились
+							if (!string.IsNullOrEmpty(avatar) && conversation.AvatarUrl != avatar) conversation.AvatarUrl = avatar;
+							if (!string.IsNullOrEmpty(username) && conversation.Username != username) conversation.Username = username;
 							conversation.LastMessageSnippet = c.LastMessageText ?? conversation.LastMessageSnippet;
 							conversation.LastMessageAt = c.LastMessageTime;
 						}

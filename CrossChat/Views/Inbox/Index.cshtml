@@ -5,7 +5,7 @@
 
 @section Styles {
     <style>
-        /* ГЛОБАЛЬНЫЙ КОНТЕЙНЕР СТРОГО ПО ВЫСОТЕ ВЬЮПОРТА */
+        /* ДЕСКТОП: АККУРАТНОЕ СТЕКЛЯННОЕ ОКНО */
         .inbox-wrapper {
             max-width: 1300px;
             margin: 5rem auto 1.5rem;
@@ -23,7 +23,7 @@
             border-radius: 20px;
             flex: 1;
             height: 100%;
-            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО: Разрешает дочерним элементам сжиматься */
+            min-height: 0;
             display: grid;
             grid-template-columns: 340px 1fr;
             overflow: hidden;
@@ -31,7 +31,7 @@
             position: relative;
         }
 
-        /* ЛЕВАЯ КОЛОНКА */
+        /* ЛЕВАЯ КОЛОНКА (СПИСОК) */
         .inbox-sidebar {
             border-right: 1px solid var(--glass-border);
             display: flex;
@@ -229,44 +229,69 @@
             text-align: center;
         }
 
-        /* ПРАВАЯ КОЛОНКА (ОБЛАСТЬ ЧАТА) */
+        /* ПРАВАЯ КОЛОНКА (ЧАТ) */
         .inbox-chat-area {
             display: flex;
             flex-direction: column;
             background: rgba(15, 23, 42, 0.15);
             position: relative;
             height: 100%;
-            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО ДЛЯ ГРИДА */
+            min-height: 0;
             overflow: hidden;
         }
 
-        /* ОБЕРТКА АКТИВНОГО ДИАЛОГА */
         .active-chat-wrapper {
             display: flex;
             flex-direction: column;
             height: 100%;
-            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО ДЛЯ СКРОЛЛА */
+            min-height: 0;
             width: 100%;
             overflow: hidden;
         }
 
+        /* ШАПКА ДИАЛОГА */
         .chat-header {
-            padding: 0.85rem 1.5rem;
+            padding: 0.85rem 1.25rem;
             border-bottom: 1px solid var(--glass-border);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(15, 23, 42, 0.4);
-            gap: 12px;
-            flex-shrink: 0; /* Запрещает шапке сжиматься */
-            z-index: 5;
+            background: rgba(15, 23, 42, 0.6);
+            gap: 8px;
+            flex-shrink: 0;
+            z-index: 10;
         }
 
         .chat-user-meta {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
+            flex: 1;
+            min-width: 0; /* Обязательно для text-overflow у имени */
+        }
+
+        .user-text-details {
+            flex: 1;
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-handle-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .back-to-list-btn {
@@ -274,33 +299,36 @@
             background: none;
             border: none;
             color: var(--text-main);
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             cursor: pointer;
             padding: 4px;
+            line-height: 1;
         }
 
-        /* HUMAN TAKEOVER */
+        /* БЛОК HUMAN TAKEOVER */
         .human-takeover-box {
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.03);
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--glass-border);
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 12px;
             flex-shrink: 0;
         }
 
         .takeover-status-label {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 700;
+            white-space: nowrap;
         }
 
         .switch {
             position: relative;
             display: inline-block;
-            width: 44px;
-            height: 22px;
+            width: 40px;
+            height: 20px;
+            flex-shrink: 0;
         }
 
             .switch input {
@@ -317,19 +345,19 @@
             right: 0;
             bottom: 0;
             background-color: #333;
-            transition: .4s;
-            border-radius: 22px;
+            transition: .3s;
+            border-radius: 20px;
         }
 
             .slider:before {
                 position: absolute;
                 content: "";
-                height: 16px;
-                width: 16px;
+                height: 14px;
+                width: 14px;
                 left: 3px;
                 bottom: 3px;
                 background-color: white;
-                transition: .4s;
+                transition: .3s;
                 border-radius: 50%;
             }
 
@@ -338,23 +366,24 @@
         }
 
             input:checked ~ .slider:before {
-                transform: translateX(22px);
+                transform: translateX(20px);
             }
 
-        /* ЛЕНТА СООБЩЕНИЙ — ТЕПЕРЬ СТРОГО СКРОЛЛИТСЯ И НЕ ВЫТАЛКИВАЕТ ПАНЕЛЬ ВВОДА */
+        /* ЛЕНТА СООБЩЕНИЙ */
         .messages-stream {
             flex: 1 1 0;
-            min-height: 0; /* РАЗРЕШАЕТ ВНУТРЕННИЙ СКРОЛЛ */
-            padding: 1.5rem;
+            min-height: 0;
+            padding: 1rem 1.25rem;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
             scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
         }
 
         .msg-bubble {
-            max-width: 70%;
+            max-width: 75%;
             padding: 10px 14px;
             border-radius: 14px;
             font-size: 0.9rem;
@@ -362,13 +391,12 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
-            position: relative;
             word-wrap: break-word;
         }
 
         .msg-incoming {
             align-self: flex-start;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.06);
             border: 1px solid var(--glass-border);
             color: var(--text-main);
             border-bottom-left-radius: 4px;
@@ -376,7 +404,7 @@
 
         .msg-outgoing-bot {
             align-self: flex-end;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
             border: 1px solid rgba(99, 102, 241, 0.4);
             color: var(--text-main);
             border-bottom-right-radius: 4px;
@@ -406,16 +434,18 @@
             background: rgba(0, 0, 0, 0.25);
         }
 
-        /* ПАНЕЛЬ ВВОДА — НАМЕРТВО ЗАФИКСИРОВАНА ВНИЗУ */
+        /* ЗАКРЕПЛЕННАЯ ПАНЕЛЬ ВВОДА ВНИЗУ */
         .chat-input-panel {
-            padding: 1rem 1.5rem;
+            padding: 0.75rem 1.25rem;
             border-top: 1px solid var(--glass-border);
-            background: rgba(15, 23, 42, 0.7);
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0; /* КРИТИЧЕСКИ ВАЖНО: НИКОГДА НЕ СЖИМАЕТСЯ И НЕ ВЫТАЛКИВАЕТСЯ */
-            z-index: 5;
+            gap: 6px;
+            flex-shrink: 0;
+            z-index: 20;
         }
 
         .input-tools-row {
@@ -426,13 +456,13 @@
 
         .input-row {
             display: flex;
-            gap: 10px;
-            align-items: flex-end;
+            gap: 8px;
+            align-items: center;
         }
 
         .chat-textarea {
             flex: 1;
-            background: var(--input-bg, rgba(255, 255, 255, 0.04));
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
             border: 1px solid var(--glass-border);
             border-radius: 12px;
             color: var(--text-main);
@@ -440,8 +470,8 @@
             font-size: 0.92rem;
             resize: none;
             outline: none;
-            max-height: 120px;
-            min-height: 42px;
+            height: 42px;
+            box-sizing: border-box;
             font-family: inherit;
         }
 
@@ -461,13 +491,12 @@
             align-items: center;
             justify-content: center;
             font-size: 1.1rem;
-            transition: all 0.2s;
             flex-shrink: 0;
+            transition: transform 0.15s;
         }
 
-            .btn-send:hover {
-                transform: scale(1.05);
-                background: #4f46e5;
+            .btn-send:active {
+                transform: scale(0.95);
             }
 
         .empty-chat-state {
@@ -482,25 +511,96 @@
             padding: 2rem;
         }
 
+        /* ========================================================================= */
+        /* РЕЖИМ «МОБИЛЬНЫЙ МЕССЕНДЖЕР» (КАК В TELEGRAM / WHATSAPP)                 */
+        /* ========================================================================= */
         @@media (max-width: 768px) {
-            .inbox-card {
-                grid-template-columns: 1fr;
+            .inbox-wrapper {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100dvh !important; /* Настоящая высота мобильного экрана с учетом клавиатуры */
+                margin: 0 !important;
+                padding: 0 !important;
+                z-index: 10000;
+                border-radius: 0 !important;
             }
 
+            .inbox-card {
+                border: none !important;
+                border-radius: 0 !important;
+                grid-template-columns: 1fr !important;
+                height: 100% !important;
+            }
+            /* По умолчанию виден список диалогов */
             .inbox-chat-area {
                 display: none;
             }
 
+            .inbox-sidebar {
+                width: 100% !important;
+                height: 100% !important;
+            }
+            /* Когда открыт чат — список диалогов скрывается, чат занимает весь экран */
             .inbox-card.mobile-chat-open .inbox-sidebar {
-                display: none;
+                display: none !important;
             }
 
             .inbox-card.mobile-chat-open .inbox-chat-area {
-                display: flex;
+                display: flex !important;
+                width: 100% !important;
             }
 
             .back-to-list-btn {
-                display: block;
+                display: block !important;
+                margin-right: 4px;
+            }
+            /* Компактная шапка на телефоне */
+            .chat-header {
+                padding: 8px 10px !important;
+                background: #0f172a !important;
+            }
+
+            .chat-user-meta {
+                gap: 8px !important;
+            }
+
+            .avatar-wrapper {
+                width: 34px !important;
+                height: 34px !important;
+            }
+
+            .user-name-title {
+                font-size: 0.88rem !important;
+            }
+
+            .user-handle-subtitle {
+                font-size: 0.7rem !important;
+            }
+            /* Скрываем подпись в блоке Takeover, оставляя только статус и свитч */
+            #takeoverSubLabel {
+                display: none !important;
+            }
+
+            .human-takeover-box {
+                padding: 4px 8px !important;
+                gap: 6px !important;
+            }
+
+            .takeover-status-label {
+                font-size: 0.72rem !important;
+            }
+            /* ПАНЕЛЬ ВВОДА СТРОГО НАМЕРТВО ВНИЗУ (УЧЕТ SAFE AREA ДЛЯ IPHONE) */
+            .chat-input-panel {
+                padding: 8px 10px !important;
+                padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+                background: #0f172a !important;
+            }
+
+            .msg-bubble {
+                max-width: 85% !important;
+                font-size: 0.88rem !important;
             }
         }
     </style>
@@ -540,7 +640,7 @@
                 </div>
             </div>
 
-            <!-- Список реальных диалогов -->
+            <!-- Список диалогов -->
             <div class="dialogs-list" id="dialogsContainer">
                 <div id="dialogsLoading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                     ⏳ Загрузка диалогов...
@@ -548,7 +648,7 @@
             </div>
         </div>
 
-        <!-- 2. ПРАВАЯ КОЛОНКА (ПЕРЕПИСКА) -->
+        <!-- 2. ПРАВАЯ КОЛОНКА (ЧАТ) -->
         <div class="inbox-chat-area" id="chatArea">
 
             <!-- Заглушка, когда диалог не выбран -->
@@ -560,28 +660,28 @@
                 </p>
             </div>
 
-            <!-- Реальная область чата (с классом .active-chat-wrapper вместо инлайна) -->
+            <!-- Активный диалог -->
             <div id="activeChatWrapper" class="active-chat-wrapper" style="display: none;">
 
-                <!-- Шапка чата -->
+                <!-- Компактная шапка чата без наложений -->
                 <div class="chat-header">
                     <div class="chat-user-meta">
                         <button type="button" class="back-to-list-btn" onclick="closeMobileChat()">←</button>
-                        <div class="avatar-wrapper" style="width: 38px; height: 38px;">
+                        <div class="avatar-wrapper" style="width: 36px; height: 36px;">
                             <div class="chat-avatar" id="activeAvatar">U</div>
                             <div class="network-badge-mini" id="activeNetBadge">📸</div>
                         </div>
-                        <div style="min-width: 0;">
-                            <div id="activeChatName" style="font-weight:700; font-size:0.95rem; color:var(--text-main);">Имя Клиента</div>
-                            <div id="activeChatHandle" style="font-size:0.75rem; color:var(--text-secondary);">@@username</div>
+                        <div class="user-text-details">
+                            <div id="activeChatName" class="user-name-title">Имя Клиента</div>
+                            <div id="activeChatHandle" class="user-handle-subtitle">@@username</div>
                         </div>
                     </div>
 
                     <!-- HUMAN TAKEOVER -->
                     <div class="human-takeover-box">
                         <div style="text-align: right;">
-                            <div class="takeover-status-label" id="takeoverLabel" style="color: #10b981;">🤖 ИИ активен</div>
-                            <div style="font-size: 0.68rem; color: var(--text-secondary);" id="takeoverSubLabel">Бот отвечает сам</div>
+                            <div class="takeover-status-label" id="takeoverLabel" style="color: #10b981;">🤖 ИИ</div>
+                            <div style="font-size: 0.65rem; color: var(--text-secondary);" id="takeoverSubLabel">Бот отвечает сам</div>
                         </div>
                         <label class="switch">
                             <input type="checkbox" id="takeoverToggle" onchange="onTakeoverToggleChanged(this.checked)">
@@ -590,14 +690,14 @@
                     </div>
                 </div>
 
-                <!-- Сообщения со скроллом -->
+                <!-- Скроллящаяся лента сообщений -->
                 <div class="messages-stream" id="messagesStream"></div>
 
-                <!-- Панель отправки (всегда видна внизу) -->
+                <!-- Намертво закрепленная панель ввода внизу -->
                 <div class="chat-input-panel">
                     <div class="input-tools-row">
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);" id="replyingAsNotice">
-                            ✍️ Вы отвечаете клиенту
+                        <span style="font-size: 0.72rem; color: var(--text-secondary);" id="replyingAsNotice">
+                            ✍️ Ответ клиенту
                         </span>
                     </div>
 
@@ -676,7 +776,7 @@
                 container.innerHTML = `
                     <div style="text-align: center; padding: 3rem 1rem; color: var(--text-secondary);">
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
-                        <div style="font-weight: 700; color: var(--text-main);">Диалогов пока нет в базе</div>
+                        <div style="font-weight: 700; color: var(--text-main);">Диалогов пока нет</div>
                         <div style="font-size: 0.75rem; margin-top: 6px; margin-bottom: 15px;">Нажмите кнопку ниже, чтобы синхронизировать диалоги.</div>
                         <button type="button" class="pill-btn" onclick="syncInbox()" style="margin: 0 auto; background: var(--accent-color); color: #fff; padding: 8px 16px;">
                             🔄 Синхронизировать диалоги
@@ -770,9 +870,10 @@
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
                 }
 
-                // Гарантированная плавная прокрутка вниз
+                // Прокрутка вниз
                 scrollChatToBottom();
 
+                // Мобильный режим: открываем чат на весь экран
                 document.getElementById('inboxCard').classList.add('mobile-chat-open');
 
             } catch (err) {
@@ -836,13 +937,13 @@
             if (toggle) toggle.checked = isTakeover;
 
             if (isTakeover) {
-                label.textContent = "👤 Ручной режим";
+                label.textContent = "👤 Ручной";
                 label.style.color = "#f43f5e";
-                subLabel.textContent = "ИИ отключен для этого чата";
+                if (subLabel) subLabel.textContent = "ИИ отключен";
             } else {
-                label.textContent = "🤖 ИИ активен";
+                label.textContent = "🤖 ИИ";
                 label.style.color = "#10b981";
-                subLabel.textContent = "Бот отвечает сам";
+                if (subLabel) subLabel.textContent = "Бот отвечает сам";
             }
         }
 
@@ -902,13 +1003,12 @@
             return p.innerHTML;
         }
 
-        // НАДЕЖНАЯ ПРОКРУТКА ВНИЗ
         function scrollChatToBottom() {
             const stream = document.getElementById('messagesStream');
             if (stream) {
                 setTimeout(() => {
                     stream.scrollTop = stream.scrollHeight;
-                }, 50);
+                }, 80);
             }
         }
 

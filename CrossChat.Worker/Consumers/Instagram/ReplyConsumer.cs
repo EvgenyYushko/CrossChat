@@ -211,11 +211,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 				return;
 			}
-			
+
+			int unreadCount = 0;
+			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
+
 			// ==================================================================================
-			// 1. СИНХРОНИЗАЦИЯ С ЕДИНЫМ ИНБОКСОМ КЛИЕНТА (CROSSCHAT UNIFIED INBOX)
+			// 1. СИНХРОНИЗАЦИЯ ВСЕЙ ПАЧКИ СООБЩЕНИЙ В ИНБОКС (ОТ СТАРЫХ К НОВЫМ)
 			// ==================================================================================
-			// 1. Получаем DTO диалога:
 			int networkTypeInstagram = 1;
 			var conversation = await _inboxService.GetOrCreateConversationAsync(
 				settings.ProfileId,
@@ -226,22 +228,29 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				customer.Username,
 				customer.ProfilePictureUrl);
 
-			// 2. Сохраняем входящее (передаем conversation.Id):
-			if (messages.Count > 0 && lastSenderId != businessAccountId)
+			// Сохраняем ВСЕ сообщения из пачки, которые написал клиент (защита от дублей встроена)
+			if (unreadCount > 0)
 			{
-				await _inboxService.SaveIncomingMessageAsync(
-					conversation.Id, // <-- ТЕПЕРЬ ПРОСТО ID
-					lastMsg.Id,
-					lastMsg.Text ?? "[Медиа]");
+				for (int i = unreadCount - 1; i >= 0; i--)
+				{
+					var m = messages[i];
+					if (m.From.Id != businessAccountId)
+					{
+						string content = await ResolveMessageContentAsync(m);
+						await _inboxService.SaveIncomingMessageAsync(conversation.Id, m.Id, content);
+					}
+				}
 			}
 
-			// 3. Проверка Human Takeover (DTO знает эти поля!):
+			// ==================================================================================
+			// 2. ПРОВЕРКА HUMAN TAKEOVER (ПЕРЕХВАТ УПРАВЛЕНИЯ)
+			// ==================================================================================
 			if (conversation.IsHumanTakeover)
 			{
 				if (conversation.HumanTakeoverUntil.HasValue && conversation.HumanTakeoverUntil.Value > DateTime.UtcNow)
 				{
-					await _console.LogInfo($"👤 Диалог с @{customer.Username} перехвачен менеджером на сайте (до {conversation.HumanTakeoverUntil.Value:HH:mm} UTC). Бот молчит.");
-					return;
+					await _console.LogInfo($"👤 Диалог с @{customer.Username} перехвачен менеджером (до {conversation.HumanTakeoverUntil.Value:HH:mm} UTC). Бот молчит.");
+					return; // Выходим, бот не отвечает!
 				}
 				else if (!conversation.HumanTakeoverUntil.HasValue)
 				{
@@ -249,9 +258,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					return;
 				}
 			}
-
-			int unreadCount = 0;
-			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
 
 			var chatHistory = new List<AiRequest>();
 			var unreadUserMessageIds = new List<string>(); // Для реакций

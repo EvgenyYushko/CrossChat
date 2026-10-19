@@ -186,11 +186,19 @@ namespace CrossChat.Controllers
 
 		private async Task PublishMessage(InstagramMessaging messaging)
 		{
+			// Достаем текст или пометку о медиа
+			string? messageText = messaging.Message?.Text;
+			if (string.IsNullOrEmpty(messageText) && messaging.Message?.Attachments?.Count > 0)
+			{
+				messageText = $"[{messaging.Message.Attachments[0].Type}]";
+			}
+
 			await _publishEndpoint.Publish(new InstagramMessageReceived
 			{
 				SenderId = messaging.Sender.Id,
-				RecipientId = messaging.Recipient.Id, // владелец аккаунта
+				RecipientId = messaging.Recipient.Id,
 				MessageId = messaging.Message.MessageId,
+				Text = messageText, // <-- ПЕРЕДАЕМ ТЕКСТ
 				ReceivedAt = DateTimeNow,
 				AttachmentCount = messaging.Message.Attachments?.Count ?? 0
 			});

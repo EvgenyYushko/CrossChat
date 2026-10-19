@@ -6,6 +6,7 @@ public record InstagramMessageReceived
 	public string SenderId { get; set; } = string.Empty;
 	public string RecipientId { get; set; } = string.Empty;
 	public string MessageId { get; set; } = string.Empty;
+	public string? Text { get; set; }
 	public DateTime ReceivedAt { get; set; }
 
 	public int AttachmentCount  { get; set; }
