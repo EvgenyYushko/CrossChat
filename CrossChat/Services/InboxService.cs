@@ -30,13 +30,13 @@ namespace CrossChat.Services
 		}
 
 		public async Task<InboxConversationDto> GetOrCreateConversationAsync(
-	int profileId,
-	int networkType,
-	int botId,
-	string externalUserId,
-	string? username,
-	string? fullName,
-	string? avatarUrl)
+			int profileId,
+			int networkType,
+			int botId,
+			string externalUserId,
+			string? username,
+			string? fullName,
+			string? avatarUrl)
 		{
 			var conversation = await _db.InboxConversations
 				.FirstOrDefaultAsync(c => c.NetworkType == networkType && c.BotId == botId && c.ExternalUserId == externalUserId);
@@ -394,6 +394,102 @@ namespace CrossChat.Services
 			}
 
 			return totalSynced;
+		}
+
+		public async Task<bool> SaveEchoMessageAsync(
+			int networkType,
+			string businessAccountId,
+			string customerId,
+			string messageId,
+			string text)
+		{
+			try
+			{
+				// 1. Ищем настройки аккаунта
+				var settings = await _db.InstagramSettings
+					.AsNoTracking()
+					.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
+
+				if (settings == null) return false;
+
+				// 2. Ищем существующий диалог
+				var conversation = await _db.InboxConversations
+					.FirstOrDefaultAsync(c => c.NetworkType == networkType && c.BotId == settings.Id && c.ExternalUserId == customerId);
+
+				if (conversation == null) return false;
+
+				// ==================================================================================
+				// 3. ЗАЩИТА ОТ ДУБЛИРОВАНИЯ (СКЛЕЙКА С СООБЩЕНИЕМ, ОТПРАВЛЕННЫМ С САЙТА):
+				// Ищем наше собственное исходящее сообщение с таким же текстом за последние 30 секунд
+				// ==================================================================================
+				var thresholdUtc = DateTime.UtcNow.AddSeconds(-30);
+				var recentSentMessage = await _db.InboxMessages
+					.Where(m => m.ConversationId == conversation.Id &&
+								!m.IsIncoming &&
+								m.Text == text &&
+								m.CreatedAtUtc >= thresholdUtc)
+					.OrderByDescending(m => m.CreatedAtUtc)
+					.FirstOrDefaultAsync();
+
+				if (recentSentMessage != null)
+				{
+					// Это подтверждение нашего сообщения с сайта!
+					// Привязываем официальный ID от Meta и НЕ создаем дубль!
+					if (string.IsNullOrEmpty(recentSentMessage.ExternalMessageId))
+					{
+						recentSentMessage.ExternalMessageId = messageId;
+						await _db.SaveChangesAsync();
+					}
+					return false; // ВЫХОДИМ: второй раз в базу не пишем и в SignalR не шлем!
+				}
+
+				// Защита от дублей по MessageId (если вебхук прилетел повторно)
+				if (!string.IsNullOrEmpty(messageId))
+				{
+					bool alreadyExists = await _db.InboxMessages.AnyAsync(m => m.ExternalMessageId == messageId);
+					if (alreadyExists) return false;
+				}
+
+				// ==================================================================================
+				// 4. ЕСЛИ ДОШЛИ СЮДА — ЭТО РЕАЛЬНОЕ СООБЩЕНИЕ, ОТПРАВЛЕННОЕ С ТЕЛЕФОНА!
+				// ==================================================================================
+				conversation.IsHumanTakeover = true;
+				conversation.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
+
+				var message = new InboxMessage
+				{
+					ConversationId = conversation.Id,
+					ExternalMessageId = messageId,
+					Text = text,
+					IsIncoming = false,
+					IsSentByBot = false, // Отправил человек с телефона
+					IsReadByManager = true,
+					CreatedAtUtc = DateTime.UtcNow
+				};
+
+				_db.InboxMessages.Add(message);
+
+				conversation.LastMessageSnippet = text;
+				conversation.LastMessageAt = DateTime.UtcNow;
+				conversation.UnreadCount = 0;
+
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation("📱 [Echo] Зафиксирован ответ менеджера с телефона клиенту {CustomerId}: «{Text}»", customerId, text);
+
+				// Пушим в SignalR на сайт (теперь ровно 1 раз!)
+				await NotifySignalRNewMessage(conversation, message);
+
+				await _hubContext.Clients.Group($"profile_inbox_{conversation.ProfileId}")
+					.SendAsync("TakeoverStatusChanged", conversation.Id, true);
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка обработки эхо-сообщения");
+				return false;
+			}
 		}
 	}
 }

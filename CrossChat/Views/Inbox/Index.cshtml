@@ -731,18 +731,17 @@
         connection.on("ReceiveInboxMessage", (payload) => {
             console.log("⚡ [SignalR] Новое сообщение:", payload);
 
-            if (currentConversationId === payload.conversationId) {
+            // Сравниваем строго как числа Number(...) == Number(...)
+            if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
                 const stream = document.getElementById('messagesStream');
 
-                // ЗАЩИТА ОТ ДУБЛИРОВАНИЯ (ЭХА):
-                // Если это исходящее сообщение от человека и мы сами его только что напечатали
+                // Защита от дублей своего же сообщения
                 if (!payload.isIncoming && !payload.isSentByBot && stream) {
                     const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
                     if (pendingBubble && pendingBubble.dataset.text === payload.text) {
-                        // Снимаем метку ожидания, не создавая дубликат!
                         pendingBubble.removeAttribute('data-pending');
                         updateDialogSnippet(payload.conversationId, payload.lastSnippet, payload.time, payload.unreadCount);
-                        return; // ВЫХОДИМ, бабл уже на экране!
+                        return;
                     }
                 }
 
@@ -808,7 +807,7 @@
 
                 const badge = getNetworkBadge(d.networkType);
                 const avatarContent = d.avatar
-                    ? `<img src="${d.avatar}" class="chat-avatar" alt="Avatar">`
+                    ? `<img src="${d.avatar}" class="chat-avatar" alt="Avatar" referrerpolicy="no-referrer" onerror="this.onerror=null; this.outerHTML='<div class=\\'chat-avatar\\' style=\\'background:${badge.color};\\'>${getInitials(d.name)}</div>';">`
                     : `<div class="chat-avatar" style="background:${badge.color};">${getInitials(d.name)}</div>`;
 
                 item.innerHTML = `
@@ -865,10 +864,9 @@
 
                 const avatarElem = document.getElementById('activeAvatar');
                 if (data.avatar) {
-                    avatarElem.outerHTML = `<img src="${data.avatar}" id="activeAvatar" class="chat-avatar" alt="Avatar">`;
+                    avatarElem.outerHTML = `<img src="${data.avatar}" id="activeAvatar" class="chat-avatar" alt="Avatar" referrerpolicy="no-referrer" onerror="this.onerror=null; this.outerHTML='<div class=\\'chat-avatar\\' id=\\'activeAvatar\\' style=\\'background:${badge.color};\\'>${getInitials(data.name)}</div>';">`;
                 } else {
-                    avatarElem.textContent = getInitials(data.name);
-                    avatarElem.style.background = badge.color;
+                    avatarElem.outerHTML = `<div class="chat-avatar" id="activeAvatar" style="background:${badge.color};">${getInitials(data.name)}</div>`;
                 }
 
                 document.getElementById('replyingAsNotice').innerHTML = `✍️ Вы отвечаете в <strong>${badge.name}</strong>`;
@@ -1084,6 +1082,21 @@
                 }
             }
         }
+
+        // Автоматический перезаход в комнату профиля при переподключении сети/сервера:
+        connection.onreconnected(async (newConnectionId) => {
+            console.log("🔄 [SignalR] Связь восстановлена! Повторный вход в комнату профиля...", newConnectionId);
+            if (profileId > 0) {
+                try {
+                    await connection.invoke("JoinProfileRoom", profileId);
+                    console.log("✅ [SignalR] Успешно вернулись в комнату профиля!");
+                    // Освежаем список диалогов на случай, если что-то пропустили во время обрыва
+                    await loadDialogs();
+                } catch (e) {
+                    console.error("Ошибка повторного входа в комнату:", e);
+                }
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             loadDialogs();

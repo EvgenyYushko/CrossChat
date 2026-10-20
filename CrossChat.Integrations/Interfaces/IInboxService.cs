@@ -34,9 +34,16 @@ namespace CrossChat.Integrations.Interfaces
 
 		// Переключение паузы ИИ (Human Takeover)
 		Task<bool> ToggleHumanTakeoverAsync(
-			int conversationId, 
+			int conversationId,
 			bool isTakeover);
 
 		Task<int> SyncProfileConversationsAsync(int profileId);
+
+		Task<bool> SaveEchoMessageAsync(
+			int networkType,
+			string businessAccountId,
+			string customerId,
+			string messageId,
+			string text);
 	}
 }

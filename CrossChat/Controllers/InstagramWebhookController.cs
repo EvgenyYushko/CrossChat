@@ -16,13 +16,19 @@ namespace CrossChat.Controllers
 	{
 		private readonly IPublishEndpoint _publishEndpoint;
 		private readonly IUserConsoleService _consoleService;
+		private readonly IInboxService _inboxService; // <-- ВНЕДРЯЕМ ИНБОКС
 		private readonly ILogger<InstagramWebhookController> _logger;
-		private const string VerifyToken = "test"; // Задайте свой токен
+		private const string VerifyToken = "test";
 
-		public InstagramWebhookController(ILogger<InstagramWebhookController> logger, IPublishEndpoint publishEndpoint, IUserConsoleService consoleService)
+		public InstagramWebhookController(
+			ILogger<InstagramWebhookController> logger, 
+			IPublishEndpoint publishEndpoint, 
+			IUserConsoleService consoleService,
+			IInboxService inboxService) // <-- ДОБАВЛЕНО
 		{
 			_publishEndpoint = publishEndpoint;
 			_consoleService = consoleService;
+			_inboxService = inboxService;
 			_logger = logger;
 		}
 
@@ -34,7 +40,6 @@ namespace CrossChat.Controllers
 		{
 			_logger.LogInformation($"Webhook verification: mode={mode}, token={token}");
 
-			// Проверяем токен верификации
 			if (mode == "subscribe" && token == VerifyToken)
 			{
 				_logger.LogInformation("Webhook verified successfully");
@@ -55,27 +60,53 @@ namespace CrossChat.Controllers
 				using var reader = new StreamReader(Request.Body);
 				var body = await reader.ReadToEndAsync();
 
-				//_logger.LogInformation(body);
-
-				// Десериализуем
 				var payload = JsonSerializer.Deserialize<InstagramWebhookPayload>(body);
-
 				if (payload?.Entry == null) return Ok();
 
 				foreach (var entry in payload.Entry)
 				{
-					// 1. Обработка Сообщений (Direct)
+					var instagramBusinessId = entry.Id;
+
+					// ===================================================================
+					// 1. ОБРАБОТКА ДИАЛОГОВ (DIRECT)
+					// ===================================================================
 					if (entry.Messaging != null)
 					{
 						foreach (var messaging in entry.Messaging)
 						{
-							// Это простое сообщение?
-							if (messaging.Message != null && !messaging.Message.IsEcho)
+							if (messaging.Message == null) continue;
+
+							// -------------------------------------------------------------
+							// СЦЕНАРИЙ А: ЭХО-СООБЩЕНИЕ (ВЫ ОТВЕТИЛИ С ТЕЛЕФОНА ИЗ ПРИЛОЖЕНИЯ)
+							// -------------------------------------------------------------
+							if (messaging.Message.IsEcho)
 							{
-								// Проверка на ответ на сторис
+								var customerId = messaging.Recipient?.Id; // Кому ответили
+								var text = messaging.Message.Text;
+								var mid = messaging.Message.MessageId;
+
+								if (!string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(text))
+								{
+									int networkTypeInstagram = 1;
+									await _inboxService.SaveEchoMessageAsync(
+										networkTypeInstagram,
+										instagramBusinessId,
+										customerId,
+										mid,
+										text);
+								}
+								continue; // Идем дальше, для ИИ это сообщение обрабатывать НЕ НАДО!
+							}
+
+							// -------------------------------------------------------------
+							// СЦЕНАРИЙ Б: ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ КЛИЕНТА
+							// -------------------------------------------------------------
+							if (!messaging.Message.IsEcho)
+							{
+								// Ответ на сторис
 								if (messaging.Message.ReplyTo != null && !messaging.Message.ReplyTo.IsSelfReply)
 								{
-									_logger.LogInformation($"Логика ответа на реплей");
+									_logger.LogInformation("Логика ответа на реплей");
 									await PublishMessage(messaging);
 								}
 								// Обычный текст
@@ -83,12 +114,11 @@ namespace CrossChat.Controllers
 								{
 									await PublishMessage(messaging);
 								}
-								// Картинка/Видео
+								// Картинка / Видео
 								else if (messaging.Message.Attachments?.Count > 0 && !messaging.Message.Attachments.Any(t => t.Type == "template"))
 								{
 									var messageId = messaging.Message.MessageId;
 									var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
-									var InstagramBusinessId = entry.Id;
 
 									foreach (var attach in messaging.Message.Attachments)
 									{
@@ -100,7 +130,7 @@ namespace CrossChat.Controllers
 										{
 											Url = url,
 											MediaType = type,
-											IsProcessed = false // ОЧЕНЬ ВАЖНО
+											IsProcessed = false
 										};
 
 										lock (mediaList)
@@ -108,67 +138,52 @@ namespace CrossChat.Controllers
 											mediaList.Add(emptyMedia);
 										}
 
-										// КИДАЕМ В ОЧЕРЕДЬ
 										await _publishEndpoint.Publish(new ProcessMediaCommand
 										{
 											MessageId = messageId,
 											Url = url,
 											MediaType = type,
-											SenderId = messaging.Sender.Id,        // Передаем ID отправителя
-											RecipientId = messaging.Recipient.Id   // Передаем ID бизнес-аккаунта
+											SenderId = messaging.Sender.Id,
+											RecipientId = messaging.Recipient.Id
 										});
 									}
 
 									await PublishMessage(messaging);
 								}
 							}
-							// Это реакция?
 							else if (messaging.Reaction != null)
 							{
 								_logger.LogInformation($"Пользователь поставил реакцию {messaging.Reaction.Emoji}");
 							}
-							// Это удаление?
-							else if (messaging.Message != null && messaging.Message.IsDeleted)
+							else if (messaging.Message.IsDeleted)
 							{
 								_logger.LogInformation("Пользователь удалил сообщение");
 							}
 						}
 					}
 
-					// 2. Обработка Комментариев (Changes)
+					// ===================================================================
+					// 2. ОБРАБОТКА КОММЕНТАРИЕВ (CHANGES)
+					// ===================================================================
 					if (entry.Changes != null)
 					{
 						foreach (var change in entry.Changes)
 						{
 							if (change.Field == "comments")
 							{
-								var InstagramBusinessId = entry.Id;
 								var value = change.Value;
-
 								_logger.LogInformation($"[Webhook] Новый коммент от {value.From?.Username}: {value.Text}");
 
-								// 1. Защита: не отвечаем самим себе
-								if (value.From?.Id == InstagramBusinessId)
-								{
-									_logger.LogInformation("Ignoring comment from self (bot)");
-									continue; // ИСПРАВЛЕНО: continue вместо return Ok()
-								}
+								if (value.From?.Id == instagramBusinessId) continue;
+								if (value.ParentId is not null) continue;
 
-								// 2. Защита: не отвечаем на вложенные комментарии (ответы на реплаи)
-								if (value.ParentId is not null)
-								{
-									_logger.LogInformation("Ignoring nested reply (has ParentId)");
-									continue; // ИСПРАВЛЕНО: continue вместо return Ok()
-								}
-
-								// Отправляем в RabbitMQ!
 								await _publishEndpoint.Publish(new InstagramCommentReceived
 								{
-									BusinessAccountId = InstagramBusinessId,
+									BusinessAccountId = instagramBusinessId,
 									CommentId = value.Id,
 									Text = value.Text ?? "",
 									Username = value.From?.Username ?? "user",
-									MediaId = value.Media?.Id // Передаем ID поста!
+									MediaId = value.Media?.Id
 								});
 							}
 						}
@@ -186,7 +201,6 @@ namespace CrossChat.Controllers
 
 		private async Task PublishMessage(InstagramMessaging messaging)
 		{
-			// Достаем текст или пометку о медиа
 			string? messageText = messaging.Message?.Text;
 			if (string.IsNullOrEmpty(messageText) && messaging.Message?.Attachments?.Count > 0)
 			{
@@ -198,7 +212,7 @@ namespace CrossChat.Controllers
 				SenderId = messaging.Sender.Id,
 				RecipientId = messaging.Recipient.Id,
 				MessageId = messaging.Message.MessageId,
-				Text = messageText, // <-- ПЕРЕДАЕМ ТЕКСТ
+				Text = messageText,
 				ReceivedAt = DateTimeNow,
 				AttachmentCount = messaging.Message.Attachments?.Count ?? 0
 			});
