@@ -160,19 +160,19 @@ namespace CrossChat.Controllers
 			return Ok(new { success = true, count = syncedCount });
 		}
 
-		// 6. Отправка реакции (лайк по дабл-клику)
-		[HttpPost("react")]
-		public async Task<IActionResult> SendReaction([FromBody] SendReactionDto dto)
+		// 6. Тоггл реакции (поставить / снять лайк)
+		[HttpPost("toggle-reaction")]
+		public async Task<IActionResult> ToggleReaction([FromBody] ToggleReactionDto dto)
 		{
-			bool success = await _inboxService.SendMessageReactionAsync(dto.MessageId, dto.Reaction ?? "love");
-			return Ok(new { success });
+			var (success, newReaction) = await _inboxService.ToggleMessageReactionAsync(dto.MessageId);
+			return Ok(new { success, reaction = newReaction });
 		}
+
 	}
 
-	public class SendReactionDto
+	public class ToggleReactionDto
 	{
 		public int MessageId { get; set; }
-		public string? Reaction { get; set; } = "love";
 	}
 
 	public class SendMessageDto

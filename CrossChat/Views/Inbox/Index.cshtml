@@ -916,6 +916,28 @@
             updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
         });
 
+        // СЛУШАТЕЛЬ ОБНОВЛЕНИЯ РЕАКЦИЙ В РЕАЛЬНОМ ВРЕМЕНИ
+        connection.on("UpdateMessageReaction", (conversationId, messageId, reaction) => {
+            console.log("⚡ [SignalR] Обновление реакции:", { conversationId, messageId, reaction });
+
+            if (currentConversationId && Number(currentConversationId) === Number(conversationId)) {
+                const bubble = document.querySelector(`.msg-bubble[data-msg-id="${messageId}"]`);
+                if (bubble) {
+                    let badge = bubble.querySelector('.reaction-badge');
+                    if (reaction) {
+                        if (!badge) {
+                            badge = document.createElement('div');
+                            badge.className = 'reaction-badge';
+                            bubble.appendChild(badge);
+                        }
+                        badge.textContent = reaction;
+                    } else {
+                        if (badge) badge.remove(); // Сняли реакцию
+                    }
+                }
+            }
+        });
+
         connection.on("TakeoverStatusChanged", (conversationId, isTakeover) => {
             if (currentConversationId === conversationId) {
                 updateTakeoverUi(isTakeover);
@@ -1302,41 +1324,44 @@
             }
         });
 
-        // ОБРАБОТКА ДВОЙНОГО КЛИКА (ЛАЙК СООБЩЕНИЯ)
+        // ОБРАБОТКА ДВОЙНОГО КЛИКА (ПОСТАВИТЬ / СНЯТЬ ЛАЙК)
         async function handleMessageDoubleClick(bubbleElement, messageId) {
             if (!messageId) return;
 
-            // 1. АНИМИРУЕМ ВСПЛЫВАЮЩЕЕ СЕРДЕЧКО В ЦЕНТРЕ БАБЛА
-            const heart = document.createElement('div');
-            heart.className = 'heart-pop';
-            heart.textContent = '❤️';
-            bubbleElement.appendChild(heart);
-
-            // Удаляем элемент анимации через 0.7 сек
-            setTimeout(() => heart.remove(), 700);
-
-            // 2. ЗАКРЕПЛЯЕМ МАЛЕНЬКИЙ БЕЙДЖ СЕРДЕЧКА В УГЛУ СООБЩЕНИЯ (если его еще нет)
             let badge = bubbleElement.querySelector('.reaction-badge');
-            if (!badge) {
+            const isCurrentlyLiked = !!badge;
+
+            // ОПТИМИСТИЧНЫЙ UI:
+            if (isCurrentlyLiked) {
+                // Если лайк уже стоял — сразу убираем бейдж
+                badge.remove();
+            } else {
+                // Если лайка не было — запускаем красивую анимацию всплывающего сердца
+                const heart = document.createElement('div');
+                heart.className = 'heart-pop';
+                heart.textContent = '❤️';
+                bubbleElement.appendChild(heart);
+                setTimeout(() => heart.remove(), 700);
+
+                // Прикрепляем бейдж
                 badge = document.createElement('div');
                 badge.className = 'reaction-badge';
                 badge.textContent = '❤️';
                 bubbleElement.appendChild(badge);
             }
 
-            // 3. ОТПРАВЛЯЕМ ЗАПРОС В ИНСТАГРАМ API
             try {
-                const res = await fetch('/inbox/react', {
+                const res = await fetch('/inbox/toggle-reaction', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messageId: messageId, reaction: 'love' })
+                    body: JSON.stringify({ messageId: messageId })
                 });
 
                 if (!res.ok) {
-                    console.warn("Не удалось отправить реакцию в Instagram API");
+                    console.warn("Не удалось синхронизировать реакцию с Meta API");
                 }
             } catch (err) {
-                console.error("Ошибка сети при отправке реакции:", err);
+                console.error("Ошибка сети при переключении реакции:", err);
             }
         }
 

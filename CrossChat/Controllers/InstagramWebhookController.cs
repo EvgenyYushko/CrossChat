@@ -21,8 +21,8 @@ namespace CrossChat.Controllers
 		private const string VerifyToken = "test";
 
 		public InstagramWebhookController(
-			ILogger<InstagramWebhookController> logger, 
-			IPublishEndpoint publishEndpoint, 
+			ILogger<InstagramWebhookController> logger,
+			IPublishEndpoint publishEndpoint,
 			IUserConsoleService consoleService,
 			IInboxService inboxService) // <-- ДОБАВЛЕНО
 		{
@@ -74,14 +74,37 @@ namespace CrossChat.Controllers
 					{
 						foreach (var messaging in entry.Messaging)
 						{
+							// ===================================================================
+							// 1. РЕАКЦИИ (У НИХ messaging.Message ВСЕГДА NULL!)
+							// ===================================================================
+							if (messaging.Reaction != null)
+							{
+								var mid = messaging.Reaction.MessageId; // ID сообщения
+								var emoji = messaging.Reaction.Emoji;
+								var action = messaging.Reaction.Action; // "react" или "unreact"
+
+								_logger.LogInformation("❤️ [Instagram Reaction Webhook] Действие: {Action}, Emoji: {Emoji}, Mid: {Mid}", action, emoji, mid);
+
+								if (!string.IsNullOrEmpty(mid))
+								{
+									await _inboxService.HandleReactionWebhookAsync(
+										instagramBusinessId,
+										mid,
+										emoji,
+										action);
+								}
+								continue; // Переходим к следующему объекту
+							}
+
+							// Если нет ни сообщения, ни реакции — пропускаем
 							if (messaging.Message == null) continue;
 
-							// -------------------------------------------------------------
-							// СЦЕНАРИЙ А: ЭХО-СООБЩЕНИЕ (ВЫ ОТВЕТИЛИ С ТЕЛЕФОНА ИЗ ПРИЛОЖЕНИЯ)
-							// -------------------------------------------------------------
+							// ===================================================================
+							// 2. ИСХОДЯЩИЕ ЭХО-СООБЩЕНИЯ (ОТВЕТ С ТЕЛЕФОНА)
+							// ===================================================================
 							if (messaging.Message.IsEcho)
 							{
-								var customerId = messaging.Recipient?.Id; // Кому ответили
+								var customerId = messaging.Recipient?.Id;
 								var text = messaging.Message.Text;
 								var mid = messaging.Message.MessageId;
 
@@ -95,65 +118,55 @@ namespace CrossChat.Controllers
 										mid,
 										text);
 								}
-								continue; // Идем дальше, для ИИ это сообщение обрабатывать НЕ НАДО!
+								continue;
 							}
 
-							// -------------------------------------------------------------
-							// СЦЕНАРИЙ Б: ВХОДЯЩЕЕ СООБЩЕНИЕ ОТ КЛИЕНТА
-							// -------------------------------------------------------------
-							if (!messaging.Message.IsEcho)
+							// ===================================================================
+							// 3. ВХОДЯЩИЕ СООБЩЕНИЯ ОТ КЛИЕНТА
+							// ===================================================================
+							if (messaging.Message.ReplyTo != null && !messaging.Message.ReplyTo.IsSelfReply)
 							{
-								// Ответ на сторис
-								if (messaging.Message.ReplyTo != null && !messaging.Message.ReplyTo.IsSelfReply)
-								{
-									_logger.LogInformation("Логика ответа на реплей");
-									await PublishMessage(messaging);
-								}
-								// Обычный текст
-								else if (!string.IsNullOrEmpty(messaging.Message.Text) || messaging.Message.IsUnsupported)
-								{
-									await PublishMessage(messaging);
-								}
-								// Картинка / Видео
-								else if (messaging.Message.Attachments?.Count > 0 && !messaging.Message.Attachments.Any(t => t.Type == "template"))
-								{
-									var messageId = messaging.Message.MessageId;
-									var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
+								_logger.LogInformation("Логика ответа на реплей");
+								await PublishMessage(messaging);
+							}
+							else if (!string.IsNullOrEmpty(messaging.Message.Text) || messaging.Message.IsUnsupported)
+							{
+								await PublishMessage(messaging);
+							}
+							else if (messaging.Message.Attachments?.Count > 0 && !messaging.Message.Attachments.Any(t => t.Type == "template"))
+							{
+								var messageId = messaging.Message.MessageId;
+								var mediaList = MediaMessageStorage.Storage.GetOrAdd(messageId, _ => new List<MediaDataEntry>());
 
-									foreach (var attach in messaging.Message.Attachments)
+								foreach (var attach in messaging.Message.Attachments)
+								{
+									var type = attach.Type;
+									var url = attach.Payload?.Url;
+									if (string.IsNullOrEmpty(url)) continue;
+
+									var emptyMedia = new MediaDataEntry
 									{
-										var type = attach.Type;
-										var url = attach.Payload?.Url;
-										if (string.IsNullOrEmpty(url)) continue;
+										Url = url,
+										MediaType = type,
+										IsProcessed = false
+									};
 
-										var emptyMedia = new MediaDataEntry
-										{
-											Url = url,
-											MediaType = type,
-											IsProcessed = false
-										};
-
-										lock (mediaList)
-										{
-											mediaList.Add(emptyMedia);
-										}
-
-										await _publishEndpoint.Publish(new ProcessMediaCommand
-										{
-											MessageId = messageId,
-											Url = url,
-											MediaType = type,
-											SenderId = messaging.Sender.Id,
-											RecipientId = messaging.Recipient.Id
-										});
+									lock (mediaList)
+									{
+										mediaList.Add(emptyMedia);
 									}
 
-									await PublishMessage(messaging);
+									await _publishEndpoint.Publish(new ProcessMediaCommand
+									{
+										MessageId = messageId,
+										Url = url,
+										MediaType = type,
+										SenderId = messaging.Sender.Id,
+										RecipientId = messaging.Recipient.Id
+									});
 								}
-							}
-							else if (messaging.Reaction != null)
-							{
-								_logger.LogInformation($"Пользователь поставил реакцию {messaging.Reaction.Emoji}");
+
+								await PublishMessage(messaging);
 							}
 							else if (messaging.Message.IsDeleted)
 							{

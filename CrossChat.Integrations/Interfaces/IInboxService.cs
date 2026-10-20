@@ -47,5 +47,11 @@ namespace CrossChat.Integrations.Interfaces
 			string text);
 
 		Task<bool> SendMessageReactionAsync(int messageId, string reaction = "love");
+
+		// Переключение реакции (поставить или снять лайк)
+		Task<(bool Success, string? NewReaction)> ToggleMessageReactionAsync(int messageId);
+
+		// Обработка реакции из вебхука (когда лайк поставили/сняли на телефоне)
+		Task<bool> HandleReactionWebhookAsync(string businessAccountId, string externalMessageId, string? emoji, string? action);
 	}
 }

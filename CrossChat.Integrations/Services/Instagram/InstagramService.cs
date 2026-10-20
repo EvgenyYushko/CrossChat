@@ -187,20 +187,39 @@ public partial class InstagramService : IInstagramService
 		return reactions[random.Next(reactions.Length)];
 	}
 
-	public async Task<bool> SendReactionAsync(string recipientId, string messageId, string reaction, string accessToken)
+	public async Task<bool> SendReactionAsync(string recipientId, string messageId, string? reaction, string accessToken)
 	{
 		var url = $"{ApiVersion}/me/messages?access_token={accessToken}";
 
-		var payload = new
+		// ОФИЦИАЛЬНЫЙ СИНТАКСИС META ДЛЯ СНЯТИЯ И ПОСТАНОВКИ РЕАКЦИЙ:
+		object payload;
+		if (string.IsNullOrEmpty(reaction) || reaction == "unreact")
 		{
-			recipient = new { id = recipientId },
-			sender_action = "react",
+			// СНЯТИЕ РЕАКЦИИ: action = "unreact", без поля reaction!
 			payload = new
 			{
-				message_id = messageId,
-				reaction = reaction
-			}
-		};
+				recipient = new { id = recipientId },
+				sender_action = "unreact",
+				payload = new
+				{
+					message_id = messageId
+				}
+			};
+		}
+		else
+		{
+			// УСТАНОВКА РЕАКЦИИ: action = "react", reaction = "love" или эмодзи
+			payload = new
+			{
+				recipient = new { id = recipientId },
+				sender_action = "react",
+				payload = new
+				{
+					message_id = messageId,
+					reaction = reaction
+				}
+			};
+		}
 
 		var json = JsonSerializer.Serialize(payload);
 		var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -208,19 +227,18 @@ public partial class InstagramService : IInstagramService
 		try
 		{
 			var response = await _httpClient.PostAsync(url, content);
-
 			if (response.IsSuccessStatusCode)
 			{
 				return true;
 			}
 
 			var error = await response.Content.ReadAsStringAsync();
-			Console.WriteLine($"[Reaction Error] Не удалось отправить реакцию: {error}");
+			_logger.LogWarning("[Instagram Reaction] Ошибка отправки реакции (HTTP {Code}): {Err}", response.StatusCode, error);
 			return false;
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"[Reaction Error] Ошибка: {ex.Message}");
+			_logger.LogError(ex, "[Instagram Reaction] Исключение при отправке реакции");
 			return false;
 		}
 	}

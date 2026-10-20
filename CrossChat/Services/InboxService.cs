@@ -554,5 +554,101 @@ namespace CrossChat.Services
 				return false;
 			}
 		}
+
+		// 1. ПЕРЕКЛЮЧЕНИЕ РЕАКЦИИ С САЙТА (ТОГГЛ)
+		public async Task<(bool Success, string? NewReaction)> ToggleMessageReactionAsync(int messageId)
+		{
+			try
+			{
+				var msg = await _db.InboxMessages
+					.Include(m => m.Conversation)
+					.FirstOrDefaultAsync(m => m.Id == messageId);
+
+				if (msg == null || string.IsNullOrEmpty(msg.ExternalMessageId))
+					return (false, null);
+
+				var conv = msg.Conversation;
+				if (conv.NetworkType != (int)NetworkType.Instagram)
+					return (false, null);
+
+				var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
+				if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+					return (false, null);
+
+				// Если реакция уже стояла — мы её СНИМАЕМ (null), иначе СТАВИМ ("❤️")
+				bool isAlreadyLiked = !string.IsNullOrEmpty(msg.Reaction);
+				string? newReaction = isAlreadyLiked ? null : "❤️";
+				string apiReactionParam = isAlreadyLiked ? "" : "love";
+
+				// Отправляем в Instagram API
+				bool success = await _instaService.SendReactionAsync(
+					conv.ExternalUserId,
+					msg.ExternalMessageId,
+					apiReactionParam,
+					settings.AccessToken);
+
+				if (success)
+				{
+					// Сохраняем новое состояние в БД
+					msg.Reaction = newReaction;
+					await _db.SaveChangesAsync();
+
+					// Уведомляем все вкладки через SignalR
+					await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+						.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, newReaction);
+
+					_logger.LogInformation("❤️ [Reaction Toggle] Реакция для {MsgId}: {Status}", msg.Id, newReaction ?? "СНЯТА");
+					return (true, newReaction);
+				}
+
+				return (false, msg.Reaction);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка переключения реакции для сообщения {Id}", messageId);
+				return (false, null);
+			}
+		}
+
+		// 2. ОБРАБОТКА РЕАКЦИИ ИЗ ВЕБХУКА (С ТЕЛЕФОНА)
+		public async Task<bool> HandleReactionWebhookAsync(string businessAccountId, string externalMessageId, string? emoji, string? action)
+		{
+			try
+			{
+				// Ищем сообщение по ExternalMessageId от Meta
+				var msg = await _db.InboxMessages
+					.Include(m => m.Conversation)
+					.FirstOrDefaultAsync(m => m.ExternalMessageId == externalMessageId);
+
+				if (msg == null) return false;
+
+				// Meta присылает action: "react" или "unreact"
+				string? updatedReaction = null;
+				if (action == "react")
+				{
+					updatedReaction = !string.IsNullOrEmpty(emoji) ? emoji : "❤️";
+				}
+				else if (action == "unreact")
+				{
+					updatedReaction = null; // Сняли лайк
+				}
+
+				msg.Reaction = updatedReaction;
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation("📱 [Reaction Webhook] Реакция с телефона синхронизирована для msg {Id}: {React}", msg.Id, updatedReaction ?? "СНЯТА");
+
+				// Моментально пушим в браузер через SignalR!
+				await _hubContext.Clients.Group($"profile_inbox_{msg.Conversation.ProfileId}")
+					.SendAsync("UpdateMessageReaction", msg.ConversationId, msg.Id, updatedReaction);
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка синхронизации реакции из вебхука");
+				return false;
+			}
+		}
 	}
 }
