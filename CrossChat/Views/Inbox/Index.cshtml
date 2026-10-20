@@ -647,7 +647,26 @@
             opacity: 1;
             transform: scale(1);
         }
+        }
 
+        /* КРАСИВАЯ КНОПКА ДЛЯ МОДАЛКИ 24 ЧАСОВ */
+        .btn-modal-action {
+            width: 100% !important;
+            padding: 12px 20px !important;
+            background: var(--accent-color, #6366f1) !important;
+            color: #ffffff !important;
+            border: none !important;
+            border-radius: 12px !important;
+            font-weight: 700 !important;
+            font-size: 0.95rem !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+        }
+
+        .btn-modal-action:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
         }
     </style>
 }
@@ -748,7 +767,7 @@
                     </div>
 
                     <div class="input-row">
-                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите ответ клиенту (Enter для отправки)..." onkeydown="handleInputKeydown(event)"></textarea>
+                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите ответ клиенту..." onkeydown="handleInputKeydown(event)"></textarea>
                         <button type="button" class="btn-send" onclick="sendManualMessage()">➤</button>
                     </div>
                 </div>
@@ -759,22 +778,27 @@
     </div>
 </div>
 
-<!-- МОДАЛКА: 24-ЧАСОВОЕ ОКНО META ЗАКРЫТО -->
+<!-- МОДАЛКА: 24-ЧАСОВОЕ ОКНО META ЗАКРЫТО (ИСПРАВЛЕННАЯ) -->
 <div id="metaWindowModalOverlay" class="meta-window-overlay" onclick="closeMetaWindowModal()">
     <div class="meta-window-modal" onclick="event.stopPropagation()">
-        <div style="font-size: 3rem; margin-bottom: 0.5rem;">⏳</div>
-        <h3 style="margin: 0 0 10px 0; color: #fbbf24; font-size: 1.25rem; font-weight: 800;">24-часовое окно ответа закрыто</h3>
+        <div style="font-size: 3.5rem; margin-bottom: 0.5rem; line-height: 1;">⏳</div>
+        <h3 style="margin: 0 0 10px 0; color: #d97706; font-size: 1.3rem; font-weight: 800;">
+            24-часовое окно ответа закрыто
+        </h3>
 
-        <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
-            Политика безопасности Meta запрещает отправку сообщений через сторонние сервисы, если с момента последнего сообщения клиента прошло больше 24 часов [^developers_facebook_instagram_messaging_window].
+        <p style="color: var(--text-secondary, #64748b); font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.25rem;">
+            Политика безопасности Meta запрещает отправку сообщений через сторонние сервисы, если с момента последнего сообщения клиента прошло больше 24 часов.
         </p>
 
-        <div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 14px; padding: 14px; text-align: left; font-size: 0.85rem; color: #fde68a; line-height: 1.45; margin-bottom: 1.5rem;">
-            📱 <strong>Как отправить ответ прямо сейчас:</strong><br>
-            Откройте официальное приложение <strong>Instagram</strong> на телефоне и напишите клиенту оттуда напрямую. На мобильное приложение это ограничение не действует, а ваш ответ сразу отобразится здесь в чате!
+        <!-- КОНТРАСТНЫЙ ЧИТАЕМЫЙ БЛОК -->
+        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 14px; padding: 14px; text-align: left; font-size: 0.85rem; color: var(--text-main, #1e293b); line-height: 1.5; margin-bottom: 1.5rem;">
+            <div style="color: #d97706; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <span>📱</span> Как отправить ответ прямо сейчас:
+            </div>
+            Откройте официальное приложение <strong>Instagram</strong> на телефоне и отправьте ответ оттуда напрямую. На мобильное приложение это ограничение не действует, а ваш ответ сразу отобразится здесь в чате!
         </div>
 
-        <button type="button" class="btn btn-primary" style="margin: 0; width: 100%;" onclick="closeMetaWindowModal()">
+        <button type="button" class="btn-modal-action" onclick="closeMetaWindowModal()">
             Понятно
         </button>
     </div>
