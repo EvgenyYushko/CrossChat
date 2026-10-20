@@ -894,17 +894,21 @@
             if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
                 const stream = document.getElementById('messagesStream');
 
-                // Защита от дублей своего же сообщения
+                // =========================================================================
+                // ЗАЩИТА: ЕСЛИ ЭТО СООБЩЕНИЕ МЫ САМИ ТОЛЬКО ЧТО ОТПРАВИЛИ С ЭТОЙ ВКЛАДКИ
+                // =========================================================================
                 if (!payload.isIncoming && !payload.isSentByBot && stream) {
-                    const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
+                    const pendingBubble = stream.querySelector(`.msg-outgoing-human[data-pending="true"]`);
                     if (pendingBubble && pendingBubble.dataset.text === payload.text) {
+                        // Снимаем метку ожидания, привязываем ID и ВЫХОДИМ (дубль не создается!)
                         pendingBubble.removeAttribute('data-pending');
+                        pendingBubble.dataset.msgId = payload.messageId;
                         updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
-                        return;
+                        return; // <-- ВТОРОЙ БАБЛ НЕ РИСУЕТСЯ!
                     }
                 }
 
-                // ПРАВИЛЬНЫЙ ПОРЯДОК: messageId, text, isIncoming, isSentByBot, time, reaction
+                // Вставляем бабл для входящих от клиента, ответов бота или ответов с другого устройства
                 appendMessageBubble(payload.messageId, payload.text, payload.isIncoming, payload.isSentByBot, localTime, null);
                 scrollChatToBottom();
             }
@@ -1053,7 +1057,7 @@
             }
         }
 
-        // 4. РУЧНАЯ ОТПРАВКА С ЗАЩИТОЙ И КРАСИВОЙ ОБРАБОТКОЙ ОШИБОК
+        // 4. РУЧНАЯ ОТПРАВКА С ЗАЩИТОЙ ОТ ДУБЛЕЙ
         async function sendManualMessage() {
             if (!currentConversationId) return;
 
@@ -1061,13 +1065,19 @@
             const text = input.value.trim();
             if (!text) return;
 
-            // Временно очищаем поле ввода
             input.value = '';
 
-            // Оптимистично отображаем бабл
+            // Мгновенно рисуем бабл с меткой ожидания
+            const stream = document.getElementById('messagesStream');
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            appendMessageBubble(null, text, false, false, timeStr, true);
+
+            const tempBubble = document.createElement('div');
+            tempBubble.className = 'msg-bubble msg-outgoing-human';
+            tempBubble.setAttribute('data-pending', 'true');
+            tempBubble.dataset.text = text;
+            tempBubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
+            stream.appendChild(tempBubble);
             scrollChatToBottom();
 
             updateTakeoverUi(true);
@@ -1082,15 +1092,10 @@
                 if (!res.ok) {
                     const err = await res.text();
 
-                    // 1. Убираем повисший неотправленный бабл из ленты
-                    const stream = document.getElementById('messagesStream');
-                    const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
-                    if (pendingBubble) pendingBubble.remove();
-
-                    // 2. ВОЗВРАЩАЕМ ТЕКСТ ОБРАТНО В ПОЛЕ ВВОДА (чтобы менеджер не потерял напечатанное!)
+                    // Если ошибка — удаляем бабл и возвращаем текст в поле ввода
+                    tempBubble.remove();
                     input.value = text;
 
-                    // 3. КРАСИВАЯ ОБРАБОТКА ОШИБКИ
                     if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022")) {
                         openMetaWindowModal();
                     } else {
@@ -1098,10 +1103,7 @@
                     }
                 }
             } catch (err) {
-                // При ошибке сети также возвращаем текст
-                const stream = document.getElementById('messagesStream');
-                const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
-                if (pendingBubble) pendingBubble.remove();
+                tempBubble.remove();
                 input.value = text;
                 alert("Ошибка сети при отправке сообщения");
             }
