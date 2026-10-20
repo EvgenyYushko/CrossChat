@@ -188,52 +188,62 @@ namespace CrossChat.Services
 			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == conversationId);
 			if (conv == null) return (false, "Диалог не найден");
 
+			// 1. АВТОМАТИЧЕСКИЙ ПЕРЕХВАТ (HUMAN TAKEOVER):
+			conv.IsHumanTakeover = true;
+			conv.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
+
+			// ==================================================================================
+			// 2. СОХРАНЯЕМ В БД СРАЗУ (ДО ОТПРАВКИ В СЕТЬ!)
+			// Это исключает гонку потоков: когда через 200мс прилетит вебхук-эхо от Meta,
+			// оно уже увидит это сообщение в базе данных и НЕ создаст дубликат!
+			// ==================================================================================
+			var message = new InboxMessage
+			{
+				ConversationId = conv.Id,
+				Text = text,
+				IsIncoming = false,
+				IsSentByBot = false, // Отправил человек (менеджер)
+				IsReadByManager = true,
+				CreatedAtUtc = DateTime.UtcNow
+			};
+
+			_db.InboxMessages.Add(message);
+			conv.LastMessageSnippet = text;
+			conv.LastMessageAt = DateTime.UtcNow;
+			await _db.SaveChangesAsync();
+
 			try
 			{
-				// Включаем Human Takeover на 2 часа
-				conv.IsHumanTakeover = true;
-				conv.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
-
-				// Отправка в Instagram
+				// 3. Отправляем в Instagram
 				if ((NetworkType)conv.NetworkType == NetworkType.Instagram)
 				{
 					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
 					if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
-						return (false, "Настройки Instagram бота не найдены");
+						throw new Exception("Настройки Instagram бота не найдены");
 
 					await _instaService.SendMessageAsync(conv.ExternalUserId, text, settings.AccessToken);
 				}
 
-				var message = new InboxMessage
-				{
-					ConversationId = conv.Id,
-					Text = text,
-					IsIncoming = false,
-					IsSentByBot = false, // Отправил человек
-					IsReadByManager = true,
-					CreatedAtUtc = DateTime.UtcNow
-				};
-
-				_db.InboxMessages.Add(message);
-				conv.LastMessageSnippet = text;
-				conv.LastMessageAt = DateTime.UtcNow;
-
-				await _db.SaveChangesAsync();
-
+				// 4. Успешно отправлено — пушим в SignalR ровно 1 раз
 				await NotifySignalRNewMessage(conv, message);
 				return (true, null);
 			}
 			catch (Exception ex)
 			{
+				// 5. ЕСЛИ ОТПРАВКА СОРВАЛАСЬ (например, 24-часовое окно закрыто) —
+				// удаляем черновик из базы, чтобы не засорять переписку неотправленным сообщением
+				_db.InboxMessages.Remove(message);
+				await _db.SaveChangesAsync();
+
 				_logger.LogError(ex, "Ошибка при ручной отправке ответа в инбоксе");
 
-				// Распознаем 24-часовое окно Meta
+				string userFriendlyMessage = ex.Message;
 				if (ex.Message.Contains("outside of allowed window") || ex.Message.Contains("2534022"))
 				{
-					return (false, "OUTSIDE_24H_WINDOW");
+					userFriendlyMessage = "OUTSIDE_24H_WINDOW";
 				}
 
-				return (false, ex.Message);
+				return (false, userFriendlyMessage);
 			}
 		}
 
