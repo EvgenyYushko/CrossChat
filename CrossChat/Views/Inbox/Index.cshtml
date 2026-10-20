@@ -821,6 +821,89 @@
                 opacity: 1;
             }
         }
+
+        /* === КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ СООБЩЕНИЙ (КАК В TELEGRAM) === */
+        .voice-player-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            min-width: 220px;
+            max-width: 260px;
+            box-sizing: border-box;
+            user-select: none;
+            margin-bottom: 4px;
+        }
+
+        /* Круглая кнопка Play / Pause */
+        .voice-play-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #2AABEE;
+            color: #ffffff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-size: 0.9rem;
+            transition: transform 0.15s ease, background 0.2s ease;
+            padding-left: 2px; /* Оптическая центровка треугольника Play */
+        }
+
+            .voice-play-btn:active {
+                transform: scale(0.92);
+            }
+
+            .voice-play-btn.playing {
+                background: #f43f5e;
+                padding-left: 0;
+            }
+
+        /* Контейнер дорожки и таймера */
+        .voice-track-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            cursor: pointer;
+        }
+
+        /* Звуковая волна из вертикальных полосок */
+        .voice-bars-wrap {
+            display: flex;
+            align-items: center;
+            gap: 2.5px;
+            height: 20px;
+            width: 100%;
+        }
+
+        .voice-bar {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 2px;
+            transition: background 0.15s ease;
+            pointer-events: none;
+        }
+
+            .voice-bar.active {
+                background: #38bdf8; /* Неоново-голубой цвет прослушанной части */
+            }
+
+        /* Таймер */
+        .voice-time-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
     </style>
 }
 
@@ -1331,9 +1414,25 @@
                         </div>
                     `;
                 } else if (cleanType.includes('audio') || cleanType === 'voice') {
+                // Генерируем уникальный ID для каждого плеера
+                const playerId = 'vp_' + Math.random().toString(36).substring(2, 9);
+
                     mediaHtml = `
-                        <div class="msg-media-container">
-                            <audio src="${srcUrl}" class="msg-media-audio" controls
+                        <div class="voice-player-card" id="${playerId}">
+                            <button type="button" class="voice-play-btn" onclick="toggleVoicePlay('${playerId}')">▶</button>
+                            <div class="voice-track-box" onclick="seekVoice(event, '${playerId}')">
+                                <div class="voice-bars-wrap">
+                                    ${generateWaveformBars()}
+                                </div>
+                                <div class="voice-time-row">
+                                    <span class="voice-current-time">0:00</span>
+                                    <span class="voice-total-time">🎙️ Голосовое</span>
+                                </div>
+                            </div>
+                            <audio src="${srcUrl}" preload="metadata" style="display:none;"
+                                   onloadedmetadata="initVoiceDuration('${playerId}', this)"
+                                   ontimeupdate="updateVoiceProgress('${playerId}', this)"
+                                   onended="resetVoicePlayer('${playerId}', this)"
                                    onerror="handleMediaExpired(this, '🎙️ Голосовое сообщение')"></audio>
                         </div>
                     `;
@@ -1537,6 +1636,113 @@
             } catch (err) {
                 console.error("Ошибка сети при переключении реакции:", err);
             }
+        }
+
+        // 1. Генерация 24 полосок разной высоты для звуковой волны
+        function generateWaveformBars() {
+            const heights = [4, 8, 14, 18, 12, 6, 16, 20, 10, 6, 12, 18, 8, 14, 10, 16, 8, 4, 12, 6, 10, 14, 8, 4];
+            return heights.map(h => `<span class="voice-bar" style="height:${h}px;"></span>`).join('');
+        }
+
+        // 2. Старт / Пауза воспроизведения
+        function toggleVoicePlay(playerId) {
+            const card = document.getElementById(playerId);
+            if (!card) return;
+
+            const audio = card.querySelector('audio');
+            const btn = card.querySelector('.voice-play-btn');
+
+            // Если этот плеер уже играет — ставим на паузу
+            if (!audio.paused) {
+                audio.pause();
+                btn.textContent = '▶';
+                btn.classList.remove('playing');
+                return;
+            }
+
+            // Останавливаем все другие играющие голосовые (чтобы не играли хором!)
+            document.querySelectorAll('.voice-player-card').forEach(c => {
+                if (c.id !== playerId) {
+                    const otherAudio = c.querySelector('audio');
+                    const otherBtn = c.querySelector('.voice-play-btn');
+                    if (otherAudio && !otherAudio.paused) {
+                        otherAudio.pause();
+                        otherBtn.textContent = '▶';
+                        otherBtn.classList.remove('playing');
+                    }
+                }
+            });
+
+            audio.play();
+            btn.textContent = '⏸';
+            btn.classList.add('playing');
+        }
+
+        // 3. Обновление прогресса и подсветка полосок волны
+        function updateVoiceProgress(playerId, audio) {
+            const card = document.getElementById(playerId);
+            if (!card || !audio.duration) return;
+
+            const currentSpan = card.querySelector('.voice-current-time');
+            currentSpan.textContent = formatAudioSeconds(audio.currentTime);
+
+            // Подсвечиваем полоски
+            const bars = card.querySelectorAll('.voice-bar');
+            const progressPercent = audio.currentTime / audio.duration;
+            const activeBarsCount = Math.floor(progressPercent * bars.length);
+
+            bars.forEach((bar, index) => {
+                if (index <= activeBarsCount) {
+                    bar.classList.add('active');
+                } else {
+                    bar.classList.remove('active');
+                }
+            });
+        }
+
+        // 4. Инициализация длительности аудиозаписи
+        function initVoiceDuration(playerId, audio) {
+            const card = document.getElementById(playerId);
+            if (!card) return;
+            if (audio.duration && isFinite(audio.duration)) {
+                card.querySelector('.voice-total-time').textContent = formatAudioSeconds(audio.duration);
+            }
+        }
+
+        // 5. Окончание прослушивания
+        function resetVoicePlayer(playerId, audio) {
+            const card = document.getElementById(playerId);
+            if (!card) return;
+
+            const btn = card.querySelector('.voice-play-btn');
+            btn.textContent = '▶';
+            btn.classList.remove('playing');
+
+            card.querySelectorAll('.voice-bar').forEach(b => b.classList.remove('active'));
+            card.querySelector('.voice-current-time').textContent = '0:00';
+        }
+
+        // 6. Перемотка кликом по дорожке
+        function seekVoice(event, playerId) {
+            const card = document.getElementById(playerId);
+            if (!card) return;
+
+            const audio = card.querySelector('audio');
+            if (!audio.duration) return;
+
+            const trackBox = card.querySelector('.voice-bars-wrap');
+            const rect = trackBox.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const percent = Math.max(0, Math.min(1, clickX / rect.width));
+
+            audio.currentTime = percent * audio.duration;
+            updateVoiceProgress(playerId, audio);
+        }
+
+        function formatAudioSeconds(sec) {
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
         document.addEventListener('DOMContentLoaded', () => {
