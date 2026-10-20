@@ -603,6 +603,52 @@
                 font-size: 0.88rem !important;
             }
         }
+
+        /* МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ 24 ЧАСОВ (ПОВЕРХ ВСЕГО) */
+        .meta-window-overlay {
+            display: none;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(15, 23, 42, 0.8) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            z-index: 999999 !important; /* Поверх любого окна и мобильного чата */
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .meta-window-modal {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid rgba(234, 179, 8, 0.4);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            padding: 2rem 1.75rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            position: relative;
+            box-sizing: border-box;
+            animation: modalPopIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @@keyframes modalPopIn {
+            from
+        {
+            opacity: 0;
+            transform: scale(0.92);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        }
     </style>
 }
 
@@ -710,6 +756,27 @@
 
         </div>
 
+    </div>
+</div>
+
+<!-- МОДАЛКА: 24-ЧАСОВОЕ ОКНО META ЗАКРЫТО -->
+<div id="metaWindowModalOverlay" class="meta-window-overlay" onclick="closeMetaWindowModal()">
+    <div class="meta-window-modal" onclick="event.stopPropagation()">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem;">⏳</div>
+        <h3 style="margin: 0 0 10px 0; color: #fbbf24; font-size: 1.25rem; font-weight: 800;">24-часовое окно ответа закрыто</h3>
+
+        <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.25rem;">
+            Политика безопасности Meta запрещает отправку сообщений через сторонние сервисы, если с момента последнего сообщения клиента прошло больше 24 часов [^developers_facebook_instagram_messaging_window].
+        </p>
+
+        <div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 14px; padding: 14px; text-align: left; font-size: 0.85rem; color: #fde68a; line-height: 1.45; margin-bottom: 1.5rem;">
+            📱 <strong>Как отправить ответ прямо сейчас:</strong><br>
+            Откройте официальное приложение <strong>Instagram</strong> на телефоне и напишите клиенту оттуда напрямую. На мобильное приложение это ограничение не действует, а ваш ответ сразу отобразится здесь в чате!
+        </div>
+
+        <button type="button" class="btn btn-primary" style="margin: 0; width: 100%;" onclick="closeMetaWindowModal()">
+            Понятно
+        </button>
     </div>
 </div>
 
@@ -893,7 +960,7 @@
             }
         }
 
-        // 4. РУЧНАЯ ОТПРАВКА
+        // 4. РУЧНАЯ ОТПРАВКА С ЗАЩИТОЙ И КРАСИВОЙ ОБРАБОТКОЙ ОШИБОК
         async function sendManualMessage() {
             if (!currentConversationId) return;
 
@@ -901,11 +968,14 @@
             const text = input.value.trim();
             if (!text) return;
 
+            // Временно очищаем поле ввода
+            input.value = '';
+
+            // Оптимистично отображаем бабл
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             appendMessageBubble(text, false, false, timeStr, true);
             scrollChatToBottom();
-            input.value = '';
 
             updateTakeoverUi(true);
 
@@ -918,10 +988,43 @@
 
                 if (!res.ok) {
                     const err = await res.text();
-                    alert("Ошибка отправки: " + err);
+
+                    // 1. Убираем повисший неотправленный бабл из ленты
+                    const stream = document.getElementById('messagesStream');
+                    const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
+                    if (pendingBubble) pendingBubble.remove();
+
+                    // 2. ВОЗВРАЩАЕМ ТЕКСТ ОБРАТНО В ПОЛЕ ВВОДА (чтобы менеджер не потерял напечатанное!)
+                    input.value = text;
+
+                    // 3. КРАСИВАЯ ОБРАБОТКА ОШИБКИ
+                    if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022")) {
+                        openMetaWindowModal();
+                    } else {
+                        alert("Ошибка отправки: " + err);
+                    }
                 }
             } catch (err) {
+                // При ошибке сети также возвращаем текст
+                const stream = document.getElementById('messagesStream');
+                const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
+                if (pendingBubble) pendingBubble.remove();
+                input.value = text;
                 alert("Ошибка сети при отправке сообщения");
+            }
+        }
+
+        function openMetaWindowModal() {
+            const overlay = document.getElementById('metaWindowModalOverlay');
+            if (overlay) {
+                overlay.style.display = 'flex';
+            }
+        }
+
+        function closeMetaWindowModal() {
+            const overlay = document.getElementById('metaWindowModalOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
             }
         }
 

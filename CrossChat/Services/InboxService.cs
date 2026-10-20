@@ -226,6 +226,13 @@ namespace CrossChat.Services
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Ошибка при ручной отправке ответа в инбоксе");
+
+				// Распознаем 24-часовое окно Meta
+				if (ex.Message.Contains("outside of allowed window") || ex.Message.Contains("2534022"))
+				{
+					return (false, "OUTSIDE_24H_WINDOW");
+				}
+
 				return (false, ex.Message);
 			}
 		}
