@@ -1,4 +1,5 @@
 using CrossChat.Integrations.Models;
+using Microsoft.AspNetCore.Http;
 
 namespace CrossChat.Integrations.Interfaces
 {
@@ -59,5 +60,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		// Удаление сообщения менеджером с сайта (по ID из БД)
 		Task<bool> DeleteMessageFromInboxAsync(int messageId);
+
+		Task<(bool Success, string? ErrorMessage)> SendManagerMediaReplyAsync(int conversationId, IFormFile file);
 	}
 }

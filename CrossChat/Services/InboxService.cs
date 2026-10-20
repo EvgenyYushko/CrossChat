@@ -5,6 +5,8 @@ using CrossChat.Hubs;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models; // <-- Подключаем DTO
+using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,15 +19,19 @@ namespace CrossChat.Services
 		private readonly IInstagramService _instaService;
 		private readonly ILogger<InboxService> _logger;
 
+		private readonly SiteSettings _siteSettings;
+
 		public InboxService(
 			AppDbContext db,
 			IHubContext<InboxHub> hubContext,
 			IInstagramService instaService,
+			SiteSettings siteSettings, // <-- ДОБАВЛЕНО
 			ILogger<InboxService> logger)
 		{
 			_db = db;
 			_hubContext = hubContext;
 			_instaService = instaService;
+			_siteSettings = siteSettings;
 			_logger = logger;
 		}
 
@@ -733,6 +739,117 @@ namespace CrossChat.Services
 			{
 				_logger.LogError(ex, "Ошибка удаления сообщения менеджером");
 				return false;
+			}
+		}
+
+		public async Task<(bool Success, string? ErrorMessage)> SendManagerMediaReplyAsync(int conversationId, IFormFile file)
+		{
+			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == conversationId);
+			if (conv == null) return (false, "Диалог не найден");
+
+			try
+			{
+				string ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+				string mediaType = "image";
+				string snippetLabel = "📷 Фотография";
+
+				// ===================================================================
+				// 1. ПРОВЕРКА АУДИО (ПЕРВОЙ ОЧЕРЕДЬЮ!)
+				// ===================================================================
+				if (file.ContentType.StartsWith("audio/") ||
+					file.FileName.StartsWith("voice_") ||
+					ext == ".mp3" || ext == ".ogg" || ext == ".wav" || ext == ".m4a" || ext == ".webm")
+				{
+					mediaType = "audio";
+					snippetLabel = "🎙️ Голосовое сообщение";
+					ext = ".m4a";
+				}
+				// 2. ПРОВЕРКА ВИДЕО
+				else if (file.ContentType.StartsWith("video/") || ext == ".mp4" || ext == ".mov" || ext == ".avi")
+				{
+					mediaType = "video";
+					snippetLabel = "🎬 Видеозапись";
+					ext = ".mp4";
+				}
+
+				// 3. Сохраняем исходный файл
+				string tempFolder = _siteSettings.TempFolder;
+				if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
+
+				string tempFileName = $"{Guid.NewGuid()}{ext}";
+				string localPath = Path.Combine(tempFolder, tempFileName);
+
+				using (var stream = new FileStream(localPath, FileMode.Create))
+				{
+					await file.CopyToAsync(stream);
+				}
+
+				// ===================================================================
+				// 4. ОБРАБОТКА МЕДИАФАЙЛОВ ПЕРЕД ОТПРАВКОЙ В META
+				// ===================================================================
+				if (mediaType == "video")
+				{
+					// Безопасное сжатие тяжелых роликов с телефона
+					await VideoService.CompressVideoForDirectAsync(localPath, _logger);
+				}
+				else if (mediaType == "audio")
+				{
+					// Конвертация браузерного WebM/WAV в эталонный Instagram AAC (.m4a)
+					string convertedAudioPath = await VideoService.ConvertToInstagramAudioAsync(localPath, _logger);
+					tempFileName = Path.GetFileName(convertedAudioPath);
+				}
+
+				string publicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
+
+				// 5. Включаем Human Takeover
+				conv.IsHumanTakeover = true;
+				conv.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
+
+				// 6. Отправка в Instagram Direct
+				if ((NetworkType)conv.NetworkType == NetworkType.Instagram)
+				{
+					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
+					if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+						return (false, "Настройки Instagram бота не найдены");
+
+					await _instaService.SendMediaAttachmentAsync(conv.ExternalUserId, mediaType, publicUrl, settings.AccessToken);
+				}
+
+				// 7. Сохранение в базу Инбокса
+				var message = new InboxMessage
+				{
+					ConversationId = conv.Id,
+					Text = snippetLabel,
+					MediaUrl = publicUrl,
+					MediaType = mediaType,
+					IsIncoming = false,
+					IsSentByBot = false,
+					IsReadByManager = true,
+					CreatedAtUtc = DateTime.UtcNow
+				};
+
+				_db.InboxMessages.Add(message);
+				conv.LastMessageSnippet = snippetLabel;
+				conv.LastMessageAt = DateTime.UtcNow;
+
+				await _db.SaveChangesAsync();
+
+				// 8. Пушим в SignalR
+				await NotifySignalRNewMessage(conv, message);
+
+				return (true, null);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка отправки медиафайла менеджером");
+
+				string userFriendlyMessage = ex.Message;
+				if (ex.Message.Contains("outside of allowed window") || ex.Message.Contains("2534022"))
+				{
+					userFriendlyMessage = "OUTSIDE_24H_WINDOW";
+				}
+
+				return (false, userFriendlyMessage);
 			}
 		}
 	}

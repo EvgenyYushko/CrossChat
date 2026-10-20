@@ -339,5 +339,104 @@ namespace CrossChat.Integrations.Services
 				if (File.Exists(tempOutput)) try { File.Delete(tempOutput); } catch { }
 			}
 		}
+
+		/// <summary>
+		/// Безопасное сжатие видео для Render (ограничение -threads 1 защищает от перезапуска сервера по памяти!)
+		/// </summary>
+		public static async Task<string> CompressVideoForDirectAsync(string inputPath, ILogger? logger = null)
+		{
+			if (!File.Exists(inputPath)) return inputPath;
+
+			var fileInfo = new FileInfo(inputPath);
+			// Сжимаем ролики крупнее 20 МБ
+			if (fileInfo.Length <= 20 * 1024 * 1024) return inputPath;
+
+			string directory = Path.GetDirectoryName(inputPath)!;
+			string outputPath = Path.Combine(directory, $"comp_{Guid.NewGuid()}.mp4");
+
+			try
+			{
+				logger?.LogInformation("🎬 [FFmpeg] Безопасное сжатие видео {Size:F1} МБ для Direct...", fileInfo.Length / (1024.0 * 1024.0));
+
+				// -threads 1 КРИТИЧЕСКИ ВАЖЕН ДЛЯ RENDER: удерживает память в пределах 80 МБ!
+				// -pix_fmt yuv420p гарантирует, что цвета с iPhone (HDR/HEVC) корректно прочитаются серверами Meta
+				var arguments = $"-y -i \"{inputPath}\" -threads 1 -vf \"scale='min(720,iw)':-2\" " +
+								$"-c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p " +
+								$"-c:a aac -b:a 128k -ar 44100 -movflags +faststart \"{outputPath}\"";
+
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = arguments,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+				await process.WaitForExitAsync();
+
+				if (process.ExitCode == 0 && File.Exists(outputPath))
+				{
+					long newSize = new FileInfo(outputPath).Length;
+					logger?.LogInformation("✅ [FFmpeg] Видео успешно сжато: {Old:F1} МБ -> {New:F1} МБ",
+						fileInfo.Length / (1024.0 * 1024.0), newSize / (1024.0 * 1024.0));
+
+					File.Delete(inputPath);
+					File.Move(outputPath, inputPath);
+					return inputPath;
+				}
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "Ошибка сжатия видео для Direct");
+			}
+
+			return inputPath;
+		}
+
+		/// <summary>
+		/// Быстрая конвертация голосового сообщения из браузера (WebM, Ogg, Wav) в эталонный формат Instagram Audio (AAC m4a)
+		/// </summary>
+		public static async Task<string> ConvertToInstagramAudioAsync(string inputPath, ILogger? logger = null)
+		{
+			if (!File.Exists(inputPath)) return inputPath;
+
+			string directory = Path.GetDirectoryName(inputPath)!;
+			string outputPath = Path.Combine(directory, $"{Guid.NewGuid()}.m4a");
+
+			try
+			{
+				// Переводим аудиодорожку в стандартный AAC кодек со стерео/моно 44.1kHz
+				var arguments = $"-y -i \"{inputPath}\" -vn -c:a aac -b:a 128k -ar 44100 \"{outputPath}\"";
+
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = arguments,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+				await process.WaitForExitAsync();
+
+				if (process.ExitCode == 0 && File.Exists(outputPath))
+				{
+					try { File.Delete(inputPath); } catch { }
+					logger?.LogInformation("✅ [FFmpeg] Голосовое успешно конвертировано в AAC M4A");
+					return outputPath;
+				}
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "Ошибка конвертации аудио для Instagram");
+			}
+
+			return inputPath;
+		}
 	}
 }

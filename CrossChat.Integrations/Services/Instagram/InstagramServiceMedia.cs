@@ -1,3 +1,5 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -747,6 +749,55 @@ public partial class InstagramService
 
 		_logger.LogError($"❌ Container not ready after {maxAttempts} attempts");
 		return null;
+	}
+
+	/// <summary>
+	/// Универсальная отправка медиафайла (фото, видео, голосовое) клиенту в Instagram Direct по URL
+	/// </summary>
+	public async Task<string?> SendMediaAttachmentAsync(string recipientId, string mediaType, string mediaUrl, string accessToken)
+	{
+		var url = $"{ApiVersion}/me/messages";
+
+		// Нормализуем тип для Meta API: "image", "video", "audio"
+		string cleanType = mediaType.ToLowerInvariant();
+		if (cleanType == "photo") cleanType = "image";
+		if (cleanType == "voice") cleanType = "audio";
+
+		var payload = new
+		{
+			recipient = new { id = recipientId },
+			message = new
+			{
+				attachment = new
+				{
+					type = cleanType,
+					payload = new
+					{
+						url = mediaUrl,
+						is_reusable = true
+					}
+				}
+			}
+		};
+
+		using var request = new HttpRequestMessage(HttpMethod.Post, url);
+		request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+		request.Content = JsonContent.Create(payload);
+
+		var response = await _httpClient.SendAsync(request);
+		var responseContent = await response.Content.ReadAsStringAsync();
+
+		if (!response.IsSuccessStatusCode)
+		{
+			_logger.LogError("[Instagram Direct Media] ❌ Ошибка отправки ({Type}): {Err}", cleanType, responseContent);
+			throw new Exception($"Instagram API Error: {responseContent}");
+		}
+
+		using var doc = JsonDocument.Parse(responseContent);
+		string? messageId = doc.RootElement.TryGetProperty("message_id", out var mid) ? mid.GetString() : null;
+
+		_logger.LogInformation("✅ [Instagram Direct Media] Файл ({Type}) успешно отправлен клиенту {RecipientId}!", cleanType, recipientId);
+		return messageId;
 	}
 
 	/// <summary>

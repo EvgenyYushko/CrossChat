@@ -230,6 +230,21 @@ namespace CrossChat.Controllers
 			bool success = await _inboxService.DeleteMessageFromInboxAsync(dto.MessageId);
 			return Ok(new { success });
 		}
+
+		// 8. Отправка медиафайла (скрепочка 📎) менеджером
+		[HttpPost("send-media")]
+		[RequestSizeLimit(50 * 1024 * 1024)] // Лимит 50 МБ
+		public async Task<IActionResult> SendMedia([FromForm] int conversationId, [FromForm] IFormFile file)
+		{
+			if (file == null || file.Length == 0)
+				return BadRequest("Файл не выбран");
+
+			var (success, error) = await _inboxService.SendManagerMediaReplyAsync(conversationId, file);
+			if (!success)
+				return BadRequest(error);
+
+			return Ok(new { success = true });
+		}
 	}
 
 	public class DeleteMessageDto

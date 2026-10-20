@@ -974,6 +974,112 @@
                 transform: scale(1);
             }
         }
+
+        /* КНОПКА ПРИКРЕПЛЕНИЯ ФАЙЛА (СКРЕПОЧКА) */
+        .btn-attach {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+            .btn-attach:hover {
+                color: var(--accent-color, #6366f1);
+                transform: scale(1.15);
+            }
+
+            .btn-attach:active {
+                transform: scale(0.95);
+            }
+
+        /* КНОПКА МИКРОФОНА */
+        .btn-mic {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+            .btn-mic:hover {
+                color: #ef4444;
+                transform: scale(1.15);
+            }
+
+        /* ПАНЕЛЬ ЗАПИСИ ГОЛОСОВОГО */
+        .voice-recording-ui {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            padding: 8px 14px;
+            flex: 1;
+            color: #f87171;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .rec-pulse-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            display: inline-block;
+            animation: recPulse 1s infinite alternate;
+        }
+
+        @@keyframes recPulse {
+            from {
+                opacity: 0.3;
+                transform: scale(0.8);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+        }
+
+        .voice-rec-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-rec-action {
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+
+        .btn-rec-cancel:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-rec-send:hover {
+            background: rgba(16, 185, 129, 0.2);
+        }
     </style>
 }
 
@@ -1072,9 +1178,33 @@
                         </span>
                     </div>
 
-                    <div class="input-row">
-                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите ответ клиенту..." onkeydown="handleInputKeydown(event)"></textarea>
+                    <div class="input-row" id="normalInputRow">
+                        <!-- СКРЕПКА -->
+                        <button type="button" class="btn-attach" onclick="triggerFileInput()" title="Прикрепить файл">
+                            📎
+                        </button>
+                        <input type="file" id="mediaFileInput" style="display: none;"
+                               accept="image/*,video/*,audio/*" onchange="uploadAndSendMedia(this)">
+
+                        <!-- МИКРОФОН ДЛЯ ЗАПИСИ ГОЛОСОВОГО -->
+                        <button type="button" class="btn-mic" onclick="startVoiceRecording()" title="Записать голосовое сообщение">
+                            🎙️
+                        </button>
+
+                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите сообщение..." onkeydown="handleInputKeydown(event)"></textarea>
                         <button type="button" class="btn-send" onclick="sendManualMessage()">➤</button>
+                    </div>
+
+                    <!-- ИНТЕРФЕЙС ИДЕТ ЗАПИСЬ (СКРЫТ ПО УМОЛЧАНИЮ) -->
+                    <div class="voice-recording-ui" id="voiceRecordingUi">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="rec-pulse-dot"></span>
+                            <span>Запись: <strong id="voiceRecTimer">0:00</strong></span>
+                        </div>
+                        <div class="voice-rec-actions">
+                            <button type="button" class="btn-rec-action btn-rec-cancel" onclick="cancelVoiceRecording()" title="Отменить">❌</button>
+                            <button type="button" class="btn-rec-action btn-rec-send" onclick="stopAndSendVoiceRecording()" title="Отправить голосовое">✅</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1906,6 +2036,141 @@
             const m = Math.floor(sec / 60);
             const s = Math.floor(sec % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // ОТКРЫТИЕ ПРОВОДНИКА ПРИ КЛИКЕ НА СКРЕПКУ
+        function triggerFileInput() {
+            if (!currentConversationId) {
+                alert("Сначала выберите диалог!");
+                return;
+            }
+            document.getElementById('mediaFileInput').click();
+        }
+
+        // ОТПРАВКА ВЫБРАННОГО ФАЙЛА
+        async function uploadAndSendMedia(input) {
+            if (!input.files || input.files.length === 0 || !currentConversationId) return;
+
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('conversationId', currentConversationId);
+            formData.append('file', file);
+
+            // Сбрасываем выбор файла в проводнике
+            input.value = '';
+
+            // Оптимистично выводим индикатор отправки файла
+            const stream = document.getElementById('messagesStream');
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const tempBubble = document.createElement('div');
+            tempBubble.className = 'msg-bubble msg-outgoing-human';
+            tempBubble.setAttribute('data-pending', 'true');
+            tempBubble.innerHTML = `<div>⏳ Загрузка и отправка файла (${escapeHtml(file.name)})...</div><div class="msg-footer"><span>${timeStr}</span></div>`;
+            stream.appendChild(tempBubble);
+            scrollChatToBottom();
+
+            updateTakeoverUi(true);
+
+            try {
+                const res = await fetch('/inbox/send-media', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const err = await res.text();
+                    tempBubble.remove();
+
+                    if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022")) {
+                        openMetaWindowModal();
+                    } else {
+                        alert("Ошибка отправки медиа: " + err);
+                    }
+                } else {
+                    // Успех: временный бабл заменится настоящим баблом из SignalR
+                    setTimeout(() => tempBubble.remove(), 1000);
+                }
+            } catch (err) {
+                tempBubble.remove();
+                alert("Ошибка сети при отправке файла");
+            }
+        }
+
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let recordingTimerInterval = null;
+        let recordingSeconds = 0;
+
+        // 1. СТАРТ ЗАПИСИ С МИКРОФОНА
+        async function startVoiceRecording() {
+            if (!currentConversationId) {
+                alert("Сначала выберите диалог!");
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.start();
+
+                // Переключаем интерфейс ввода в режим записи
+                document.getElementById('normalInputRow').style.display = 'none';
+                document.getElementById('voiceRecordingUi').style.display = 'flex';
+
+                // Запускаем таймер записи
+                recordingSeconds = 0;
+                document.getElementById('voiceRecTimer').textContent = "0:00";
+                recordingTimerInterval = setInterval(() => {
+                    recordingSeconds++;
+                    const m = Math.floor(recordingSeconds / 60);
+                    const s = recordingSeconds % 60;
+                    document.getElementById('voiceRecTimer').textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+                }, 1000);
+
+            } catch (err) {
+                alert("Не удалось получить доступ к микрофону. Разрешите доступ в браузере.");
+            }
+        }
+
+        // 2. ОТМЕНА ЗАПИСИ
+        function cancelVoiceRecording() {
+            stopRecordingCleanup();
+        }
+
+        // 3. ОСТАНОВКА И ОТПРАВКА ГОЛОСОВОГО В ЧАТ
+        function stopAndSendVoiceRecording() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+
+            mediaRecorder.onstop = async () => {
+                // Создаем Blob из записанного звука
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+
+                // Называем voice_*.webm - бэкенд переведет его в идеальный Instagram M4A
+                const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: audioBlob.type });
+
+                const fakeInput = { files: [audioFile], value: '' };
+                await uploadAndSendMedia(fakeInput);
+            };
+
+            mediaRecorder.stop();
+            stopRecordingCleanup();
+        }
+
+        function stopRecordingCleanup() {
+            if (recordingTimerInterval) clearInterval(recordingTimerInterval);
+            if (mediaRecorder && mediaRecorder.stream) {
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('voiceRecordingUi').style.display = 'none';
+            document.getElementById('normalInputRow').style.display = 'flex';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
