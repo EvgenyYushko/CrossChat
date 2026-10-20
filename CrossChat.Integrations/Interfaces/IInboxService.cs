@@ -45,5 +45,7 @@ namespace CrossChat.Integrations.Interfaces
 			string customerId,
 			string messageId,
 			string text);
+
+		Task<bool> SendMessageReactionAsync(int messageId, string reaction = "love");
 	}
 }

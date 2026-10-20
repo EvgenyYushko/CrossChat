@@ -153,6 +153,20 @@ namespace CrossChat.Controllers
 			int syncedCount = await _inboxService.SyncProfileConversationsAsync(profileId);
 			return Ok(new { success = true, count = syncedCount });
 		}
+
+		// 6. Отправка реакции (лайк по дабл-клику)
+		[HttpPost("react")]
+		public async Task<IActionResult> SendReaction([FromBody] SendReactionDto dto)
+		{
+			bool success = await _inboxService.SendMessageReactionAsync(dto.MessageId, dto.Reaction ?? "love");
+			return Ok(new { success });
+		}
+	}
+
+	public class SendReactionDto
+	{
+		public int MessageId { get; set; }
+		public string? Reaction { get; set; } = "love";
 	}
 
 	public class SendMessageDto

@@ -668,6 +668,72 @@
             opacity: 0.9;
             transform: translateY(-1px);
         }
+
+        /* АНИМАЦИЯ СЕРДЕЧКА INSTAGRAM ПО ДАБЛ-КЛИКУ */
+        .msg-bubble {
+            position: relative; /* Чтобы сердечко позиционировалось по центру бабла */
+            user-select: none; /* Чтобы при дабл-клике не выделялся текст */
+        }
+
+        /* Всплывающее и исчезающее сердечко */
+        .heart-pop {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 2.5rem;
+            animation: heartPopAnim 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        @@keyframes heartPopAnim {
+            0% {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 0;
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.4);
+                opacity: 1;
+            }
+
+            80% {
+                transform: translate(-50%, -50%) scale(1.1);
+                opacity: 0.9;
+            }
+
+            100% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0;
+            }
+        }
+
+        /* Закрепленный маленький бейдж реакции в углу бабла */
+        .reaction-badge {
+            position: absolute;
+            bottom: -8px;
+            right: 12px;
+            background: #1e293b;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1px 6px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            animation: reactionBadgePop 0.2s ease-out;
+        }
+
+        @@keyframes reactionBadgePop {
+            from {
+                transform: scale(0);
+            }
+
+            to {
+                transform: scale(1);
+            }
+        }
     </style>
 }
 
@@ -836,7 +902,7 @@
                     }
                 }
 
-                appendMessageBubble(payload.text, payload.isIncoming, payload.isSentByBot, payload.time);
+                appendMessageBubble(payload.messageId, payload.text, payload.isIncoming, payload.isSentByBot, localTime);
                 scrollChatToBottom();
             }
 
@@ -967,7 +1033,7 @@
                 stream.innerHTML = '';
                 if (data.messages && data.messages.length > 0) {
                     data.messages.forEach(m => {
-                        appendMessageBubble(m.text, m.isIncoming, m.isSentByBot, m.time);
+                        appendMessageBubble(m.id, m.text, m.isIncoming, m.isSentByBot, m.time);
                     });
                 } else {
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
@@ -998,7 +1064,7 @@
             // Оптимистично отображаем бабл
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            appendMessageBubble(text, false, false, timeStr, true);
+            appendMessageBubble(null, text, false, false, timeStr, true);
             scrollChatToBottom();
 
             updateTakeoverUi(true);
@@ -1087,19 +1153,26 @@
         }
 
         // 6. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-        function appendMessageBubble(text, isIncoming, isSentByBot, time, isPending = false) {
+        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, isPending = false) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
 
-            // Если это сообщение отправлено нами только что — помечаем его как ожидающее подтверждения
             if (isPending) {
                 bubble.setAttribute('data-pending', 'true');
                 bubble.dataset.text = text;
             }
 
+            // Сохраняем ID сообщения из БД
+            if (messageId) {
+                bubble.dataset.msgId = messageId;
+            }
+
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
                 bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span>${time}</span></div>`;
+
+                // ВЕШАЕМ ДАБЛ-КЛИК ТОЛЬКО НА ВХОДЯЩИЕ СООБЩЕНИЯ КЛИЕНТА!
+                bubble.ondblclick = () => handleMessageDoubleClick(bubble, messageId);
             } else if (isSentByBot) {
                 bubble.className = 'msg-bubble msg-outgoing-bot';
                 bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
@@ -1224,6 +1297,44 @@
                 }
             }
         });
+
+        // ОБРАБОТКА ДВОЙНОГО КЛИКА (ЛАЙК СООБЩЕНИЯ)
+        async function handleMessageDoubleClick(bubbleElement, messageId) {
+            if (!messageId) return;
+
+            // 1. АНИМИРУЕМ ВСПЛЫВАЮЩЕЕ СЕРДЕЧКО В ЦЕНТРЕ БАБЛА
+            const heart = document.createElement('div');
+            heart.className = 'heart-pop';
+            heart.textContent = '❤️';
+            bubbleElement.appendChild(heart);
+
+            // Удаляем элемент анимации через 0.7 сек
+            setTimeout(() => heart.remove(), 700);
+
+            // 2. ЗАКРЕПЛЯЕМ МАЛЕНЬКИЙ БЕЙДЖ СЕРДЕЧКА В УГЛУ СООБЩЕНИЯ (если его еще нет)
+            let badge = bubbleElement.querySelector('.reaction-badge');
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'reaction-badge';
+                badge.textContent = '❤️';
+                bubbleElement.appendChild(badge);
+            }
+
+            // 3. ОТПРАВЛЯЕМ ЗАПРОС В ИНСТАГРАМ API
+            try {
+                const res = await fetch('/inbox/react', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messageId: messageId, reaction: 'love' })
+                });
+
+                if (!res.ok) {
+                    console.warn("Не удалось отправить реакцию в Instagram API");
+                }
+            } catch (err) {
+                console.error("Ошибка сети при отправке реакции:", err);
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             loadDialogs();
