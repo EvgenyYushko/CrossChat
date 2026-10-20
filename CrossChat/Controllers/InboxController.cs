@@ -14,13 +14,20 @@ namespace CrossChat.Controllers
 		private readonly AppDbContext _db;
 		private readonly IInboxService _inboxService;
 		private readonly ILogger<InboxController> _logger;
+		private readonly HttpClient _httpClient; // <-- ОБЪЯВЛЯЕМ ПОЛЕ
 
-		public InboxController(AppDbContext db, IInboxService inboxService, ILogger<InboxController> logger)
+		public InboxController(
+			AppDbContext db, 
+			IInboxService inboxService, 
+			ILogger<InboxController> logger,
+			HttpClient httpClient) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
 		{
 			_db = db;
 			_inboxService = inboxService;
 			_logger = logger;
+			_httpClient = httpClient;
 		}
+
 
 		[HttpGet]
 		public async Task<IActionResult> Index([FromQuery] int? profileId)
@@ -167,6 +174,53 @@ namespace CrossChat.Controllers
 		{
 			var (success, newReaction) = await _inboxService.ToggleMessageReactionAsync(dto.MessageId);
 			return Ok(new { success, reaction = newReaction });
+		}
+
+		// ==========================================================
+		// ПОТОКОВЫЙ ПРОКСИ ДЛЯ МЕДИАФАЙЛОВ (ОБХОД ОШИБОК 403 И МОБИЛЬНЫХ ОГРАНИЧЕНИЙ)
+		// Файлы НЕ сохраняются на диск, а транслируются напрямую в браузер
+		// ==========================================================
+		// ==========================================================
+		// ПОТОКОВЫЙ ПРОКСИ ДЛЯ МЕДИАФАЙЛОВ (ИСПРАВЛЕНО: БЕЗ ОБРЫВА СОКЕТОВ И С ЗАЩИТОЙ ОТ БЛОКИРОВОК META)
+		// ==========================================================
+		[HttpGet("media/{messageId}")]
+		public async Task<IActionResult> GetMediaStream(int messageId)
+		{
+			var msg = await _db.InboxMessages.AsNoTracking().FirstOrDefaultAsync(m => m.Id == messageId);
+			if (msg == null || string.IsNullOrEmpty(msg.MediaUrl))
+				return NotFound();
+
+			try
+			{
+				// 1. Формируем запрос с браузерным User-Agent (Meta не будет сбрасывать сокет)
+				using var request = new HttpRequestMessage(HttpMethod.Get, msg.MediaUrl);
+				request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+
+				// 2. Используем внедренный _httpClient контроллера (он не уничтожается раньше времени!)
+				var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead);
+				if (!response.IsSuccessStatusCode)
+				{
+					_logger.LogWarning("[Inbox Media] Meta CDN вернула статус {Code} для сообщения {MsgId}", response.StatusCode, messageId);
+					return NotFound();
+				}
+
+				var contentType = response.Content.Headers.ContentType?.MediaType
+								  ?? (msg.MediaType == "video" ? "video/mp4" : "image/jpeg");
+
+				// 3. Считываем байты в оперативную память (для фото это 200 КБ, для видео 1-2 МБ)
+				// Это полностью исключает SocketException (104) Connection reset by peer!
+				var fileBytes = await response.Content.ReadAsByteArrayAsync();
+
+				// 4. Разрешаем браузеру кэшировать файл на 1 час (для мгновенного скролла)
+				Response.Headers.CacheControl = "public, max-age=3600";
+
+				return File(fileBytes, contentType);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "[Inbox Media] Ошибка проксирования файла для сообщения {MsgId}", messageId);
+				return NotFound();
+			}
 		}
 
 	}

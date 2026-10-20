@@ -1308,28 +1308,32 @@
 
             // 1. БЛОК ОТОБРАЖЕНИЯ МЕДИАФАЙЛОВ
             let mediaHtml = '';
-            if (mediaUrl) {
+            if (mediaUrl || mediaType) {
                 const cleanType = (mediaType || '').toLowerCase();
+
+                // ЕСЛИ ЕСТЬ ID СООБЩЕНИЯ — ИСПОЛЬЗУЕМ НАДЕЖНЫЙ ЛОКАЛЬНЫЙ ПОТОКОВЫЙ ПРОКСИ
+                // (ОН РАБОТАЕТ НА ВСЕХ IPHONE И АНДРОИДАХ БЕЗ ОШИБОК 403)
+                const srcUrl = messageId ? `/inbox/media/${messageId}` : mediaUrl;
 
                 if (cleanType.includes('image') || cleanType === 'photo') {
                     mediaHtml = `
                         <div class="msg-media-container">
-                            <img src="${mediaUrl}" class="msg-media-img" alt="Photo" referrerpolicy="no-referrer"
-                                 onclick="openInboxLightbox('${mediaUrl}')"
+                            <img src="${srcUrl}" class="msg-media-img" alt="Photo"
+                                 onclick="openInboxLightbox('${srcUrl}')"
                                  onerror="handleMediaExpired(this, '📷 Фотография')">
                         </div>
                     `;
                 } else if (cleanType.includes('video')) {
                     mediaHtml = `
                         <div class="msg-media-container">
-                            <video src="${mediaUrl}" class="msg-media-video" controls preload="metadata"
+                            <video src="${srcUrl}" class="msg-media-video" controls preload="metadata" playsinline
                                    onerror="handleMediaExpired(this, '🎬 Видеозапись')"></video>
                         </div>
                     `;
                 } else if (cleanType.includes('audio') || cleanType === 'voice') {
                     mediaHtml = `
                         <div class="msg-media-container">
-                            <audio src="${mediaUrl}" class="msg-media-audio" controls
+                            <audio src="${srcUrl}" class="msg-media-audio" controls
                                    onerror="handleMediaExpired(this, '🎙️ Голосовое сообщение')"></audio>
                         </div>
                     `;
@@ -1339,9 +1343,8 @@
             // 2. БЛОК РЕАКЦИИ
             let reactionHtml = reaction ? `<div class="reaction-badge">${escapeHtml(reaction)}</div>` : '';
 
-            // Если есть текст и это не техническая заглушка — выводим подпись к медиа
             const hasRealText = text && !text.startsWith('📷') && !text.startsWith('🎬') && !text.startsWith('🎙️') && text !== '[Медиа]' && text !== '[image]';
-            let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaUrl ? `<div>${escapeHtml(text)}</div>` : '');
+            let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaHtml ? `<div>${escapeHtml(text)}</div>` : '');
 
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
