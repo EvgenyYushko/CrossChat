@@ -732,6 +732,20 @@
             console.log("⚡ [SignalR] Новое сообщение:", payload);
 
             if (currentConversationId === payload.conversationId) {
+                const stream = document.getElementById('messagesStream');
+
+                // ЗАЩИТА ОТ ДУБЛИРОВАНИЯ (ЭХА):
+                // Если это исходящее сообщение от человека и мы сами его только что напечатали
+                if (!payload.isIncoming && !payload.isSentByBot && stream) {
+                    const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
+                    if (pendingBubble && pendingBubble.dataset.text === payload.text) {
+                        // Снимаем метку ожидания, не создавая дубликат!
+                        pendingBubble.removeAttribute('data-pending');
+                        updateDialogSnippet(payload.conversationId, payload.lastSnippet, payload.time, payload.unreadCount);
+                        return; // ВЫХОДИМ, бабл уже на экране!
+                    }
+                }
+
                 appendMessageBubble(payload.text, payload.isIncoming, payload.isSentByBot, payload.time);
                 scrollChatToBottom();
             }
@@ -891,7 +905,7 @@
 
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            appendMessageBubble(text, false, false, timeStr);
+            appendMessageBubble(text, false, false, timeStr, true);
             scrollChatToBottom();
             input.value = '';
 
@@ -948,9 +962,15 @@
         }
 
         // 6. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-        function appendMessageBubble(text, isIncoming, isSentByBot, time) {
+        function appendMessageBubble(text, isIncoming, isSentByBot, time, isPending = false) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
+
+            // Если это сообщение отправлено нами только что — помечаем его как ожидающее подтверждения
+            if (isPending) {
+                bubble.setAttribute('data-pending', 'true');
+                bubble.dataset.text = text;
+            }
 
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
