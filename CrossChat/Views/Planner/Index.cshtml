@@ -2689,6 +2689,32 @@
                 const isUnifiedBtn = document.getElementById('unifiedTelegramButtonCheckbox')?.checked ?? true;
                 formData.append('isUnifiedTelegramButton', isUnifiedBtn ? 'true' : 'false');
 
+                // ==========================================================
+                // [ИСПРАВЛЕНО] ОТПРАВКА TELEGRAM STARS (ПЛАТНЫЙ КОНТЕНТ):
+                // ==========================================================
+                const isUnifiedPaid = document.getElementById('unifiedTelegramPaidCheckbox')?.checked ?? true;
+                formData.append('isUnifiedTelegramPaid', isUnifiedPaid ? 'true' : 'false');
+
+                if (isUnifiedPaid) {
+                    // Единый режим звезд
+                    const isPaid = document.getElementById('isPaidTelegramCheckbox')?.checked ?? false;
+                    const price = document.getElementById('priceTelegramInput')?.value || '50';
+    
+                    formData.append('isPaidTelegram', isPaid ? 'true' : 'false');
+                    formData.append('priceTelegram', price);
+                } else {
+                    // Раздельный режим для каждого выбранного канала
+                    const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+                    tgCheckboxes.forEach(cb => {
+                        const netKey = cb.value;
+                        const chIsPaid = document.getElementById(`isPaid_${netKey}`)?.checked ?? false;
+                        const chPrice = document.getElementById(`price_${netKey}`)?.value || '50';
+
+                        formData.append(`isPaid_${netKey}`, chIsPaid ? 'true' : 'false');
+                        formData.append(`price_${netKey}`, chPrice);
+                    });
+                }
+
                 if (isUnifiedBtn) {
                     const hasBtn = document.getElementById('hasTgButtonCheckbox')?.checked;
                     formData.append('tgButtonText', hasBtn ? document.getElementById('tgButtonTextInput').value.trim() : '');
@@ -2708,10 +2734,6 @@
 
                 const isNoteChecked = document.getElementById('isVideoNoteTelegramCheckbox')?.checked;
                 formData.append('isVideoNoteTelegram', isNoteChecked ? 'true' : 'false');
-
-                const hasBtn = document.getElementById('hasTgButtonCheckbox')?.checked;
-                formData.append('tgButtonText', hasBtn ? document.getElementById('tgButtonTextInput').value : '');
-                formData.append('tgButtonUrl', hasBtn ? document.getElementById('tgButtonUrlInput').value : '');
 
                 const hasComment = document.getElementById('hasFirstCommentCheckbox')?.checked;
                 formData.append('firstComment', hasComment ? document.getElementById('firstCommentInput').value : '');
