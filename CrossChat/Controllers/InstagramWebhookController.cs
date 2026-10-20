@@ -168,9 +168,18 @@ namespace CrossChat.Controllers
 
 								await PublishMessage(messaging);
 							}
+							// -------------------------------------------------------------
+							// СЦЕНАРИЙ: СООБЩЕНИЕ ОТОЗВАНО / УДАЛЕНО В ПРИЛОЖЕНИИ INSTAGRAM (UNSEND)
+							// -------------------------------------------------------------
 							else if (messaging.Message.IsDeleted)
 							{
-								_logger.LogInformation("Пользователь удалил сообщение");
+								var deletedMid = messaging.Message.MessageId;
+								_logger.LogInformation("🗑️ [Instagram Webhook] Сообщение {Mid} отозвано пользователем в Instagram (Unsend).", deletedMid);
+
+								if (!string.IsNullOrEmpty(deletedMid))
+								{
+									await _inboxService.DeleteMessageByExternalIdAsync(deletedMid);
+								}
 							}
 						}
 					}

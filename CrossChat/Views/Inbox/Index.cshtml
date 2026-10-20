@@ -904,6 +904,76 @@
             color: var(--text-secondary);
             font-family: monospace;
         }
+
+        /* АНИМАЦИЯ РАСТВОРЕНИЯ СООБЩЕНИЯ */
+        .msg-bubble.deleting {
+            animation: fadeOutShrink 0.35s ease forwards;
+            pointer-events: none;
+        }
+
+        @@keyframes fadeOutShrink {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+                max-height: 200px;
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(0.8);
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                margin-bottom: 0;
+            }
+        }
+
+        /* КОНТЕКСТНОЕ МЕНЮ СООБЩЕНИЯ (ПКМ И LONG-PRESS) */
+        .msg-context-menu {
+            display: none;
+            position: fixed;
+            background: #1e293b;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 6px;
+            z-index: 1000000;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            min-width: 160px;
+            animation: menuPop 0.15s ease-out;
+        }
+
+        .msg-context-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: #ef4444; /* Красный цвет удаления */
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.15s ease;
+            text-align: left;
+        }
+
+            .msg-context-btn:hover {
+                background: rgba(239, 68, 68, 0.15);
+            }
+
+        @@keyframes menuPop {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
     </style>
 }
 
@@ -1043,6 +1113,13 @@
 <!-- ЛАЙТБОКС ДЛЯ ПРОСМОТРА ФОТО -->
 <div id="inboxLightbox" class="inbox-lightbox-overlay" onclick="closeInboxLightbox()">
     <img id="inboxLightboxImg" src="" class="inbox-lightbox-img" alt="Enlarged photo">
+</div>
+
+<!-- КОНТЕКСТНОЕ МЕНЮ СООБЩЕНИЯ (ПКМ / LONG PRESS) -->
+<div id="msgContextMenu" class="msg-context-menu" onclick="event.stopPropagation()">
+    <button type="button" class="msg-context-btn" onclick="executeDeleteMessage()">
+        <span>🗑️</span> <span>Удалить сообщение</span>
+    </button>
 </div>
 
 @section Scripts {
@@ -1375,7 +1452,30 @@
             }
         }
 
-        // 1. ОБНОВЛЕННАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ БАБЛА (с поддержкой сохраненных сердечек)
+        let targetContextMessageId = null;
+        let longPressTimer = null;
+
+        // СЛУШАТЕЛЬ УДАЛЕНИЯ СООБЩЕНИЯ (ИЗ ИНСТАГРАМ ИЛИ С САЙТА)
+        connection.on("MessageDeleted", (conversationId, messageId, lastSnippet) => {
+            console.log("🗑️ [SignalR] Сообщение удалено:", { conversationId, messageId });
+
+            if (currentConversationId && Number(currentConversationId) === Number(conversationId)) {
+                const bubble = document.querySelector(`.msg-bubble[data-msg-id="${messageId}"]`);
+                if (bubble) {
+                    // Анимация плавного исчезновения
+                    bubble.classList.add('deleting');
+                    setTimeout(() => bubble.remove(), 350);
+                }
+            }
+
+            // Обновляем превью слева
+            const snipElem = document.getElementById(`snippet_${conversationId}`);
+            if (snipElem && lastSnippet !== undefined) {
+                snipElem.textContent = lastSnippet;
+            }
+        });
+
+        // ОБНОВЛЕННЫЙ РЕНДЕР БАБЛА С ПКМ И ДОЛГИМ НАЖАТИЕМ
         function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false, mediaUrl = null, mediaType = null) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
@@ -1387,15 +1487,28 @@
 
             if (messageId) {
                 bubble.dataset.msgId = messageId;
+
+                // 1. ПКМ ДЛЯ КОМПЬЮТЕРА:
+                bubble.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    showMsgContextMenu(e.clientX, e.clientY, messageId);
+                };
+
+                // 2. LONG PRESS ДЛЯ СМАРТФОНА (500 мс):
+                bubble.addEventListener('touchstart', (e) => {
+                    longPressTimer = setTimeout(() => {
+                        const touch = e.touches[0];
+                        showMsgContextMenu(touch.clientX, touch.clientY, messageId);
+                    }, 500);
+                }, { passive: true });
+
+                bubble.addEventListener('touchend', () => clearTimeout(longPressTimer), { passive: true });
+                bubble.addEventListener('touchmove', () => clearTimeout(longPressTimer), { passive: true });
             }
 
-            // 1. БЛОК ОТОБРАЖЕНИЯ МЕДИАФАЙЛОВ
             let mediaHtml = '';
             if (mediaUrl || mediaType) {
                 const cleanType = (mediaType || '').toLowerCase();
-
-                // ЕСЛИ ЕСТЬ ID СООБЩЕНИЯ — ИСПОЛЬЗУЕМ НАДЕЖНЫЙ ЛОКАЛЬНЫЙ ПОТОКОВЫЙ ПРОКСИ
-                // (ОН РАБОТАЕТ НА ВСЕХ IPHONE И АНДРОИДАХ БЕЗ ОШИБОК 403)
                 const srcUrl = messageId ? `/inbox/media/${messageId}` : mediaUrl;
 
                 if (cleanType.includes('image') || cleanType === 'photo') {
@@ -1414,16 +1527,12 @@
                         </div>
                     `;
                 } else if (cleanType.includes('audio') || cleanType === 'voice') {
-                // Генерируем уникальный ID для каждого плеера
-                const playerId = 'vp_' + Math.random().toString(36).substring(2, 9);
-
+                    const playerId = 'vp_' + Math.random().toString(36).substring(2, 9);
                     mediaHtml = `
                         <div class="voice-player-card" id="${playerId}">
                             <button type="button" class="voice-play-btn" onclick="toggleVoicePlay('${playerId}')">▶</button>
                             <div class="voice-track-box" onclick="seekVoice(event, '${playerId}')">
-                                <div class="voice-bars-wrap">
-                                    ${generateWaveformBars()}
-                                </div>
+                                <div class="voice-bars-wrap">${generateWaveformBars()}</div>
                                 <div class="voice-time-row">
                                     <span class="voice-current-time">0:00</span>
                                     <span class="voice-total-time">🎙️ Голосовое</span>
@@ -1439,9 +1548,7 @@
                 }
             }
 
-            // 2. БЛОК РЕАКЦИИ
             let reactionHtml = reaction ? `<div class="reaction-badge">${escapeHtml(reaction)}</div>` : '';
-
             const hasRealText = text && !text.startsWith('📷') && !text.startsWith('🎬') && !text.startsWith('🎙️') && text !== '[Медиа]' && text !== '[image]';
             let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaHtml ? `<div>${escapeHtml(text)}</div>` : '');
 
@@ -1458,6 +1565,62 @@
             }
 
             stream.appendChild(bubble);
+        }
+
+        // УПРАВЛЕНИЕ КОНТЕКСТНЫМ МЕНЮ
+        function showMsgContextMenu(x, y, messageId) {
+            targetContextMessageId = messageId;
+            const menu = document.getElementById('msgContextMenu');
+            if (!menu) return;
+
+            // Защита от вылета за правый край экрана
+            const menuWidth = 170;
+            const posX = (x + menuWidth > window.innerWidth) ? (window.innerWidth - menuWidth - 10) : x;
+
+            menu.style.left = posX + 'px';
+            menu.style.top = y + 'px';
+            menu.style.display = 'block';
+        }
+
+        function hideMsgContextMenu() {
+            const menu = document.getElementById('msgContextMenu');
+            if (menu) menu.style.display = 'none';
+            targetContextMessageId = null;
+        }
+
+        // Закрываем меню при клике в любое место экрана
+        document.addEventListener('click', hideMsgContextMenu);
+        document.addEventListener('scroll', hideMsgContextMenu, true);
+
+        // ВЫПОЛНЕНИЕ УДАЛЕНИЯ СООБЩЕНИЯ
+        async function executeDeleteMessage() {
+            if (!targetContextMessageId) return;
+            const msgId = targetContextMessageId;
+            hideMsgContextMenu();
+
+            if (!confirm("Удалить это сообщение из Инбокса?")) return;
+
+            // Оптимистичная анимация растворения
+            const bubble = document.querySelector(`.msg-bubble[data-msg-id="${msgId}"]`);
+            if (bubble) bubble.classList.add('deleting');
+
+            try {
+                const res = await fetch('/inbox/delete-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messageId: msgId })
+                });
+
+                if (res.ok) {
+                    setTimeout(() => { if (bubble) bubble.remove(); }, 350);
+                } else {
+                    if (bubble) bubble.classList.remove('deleting');
+                    alert("Не удалось удалить сообщение");
+                }
+            } catch {
+                if (bubble) bubble.classList.remove('deleting');
+                alert("Ошибка сети при удалении");
+            }
         }
 
         // Фоллбек при сгорании ссылки в Meta CDN через 1-2 недели

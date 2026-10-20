@@ -653,5 +653,87 @@ namespace CrossChat.Services
 				return false;
 			}
 		}
+
+		// 1. УДАЛЕНИЕ СООБЩЕНИЯ ИЗ ВЕБХУКА (ОТМЕНА ОТПРАВКИ В INSTAGRAM)
+		public async Task<bool> DeleteMessageByExternalIdAsync(string externalMessageId)
+		{
+			try
+			{
+				var msg = await _db.InboxMessages
+					.Include(m => m.Conversation)
+					.FirstOrDefaultAsync(m => m.ExternalMessageId == externalMessageId);
+
+				if (msg == null) return false;
+
+				var conv = msg.Conversation;
+				int convId = conv.Id;
+				int msgId = msg.Id;
+				int profileId = conv.ProfileId;
+
+				_db.InboxMessages.Remove(msg);
+
+				// Обновляем сниппет последнего сообщения на предыдущее
+				var previousMsg = await _db.InboxMessages
+					.Where(m => m.ConversationId == convId && m.Id != msgId)
+					.OrderByDescending(m => m.CreatedAtUtc)
+					.FirstOrDefaultAsync();
+
+				conv.LastMessageSnippet = previousMsg?.Text ?? "";
+				conv.LastMessageAt = previousMsg?.CreatedAtUtc ?? conv.CreatedAt;
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation("🗑️ [Inbox Unsend] Сообщение {MsgId} (ext: {ExtId}) удалено по вебхуку Instagram.", msgId, externalMessageId);
+
+				// Уведомляем браузер через SignalR, чтобы бабл исчез с экрана
+				await _hubContext.Clients.Group($"profile_inbox_{profileId}")
+					.SendAsync("MessageDeleted", convId, msgId, conv.LastMessageSnippet);
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка удаления сообщения по ExternalId");
+				return false;
+			}
+		}
+
+		// 2. УДАЛЕНИЕ СООБЩЕНИЯ МЕНЕДЖЕРОМ ИЗ ИНБОКСА
+		public async Task<bool> DeleteMessageFromInboxAsync(int messageId)
+		{
+			try
+			{
+				var msg = await _db.InboxMessages
+					.Include(m => m.Conversation)
+					.FirstOrDefaultAsync(m => m.Id == messageId);
+
+				if (msg == null) return false;
+
+				var conv = msg.Conversation;
+				int convId = conv.Id;
+				int profileId = conv.ProfileId;
+
+				_db.InboxMessages.Remove(msg);
+
+				var previousMsg = await _db.InboxMessages
+					.Where(m => m.ConversationId == convId && m.Id != messageId)
+					.OrderByDescending(m => m.CreatedAtUtc)
+					.FirstOrDefaultAsync();
+
+				conv.LastMessageSnippet = previousMsg?.Text ?? "";
+				conv.LastMessageAt = previousMsg?.CreatedAtUtc ?? conv.CreatedAt;
+
+				await _db.SaveChangesAsync();
+
+				await _hubContext.Clients.Group($"profile_inbox_{profileId}")
+					.SendAsync("MessageDeleted", convId, messageId, conv.LastMessageSnippet);
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка удаления сообщения менеджером");
+				return false;
+			}
+		}
 	}
 }

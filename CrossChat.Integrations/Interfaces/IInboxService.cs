@@ -53,5 +53,11 @@ namespace CrossChat.Integrations.Interfaces
 
 		// Обработка реакции из вебхука (когда лайк поставили/сняли на телефоне)
 		Task<bool> HandleReactionWebhookAsync(string businessAccountId, string externalMessageId, string? emoji, string? action);
+
+		// Удаление сообщения по внешнему ID (из вебхука Instagram при Unsend)
+		Task<bool> DeleteMessageByExternalIdAsync(string externalMessageId);
+
+		// Удаление сообщения менеджером с сайта (по ID из БД)
+		Task<bool> DeleteMessageFromInboxAsync(int messageId);
 	}
 }

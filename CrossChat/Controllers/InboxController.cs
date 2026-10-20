@@ -17,8 +17,8 @@ namespace CrossChat.Controllers
 		private readonly HttpClient _httpClient; // <-- ОБЪЯВЛЯЕМ ПОЛЕ
 
 		public InboxController(
-			AppDbContext db, 
-			IInboxService inboxService, 
+			AppDbContext db,
+			IInboxService inboxService,
 			ILogger<InboxController> logger,
 			HttpClient httpClient) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
 		{
@@ -223,6 +223,18 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		// 7. Удаление сообщения из Инбокса менеджером
+		[HttpPost("delete-message")]
+		public async Task<IActionResult> DeleteMessage([FromBody] DeleteMessageDto dto)
+		{
+			bool success = await _inboxService.DeleteMessageFromInboxAsync(dto.MessageId);
+			return Ok(new { success });
+		}
+	}
+
+	public class DeleteMessageDto
+	{
+		public int MessageId { get; set; }
 	}
 
 	public class ToggleReactionDto
