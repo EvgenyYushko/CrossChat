@@ -78,25 +78,30 @@ namespace CrossChat.Controllers
 			return Json(dialogs);
 		}
 
-		// 2. Получить историю сообщений выбранного чата
+		// 2. Получить историю сообщений выбранного чата (СВЕЖИЕ 50 СООБЩЕНИЙ)
 		[HttpGet("messages/{conversationId}")]
 		public async Task<IActionResult> GetMessages(int conversationId)
 		{
 			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == conversationId);
 			if (conv == null) return NotFound();
 
-			// Сбрасываем счетчик непрочитанных менеджером
 			if (conv.UnreadCount > 0)
 			{
 				conv.UnreadCount = 0;
 				await _db.SaveChangesAsync();
 			}
 
-			var messages = await _db.InboxMessages
+			// 1. Берем 50 САМЫХ ПОСЛЕДНИХ сообщений из базы:
+			var rawMessages = await _db.InboxMessages
 				.AsNoTracking()
 				.Where(m => m.ConversationId == conversationId)
+				.OrderByDescending(m => m.CreatedAtUtc) // Сначала самые новые!
+				.Take(100)
+				.ToListAsync();
+
+			// 2. Разворачиваем хронологически (старые сверху, новые снизу)
+			var messages = rawMessages
 				.OrderBy(m => m.CreatedAtUtc)
-				.Take(50)
 				.Select(m => new
 				{
 					id = m.Id,
@@ -104,9 +109,10 @@ namespace CrossChat.Controllers
 					isIncoming = m.IsIncoming,
 					isSentByBot = m.IsSentByBot,
 					mediaUrl = m.MediaUrl,
+					reaction = m.Reaction, // Подтягиваем сохраненное сердечко!
 					time = m.CreatedAtUtc.ToString("HH:mm")
 				})
-				.ToListAsync();
+				.ToList();
 
 			return Json(new
 			{

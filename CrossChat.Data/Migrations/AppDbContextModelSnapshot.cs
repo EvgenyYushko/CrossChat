@@ -314,6 +314,10 @@ namespace CrossChat.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("Reaction")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Text")
                         .IsRequired()
                         .HasColumnType("text");

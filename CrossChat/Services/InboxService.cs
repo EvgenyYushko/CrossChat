@@ -503,7 +503,6 @@ namespace CrossChat.Services
 		{
 			try
 			{
-				// Находим сообщение вместе с данными диалога
 				var msg = await _db.InboxMessages
 					.Include(m => m.Conversation)
 					.FirstOrDefaultAsync(m => m.Id == messageId);
@@ -513,14 +512,12 @@ namespace CrossChat.Services
 
 				var conv = msg.Conversation;
 
-				// Реакция для Instagram Direct
 				if (conv.NetworkType == (int)NetworkType.Instagram)
 				{
 					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
 					if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
 						return false;
 
-					// Вызываем твой готовый метод отправки реакции
 					bool success = await _instaService.SendReactionAsync(
 						conv.ExternalUserId,
 						msg.ExternalMessageId,
@@ -529,7 +526,11 @@ namespace CrossChat.Services
 
 					if (success)
 					{
-						_logger.LogInformation("❤️ [Instagram Reaction] Успешно поставлен лайк на сообщение {ExternalMsgId}", msg.ExternalMessageId);
+						// СОХРАНЯЕМ СЕРДЕЧКО В БАЗУ ДАННЫХ:
+						msg.Reaction = "❤️";
+						await _db.SaveChangesAsync();
+
+						_logger.LogInformation("❤️ [Instagram Reaction] Лайк сохранен в БД для сообщения {MsgId}", msg.Id);
 					}
 
 					return success;
@@ -539,7 +540,7 @@ namespace CrossChat.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Ошибка отправки реакции на сообщение {MessageId}", messageId);
+				_logger.LogError(ex, "Ошибка отправки реакции");
 				return false;
 			}
 		}

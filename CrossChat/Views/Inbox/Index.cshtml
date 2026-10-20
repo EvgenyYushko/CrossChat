@@ -885,10 +885,12 @@
             .withAutomaticReconnect()
             .build();
 
+        // 2. ОБНОВЛЕННЫЙ СЛУШАТЕЛЬ SIGNALR (БЕЗ СДВИГА АРГУМЕНТОВ)
         connection.on("ReceiveInboxMessage", (payload) => {
             console.log("⚡ [SignalR] Новое сообщение:", payload);
 
-            // Сравниваем строго как числа Number(...) == Number(...)
+            const localTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
                 const stream = document.getElementById('messagesStream');
 
@@ -897,16 +899,17 @@
                     const pendingBubble = stream.querySelector('.msg-outgoing-human[data-pending="true"]');
                     if (pendingBubble && pendingBubble.dataset.text === payload.text) {
                         pendingBubble.removeAttribute('data-pending');
-                        updateDialogSnippet(payload.conversationId, payload.lastSnippet, payload.time, payload.unreadCount);
+                        updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
                         return;
                     }
                 }
 
-                appendMessageBubble(payload.messageId, payload.text, payload.isIncoming, payload.isSentByBot, localTime);
+                // ПРАВИЛЬНЫЙ ПОРЯДОК: messageId, text, isIncoming, isSentByBot, time, reaction
+                appendMessageBubble(payload.messageId, payload.text, payload.isIncoming, payload.isSentByBot, localTime, null);
                 scrollChatToBottom();
             }
 
-            updateDialogSnippet(payload.conversationId, payload.lastSnippet, payload.time, payload.unreadCount);
+            updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
         });
 
         connection.on("TakeoverStatusChanged", (conversationId, isTakeover) => {
@@ -1033,7 +1036,7 @@
                 stream.innerHTML = '';
                 if (data.messages && data.messages.length > 0) {
                     data.messages.forEach(m => {
-                        appendMessageBubble(m.id, m.text, m.isIncoming, m.isSentByBot, m.time);
+                        appendMessageBubble(m.id, m.text, m.isIncoming, m.isSentByBot, m.time, m.reaction);
                     });
                 } else {
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
@@ -1152,8 +1155,8 @@
             }
         }
 
-        // 6. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, isPending = false) {
+        // 1. ОБНОВЛЕННАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ БАБЛА (с поддержкой сохраненных сердечек)
+        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
 
@@ -1162,23 +1165,22 @@
                 bubble.dataset.text = text;
             }
 
-            // Сохраняем ID сообщения из БД
             if (messageId) {
                 bubble.dataset.msgId = messageId;
             }
 
+            let reactionHtml = reaction ? `<div class="reaction-badge">${escapeHtml(reaction)}</div>` : '';
+
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span>${time}</span></div>`;
-
-                // ВЕШАЕМ ДАБЛ-КЛИК ТОЛЬКО НА ВХОДЯЩИЕ СООБЩЕНИЯ КЛИЕНТА!
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span>${time}</span></div>`;
                 bubble.ondblclick = () => handleMessageDoubleClick(bubble, messageId);
             } else if (isSentByBot) {
                 bubble.className = 'msg-bubble msg-outgoing-bot';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
             } else {
                 bubble.className = 'msg-bubble msg-outgoing-human';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
+                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
             }
 
             stream.appendChild(bubble);

@@ -38,5 +38,8 @@ namespace CrossChat.Data.Entities.Inbox
 		public bool IsReadByManager { get; set; } = false;
 
 		public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+		[MaxLength(20)]
+		public string? Reaction { get; set; }
 	}
 }
