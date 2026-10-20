@@ -62,7 +62,9 @@ public class WebhookConsumer : IConsumer<InstagramMessageReceived>
 				await _inboxService.SaveIncomingMessageAsync(
 					conversation.Id,
 					context.Message.MessageId,
-					messageText);
+					messageText,
+					context.Message.MediaUrl,   // <-- 4-й параметр
+					context.Message.MediaType); // <-- 5-й параметр
 			}
 		}
 		catch (Exception ex)

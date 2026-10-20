@@ -215,9 +215,26 @@ namespace CrossChat.Controllers
 		private async Task PublishMessage(InstagramMessaging messaging)
 		{
 			string? messageText = messaging.Message?.Text;
-			if (string.IsNullOrEmpty(messageText) && messaging.Message?.Attachments?.Count > 0)
+			string? mediaUrl = null;
+			string? mediaType = null;
+
+			// Если клиент прислал фото/видео/аудио — достаем прямую ссылку Meta CDN
+			if (messaging.Message?.Attachments?.Count > 0)
 			{
-				messageText = $"[{messaging.Message.Attachments[0].Type}]";
+				var firstAttach = messaging.Message.Attachments[0];
+				mediaType = firstAttach.Type?.ToLower(); // "image", "video", "audio"
+				mediaUrl = firstAttach.Payload?.Url;
+
+				if (string.IsNullOrEmpty(messageText))
+				{
+					messageText = mediaType switch
+					{
+						"image" => "📷 Фотография",
+						"video" => "🎬 Видеозапись",
+						"audio" => "🎙️ Голосовое сообщение",
+						_ => $"[{mediaType}]"
+					};
+				}
 			}
 
 			await _publishEndpoint.Publish(new InstagramMessageReceived
@@ -226,8 +243,10 @@ namespace CrossChat.Controllers
 				RecipientId = messaging.Recipient.Id,
 				MessageId = messaging.Message.MessageId,
 				Text = messageText,
+				MediaUrl = mediaUrl,     // <-- ПЕРЕДАЕМ URL
+				MediaType = mediaType,   // <-- ПЕРЕДАЕМ ТИП
 				ReceivedAt = DateTimeNow,
-				AttachmentCount = messaging.Message.Attachments?.Count ?? 0
+				AttachmentCount = messaging.Message?.Attachments?.Count ?? 0
 			});
 		}
 	}

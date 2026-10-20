@@ -274,6 +274,9 @@ namespace CrossChat.Services
 					text = msg.Text,
 					isIncoming = msg.IsIncoming,
 					isSentByBot = msg.IsSentByBot,
+					mediaUrl = msg.MediaUrl,       // <-- ПЕРЕДАЕМ В SIGNALR
+					mediaType = msg.MediaType,     // <-- ПЕРЕДАЕМ В SIGNALR
+					reaction = msg.Reaction,
 					time = msg.CreatedAtUtc.ToString("HH:mm"),
 					lastSnippet = conv.LastMessageSnippet,
 					unreadCount = conv.UnreadCount

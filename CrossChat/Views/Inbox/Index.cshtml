@@ -734,6 +734,93 @@
                 transform: scale(1);
             }
         }
+
+        /* МЕДИАФАЙЛЫ В СООБЩЕНИЯХ */
+        .msg-media-container {
+            margin-bottom: 6px;
+            border-radius: 10px;
+            overflow: hidden;
+            max-width: 260px;
+        }
+
+        .msg-media-img {
+            width: 100%;
+            max-height: 260px;
+            object-fit: cover;
+            border-radius: 10px;
+            cursor: zoom-in;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        .msg-media-img:hover {
+            transform: scale(1.02);
+        }
+
+        .msg-media-video {
+            width: 100%;
+            max-width: 260px;
+            border-radius: 10px;
+            outline: none;
+            display: block;
+        }
+
+        .msg-media-audio {
+            width: 100%;
+            max-width: 240px;
+            height: 36px;
+            outline: none;
+            margin-top: 4px;
+        }
+
+        /* Плашка сгоревшей ссылки */
+        .msg-media-expired {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px dashed var(--glass-border);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Лайтбокс для просмотра фото на весь экран */
+        .inbox-lightbox-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.88);
+            backdrop-filter: blur(8px);
+            z-index: 1000000;
+            justify-content: center;
+            align-items: center;
+            cursor: zoom-out;
+        }
+
+        .inbox-lightbox-img {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            animation: zoomIn 0.2s ease-out;
+        }
+
+        @@keyframes zoomIn {
+            from {
+                transform: scale(0.9);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
     </style>
 }
 
@@ -870,6 +957,11 @@
     </div>
 </div>
 
+<!-- ЛАЙТБОКС ДЛЯ ПРОСМОТРА ФОТО -->
+<div id="inboxLightbox" class="inbox-lightbox-overlay" onclick="closeInboxLightbox()">
+    <img id="inboxLightboxImg" src="" class="inbox-lightbox-img" alt="Enlarged photo">
+</div>
+
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
 
@@ -909,7 +1001,17 @@
                 }
 
                 // Вставляем бабл для входящих от клиента, ответов бота или ответов с другого устройства
-                appendMessageBubble(payload.messageId, payload.text, payload.isIncoming, payload.isSentByBot, localTime, null);
+                appendMessageBubble(
+                    payload.messageId,
+                    payload.text,
+                    payload.isIncoming,
+                    payload.isSentByBot,
+                    localTime,
+                    payload.reaction,
+                    false,
+                    payload.mediaUrl,
+                    payload.mediaType
+                );
                 scrollChatToBottom();
             }
 
@@ -1062,9 +1164,20 @@
                 stream.innerHTML = '';
                 if (data.messages && data.messages.length > 0) {
                     data.messages.forEach(m => {
-                        appendMessageBubble(m.id, m.text, m.isIncoming, m.isSentByBot, m.time, m.reaction);
+                        appendMessageBubble(
+                            m.id,
+                            m.text,
+                            m.isIncoming,
+                            m.isSentByBot,
+                            m.time,
+                            m.reaction,
+                            false,
+                            m.mediaUrl,
+                            m.mediaType
+                        );
                     });
-                } else {
+                } 
+                else {
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
                 }
 
@@ -1180,7 +1293,7 @@
         }
 
         // 1. ОБНОВЛЕННАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ БАБЛА (с поддержкой сохраненных сердечек)
-        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false) {
+        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false, mediaUrl = null, mediaType = null) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
 
@@ -1193,21 +1306,79 @@
                 bubble.dataset.msgId = messageId;
             }
 
+            // 1. БЛОК ОТОБРАЖЕНИЯ МЕДИАФАЙЛОВ
+            let mediaHtml = '';
+            if (mediaUrl) {
+                const cleanType = (mediaType || '').toLowerCase();
+
+                if (cleanType.includes('image') || cleanType === 'photo') {
+                    mediaHtml = `
+                        <div class="msg-media-container">
+                            <img src="${mediaUrl}" class="msg-media-img" alt="Photo" referrerpolicy="no-referrer"
+                                 onclick="openInboxLightbox('${mediaUrl}')"
+                                 onerror="handleMediaExpired(this, '📷 Фотография')">
+                        </div>
+                    `;
+                } else if (cleanType.includes('video')) {
+                    mediaHtml = `
+                        <div class="msg-media-container">
+                            <video src="${mediaUrl}" class="msg-media-video" controls preload="metadata"
+                                   onerror="handleMediaExpired(this, '🎬 Видеозапись')"></video>
+                        </div>
+                    `;
+                } else if (cleanType.includes('audio') || cleanType === 'voice') {
+                    mediaHtml = `
+                        <div class="msg-media-container">
+                            <audio src="${mediaUrl}" class="msg-media-audio" controls
+                                   onerror="handleMediaExpired(this, '🎙️ Голосовое сообщение')"></audio>
+                        </div>
+                    `;
+                }
+            }
+
+            // 2. БЛОК РЕАКЦИИ
             let reactionHtml = reaction ? `<div class="reaction-badge">${escapeHtml(reaction)}</div>` : '';
+
+            // Если есть текст и это не техническая заглушка — выводим подпись к медиа
+            const hasRealText = text && !text.startsWith('📷') && !text.startsWith('🎬') && !text.startsWith('🎙️') && text !== '[Медиа]' && text !== '[image]';
+            let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaUrl ? `<div>${escapeHtml(text)}</div>` : '');
 
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span>${time}</span></div>`;
+                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span>${time}</span></div>`;
                 bubble.ondblclick = () => handleMessageDoubleClick(bubble, messageId);
             } else if (isSentByBot) {
                 bubble.className = 'msg-bubble msg-outgoing-bot';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
+                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
             } else {
                 bubble.className = 'msg-bubble msg-outgoing-human';
-                bubble.innerHTML = `<div>${escapeHtml(text)}</div>${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
+                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
             }
 
             stream.appendChild(bubble);
+        }
+
+        // Фоллбек при сгорании ссылки в Meta CDN через 1-2 недели
+        function handleMediaExpired(element, label) {
+            const parent = element.closest('.msg-media-container');
+            if (parent) {
+                parent.innerHTML = `<div class="msg-media-expired"><span>⚠️</span> <span>${label} (срок ссылки в Instagram истёк)</span></div>`;
+            }
+        }
+
+        // Открытие фото в лайтбоксе
+        function openInboxLightbox(url) {
+            const box = document.getElementById('inboxLightbox');
+            const img = document.getElementById('inboxLightboxImg');
+            if (box && img) {
+                img.src = url;
+                box.style.display = 'flex';
+            }
+        }
+
+        function closeInboxLightbox() {
+            const box = document.getElementById('inboxLightbox');
+            if (box) box.style.display = 'none';
         }
 
         function updateDialogSnippet(convId, snippet, time, unreadCount) {

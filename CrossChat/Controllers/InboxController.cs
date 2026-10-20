@@ -109,6 +109,7 @@ namespace CrossChat.Controllers
 					isIncoming = m.IsIncoming,
 					isSentByBot = m.IsSentByBot,
 					mediaUrl = m.MediaUrl,
+					mediaType = m.MediaType, // <-- ДОБАВЛЕНО
 					reaction = m.Reaction, // Подтягиваем сохраненное сердечко!
 					time = m.CreatedAtUtc.ToString("HH:mm")
 				})

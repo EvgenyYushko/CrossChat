@@ -10,5 +10,9 @@ public record InstagramMessageReceived
 	public DateTime ReceivedAt { get; set; }
 
 	public int AttachmentCount  { get; set; }
+
+	// НОВЫЕ ПОЛЯ ДЛЯ МЕДИАФАЙЛОВ:
+	public string? MediaUrl { get; set; }
+	public string? MediaType { get; set; } // "image", "video", "audio"
 }
 
