@@ -61,8 +61,8 @@ public class YouTubeCommentsPollingJob : IJob
 		{
 			try
 			{
-				_logger.LogInformation("==================================================================");
-				_logger.LogInformation("🔍 [YouTube Poller] Канал «{Title}» (ChannelId: {ChannelId})", channel.ChannelTitle, channel.ChannelId);
+				//_logger.LogInformation("==================================================================");
+				//_logger.LogInformation("🔍 [YouTube Poller] Канал «{Title}» (ChannelId: {ChannelId})", channel.ChannelTitle, channel.ChannelId);
 
 				// 2. Проверка и авто-рефреш токена
 				if (!channel.TokenExpiresAt.HasValue || channel.TokenExpiresAt.Value <= DateTimeNow.AddMinutes(5))
@@ -86,13 +86,13 @@ public class YouTubeCommentsPollingJob : IJob
 				DateTime thresholdUtc = channel.LastCommentProcessedAt ?? nowUtc.AddHours(-2);
 				DateTime thresholdBelarus = thresholdUtc + BelarusOffset;
 
-				_logger.LogInformation("⏱ [YouTube Poller] Порог фильтра: всё что НОВЕЕ {ThUtc:yyyy-MM-dd HH:mm:ss} UTC ({ThBy:HH:mm:ss} по Минску)",
-					thresholdUtc, thresholdBelarus);
+				//_logger.LogInformation("⏱ [YouTube Poller] Порог фильтра: всё что НОВЕЕ {ThUtc:yyyy-MM-dd HH:mm:ss} UTC ({ThBy:HH:mm:ss} по Минску)",
+					//thresholdUtc, thresholdBelarus);
 
 				// 4. Запрос к YouTube API (последние 20 комментариев под всеми роликами канала)
 				var comments = await ytService.GetRecentCommentsAsync(channel.ChannelId, channel.AccessToken!);
 
-				_logger.LogInformation("📥 [YouTube Poller] YouTube API вернул {Count} комментариев.", comments.Count);
+				//_logger.LogInformation("📥 [YouTube Poller] YouTube API вернул {Count} комментариев.", comments.Count);
 
 				int acceptedCount = 0;
 				int skippedOldCount = 0;
@@ -113,8 +113,8 @@ public class YouTubeCommentsPollingJob : IJob
 					if (!string.IsNullOrEmpty(c.AuthorChannelId) && c.AuthorChannelId == channel.ChannelId)
 					{
 						skippedSelfCount++;
-						_logger.LogInformation("   ⏭ [СВОЙ КОММЕНТАРИЙ - ПРОПУСК] Автор: {Author} | Текст: «{Text}» | Дата: {DateBy:HH:mm:ss} Минск",
-							c.AuthorDisplayName, c.Text, commentDateBelarus);
+						//_logger.LogInformation("   ⏭ [СВОЙ КОММЕНТАРИЙ - ПРОПУСК] Автор: {Author} | Текст: «{Text}» | Дата: {DateBy:HH:mm:ss} Минск",
+							//c.AuthorDisplayName, c.Text, commentDateBelarus);
 						continue;
 					}
 
@@ -123,15 +123,15 @@ public class YouTubeCommentsPollingJob : IJob
 					{
 						skippedOldCount++;
 						var delayMinutes = (nowUtc - commentDateUtc).TotalMinutes;
-						_logger.LogInformation("   ⏳ [СТАРЫЙ - ПРОПУСК] От: @{User} ({Ago:F0} мин назад) | Опубликован: {DateUtc:yyyy-MM-dd HH:mm:ss} UTC ({DateBy:HH:mm:ss} Минск) <= Порог {ThBy:HH:mm:ss} | Текст: «{Text}»",
-							c.AuthorDisplayName, delayMinutes, commentDateUtc, commentDateBelarus, thresholdBelarus, c.Text);
+						//_logger.LogInformation("   ⏳ [СТАРЫЙ - ПРОПУСК] От: @{User} ({Ago:F0} мин назад) | Опубликован: {DateUtc:yyyy-MM-dd HH:mm:ss} UTC ({DateBy:HH:mm:ss} Минск) <= Порог {ThBy:HH:mm:ss} | Текст: «{Text}»",
+							//c.AuthorDisplayName, delayMinutes, commentDateUtc, commentDateBelarus, thresholdBelarus, c.Text);
 						continue;
 					}
 
 					// ЕСЛИ ДОШЛИ СЮДА — КОММЕНТАРИЙ СВЕЖИЙ И ПОДЛЕЖИТ ОТВЕТУ!
 					acceptedCount++;
-					_logger.LogInformation("   🔥 [ПРИНЯТ В ОБРАБОТКУ] От: @{User} | Видео: {Vid} | Опубликован: {DateBy:HH:mm:ss} Минск | Текст: «{Text}»",
-						c.AuthorDisplayName, c.VideoId, commentDateBelarus, c.Text);
+					//_logger.LogInformation("   🔥 [ПРИНЯТ В ОБРАБОТКУ] От: @{User} | Видео: {Vid} | Опубликован: {DateBy:HH:mm:ss} Минск | Текст: «{Text}»",
+						//c.AuthorDisplayName, c.VideoId, commentDateBelarus, c.Text);
 
 					// Запоминаем максимальную дату среди обработанных комментариев
 					if (!maxCommentDateUtc.HasValue || commentDateUtc > maxCommentDateUtc.Value)
@@ -152,8 +152,8 @@ public class YouTubeCommentsPollingJob : IJob
 					});
 				}
 
-				_logger.LogInformation("📊 [YouTube Poller Итог канала «{Title}»]: Принято: {Acc}, Пропущено старых: {Old}, Пропущено своих: {Self}",
-					channel.ChannelTitle, acceptedCount, skippedOldCount, skippedSelfCount);
+				//_logger.LogInformation("📊 [YouTube Poller Итог канала «{Title}»]: Принято: {Acc}, Пропущено старых: {Old}, Пропущено своих: {Self}",
+					//channel.ChannelTitle, acceptedCount, skippedOldCount, skippedSelfCount);
 
 				// 5. Обновляем метку последнего опроса в базе данных
 				// Если были новые комментарии — сдвигаем порог на дату самого свежего из них
@@ -161,8 +161,8 @@ public class YouTubeCommentsPollingJob : IJob
 				channel.LastCommentProcessedAt = maxCommentDateUtc ?? nowUtc;
 				await db.SaveChangesAsync();
 
-				_logger.LogInformation("💾 [YouTube Poller] Новый сохраненный порог канала: {NextTh:yyyy-MM-dd HH:mm:ss} UTC", channel.LastCommentProcessedAt);
-				_logger.LogInformation("==================================================================");
+				//_logger.LogInformation("💾 [YouTube Poller] Новый сохраненный порог канала: {NextTh:yyyy-MM-dd HH:mm:ss} UTC", channel.LastCommentProcessedAt);
+				//_logger.LogInformation("==================================================================");
 			}
 			catch (Exception ex)
 			{
