@@ -50,7 +50,6 @@ namespace CrossChat.Worker
 		public static void AddWorkerServices(this IServiceCollection services, string token, SiteSettings siteSettings
 			, IConfiguration configuration)
 		{
-			// Регистрируем HttpClient для Инстаграма
 			services.AddSingleton(siteSettings);
 
 			services.AddHttpClient<IInstagramService, InstagramService>(client =>

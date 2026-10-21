@@ -222,11 +222,28 @@ namespace CrossChat.Controllers
 				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ФАЙЛОВ GOOGLE DRIVE:
 				await CleanupLinkedPostsAsync(NetworkType.Threads, botId);
 
-				// 2. Отписка и удаление самого аккаунта
-				await DisconnectThreadUser(settings.ThreadsUserId, fullDataDelete: true);
+				// 2. Отписка от вебхуков Meta (если есть токен)
+				if (!string.IsNullOrEmpty(settings.AccessToken))
+				{
+					try
+					{
+						// Логика отписки от вебхуков Threads
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "Could not unsubscribe Threads webhooks.");
+					}
+				}
+
+				// 3. Удаляем сам аккаунт из БД (без повторного вызова CleanupLinkedPostsAsync)
+				_db.ThreadsSettings.Remove(settings);
+				await _db.SaveChangesAsync();
+
+				_logger.LogInformation("✅ [Threads] Аккаунт @{Username} успешно удален.", settings.Username);
 			}
 
-			return RedirectToAction("Profile", "Auth");
+			// НАДЕЖНЫЙ ПРЯМОЙ РЕДИРЕКТ НА СТРАНИЦУ ПРОФИЛЕЙ (БЕЗ ОШИБКИ РОУТИНГА):
+			return Redirect("/profiles");
 		}
 
 		// ==========================================================

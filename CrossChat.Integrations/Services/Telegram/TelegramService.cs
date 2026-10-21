@@ -172,10 +172,10 @@ namespace CrossChat.Integrations.Services.Telegram
 			if (base64MediaList == null || !base64MediaList.Any())
 				throw new ArgumentException("Для платного поста в Telegram требуется хотя бы одно фото или видео.");
 
-			// Лимит Telegram: от 1 до 2500 звезд
 			starCount = Math.Clamp(starCount, 1, 2500);
 
-			var streams = new List<MemoryStream>();
+			var streams = new List<Stream>();
+			var tempThumbFiles = new List<string>();
 			var paidMediaItems = new List<InputPaidMedia>();
 
 			try
@@ -186,18 +186,72 @@ namespace CrossChat.Integrations.Services.Telegram
 				for (int i = 0; i < Math.Min(base64MediaList.Count, 10); i++)
 				{
 					var item = base64MediaList[i];
-					bool isVideo = item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || item.Contains("video/");
-					string cleanBase64 = item.Contains(",") ? item.Split(',')[1] : item;
+					bool isVideo = item.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+								   item.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+								   item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) ||
+								   item.Contains("video/");
 
-					var bytes = Convert.FromBase64String(cleanBase64);
-					var stream = new MemoryStream(bytes);
+					var stream = GetMediaStream(item, out _);
 					streams.Add(stream);
 
 					if (isVideo)
 					{
+						int width = 0;
+						int height = 0;
+						int duration = 0;
+						InputFile? coverFile = null;
+						InputFile? thumbFile = null;
+
+						bool fileExists = File.Exists(item);
+						Console.WriteLine($"[Telegram Stars Debug] Элемент #{i}: это видео. Путь: '{item}', На диске существует: {fileExists}");
+
+						if (fileExists)
+						{
+							// 1. Извлекаем пропорции видео через FFmpeg
+							var resInfo = await VideoService.GetVideoResolutionAsync(item);
+							if (resInfo != null)
+							{
+								width = resInfo.Width;
+								height = resInfo.Height;
+								duration = resInfo.DurationSeconds;
+								Console.WriteLine($"[Telegram Stars Debug] ✅ Разрешение извлечено: {width}x{height}, длительность: {duration}с");
+							}
+							else
+							{
+								Console.WriteLine("[Telegram Stars Debug] ⚠️ Не удалось извлечь разрешение через FFmpeg!");
+							}
+
+							// 2. ГЕНЕРИРУЕМ ОБЛОЖКУ (ИМЕННО ОНА ЗАДАЕТ ФОРМУ ПЕЙВОЛЛА 9:16!)
+							string? thumbPath = await VideoService.GenerateVideoThumbnailAsync(item);
+							if (!string.IsNullOrEmpty(thumbPath) && File.Exists(thumbPath))
+							{
+								tempThumbFiles.Add(thumbPath);
+								byte[] thumbBytes = await File.ReadAllBytesAsync(thumbPath);
+								Console.WriteLine($"[Telegram Stars Debug] ✅ Обложка создана ({thumbBytes.Length} байт): {thumbPath}");
+
+								// Создаем ДВА независимых потока для Cover и Thumbnail (защита от ошибки Content-Length!)
+								var coverStream = new MemoryStream(thumbBytes);
+								var thumbStream = new MemoryStream(thumbBytes);
+								streams.Add(coverStream);
+								streams.Add(thumbStream);
+
+								coverFile = InputFile.FromStream(coverStream, $"cover_{i}.jpg");
+								thumbFile = InputFile.FromStream(thumbStream, $"thumb_{i}.jpg");
+							}
+							else
+							{
+								Console.WriteLine("[Telegram Stars Debug] ⚠️ Не удалось сгенерировать файл обложки thumbPath!");
+							}
+						}
+
 						paidMediaItems.Add(new InputPaidMediaVideo
 						{
 							Media = InputFile.FromStream(stream, $"paid_video_{i}.mp4"),
+							Cover = coverFile,         // <-- ПЕРЕДАЕМ ОБЛОЖКУ ДЛЯ ЗАБЛЮРЕННОГО ПЕЙВОЛЛА!
+							Thumbnail = thumbFile,     // <-- ПРЕВЬЮ ДЛЯ КЛИЕНТА
+							Width = width,             // 1080
+							Height = height,           // 1920
+							Duration = duration,
 							SupportsStreaming = true
 						});
 					}
@@ -210,7 +264,8 @@ namespace CrossChat.Integrations.Services.Telegram
 					}
 				}
 
-				// Отправляем платный альбом/медиа
+				Console.WriteLine($"[Telegram Stars Debug] 🚀 Отправка SendPaidMedia на {senderId} (элементов: {paidMediaItems.Count})...");
+
 				var message = await _telegramBotClient.SendPaidMedia(
 					chatId: senderId,
 					starCount: starCount,
@@ -220,6 +275,8 @@ namespace CrossChat.Integrations.Services.Telegram
 					replyMarkup: isCaptionTooLong ? null : replyMarkup
 				);
 
+				Console.WriteLine($"[Telegram Stars Debug] 🎉 Успешно отправлено! MessageId: {message.Id}");
+
 				if (isCaptionTooLong)
 				{
 					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
@@ -227,16 +284,16 @@ namespace CrossChat.Integrations.Services.Telegram
 
 				return message;
 			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"[Telegram] Ошибка отправки платного медиа: {ex.Message}");
-				throw;
-			}
 			finally
 			{
-				foreach (var stream in streams)
+				foreach (var s in streams)
 				{
-					stream?.Dispose();
+					s?.Dispose();
+				}
+
+				foreach (var thumb in tempThumbFiles)
+				{
+					try { if (File.Exists(thumb)) File.Delete(thumb); } catch { }
 				}
 			}
 		}
@@ -268,50 +325,71 @@ namespace CrossChat.Integrations.Services.Telegram
 
 		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
-			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
-			var videoBytes = Convert.FromBase64String(cleanBase64);
-
 			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+			using var stream = GetMediaStream(base64Video, out _);
 
-			using (var stream = new MemoryStream(videoBytes))
+			// =========================================================================
+			// ИЗВЛЕКАЕМ ТОЧНЫЕ РАЗМЕРЫ (WIDTH / HEIGHT / DURATION)
+			// Это гарантирует идеальный вертикальный прямоугольник вместо квадрата!
+			// =========================================================================
+			int? width = null;
+			int? height = null;
+			int? duration = null;
+
+			if (File.Exists(base64Video))
 			{
-				if (isCaptionTooLong)
+				var resInfo = await VideoService.GetVideoResolutionAsync(base64Video);
+				if (resInfo != null)
 				{
-					var videoMsg = await _telegramBotClient.SendVideo(
-						chatId: senderId,
-						video: InputFile.FromStream(stream, "video.mp4"),
-						supportsStreaming: true);
-
-					await _telegramBotClient.SendMessage(
-						chatId: senderId,
-						text: caption,
-						replyMarkup: replyMarkup,
-						parseMode: parseMode);
-
-					return videoMsg;
+					width = resInfo.Width;
+					height = resInfo.Height;
+					duration = resInfo.DurationSeconds;
 				}
-				else
-				{
-					return await _telegramBotClient.SendVideo(
-						chatId: senderId,
-						video: InputFile.FromStream(stream, "video.mp4"),
-						caption: string.IsNullOrEmpty(caption) ? null : caption,
-						replyMarkup: replyMarkup,
-						parseMode: parseMode,
-						supportsStreaming: true);
-				}
+			}
+
+			if (isCaptionTooLong)
+			{
+				var videoMsg = await _telegramBotClient.SendVideo(
+					chatId: senderId,
+					video: InputFile.FromStream(stream, "video.mp4"),
+					duration: duration,
+					width: width,
+					height: height,
+					supportsStreaming: true);
+
+				await _telegramBotClient.SendMessage(
+					chatId: senderId,
+					text: caption,
+					replyMarkup: replyMarkup,
+					parseMode: parseMode);
+
+				return videoMsg;
+			}
+			else
+			{
+				return await _telegramBotClient.SendVideo(
+					chatId: senderId,
+					video: InputFile.FromStream(stream, "video.mp4"),
+					duration: duration,
+					width: width,
+					height: height,
+					caption: string.IsNullOrEmpty(caption) ? null : caption,
+					replyMarkup: replyMarkup,
+					parseMode: parseMode,
+					supportsStreaming: true);
 			}
 		}
 
 		/// <summary>
-		/// Универсальная публикация альбома: поддерживает и фото, и видео, и их смесь (до 10 файлов)
+		/// Универсальная публикация медиа-альбома в Telegram (до 10 фото и/или видео)
+		/// Поддерживает как файлы с диска (0 МБ RAM), так и Base64, сохраняя оригинальные пропорции (Width/Height)
 		/// </summary>
 		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null)
 		{
 			if (base64MediaList == null || !base64MediaList.Any()) return null;
 
 			var media = new List<IAlbumInputMedia>();
-			var streams = new List<MemoryStream>();
+			var streams = new List<Stream>(); // Используем Stream вместо MemoryStream для поддержки файлов с диска
 
 			try
 			{
@@ -321,14 +399,18 @@ namespace CrossChat.Integrations.Services.Telegram
 				for (int i = 0; i < Math.Min(base64MediaList.Count, 10); i++)
 				{
 					var item = base64MediaList[i];
-					bool isVideo = item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || item.Contains("video/");
-					string cleanBase64 = item.Contains(",") ? item.Split(',')[1] : item;
 
-					var bytes = Convert.FromBase64String(cleanBase64);
-					var stream = new MemoryStream(bytes);
+					// 1. Умное определение видео (по пути к файлу или Base64 data-uri)
+					bool isVideo = item.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+								   item.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+								   item.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) ||
+								   item.Contains("video/");
+
+					// 2. Получаем поток (FileStream с диска или MemoryStream из Base64)
+					var stream = GetMediaStream(item, out _);
 					streams.Add(stream);
 
-					// Задаем описание только для первого элемента альбома
+					// Подпись задается только для первого элемента альбома
 					string? itemCaption = (i == 0 && !string.IsNullOrEmpty(albumCaption)) ? albumCaption : null;
 					ParseMode itemParseMode = itemCaption != null ? ParseMode.Html : ParseMode.None;
 
@@ -336,8 +418,29 @@ namespace CrossChat.Integrations.Services.Telegram
 
 					if (isVideo)
 					{
+						// =========================================================================
+						// ИЗВЛЕКАЕМ ТОЧНЫЕ РАЗМЕРЫ ВИДЕО ДЛЯ ИДЕАЛЬНЫХ ПРОПОРЦИЙ В АЛЬБОМЕ:
+						// =========================================================================
+						int width = 0;
+						int height = 0;
+						int duration = 0;
+
+						if (File.Exists(item))
+						{
+							var resInfo = await VideoService.GetVideoResolutionAsync(item);
+							if (resInfo != null)
+							{
+								width = resInfo.Width;
+								height = resInfo.Height;
+								duration = resInfo.DurationSeconds;
+							}
+						}
+
 						inputMedia = new InputMediaVideo(InputFile.FromStream(stream, $"video_{i}.mp4"))
 						{
+							Width = width,       // <-- Точная ширина кадра (напр. 1080)
+							Height = height,     // <-- Точная высота кадра (напр. 1920)
+							Duration = duration, // <-- Длительность
 							SupportsStreaming = true,
 							Caption = itemCaption,
 							ParseMode = itemParseMode
@@ -355,6 +458,7 @@ namespace CrossChat.Integrations.Services.Telegram
 					media.Add(inputMedia);
 				}
 
+				// 3. Отправляем альбом в Telegram
 				var messages = await _telegramBotClient.SendMediaGroup(senderId, media);
 
 				// Если текст не поместился в лимит подписи 1024 — отправляем следом отдельным сообщением
@@ -363,10 +467,9 @@ namespace CrossChat.Integrations.Services.Telegram
 					await _telegramBotClient.SendMessage(senderId, caption, parseMode: ParseMode.Html);
 				}
 
-				// Если к альбому прикреплена кнопка:
+				// Если к альбому прикреплена кнопка-ссылка
 				if (replyMarkup != null && !isCaptionTooLong)
 				{
-					// Альбомы в Telegram не принимают кнопки напрямую, шлем кнопку отдельной плашкой
 					await _telegramBotClient.SendMessage(senderId, "👇 Ссылка к публикации:", replyMarkup: replyMarkup);
 				}
 
@@ -379,9 +482,10 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 			finally
 			{
-				foreach (var stream in streams)
+				// 4. Гарантированно закрываем все открытые файловые потоки
+				foreach (var s in streams)
 				{
-					stream?.Dispose();
+					s?.Dispose();
 				}
 			}
 		}
@@ -448,22 +552,26 @@ namespace CrossChat.Integrations.Services.Telegram
 
 		public async Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html)
 		{
-			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
-			var rawBytes = Convert.FromBase64String(cleanBase64);
+			byte[] rawBytes;
+			if (File.Exists(base64Video))
+			{
+				rawBytes = await File.ReadAllBytesAsync(base64Video);
+			}
+			else
+			{
+				string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
+				rawBytes = Convert.FromBase64String(cleanBase64);
+			}
 
-			// На лету нарезаем квадрат 640x640
 			var squareVideoBytes = await VideoService.ConvertToTelegramVideoNoteAsync(rawBytes);
-
 			using var stream = new MemoryStream(squareVideoBytes);
 
-			// Отправляем нативный VideoNote
 			var noteMsg = await _telegramBotClient.SendVideoNote(
 				chatId: senderId,
 				videoNote: InputFile.FromStream(stream, "circle.mp4"),
 				length: 640
 			);
 
-			// Если к кружочку был написан текст — отправляем его следом отдельным сообщением
 			if (!string.IsNullOrWhiteSpace(caption))
 			{
 				await Task.Delay(500);
@@ -647,6 +755,21 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 
 			return 0;
+		}
+
+		private static Stream GetMediaStream(string input, out bool isFileStream)
+		{
+			// Если это файл на диске — стримим с диска с расходом RAM 0 МБ!
+			if (File.Exists(input))
+			{
+				isFileStream = true;
+				return new FileStream(input, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+			}
+
+			// Иначе декодируем Base64
+			isFileStream = false;
+			string cleanBase64 = input.Contains(",") ? input.Split(',')[1] : input;
+			return new MemoryStream(Convert.FromBase64String(cleanBase64));
 		}
 
 		public async Task SetWebhookAsync(string token, string webhookUrl)

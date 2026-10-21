@@ -97,22 +97,33 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		public async Task<(bool Success, string? PostId)> PublishReelAsync(string message, string base64Video, string acessToken, string pageIdToPublish)
+		public async Task<(bool Success, string? PostId)> PublishReelAsync(string message, string videoItem, string acessToken, string pageIdToPublish)
 		{
 			string pageAccessToken = acessToken;
 			if (string.IsNullOrEmpty(pageAccessToken)) return (false, null);
 
-			string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
-
 			byte[] videoBytes;
-			try
+
+			// =========================================================================
+			// 1. УМНАЯ АДАПТАЦИЯ: Если это файл на диске — читаем напрямую без Base64!
+			// =========================================================================
+			if (File.Exists(videoItem))
 			{
-				videoBytes = Convert.FromBase64String(cleanBase64);
+				videoBytes = await File.ReadAllBytesAsync(videoItem);
 			}
-			catch (FormatException)
+			else
 			{
-				Console.WriteLine("Ошибка: Неверный формат Base64 для видео.");
-				return (false, null);
+				// Иначе декодируем Base64 (для обратной совместимости)
+				string cleanBase64 = videoItem.Contains(",") ? videoItem.Split(',')[1] : videoItem;
+				try
+				{
+					videoBytes = Convert.FromBase64String(cleanBase64);
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Ошибка: Неверный формат Base64 для видео Facebook.");
+					return (false, null);
+				}
 			}
 
 			using (var httpClient = new HttpClient())
@@ -326,56 +337,63 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		private async Task<string> UploadImageAsync(string pageAccessToken, string pageId, string base64Image, HttpClient httpClient)
+		private async Task<string?> UploadImageAsync(string pageAccessToken, string pageId, string imageInput, HttpClient httpClient)
 		{
-			// ВАЖНО: Очищаем data-uri префикс ("data:image/jpeg;base64,...")
-			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
-
 			byte[] imageBytes;
-			try
+
+			// =========================================================================
+			// 1. ЕСЛИ ЭТО ФАЙЛ НА ДИСКЕ (пришел из фасада):
+			// =========================================================================
+			if (File.Exists(imageInput))
 			{
-				imageBytes = Convert.FromBase64String(cleanBase64);
+				imageBytes = await File.ReadAllBytesAsync(imageInput);
 			}
-			catch (FormatException)
+			else
 			{
-				Console.WriteLine("Ошибка: Неверный формат Base64 для фото.");
-				return null;
-			}
-
-			// Единая версия API v24.0
-			string url = $"https://graph.facebook.com/v24.0/{pageId}/photos";
-
-			using (var content = new MultipartFormDataContent())
-			{
-				var imageContent = new ByteArrayContent(imageBytes);
-				imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
-
-				content.Add(imageContent, "source", "image.jpg");
-				content.Add(new StringContent(pageAccessToken), "access_token");
-				content.Add(new StringContent("false"), "published"); // published=false для подготовки к альбому или сторис
-
-				var response = await httpClient.PostAsync(url, content);
-
-				if (response.IsSuccessStatusCode)
+				// 2. ЕСЛИ ЭТО BASE64:
+				string cleanBase64 = imageInput.Contains(",") ? imageInput.Split(',')[1] : imageInput;
+				try
 				{
-					string result = await response.Content.ReadAsStringAsync();
-					try
-					{
-						var data = JsonSerializer.Deserialize<UploadResponse>(result);
-						return data?.id;
-					}
-					catch (JsonException)
-					{
-						Console.WriteLine($"Ошибка парсинга ID при загрузке. Ответ: {result}");
-						return null;
-					}
+					imageBytes = Convert.FromBase64String(cleanBase64);
 				}
-				else
+				catch (FormatException)
 				{
-					string errorResult = await response.Content.ReadAsStringAsync();
-					Console.WriteLine($"Ошибка при загрузке изображения в Facebook (HTTP {response.StatusCode}): {errorResult}");
+					Console.WriteLine("Ошибка: Неверный формат Base64 для фото Facebook.");
 					return null;
 				}
+			}
+
+			string url = $"https://graph.facebook.com/v24.0/{pageId}/photos";
+
+			using var content = new MultipartFormDataContent();
+			var imageContent = new ByteArrayContent(imageBytes);
+			imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+
+			content.Add(imageContent, "source", "image.jpg");
+			content.Add(new StringContent(pageAccessToken), "access_token");
+			content.Add(new StringContent("false"), "published"); // published=false для подготовки к альбому или сторис
+
+			var response = await httpClient.PostAsync(url, content);
+
+			if (response.IsSuccessStatusCode)
+			{
+				string result = await response.Content.ReadAsStringAsync();
+				try
+				{
+					var data = JsonSerializer.Deserialize<UploadResponse>(result);
+					return data?.id;
+				}
+				catch (JsonException)
+				{
+					Console.WriteLine($"Ошибка парсинга ID при загрузке. Ответ: {result}");
+					return null;
+				}
+			}
+			else
+			{
+				string errorResult = await response.Content.ReadAsStringAsync();
+				Console.WriteLine($"Ошибка при загрузке изображения в Facebook (HTTP {response.StatusCode}): {errorResult}");
+				return null;
 			}
 		}
 

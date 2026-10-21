@@ -29,7 +29,8 @@ public class XPublisher : ISocialPublisher
 		await _console.Log($"Начало отправки поста в X @{settings.ScreenName}.", settings.UserId, state.BotId);
 
 		// Определяем типы файлов: видео или фото
-		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+		// 1. Проверка типов с поддержкой путей к файлам:
+		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
 		var videoItem = images?.FirstOrDefault(isVideo);
 		var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
 
@@ -39,6 +40,8 @@ public class XPublisher : ISocialPublisher
 		if (videoItem != null)
 		{
 			await _console.Log("Обнаружено видео. Загрузка ролика в X...", settings.UserId, state.BotId);
+
+			// Если XService умеет работать с байтами/файлом:
 			success = await _service.CreateVideoPost(caption, videoItem, settings.AccessToken);
 		}
 		// 2. ФОТО (до 4 картинок)

@@ -74,7 +74,8 @@ public partial class InstagramService
 		{
 			try
 			{
-				var statusUrl = $"{containerId}?fields=status_code,status&access_token={accessToken}";
+				// ЗАПРАШИВАЕМ error_message, ЧТОБЫ ЗНАТЬ ТОЧНУЮ ПРИЧИНУ:
+				var statusUrl = $"{containerId}?fields=status_code,status,error_message&access_token={accessToken}";
 				var response = await _httpClient.GetAsync(statusUrl);
 				var json = await response.Content.ReadAsStringAsync();
 
@@ -83,15 +84,16 @@ public partial class InstagramService
 				if (response.IsSuccessStatusCode)
 				{
 					using var doc = JsonDocument.Parse(json);
+					var root = doc.RootElement;
 
-					var statusCode = doc.RootElement.TryGetProperty("status_code", out var sc) ? sc.GetString() : null;
-					var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
+					var statusCode = root.TryGetProperty("status_code", out var sc) ? sc.GetString() : null;
+					var status = root.TryGetProperty("status", out var s) ? s.GetString() : null;
+					var errorMsg = root.TryGetProperty("error_message", out var em) ? em.GetString() : null;
 
 					_logger.LogInformation($"Статус: {status}, Status Code: {statusCode}");
 
 					if (statusCode == "FINISHED" || status == "FINISHED")
 					{
-						// ДОПОЛНИТЕЛЬНАЯ ЗАДЕРЖКА после FINISHED
 						_logger.LogInformation($"✅ Получен статус FINISHED, ждем 15 секунд перед публикацией...");
 						await Task.Delay(15000);
 						_logger.LogInformation($"✅ Медиа {containerId} готово к публикации!");
@@ -99,7 +101,7 @@ public partial class InstagramService
 					}
 					else if (statusCode == "ERROR" || status == "ERROR")
 					{
-						_logger.LogError($"❌ Медиа {containerId} завершилось с ошибкой");
+						_logger.LogError($"❌ Медиа {containerId} завершилось с ошибкой. Причина от Meta: {errorMsg}");
 						return false;
 					}
 
@@ -166,10 +168,18 @@ public partial class InstagramService
 		try
 		{
 			_logger.LogInformation("CreateSingleMediaContainerAsync - Start. LocationId: '{LocId}'", locationId);
-			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+			// Если это файл на диске — не прогоняем через Base64 фиксер!
+			string mediaPayload = File.Exists(base64String)
+				? base64String
+				: InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
 
-			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
-			tempFilesTracker.Add(localPath);
+			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(mediaPayload);
+
+			// Добавляем в список на удаление ТОЛЬКО если файл создали мы сами, а не фасад!
+			if (!File.Exists(base64String))
+			{
+				tempFilesTracker.Add(localPath);
+			}
 
 			await Task.Delay(500);
 
@@ -240,9 +250,16 @@ public partial class InstagramService
 
 			foreach (var base64String in base64Strings)
 			{
-				string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
-				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
-				tempFilesTracker.Add(localPath);
+				string mediaPayload = File.Exists(base64String)
+					? base64String
+					: InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+
+				var (mediaUrl, localPath) = await SaveMediaLocallyAsync(mediaPayload);
+
+				if (!File.Exists(base64String))
+				{
+					tempFilesTracker.Add(localPath);
+				}
 
 				bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
 				string childUrl = isVideo
@@ -306,23 +323,37 @@ public partial class InstagramService
 		}
 	}
 
-	private async Task<(string PublicUrl, string LocalPath)> SaveMediaLocallyAsync(string base64String)
+	private async Task<(string PublicUrl, string LocalPath)> SaveMediaLocallyAsync(string mediaInput)
 	{
-		// Получаем пути
 		string tempFolder = _siteSettings.TempFolder;
+		if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
 
-		if (!Directory.Exists(tempFolder))
+		// =========================================================================
+		// 1. ЕСЛИ ЭТО УЖЕ ЛОКАЛЬНЫЙ ФАЙЛ (пришел из нашего SocialPublicationFacade):
+		// =========================================================================
+		if (File.Exists(mediaInput))
 		{
-			Directory.CreateDirectory(tempFolder);
+			string existingFileName = Path.GetFileName(mediaInput);
+
+			// Если это видео — срезаем метку ИИ
+			if (existingFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+			{
+				await VideoService.StripAiMetadataAsync(mediaInput, _logger);
+			}
+
+			string existingPublicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{existingFileName}";
+			return (existingPublicUrl, mediaInput);
 		}
 
-		// Определяем расширение файла из Base64 (по умолчанию .jpg)
+		// =========================================================================
+		// 2. ЕСЛИ ЭТО BASE64 (старый сценарий для легких фото):
+		// =========================================================================
 		string extension = ".jpg";
-		string cleanBase64 = base64String;
+		string cleanBase64 = mediaInput;
 
-		if (base64String.Contains(","))
+		if (mediaInput.Contains(","))
 		{
-			var parts = base64String.Split(',');
+			var parts = mediaInput.Split(',');
 			var metaInfo = parts[0].ToLower();
 			cleanBase64 = parts[1];
 
@@ -330,58 +361,64 @@ public partial class InstagramService
 			else if (metaInfo.Contains("image/png")) extension = ".png";
 		}
 
-		// Генерируем уникальное имя
 		string fileName = $"{Guid.NewGuid()}{extension}";
-		string localPath = System.IO.Path.Combine(tempFolder, fileName);
+		string localPath = Path.Combine(tempFolder, fileName);
 
-		// Декодируем и сохраняем файл
 		byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 		await File.WriteAllBytesAsync(localPath, fileBytes);
 
-		// ЕСЛИ ЭТО ВИДЕО — УДАЛЯЕМ МЕТКУ ИИ ЧЕРЕЗ FFMPEG
 		if (extension == ".mp4")
 		{
 			await VideoService.StripAiMetadataAsync(localPath, _logger);
 		}
 
-		// Формируем публичную ссылку (убедитесь, что APP_URL доступен в классе)
-		// APP_URL должен быть вашим доменом на Render, например https://my-app.onrender.com
 		string publicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{fileName}";
-
 		return (publicUrl, localPath);
 	}
 
-	public async Task<string> PublishStoryFromBase64(string base64String, string accessToken)
+	public async Task<string> PublishStoryFromBase64(string mediaInput, string accessToken)
 	{
-		if (string.IsNullOrEmpty(base64String))
+		if (string.IsNullOrEmpty(mediaInput))
 		{
 			_logger.LogWarning("❌ No media provided for story");
 			return null;
 		}
 
-		// Запускаем фоновую чистку старого мусора (на случай прошлых падений сервера)
 		CleanupOldTempFiles();
 
-		string localFilePath = null; // Переменная для отслеживания пути к файлу для удаления
+		string? localFilePathToDelete = null; // Удаляем файл ТОЛЬКО если мы сами создали его из Base64
 
 		try
 		{
-			string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(base64String);
+			string mediaUrl;
 
-			// 1. Сохраняем файл на свой сервер (вместо ImgBB)
-			var (mediaUrl, localPath) = await SaveMediaLocallyAsync(validBase64);
-			localFilePath = localPath; // Запоминаем путь, чтобы удалить в finally
+			// =========================================================================
+			// 1. ЕСЛИ ЭТО УЖЕ ЛОКАЛЬНЫЙ ФАЙЛ НА ДИСКЕ (пришел из фасада):
+			// =========================================================================
+			if (File.Exists(mediaInput))
+			{
+				string fileName = Path.GetFileName(mediaInput);
+				mediaUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{fileName}";
+				_logger.LogInformation("✅ [Instagram Story] Используем готовый локальный файл: {Path}", mediaInput);
+			}
+			else
+			{
+				// 2. ЕСЛИ ЭТО BASE64:
+				string validBase64 = InstagramAspectRatioFixer.FixAspectRatioIfNeeded(mediaInput);
+				var (mUrl, lPath) = await SaveMediaLocallyAsync(validBase64);
+				mediaUrl = mUrl;
+				localFilePathToDelete = lPath;
+			}
 
 			if (string.IsNullOrEmpty(mediaUrl))
 			{
-				_logger.LogError($"❌ Не удалось получить ссылку на локальное медиа");
+				_logger.LogError("❌ Не удалось получить ссылку на медиа для сторис");
 				return null;
 			}
 
-			_logger.LogInformation($"✅ Файл для сторис сохранен локально. Ссылка: {mediaUrl}");
+			_logger.LogInformation("✅ Файл для сторис готов. Ссылка: {Url}", mediaUrl);
 
-			// 2. Определяем тип медиа (Instagram требует VIDEO для mp4 и IMAGE для фото)
-			string mediaType = mediaUrl.EndsWith(".mp4") ? "VIDEO" : "IMAGE";
+			string mediaType = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ? "VIDEO" : "IMAGE";
 
 			var media = new InstagramMedia
 			{
@@ -389,7 +426,6 @@ public partial class InstagramService
 				Media_Url = mediaUrl,
 			};
 
-			// 3. Создаем контейнер для сторис
 			var containerId = await CreateStoryContainer(media, accessToken);
 			if (string.IsNullOrEmpty(containerId))
 			{
@@ -397,12 +433,10 @@ public partial class InstagramService
 				return null;
 			}
 
-			// 4. Ждем готовности медиа и публикуем
 			var storyId = await WaitAndPublishContainer(containerId, accessToken);
-
 			if (!string.IsNullOrEmpty(storyId))
 			{
-				_logger.LogError($"✅ Regular story published successfully: {storyId}");
+				_logger.LogInformation("✅ История Instagram успешно опубликована: {StoryId}", storyId);
 				return storyId;
 			}
 
@@ -410,24 +444,16 @@ public partial class InstagramService
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, "❌ Error publishing regular story");
+			_logger.LogError(ex, "❌ Ошибка публикации сторис в Instagram");
 			return null;
 		}
 		finally
 		{
-			// 5. ГАРАНТИРОВАННАЯ ОЧИСТКА
-			// Этот блок выполнится всегда: и при успехе, и при ошибке (например, если Instagram отклонил файл)
-			if (!string.IsNullOrEmpty(localFilePath) && File.Exists(localFilePath))
+			// Удаляем файл ТОЛЬКО если мы сами сгенерировали его из Base64.
+			// Если файл пришел из фасада — фасад сам удалит его в конце!
+			if (!string.IsNullOrEmpty(localFilePathToDelete) && File.Exists(localFilePathToDelete))
 			{
-				try
-				{
-					File.Delete(localFilePath);
-					_logger.LogInformation($"🗑️ Временный файл сторис удален: {localFilePath}");
-				}
-				catch (Exception ex)
-				{
-					_logger.LogError(ex, $"⚠️ Не удалось удалить временный файл сторис {localFilePath}");
-				}
+				try { File.Delete(localFilePathToDelete); } catch { }
 			}
 		}
 	}

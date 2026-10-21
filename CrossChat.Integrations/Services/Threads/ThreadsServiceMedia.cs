@@ -51,7 +51,10 @@ namespace CrossChat.Integrations.Services
 				else if (imagesBase64.Count == 1)
 				{
 					var (mediaUrl, localPath) = await SaveMediaLocallyAsync(imagesBase64.First());
-					tempFilesTracker.Add(localPath);
+					if (!File.Exists(imagesBase64.First()))
+					{
+						tempFilesTracker.Add(localPath);
+					}
 
 					bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
 
@@ -95,7 +98,10 @@ namespace CrossChat.Integrations.Services
 					foreach (var base64Item in imagesBase64.Take(10))
 					{
 						var (mediaUrl, localPath) = await SaveMediaLocallyAsync(base64Item);
-						tempFilesTracker.Add(localPath);
+						if (!File.Exists(base64Item))
+						{
+							tempFilesTracker.Add(localPath);
+						}
 
 						bool isVideo = mediaUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
 
@@ -282,21 +288,37 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		private async Task<(string PublicUrl, string LocalPath)> SaveMediaLocallyAsync(string base64String)
+		private async Task<(string PublicUrl, string LocalPath)> SaveMediaLocallyAsync(string mediaInput)
 		{
 			string tempFolder = _siteSettings.TempFolder;
+			if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
 
-			if (!Directory.Exists(tempFolder))
+			// =========================================================================
+			// 1. ЕСЛИ ЭТО УЖЕ ЛОКАЛЬНЫЙ ФАЙЛ НА ДИСКЕ (пришел из фасада):
+			// =========================================================================
+			if (File.Exists(mediaInput))
 			{
-				Directory.CreateDirectory(tempFolder);
+				string existingFileName = Path.GetFileName(mediaInput);
+
+				// Если это видео — срезаем метку ИИ через FFmpeg
+				if (existingFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+				{
+					await VideoService.StripAiMetadataAsync(mediaInput, _logger);
+				}
+
+				string existingPublicUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{existingFileName}";
+				return (existingPublicUrl, mediaInput);
 			}
 
+			// =========================================================================
+			// 2. ЕСЛИ ЭТО BASE64 (для легких фото):
+			// =========================================================================
 			string extension = ".jpg";
-			string cleanBase64 = base64String;
+			string cleanBase64 = mediaInput;
 
-			if (base64String.Contains(","))
+			if (mediaInput.Contains(","))
 			{
-				var parts = base64String.Split(',');
+				var parts = mediaInput.Split(',');
 				var metaInfo = parts[0].ToLower();
 				cleanBase64 = parts[1];
 
@@ -310,7 +332,6 @@ namespace CrossChat.Integrations.Services
 			byte[] fileBytes = Convert.FromBase64String(cleanBase64);
 			await File.WriteAllBytesAsync(localPath, fileBytes);
 
-			// Очищаем C2PA метку ИИ из видео через FFmpeg
 			if (extension == ".mp4")
 			{
 				await VideoService.StripAiMetadataAsync(localPath, _logger);

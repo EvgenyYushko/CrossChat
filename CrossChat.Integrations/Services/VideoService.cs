@@ -501,5 +501,77 @@ namespace CrossChat.Integrations.Services
 
 			return inputPath;
 		}
+
+		public class VideoResolutionInfo
+		{
+			public int Width { get; set; }
+			public int Height { get; set; }
+			public int DurationSeconds { get; set; }
+		}
+
+		/// <summary>
+		/// Мгновенно извлекает точные размеры (Width x Height) и длительность видео для Telegram Bot API
+		/// </summary>
+		public static async Task<VideoResolutionInfo?> GetVideoResolutionAsync(string videoPath)
+		{
+			if (!File.Exists(videoPath)) return null;
+
+			try
+			{
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = $"-i \"{videoPath}\"",
+					RedirectStandardError = true, // FFmpeg выводит метаданные в поток stderr
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				string output = await process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+
+				// 1. Извлекаем разрешение: например, "1080x1920"
+				var matchRes = System.Text.RegularExpressions.Regex.Match(output, @"Stream.*Video:.*,\s*(\d{3,4})x(\d{3,4})");
+				if (!matchRes.Success) return null;
+
+				int width = int.Parse(matchRes.Groups[1].Value);
+				int height = int.Parse(matchRes.Groups[2].Value);
+
+				// 2. Проверяем ориентацию (если видео снято на смартфон вертикально, проверяем rotate)
+				var matchRotate = System.Text.RegularExpressions.Regex.Match(output, @"rotate\s*:\s*(\d+)");
+				if (matchRotate.Success && int.TryParse(matchRotate.Groups[1].Value, out int rot))
+				{
+					if (rot == 90 || rot == 270)
+					{
+						(width, height) = (height, width);
+					}
+				}
+
+				// 3. Извлекаем длительность (Duration: 00:00:10)
+				int duration = 0;
+				var matchDur = System.Text.RegularExpressions.Regex.Match(output, @"Duration:\s*(\d{2}):(\d{2}):(\d{2})");
+				if (matchDur.Success)
+				{
+					int h = int.Parse(matchDur.Groups[1].Value);
+					int m = int.Parse(matchDur.Groups[2].Value);
+					int s = int.Parse(matchDur.Groups[3].Value);
+					duration = (h * 3600) + (m * 60) + s;
+				}
+
+				return new VideoResolutionInfo
+				{
+					Width = width,
+					Height = height,
+					DurationSeconds = duration
+				};
+			}
+			catch
+			{
+				return null;
+			}
+		}
 	}
 }

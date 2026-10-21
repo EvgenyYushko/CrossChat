@@ -30,7 +30,10 @@ namespace CrossChat.Worker.Publishers
 
 			await _console.Log($"Начало отправки поста в страницу {settings.PageName}.", settings.UserId, state.BotId);
 
-			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
+			bool isAudio(string s) => s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) || s.Contains("audio/") || s.EndsWith(".ogg") || s.EndsWith(".mp3");
+			bool isImage(string s) => !isAudio(s) && !isVideo(s);
+
 			var videoItem = images?.FirstOrDefault(isVideo);
 			var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
 

@@ -42,7 +42,7 @@ namespace CrossChat.Worker.Publishers
 				channel.ChannelTitle, channel.CustomUrl);
 
 			// 2. Ищем видео и возможную обложку (картинку)
-			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+			bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
 			bool isImage(string s) => !isVideo(s) && !s.Contains("audio/");
 
 			var videoItem = images?.FirstOrDefault(isVideo);
@@ -76,8 +76,16 @@ namespace CrossChat.Worker.Publishers
 			}
 
 			// 4. Достаем бинарные данные видео и очищаем метаданные
-			string cleanBase64 = videoItem.Contains(",") ? videoItem.Split(',')[1] : videoItem;
-			byte[] videoBytes = Convert.FromBase64String(cleanBase64);
+			byte[] videoBytes;
+			if (File.Exists(videoItem))
+			{
+				videoBytes = await File.ReadAllBytesAsync(videoItem);
+			}
+			else
+			{
+				string cleanBase64 = videoItem.Contains(",") ? videoItem.Split(',')[1] : videoItem;
+				videoBytes = Convert.FromBase64String(cleanBase64);
+			}
 
 			_logger.LogInformation("[YouTube] Очистка видео от метаданных ИИ перед публикацией...");
 			videoBytes = await VideoService.StripAiMetadataAsync(videoBytes, _logger);
@@ -113,7 +121,7 @@ namespace CrossChat.Worker.Publishers
 
 			string privacy = string.IsNullOrWhiteSpace(state.PrivacyStatus) ? "public" : state.PrivacyStatus;
 
-			_logger.LogInformation("[YouTube] Загрузка видео ({Bytes} байт), заголовок: «{Title}», приватность: {P}...", 
+			_logger.LogInformation("[YouTube] Загрузка видео ({Bytes} байт), заголовок: «{Title}», приватность: {P}...",
 				videoBytes.Length, title, privacy);
 
 			// 6. Загружаем видео через YouTube Data API v3

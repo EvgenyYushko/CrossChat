@@ -33,8 +33,8 @@ public class TelegramChannelPublisher : ISocialPublisher
 		// 1. Формируем кнопку-ссылку, если она заполнена
 		InlineKeyboardMarkup? inlineKeyboard = _service.BuildInlineButton(state.ButtonText, state.ButtonUrl);
 
-		bool isAudio(string s) => s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) || s.Contains("audio/");
-		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+		bool isAudio(string s) => s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) || s.Contains("audio/") || s.EndsWith(".ogg") || s.EndsWith(".mp3");
+		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
 		bool isImage(string s) => !isAudio(s) && !isVideo(s);
 
 		var audioItem = images?.FirstOrDefault(isAudio);

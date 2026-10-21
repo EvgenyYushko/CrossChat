@@ -42,7 +42,7 @@ public class BlueSkyPublisher : ISocialPublisher
 
 		await _console.Log($"Начало отправки поста в BlueSky @{botModel.Handle}.", 0, state.BotId);
 
-		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/");
+		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
 		var videoItem = images?.FirstOrDefault(isVideo);
 		var photoItems = images?.Where(s => !isVideo(s)).ToList() ?? new List<string>();
 

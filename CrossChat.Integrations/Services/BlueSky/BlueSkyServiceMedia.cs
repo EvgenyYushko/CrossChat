@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
-using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Integrations.Services
 {
@@ -16,13 +15,14 @@ namespace CrossChat.Integrations.Services
 	{
 		private const int MAX_GRAPHEME_LENGTH = 300;
 
-		public async Task<(bool Success, string? Uri, string? Cid)> PublishPostWithVideoAsync(string caption, string base64Video, string mimeType, BlueSkyModel settings)
+		public async Task<(bool Success, string? Uri, string? Cid)> PublishPostWithVideoAsync(string caption, string videoInput, string mimeType, BlueSkyModel settings)
 		{
 			try
 			{
 				caption = await TruncateTextToMaxLength(caption);
 
-				var videoBlob = await UploadVideoFromBase64Async(base64Video, mimeType, settings);
+				// Вызываем адаптированный метод загрузки видео-блоба в PDS
+				var videoBlob = await UploadVideoFromBase64Async(videoInput, mimeType, settings);
 				if (videoBlob == null)
 				{
 					_logger.LogError("[BlueSky] Не удалось загрузить видео blob.");
@@ -85,24 +85,34 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
-		public async Task<(Blob? Blob, AspectRatio? AspectRatio)> UploadImageFromBase64Async(string base64Image, string mimeType, BlueSkyModel setting)
+		public async Task<(Blob? Blob, AspectRatio? AspectRatio)> UploadImageFromBase64Async(string imageInput, string mimeType, BlueSkyModel setting)
 		{
 			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 			var uploadUrl = $"{pdsUrl}/xrpc/com.atproto.repo.uploadBlob";
 
 			try
 			{
-				string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
-				byte[] fileBytes = Convert.FromBase64String(cleanBase64);
+				byte[] fileBytes;
 
-				// Если файл больше 1.95 МБ — оптимизируем
+				// 1. Проверяем, путь к файлу это или Base64
+				if (File.Exists(imageInput))
+				{
+					fileBytes = await File.ReadAllBytesAsync(imageInput);
+				}
+				else
+				{
+					string cleanBase64 = imageInput.Contains(",") ? imageInput.Split(',')[1] : imageInput;
+					fileBytes = Convert.FromBase64String(cleanBase64);
+				}
+
+				// Если файл больше 1.95 МБ — оптимизируем под лимиты BlueSky
 				const int MAX_BLUESKY_BYTES = 1_950_000;
 				if (fileBytes.Length > MAX_BLUESKY_BYTES)
 				{
 					fileBytes = CompressImageForBlueSky(fileBytes, out mimeType);
 				}
 
-				// Считываем точные пропорции изображения для идеального превью в ленте
+				// Считываем точные пропорции изображения для превью
 				AspectRatio? aspectRatio = null;
 				try
 				{
@@ -325,18 +335,29 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Загрузка бинарных данных видео в репозиторий AT Protocol (PDS) с DPoP-подписью
+		/// Загрузка бинарных данных видео в репозиторий AT Protocol (PDS).
+		/// Поддерживает как путь к файлу на диске, так и Base64 строку.
 		/// </summary>
-		public async Task<Blob?> UploadVideoFromBase64Async(string base64Video, string mimeType, BlueSkyModel setting)
+		public async Task<Blob?> UploadVideoFromBase64Async(string videoInput, string mimeType, BlueSkyModel setting)
 		{
 			var pdsUrl = setting.PdsUrl?.TrimEnd('/');
 			var uploadUrl = $"{pdsUrl}/xrpc/com.atproto.repo.uploadBlob";
 
 			try
 			{
-				// Очищаем data-uri префикс, если он есть
-				string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
-				byte[] fileBytes = Convert.FromBase64String(cleanBase64);
+				byte[] fileBytes;
+
+				// 1. Если передан путь к файлу на диске — читаем байты напрямую:
+				if (File.Exists(videoInput))
+				{
+					fileBytes = await File.ReadAllBytesAsync(videoInput);
+				}
+				else
+				{
+					// 2. Иначе декодируем Base64
+					string cleanBase64 = videoInput.Contains(",") ? videoInput.Split(',')[1] : videoInput;
+					fileBytes = Convert.FromBase64String(cleanBase64);
+				}
 
 				var fileContent = new ByteArrayContent(fileBytes);
 				fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrEmpty(mimeType) ? "video/mp4" : mimeType);

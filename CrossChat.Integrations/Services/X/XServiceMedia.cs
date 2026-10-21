@@ -87,21 +87,41 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Метод для публикации видео (MP4) из Base64 через TwitterClient + API v2
+		/// Метод для публикации видео (MP4) из локального файла или Base64 через TwitterClient + API v2
 		/// </summary>
-		public async Task<bool> CreateVideoPost(string caption, string base64Video, string accessToken)
+		public async Task<bool> CreateVideoPost(string caption, string videoInput, string accessToken)
 		{
-			if (string.IsNullOrEmpty(base64Video))
+			if (string.IsNullOrEmpty(videoInput))
 			{
-				_logger.LogError("[X] Передана пустая строка Base64 для видео.");
+				_logger.LogError("[X] Передан пустой параметр для видео.");
 				return false;
 			}
 
 			try
 			{
-				// 1. Очистка Base64 и подготовка байтов
-				string cleanBase64 = base64Video.Contains(",") ? base64Video.Split(',')[1] : base64Video;
-				byte[] videoBytes = Convert.FromBase64String(cleanBase64);
+				byte[] videoBytes;
+
+				// =========================================================================
+				// 1. УМНАЯ АДАПТАЦИЯ: Читаем напрямую из файла на диске (0 лишней памяти RAM)
+				// =========================================================================
+				if (File.Exists(videoInput))
+				{
+					videoBytes = await File.ReadAllBytesAsync(videoInput);
+				}
+				else
+				{
+					// Иначе парсим Base64 (обратная совместимость)
+					string cleanBase64 = videoInput.Contains(",") ? videoInput.Split(',')[1] : videoInput;
+					try
+					{
+						videoBytes = Convert.FromBase64String(cleanBase64);
+					}
+					catch (FormatException)
+					{
+						_logger.LogError("[X] Неверный формат Base64 или путь к файлу не найден: {Input}", videoInput);
+						return false;
+					}
+				}
 
 				_logger.LogInformation("[X] Размер видео: {Size:F2} MB. Начинаем загрузку в Twitter...", videoBytes.Length / (1024.0 * 1024.0));
 
