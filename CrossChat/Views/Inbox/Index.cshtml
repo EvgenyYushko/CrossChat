@@ -1080,6 +1080,84 @@
         .btn-rec-send:hover {
             background: rgba(16, 185, 129, 0.2);
         }
+
+        /* КАРТОЧКА ПРОГРЕССА ЗАГРУЗКИ ВНУТРИ ЧАТА */
+        .upload-progress-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 220px;
+            max-width: 280px;
+        }
+
+        .upload-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .upload-cancel-btn {
+            background: none;
+            border: none;
+            color: #ef4444;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 6px;
+            line-height: 1;
+            transition: background 0.15s;
+        }
+
+            .upload-cancel-btn:hover {
+                background: rgba(239, 68, 68, 0.2);
+            }
+
+        .upload-bar-bg {
+            background: rgba(255, 255, 255, 0.1);
+            height: 6px;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .upload-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #38bdf8, #818cf8);
+            border-radius: 6px;
+            transition: width 0.15s ease;
+        }
+
+            .upload-bar-fill.processing {
+                width: 100% !important;
+                background: linear-gradient(90deg, #6366f1, #a855f7);
+                animation: barPulse 1.2s infinite ease-in-out;
+            }
+
+        @@keyframes barPulse {
+            0% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.5;
+            }
+        }
+
+        .upload-footer-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
     </style>
 }
 
@@ -2047,55 +2125,140 @@
             document.getElementById('mediaFileInput').click();
         }
 
-        // ОТПРАВКА ВЫБРАННОГО ФАЙЛА
+        // Глобальная переменная для отмены текущей загрузки
+        let currentMediaUploadXhr = null;
+
+        // ОТПРАВКА МЕДИА С РЕАЛЬНЫМ ПРОГРЕСС-БАРОМ И ОТМЕНОЙ
         async function uploadAndSendMedia(input) {
             if (!input.files || input.files.length === 0 || !currentConversationId) return;
 
             const file = input.files[0];
-            const formData = new FormData();
-            formData.append('conversationId', currentConversationId);
-            formData.append('file', file);
+            const targetConversationId = currentConversationId;
 
-            // Сбрасываем выбор файла в проводнике
+            // Сбрасываем инпут выбора файла
             input.value = '';
 
-            // Оптимистично выводим индикатор отправки файла
+            // Валидация размера: предупреждаем, если видео больше 100 МБ
+            if (file.size > 100 * 1024 * 1024) {
+                alert("Файл слишком большой (> 100 МБ). Пожалуйста, выберите файл меньшего размера.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('conversationId', targetConversationId);
+            formData.append('file', file);
+
             const stream = document.getElementById('messagesStream');
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            const tempBubble = document.createElement('div');
-            tempBubble.className = 'msg-bubble msg-outgoing-human';
-            tempBubble.setAttribute('data-pending', 'true');
-            tempBubble.innerHTML = `<div>⏳ Загрузка и отправка файла (${escapeHtml(file.name)})...</div><div class="msg-footer"><span>${timeStr}</span></div>`;
-            stream.appendChild(tempBubble);
-            scrollChatToBottom();
+            // 1. Создаем бабл с красивым прогресс-баром
+            const uploadBubble = document.createElement('div');
+            uploadBubble.className = 'msg-bubble msg-outgoing-human';
+            uploadBubble.id = 'activeUploadBubble';
 
+            const fileSizeFormatted = formatBytesSimple(file.size);
+
+            uploadBubble.innerHTML = `
+                <div class="upload-progress-card">
+                    <div class="upload-header-row">
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">
+                            📎 ${escapeHtml(file.name)}
+                        </span>
+                        <button type="button" class="upload-cancel-btn" onclick="abortMediaUpload()" title="Отменить отправку">✕</button>
+                    </div>
+                    <div class="upload-bar-bg">
+                        <div class="upload-bar-fill" id="uploadFill"></div>
+                    </div>
+                    <div class="upload-footer-row">
+                        <span id="uploadStatusText">Загрузка: 0%</span>
+                        <span id="uploadBytesText">0 / ${fileSizeFormatted}</span>
+                    </div>
+                </div>
+                <div class="msg-footer"><span>${timeStr}</span></div>
+            `;
+
+            stream.appendChild(uploadBubble);
+            scrollChatToBottom();
             updateTakeoverUi(true);
 
-            try {
-                const res = await fetch('/inbox/send-media', {
-                    method: 'POST',
-                    body: formData
-                });
+            // 2. Запускаем передачу через XMLHttpRequest для точного трекинга прогресса
+            currentMediaUploadXhr = new XMLHttpRequest();
+            currentMediaUploadXhr.open('POST', '/inbox/send-media', true);
 
-                if (!res.ok) {
-                    const err = await res.text();
-                    tempBubble.remove();
+            // Отслеживаем реальные отправленные байты
+            currentMediaUploadXhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    const fill = document.getElementById('uploadFill');
+                    const statusText = document.getElementById('uploadStatusText');
+                    const bytesText = document.getElementById('uploadBytesText');
+
+                    if (percent < 100) {
+                        if (fill) fill.style.width = percent + '%';
+                        if (statusText) statusText.textContent = `Загрузка: ${percent}%`;
+                        if (bytesText) bytesText.textContent = `${formatBytesSimple(e.loaded)} / ${fileSizeFormatted}`;
+                    } else {
+                        // Байты улетели на сервер — теперь сервер сжимает видео через FFmpeg
+                        if (fill) {
+                            fill.classList.add('processing');
+                        }
+                        if (statusText) {
+                            statusText.textContent = file.type.startsWith('video') ? "⚙️ Сжатие видео на сервере..." : "⚙️ Обработка...";
+                        }
+                        if (bytesText) bytesText.textContent = "Почти готово";
+                    }
+                }
+            };
+
+            currentMediaUploadXhr.onload = function () {
+                currentMediaUploadXhr = null;
+
+                if (this.status >= 200 && this.status < 300) {
+                    // Успех: временный бабл прогресса растворяется, а вместо него встает готовый медиа-бабл из SignalR
+                    setTimeout(() => {
+                        if (uploadBubble) uploadBubble.remove();
+                    }, 600);
+                } else {
+                    const err = this.responseText;
+                    if (uploadBubble) uploadBubble.remove();
 
                     if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022")) {
                         openMetaWindowModal();
                     } else {
-                        alert("Ошибка отправки медиа: " + err);
+                        alert("Ошибка отправки: " + err);
                     }
-                } else {
-                    // Успех: временный бабл заменится настоящим баблом из SignalR
-                    setTimeout(() => tempBubble.remove(), 1000);
                 }
-            } catch (err) {
-                tempBubble.remove();
-                alert("Ошибка сети при отправке файла");
+            };
+
+            currentMediaUploadXhr.onerror = function () {
+                currentMediaUploadXhr = null;
+                if (uploadBubble) uploadBubble.remove();
+                alert("Сетевая ошибка при передаче файла.");
+            };
+
+            currentMediaUploadXhr.onabort = function () {
+                currentMediaUploadXhr = null;
+                if (uploadBubble) uploadBubble.remove();
+                console.log("Загрузка отменена пользователем.");
+            };
+
+            currentMediaUploadXhr.send(formData);
+        }
+
+        // ФУНКЦИЯ КНОПКИ ОТМЕНЫ
+        function abortMediaUpload() {
+            if (currentMediaUploadXhr) {
+                currentMediaUploadXhr.abort();
             }
+        }
+
+        function formatBytesSimple(bytes) {
+            if (bytes === 0) return '0 Б';
+            const k = 1024;
+            const sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
         let mediaRecorder = null;

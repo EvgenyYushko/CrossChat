@@ -340,6 +340,9 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
+		// Статический семафор: разрешает жать только ОДНО тяжелое видео одновременно
+		private static readonly SemaphoreSlim _videoCompressionSemaphore = new SemaphoreSlim(1, 1);
+
 		/// <summary>
 		/// Безопасное сжатие видео для Render (ограничение -threads 1 защищает от перезапуска сервера по памяти!)
 		/// </summary>
@@ -348,18 +351,18 @@ namespace CrossChat.Integrations.Services
 			if (!File.Exists(inputPath)) return inputPath;
 
 			var fileInfo = new FileInfo(inputPath);
-			// Сжимаем ролики крупнее 20 МБ
 			if (fileInfo.Length <= 20 * 1024 * 1024) return inputPath;
+
+			// Ждем своей очереди, если другой пользователь уже сжимает видео
+			await _videoCompressionSemaphore.WaitAsync();
 
 			string directory = Path.GetDirectoryName(inputPath)!;
 			string outputPath = Path.Combine(directory, $"comp_{Guid.NewGuid()}.mp4");
 
 			try
 			{
-				logger?.LogInformation("🎬 [FFmpeg] Безопасное сжатие видео {Size:F1} МБ для Direct...", fileInfo.Length / (1024.0 * 1024.0));
+				logger?.LogInformation("🎬 [FFmpeg] Старт сжатия видео {Size:F1} МБ...", fileInfo.Length / (1024.0 * 1024.0));
 
-				// -threads 1 КРИТИЧЕСКИ ВАЖЕН ДЛЯ RENDER: удерживает память в пределах 80 МБ!
-				// -pix_fmt yuv420p гарантирует, что цвета с iPhone (HDR/HEVC) корректно прочитаются серверами Meta
 				var arguments = $"-y -i \"{inputPath}\" -threads 1 -vf \"scale='min(720,iw)':-2\" " +
 								$"-c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p " +
 								$"-c:a aac -b:a 128k -ar 44100 -movflags +faststart \"{outputPath}\"";
@@ -379,10 +382,6 @@ namespace CrossChat.Integrations.Services
 
 				if (process.ExitCode == 0 && File.Exists(outputPath))
 				{
-					long newSize = new FileInfo(outputPath).Length;
-					logger?.LogInformation("✅ [FFmpeg] Видео успешно сжато: {Old:F1} МБ -> {New:F1} МБ",
-						fileInfo.Length / (1024.0 * 1024.0), newSize / (1024.0 * 1024.0));
-
 					File.Delete(inputPath);
 					File.Move(outputPath, inputPath);
 					return inputPath;
@@ -390,7 +389,12 @@ namespace CrossChat.Integrations.Services
 			}
 			catch (Exception ex)
 			{
-				logger?.LogError(ex, "Ошибка сжатия видео для Direct");
+				logger?.LogError(ex, "Ошибка сжатия видео");
+			}
+			finally
+			{
+				// Освобождаем очередь для следующего видео
+				_videoCompressionSemaphore.Release();
 			}
 
 			return inputPath;
