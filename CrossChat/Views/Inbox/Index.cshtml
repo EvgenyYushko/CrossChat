@@ -1408,6 +1408,32 @@
             }
         });
 
+        // ЖИВОЙ ПРОГРЕСС СЖАТИЯ ВИДЕО С СЕРВЕРА
+        connection.on("ServerProcessingProgress", (payload) => {
+            console.log("⚙️ [Server Progress]:", payload);
+
+            if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
+                const fill = document.getElementById('uploadFill');
+                const statusText = document.getElementById('uploadStatusText');
+                const bytesText = document.getElementById('uploadBytesText');
+
+                if (fill) {
+                    // Переключаем полоску в фиолетовый градиент обработки сервера
+                    fill.classList.remove('processing');
+                    fill.style.width = payload.percent + '%';
+                    fill.style.background = 'linear-gradient(90deg, #6366f1, #a855f7)';
+                }
+
+                if (statusText) {
+                    statusText.textContent = payload.text;
+                }
+
+                if (bytesText) {
+                    bytesText.textContent = payload.percent + '%';
+                }
+            }
+        });
+
         connection.on("TakeoverStatusChanged", (conversationId, isTakeover) => {
             if (currentConversationId === conversationId) {
                 updateTakeoverUi(isTakeover);
@@ -2199,14 +2225,15 @@
                         if (statusText) statusText.textContent = `Загрузка: ${percent}%`;
                         if (bytesText) bytesText.textContent = `${formatBytesSimple(e.loaded)} / ${fileSizeFormatted}`;
                     } else {
-                        // Байты улетели на сервер — теперь сервер сжимает видео через FFmpeg
+                        // Байты улетели на сервер: переключаем индикатор на 5% сжатия сервера
                         if (fill) {
-                            fill.classList.add('processing');
+                            fill.style.width = '5%';
+                            fill.style.background = 'linear-gradient(90deg, #6366f1, #a855f7)';
                         }
                         if (statusText) {
-                            statusText.textContent = file.type.startsWith('video') ? "⚙️ Сжатие видео на сервере..." : "⚙️ Обработка...";
+                            statusText.textContent = file.type.startsWith('video') ? "⚙️ Сжатие видео: 5%..." : "⚙️ Обработка...";
                         }
-                        if (bytesText) bytesText.textContent = "Почти готово";
+                        if (bytesText) bytesText.textContent = "Начало сжатия";
                     }
                 }
             };

@@ -789,8 +789,21 @@ namespace CrossChat.Services
 				// ===================================================================
 				if (mediaType == "video")
 				{
-					// Безопасное сжатие тяжелых роликов с телефона
-					await VideoService.CompressVideoForDirectAsync(localPath, _logger);
+					// Передаем делегат: каждый шаг сжатия сразу летит в SignalR в браузер!
+					await VideoService.CompressVideoForDirectAsync(localPath, _logger, async (percent, statusText) =>
+					{
+						try
+						{
+							await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+								.SendAsync("ServerProcessingProgress", new
+								{
+									conversationId = conv.Id,
+									percent = percent,
+									text = statusText
+								});
+						}
+						catch { }
+					});
 				}
 				else if (mediaType == "audio")
 				{

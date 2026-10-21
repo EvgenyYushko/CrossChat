@@ -346,14 +346,20 @@ namespace CrossChat.Integrations.Services
 		/// <summary>
 		/// Безопасное сжатие видео для Render (ограничение -threads 1 защищает от перезапуска сервера по памяти!)
 		/// </summary>
-		public static async Task<string> CompressVideoForDirectAsync(string inputPath, ILogger? logger = null)
+		public static async Task<string> CompressVideoForDirectAsync(
+			string inputPath,
+			ILogger? logger = null,
+			Func<int, string, Task>? onProgress = null) // <-- ДЕЛЕГАТ ДЛЯ SIGNALR ПРОГРЕССА
 		{
 			if (!File.Exists(inputPath)) return inputPath;
 
 			var fileInfo = new FileInfo(inputPath);
-			if (fileInfo.Length <= 20 * 1024 * 1024) return inputPath;
+			if (fileInfo.Length <= 20 * 1024 * 1024)
+			{
+				if (onProgress != null) await onProgress(90, "Отправка в Instagram...");
+				return inputPath;
+			}
 
-			// Ждем своей очереди, если другой пользователь уже сжимает видео
 			await _videoCompressionSemaphore.WaitAsync();
 
 			string directory = Path.GetDirectoryName(inputPath)!;
@@ -361,27 +367,81 @@ namespace CrossChat.Integrations.Services
 
 			try
 			{
-				logger?.LogInformation("🎬 [FFmpeg] Старт сжатия видео {Size:F1} МБ...", fileInfo.Length / (1024.0 * 1024.0));
+				logger?.LogInformation("🎬 [FFmpeg] Старт сжатия видео {Size:F1} МБ с живым прогрессом...", fileInfo.Length / (1024.0 * 1024.0));
+				if (onProgress != null) await onProgress(5, "Сжатие видео: 5%");
 
+				double totalVideoSeconds = 0;
+				int lastReportedPercent = 5;
+				var lastReportTime = DateTime.UtcNow;
+
+				// Добавляем флаг -progress pipe:1 для отдачи процентов в реальном времени
 				var arguments = $"-y -i \"{inputPath}\" -threads 1 -vf \"scale='min(720,iw)':-2\" " +
 								$"-c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p " +
-								$"-c:a aac -b:a 128k -ar 44100 -movflags +faststart \"{outputPath}\"";
+								$"-c:a aac -b:a 128k -ar 44100 -movflags +faststart " +
+								$"-progress pipe:1 \"{outputPath}\"";
 
 				var startInfo = new ProcessStartInfo
 				{
 					FileName = "ffmpeg",
 					Arguments = arguments,
-					RedirectStandardError = true,
+					RedirectStandardOutput = true, // Читаем прогресс
+					RedirectStandardError = true,  // Читаем длительность видео
 					UseShellExecute = false,
 					CreateNoWindow = true
 				};
 
 				using var process = new Process { StartInfo = startInfo };
+
+				// 1. Извлекаем общую длительность видео из потока stderr
+				process.ErrorDataReceived += (s, e) =>
+				{
+					if (string.IsNullOrEmpty(e.Data) || totalVideoSeconds > 0) return;
+					var match = System.Text.RegularExpressions.Regex.Match(e.Data, @"Duration:\s*(\d{2}):(\d{2}):(\d{2})\.?(\d*)");
+					if (match.Success)
+					{
+						int h = int.Parse(match.Groups[1].Value);
+						int m = int.Parse(match.Groups[2].Value);
+						int sec = int.Parse(match.Groups[3].Value);
+						totalVideoSeconds = (h * 3600) + (m * 60) + sec;
+					}
+				};
+
+				// 2. Читаем текущее время обработки из stdout и считаем процент
+				process.OutputDataReceived += async (s, e) =>
+				{
+					if (string.IsNullOrEmpty(e.Data) || totalVideoSeconds <= 0) return;
+
+					if (e.Data.StartsWith("out_time=") && !e.Data.Contains("N/A"))
+					{
+						var timeStr = e.Data.Replace("out_time=", "").Trim();
+						if (TimeSpan.TryParse(timeStr, out var currentTs))
+						{
+							int percent = Math.Clamp((int)((currentTs.TotalSeconds / totalVideoSeconds) * 100), 5, 92);
+
+							// Пушим в браузер каждые 3-4% (чтобы не спамить сокет)
+							if (percent >= lastReportedPercent + 3 && (DateTime.UtcNow - lastReportTime).TotalMilliseconds >= 600)
+							{
+								lastReportedPercent = percent;
+								lastReportTime = DateTime.UtcNow;
+								if (onProgress != null)
+								{
+									await onProgress(percent, $"Сжатие видео: {percent}%");
+								}
+							}
+						}
+					}
+				};
+
 				process.Start();
+				process.BeginOutputReadLine();
+				process.BeginErrorReadLine();
+
 				await process.WaitForExitAsync();
 
 				if (process.ExitCode == 0 && File.Exists(outputPath))
 				{
+					if (onProgress != null) await onProgress(95, "Отправка в Instagram...");
+
 					File.Delete(inputPath);
 					File.Move(outputPath, inputPath);
 					return inputPath;
@@ -393,7 +453,6 @@ namespace CrossChat.Integrations.Services
 			}
 			finally
 			{
-				// Освобождаем очередь для следующего видео
 				_videoCompressionSemaphore.Release();
 			}
 
