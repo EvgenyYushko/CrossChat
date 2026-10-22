@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Consumers.Instagram;
@@ -100,7 +101,7 @@ namespace CrossChat.Controllers
 							if (messaging.Message == null) continue;
 
 							// ===================================================================
-							// 2. ИСХОДЯЩИЕ ЭХО-СООБЩЕНИЯ (ОТВЕТ С ТЕЛЕФОНА)
+							// 2. ИСХОДЯЩИЕ ЭХО-СООБЩЕНИЯ (ОТВЕТ С ТЕЛЕФОНА: ТЕКСТ И МЕДИА)
 							// ===================================================================
 							if (messaging.Message.IsEcho)
 							{
@@ -108,15 +109,39 @@ namespace CrossChat.Controllers
 								var text = messaging.Message.Text;
 								var mid = messaging.Message.MessageId;
 
-								if (!string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(text))
+								string? mediaUrl = null;
+								string? mediaType = null;
+
+								// Извлекаем фото/видео/голосовое, отправленное из приложения Instagram
+								if (messaging.Message.Attachments?.Count > 0)
 								{
-									int networkTypeInstagram = 1;
+									var firstAttach = messaging.Message.Attachments[0];
+									mediaType = firstAttach.Type?.ToLower(); // "image", "video", "audio"
+									mediaUrl = firstAttach.Payload?.Url;
+
+									if (string.IsNullOrEmpty(text))
+									{
+										text = mediaType switch
+										{
+											"image" => "📷 Фотография",
+											"video" => "🎬 Видеозапись",
+											"audio" => "🎙️ Голосовое сообщение",
+											_ => $"[{mediaType}]"
+										};
+									}
+								}
+
+								if (!string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(mid) && (!string.IsNullOrEmpty(text) || !string.IsNullOrEmpty(mediaUrl)))
+								{
+									int networkTypeInstagram = (int)NetworkType.Instagram;
 									await _inboxService.SaveEchoMessageAsync(
 										networkTypeInstagram,
 										instagramBusinessId,
 										customerId,
 										mid,
-										text);
+										text ?? "[Вложение]",
+										mediaUrl,
+										mediaType);
 								}
 								continue;
 							}

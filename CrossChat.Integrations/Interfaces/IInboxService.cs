@@ -5,7 +5,7 @@ namespace CrossChat.Integrations.Interfaces
 {
 	public interface IInboxService
 	{
-		// Получить или создать диалог (возвращает чистый DTO)
+		// 1. Получить или создать диалог (возвращает чистый DTO)
 		Task<InboxConversationDto> GetOrCreateConversationAsync(
 			int profileId,
 			int networkType,
@@ -15,7 +15,7 @@ namespace CrossChat.Integrations.Interfaces
 			string? fullName,
 			string? avatarUrl);
 
-		// Сохранить входящее сообщение от клиента по Id диалога
+		// 2. Сохранить входящее сообщение от клиента по Id диалога
 		Task<bool> SaveIncomingMessageAsync(
 			int conversationId,
 			string externalMsgId,
@@ -23,44 +23,50 @@ namespace CrossChat.Integrations.Interfaces
 			string? mediaUrl = null,
 			string? mediaType = null);
 
-		// Сохранить ответ ИИ-бота по Id диалога
+		// 3. Сохранить ответ ИИ-бота по Id диалога
 		Task<bool> SaveBotReplyAsync(
 			int conversationId,
 			string text);
 
-		// Отправка сообщения менеджером руками через сайт
+		// 4. Отправка сообщения менеджером руками через сайт
 		Task<(bool Success, string? ErrorMessage)> SendManagerReplyAsync(
 			int conversationId,
 			string text);
 
-		// Переключение паузы ИИ (Human Takeover)
+		// 5. Переключение паузы ИИ (Human Takeover)
 		Task<bool> ToggleHumanTakeoverAsync(
 			int conversationId,
 			bool isTakeover);
 
+		// 6. Синхронизация диалогов профиля (Instagram + Facebook)
 		Task<int> SyncProfileConversationsAsync(int profileId);
 
+		// 7. Обработка исходящего эхо-сообщения (когда ответили с телефона)
 		Task<bool> SaveEchoMessageAsync(
 			int networkType,
 			string businessAccountId,
 			string customerId,
 			string messageId,
-			string text);
+			string text,
+			string? mediaUrl = null,
+			string? mediaType = null);
 
+		// 8. Отправка реакции на сообщение
 		Task<bool> SendMessageReactionAsync(int messageId, string reaction = "love");
 
-		// Переключение реакции (поставить или снять лайк)
+		// 9. Переключение реакции (поставить или снять лайк)
 		Task<(bool Success, string? NewReaction)> ToggleMessageReactionAsync(int messageId);
 
-		// Обработка реакции из вебхука (когда лайк поставили/сняли на телефоне)
+		// 10. Обработка реакции из вебхука (когда лайк поставили/сняли на телефоне)
 		Task<bool> HandleReactionWebhookAsync(string businessAccountId, string externalMessageId, string? emoji, string? action);
 
-		// Удаление сообщения по внешнему ID (из вебхука Instagram при Unsend)
+		// 11. Удаление сообщения по внешнему ID (из вебхука при Unsend)
 		Task<bool> DeleteMessageByExternalIdAsync(string externalMessageId);
 
-		// Удаление сообщения менеджером с сайта (по ID из БД)
+		// 12. Удаление сообщения менеджером с сайта (по ID из БД)
 		Task<bool> DeleteMessageFromInboxAsync(int messageId);
 
+		// 13. Отправка медиафайла менеджером (фото, видео, голосовые)
 		Task<(bool Success, string? ErrorMessage)> SendManagerMediaReplyAsync(int conversationId, IFormFile file);
 	}
 }

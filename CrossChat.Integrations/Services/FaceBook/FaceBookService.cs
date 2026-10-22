@@ -625,5 +625,185 @@ namespace CrossChat.Integrations.Services
 			public string FromId { get; set; } = string.Empty;
 			public string Text { get; set; } = string.Empty;
 		}
+
+		/// <summary>
+		/// Получает настоящее имя клиента Facebook через участников диалога (работает без App Review)
+		/// </summary>
+		public async Task<FbUser?> GetFacebookUserProfileAsync(string psid, string pageAccessToken)
+		{
+			// Запрашиваем диалог с конкретным пользователем через /me/conversations
+			string url = $"https://graph.facebook.com/v24.0/me/conversations?user_id={psid}&fields=participants&access_token={pageAccessToken}";
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var response = await httpClient.GetAsync(url);
+				if (!response.IsSuccessStatusCode)
+				{
+					return null;
+				}
+
+				var json = await response.Content.ReadAsStringAsync();
+				using var doc = JsonDocument.Parse(json);
+				var root = doc.RootElement;
+
+				if (root.TryGetProperty("data", out var dataArr) && dataArr.GetArrayLength() > 0)
+				{
+					var convo = dataArr[0];
+					if (convo.TryGetProperty("participants", out var parts) && parts.TryGetProperty("data", out var pArr))
+					{
+						foreach (var p in pArr.EnumerateArray())
+						{
+							var id = p.TryGetProperty("id", out var idElem) ? idElem.GetString() : null;
+							if (id == psid)
+							{
+								var name = p.TryGetProperty("name", out var nElem) ? nElem.GetString() : null;
+								if (!string.IsNullOrWhiteSpace(name))
+								{
+									return new FbUser
+									{
+										Id = psid,
+										Name = name,
+										ProfilePicUrl = null // Будет отрисован красивый бейдж с инициалами (например "BM")
+									};
+								}
+							}
+						}
+					}
+				}
+
+				return null;
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// 2. Отправляет медиафайл (фото, видео, аудио/голосовое) клиенту в Messenger
+		/// </summary>
+		/// <param name="recipientPsid">PSID пользователя</param>
+		/// <param name="mediaType">"image", "video", "audio"</param>
+		/// <param name="publicMediaUrl">Публичная ссылка на файл с нашего сервера</param>
+		/// <param name="pageAccessToken">Токен страницы</param>
+		public async Task<bool> SendMediaAttachmentAsync(string recipientPsid, string mediaType, string publicMediaUrl, string pageAccessToken)
+		{
+			string url = $"https://graph.facebook.com/v24.0/me/messages?access_token={pageAccessToken}";
+
+			// Meta Messenger Send API принимает тип вложения: image, video, audio или file
+			string fbType = mediaType.ToLower() switch
+			{
+				"video" => "video",
+				"audio" or "voice" => "audio",
+				_ => "image"
+			};
+
+			var payload = new
+			{
+				recipient = new { id = recipientPsid },
+				message = new
+				{
+					attachment = new
+					{
+						type = fbType,
+						payload = new
+						{
+							url = publicMediaUrl,
+							is_reusable = true
+						}
+					}
+				},
+				messaging_type = "RESPONSE"
+			};
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var jsonPayload = JsonSerializer.Serialize(payload);
+				var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+				var response = await httpClient.PostAsync(url, content);
+				var responseText = await response.Content.ReadAsStringAsync();
+
+				if (response.IsSuccessStatusCode)
+				{
+					Console.WriteLine($"[Facebook Messenger] ✅ Медиа ({fbType}) успешно отправлено пользователю {recipientPsid}");
+					return true;
+				}
+
+				Console.WriteLine($"[Facebook Messenger] ❌ Ошибка отправки медиа (HTTP {response.StatusCode}): {responseText}");
+				return false;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Messenger] Исключение при отправке медиа: {ex.Message}");
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// 3. Ставит или снимает реакцию (эмодзи) на сообщение в Messenger
+		/// </summary>
+		/// <param name="recipientPsid">PSID пользователя</param>
+		/// <param name="messageId">ExternalMessageId сообщения от Meta</param>
+		/// <param name="reactionEmoji">Эмодзи (например "❤️" или "👍") или null/пусто для снятия реакции</param>
+		public async Task<bool> SendReactionAsync(string recipientPsid, string messageId, string? reactionEmoji, string pageAccessToken)
+		{
+			string url = $"https://graph.facebook.com/v24.0/me/messages?access_token={pageAccessToken}";
+
+			// Если эмодзи передан — действие "react", если пустой — "unreact"
+			bool isReact = !string.IsNullOrEmpty(reactionEmoji);
+
+			object payload;
+			if (isReact)
+			{
+				payload = new
+				{
+					recipient = new { id = recipientPsid },
+					sender_action = "react",
+					payload = new
+					{
+						message_id = messageId,
+						reaction = reactionEmoji
+					}
+				};
+			}
+			else
+			{
+				payload = new
+				{
+					recipient = new { id = recipientPsid },
+					sender_action = "unreact",
+					payload = new
+					{
+						message_id = messageId
+					}
+				};
+			}
+
+			try
+			{
+				using var httpClient = new HttpClient();
+				var jsonPayload = JsonSerializer.Serialize(payload);
+				var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+				var response = await httpClient.PostAsync(url, content);
+				if (response.IsSuccessStatusCode)
+				{
+					Console.WriteLine($"[Facebook Messenger] ✅ Реакция {(isReact ? reactionEmoji : "СНЯТА")} для сообщения {messageId}");
+					return true;
+				}
+
+				var err = await response.Content.ReadAsStringAsync();
+				Console.WriteLine($"[Facebook Messenger] ❌ Ошибка реакции (HTTP {response.StatusCode}): {err}");
+				return false;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"[Facebook Messenger] Исключение при отправке реакции: {ex.Message}");
+				return false;
+			}
+		}
 	}
 }

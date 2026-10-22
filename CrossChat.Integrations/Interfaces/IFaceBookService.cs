@@ -23,6 +23,10 @@ namespace CrossChat.Integrations.Interfaces
 		Task<FacebookFeedPageDto> GetPageFeedAsync(string pageId, string pageAccessToken, int limit = 12, string? after = null, string? before = null);
 		Task<FacebookPostInsightsDto> GetPostInsightsAsync(string postId, string pageAccessToken);
 		Task<FacebookPageInsightsDto> GetPageInsightsAsync(string pageId, string pageAccessToken);
+
+		Task<FbUser?> GetFacebookUserProfileAsync(string psid, string pageAccessToken);
+		Task<bool> SendMediaAttachmentAsync(string recipientPsid, string mediaType, string publicMediaUrl, string pageAccessToken);
+		Task<bool> SendReactionAsync(string recipientPsid, string messageId, string? reactionEmoji, string pageAccessToken);
 	}
 
 	public class FbUser

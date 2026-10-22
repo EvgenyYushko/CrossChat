@@ -31,13 +31,16 @@ namespace CrossChat.Controllers
 
 		private string RedirectUri => $"{APP_URL}/facebook/auth/callback";
 
+		private readonly IInboxService _inboxService;
+
 		public FaceBookController(
 			ILogger<FaceBookController> logger,
 			IOptions<SocialMediaSettings> options,
 			IPublishEndpoint publishEndpoint,
 			AppDbContext db,
 			IConnectionMultiplexer redis,
-			IFaceBookService faceBookService)
+			IFaceBookService faceBookService,
+			IInboxService inboxService) // <-- ВНЕДРЯЕМ
 		{
 			_logger = logger;
 			_publishEndpoint = publishEndpoint;
@@ -45,6 +48,7 @@ namespace CrossChat.Controllers
 			_db = db;
 			_redis = redis.GetDatabase();
 			_faceBookService = faceBookService;
+			_inboxService = inboxService; // <-- СОХРАНЯЕМ
 			_httpClient = new HttpClient();
 		}
 
@@ -95,45 +99,159 @@ namespace CrossChat.Controllers
 							.AsNoTracking()
 							.FirstOrDefaultAsync(s => s.PageId == pageId);
 
-						if (settings == null || !settings.IsActive) continue;
+						// Если страницы нет в базе вообще — пропускаем
+						if (settings == null)
+						{
+							_logger.LogWarning($"[Facebook Webhook] Страница с PageId {pageId} не найдена в базе данных!");
+							continue;
+						}
 
+						// ===================================================================
 						// 1. ПЕРЕХВАТ ЛИЧНЫХ СООБЩЕНИЙ (MESSENGER)
-						if (settings.IsDirectEnabled && entry.TryGetProperty("messaging", out var messagingArr))
+						// ВАЖНО: Убрали проверку settings.IsDirectEnabled, чтобы сообщения ВСЕГДА шли в Инбокс!
+						// ===================================================================
+						if (entry.TryGetProperty("messaging", out var messagingArr))
 						{
 							foreach (var mItem in messagingArr.EnumerateArray())
 							{
-								if (mItem.TryGetProperty("message", out var msgObj))
+								// --- А. ПЕРЕХВАТ РЕАКЦИЙ ---
+								if (mItem.TryGetProperty("reaction", out var reactObj))
 								{
-									if (msgObj.TryGetProperty("is_echo", out var isEcho) && isEcho.GetBoolean())
-										continue;
+									var mid = reactObj.TryGetProperty("mid", out var rMid) ? rMid.GetString() : null;
+									var action = reactObj.TryGetProperty("action", out var rAct) ? rAct.GetString() : null;
+									var emoji = reactObj.TryGetProperty("emoji", out var rEm) ? rEm.GetString()
+										: (reactObj.TryGetProperty("reaction", out var rReact) ? rReact.GetString() : null);
 
-									var senderId = mItem.TryGetProperty("sender", out var s) ? s.GetProperty("id").GetString() : null;
-									var mid = msgObj.TryGetProperty("mid", out var m) ? m.GetString() : null;
-									var text = msgObj.TryGetProperty("text", out var t) ? t.GetString() : null;
+									_logger.LogInformation("❤️ [Facebook Reaction Webhook] Action: {Action}, Emoji: {Emoji}, Mid: {Mid}", action, emoji, mid);
 
-									if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(mid))
-										continue;
-
-									if (senderId == pageId) continue;
-
-									int attachCount = msgObj.TryGetProperty("attachments", out var atts) ? atts.GetArrayLength() : 0;
-
-									_logger.LogInformation($"[Facebook Webhook] Поймано ЛС от {senderId}: «{text}» (вложений: {attachCount})");
-
-									await _publishEndpoint.Publish(new FacebookMessageReceived
+									if (!string.IsNullOrEmpty(mid))
 									{
-										BotDbId = settings.Id,
-										PageId = pageId,
-										SenderId = senderId,
-										MessageId = mid,
-										Text = text ?? "",
-										AttachmentCount = attachCount
-									});
+										await _inboxService.HandleReactionWebhookAsync(pageId, mid, emoji, action);
+									}
+									continue;
 								}
+
+								if (!mItem.TryGetProperty("message", out var msgObj))
+									continue;
+
+								// --- Б. ИСХОДЯЩИЕ ЭХО-СООБЩЕНИЯ (ОТВЕТ МЕНЕДЖЕРА С ТЕЛЕФОНА: ТЕКСТ И МЕДИА) ---
+								if (msgObj.TryGetProperty("is_echo", out var isEcho) && isEcho.GetBoolean())
+								{
+									var customerId = mItem.TryGetProperty("recipient", out var rec) ? rec.GetProperty("id").GetString() : null;
+									var mid = msgObj.TryGetProperty("mid", out var em) ? em.GetString() : null;
+									var text = msgObj.TryGetProperty("text", out var et) ? et.GetString() : null;
+
+									string? mediaUrl1 = null;
+									string? mediaType1 = null;
+
+									// Извлекаем фото/видео/голосовое, отправленное из Messenger / Business Suite
+									if (msgObj.TryGetProperty("attachments", out var atts1) && atts1.GetArrayLength() > 0)
+									{
+										var firstAtt = atts1[0];
+										mediaType1 = firstAtt.TryGetProperty("type", out var atType) ? atType.GetString()?.ToLower() : null;
+
+										if (firstAtt.TryGetProperty("payload", out var pObj) && pObj.TryGetProperty("url", out var u))
+										{
+											mediaUrl1 = u.GetString();
+										}
+
+										if (string.IsNullOrEmpty(text))
+										{
+											text = mediaType1 switch
+											{
+												"image" => "📷 Фотография",
+												"video" => "🎬 Видеозапись",
+												"audio" => "🎙️ Голосовое сообщение",
+												_ => $"[{mediaType1}]"
+											};
+										}
+									}
+
+									_logger.LogInformation("📱 [Facebook Echo] Перехвачен ответ с телефона клиенту {Customer}: «{Text}» (медиа: {Type})",
+										customerId, text, mediaType1 ?? "нет");
+
+									if (!string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(mid) && (!string.IsNullOrEmpty(text) || !string.IsNullOrEmpty(mediaUrl1)))
+									{
+										int networkTypeFb = (int)NetworkType.Facebook;
+										await _inboxService.SaveEchoMessageAsync(
+											networkTypeFb,
+											pageId,
+											customerId,
+											mid,
+											text ?? "[Вложение]",
+											mediaUrl1,
+											mediaType1);
+									}
+									continue;
+								}
+
+								// --- В. ОТЗЫВ / УДАЛЕНИЕ СООБЩЕНИЯ КЛИЕНТОМ (UNSEND) ---
+								if (msgObj.TryGetProperty("is_deleted", out var isDel) && isDel.GetBoolean())
+								{
+									var delMid = msgObj.TryGetProperty("mid", out var dm) ? dm.GetString() : null;
+									_logger.LogInformation("🗑️ [Facebook Webhook] Сообщение {Mid} отозвано пользователем в Messenger.", delMid);
+									if (!string.IsNullOrEmpty(delMid))
+									{
+										await _inboxService.DeleteMessageByExternalIdAsync(delMid);
+									}
+									continue;
+								}
+
+								// --- Г. ВХОДЯЩИЕ СООБЩЕНИЯ КЛИЕНТА ---
+								var senderId = mItem.TryGetProperty("sender", out var s) ? s.GetProperty("id").GetString() : null;
+								var messageId = msgObj.TryGetProperty("mid", out var m) ? m.GetString() : null;
+								var messageText = msgObj.TryGetProperty("text", out var t) ? t.GetString() : null;
+
+								if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(messageId) || senderId == pageId)
+									continue;
+
+								string? mediaUrl = null;
+								string? mediaType = null;
+								int attachCount = 0;
+
+								if (msgObj.TryGetProperty("attachments", out var atts) && atts.GetArrayLength() > 0)
+								{
+									attachCount = atts.GetArrayLength();
+									var firstAtt = atts[0];
+									mediaType = firstAtt.TryGetProperty("type", out var atType) ? atType.GetString()?.ToLower() : null;
+
+									if (firstAtt.TryGetProperty("payload", out var pObj) && pObj.TryGetProperty("url", out var u))
+									{
+										mediaUrl = u.GetString();
+									}
+
+									if (string.IsNullOrEmpty(messageText))
+									{
+										messageText = mediaType switch
+										{
+											"image" => "📷 Фотография",
+											"video" => "🎬 Видеозапись",
+											"audio" => "🎙️ Голосовое сообщение",
+											_ => $"[{mediaType}]"
+										};
+									}
+								}
+
+								_logger.LogInformation($"[Facebook Webhook] ✅ Поймано ЛС от {senderId}: «{messageText}»");
+
+								// Отправляем в MassTransit (он моментально положит в Инбокс через FacebookWebhookConsumer)
+								await _publishEndpoint.Publish(new FacebookMessageReceived
+								{
+									BotDbId = settings.Id,
+									PageId = pageId,
+									SenderId = senderId,
+									MessageId = messageId,
+									Text = messageText ?? "",
+									MediaUrl = mediaUrl,
+									MediaType = mediaType,
+									AttachmentCount = attachCount
+								});
 							}
 						}
 
-						// 2. ПЕРЕХВАТ КОММЕНТАРИЕВ К ПУБЛИКАЦИЯМ
+						// ===================================================================
+						// 2. ПЕРЕХВАТ КОММЕНТАРИЕВ К ПУБЛИКАЦИЯМ (БЕЗ ИЗМЕНЕНИЙ)
+						// ===================================================================
 						if (settings.IsCommentsEnabled && entry.TryGetProperty("changes", out var changesArr))
 						{
 							foreach (var change in changesArr.EnumerateArray())
@@ -244,10 +362,13 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И GOOGLE DRIVE ИЗ BaseController
+				// 1. Очистка публикаций в планировщике и Google Drive
 				await CleanupLinkedPostsAsync(NetworkType.Facebook, botId);
 
-				// 2. Отписка от вебхуков Facebook
+				// 2. 🧹 ОЧИСТКА ДИАЛОГОВ И СООБЩЕНИЙ ИНБОКСА:
+				await CleanupLinkedInboxAsync(NetworkType.Facebook, botId);
+
+				// 3. Отписка от вебхуков Facebook
 				if (!string.IsNullOrEmpty(settings.PageAccessToken))
 				{
 					try
@@ -261,7 +382,7 @@ namespace CrossChat.Controllers
 					}
 				}
 
-				// 3. Удаляем саму интеграцию из базы данных
+				// 4. Удаляем саму интеграцию из базы данных
 				_db.FacebookSettings.Remove(settings);
 				await _db.SaveChangesAsync();
 
@@ -462,7 +583,7 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				var subscribeUrl = $"https://graph.facebook.com/v24.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,feed&access_token={pageToken}";
+				var subscribeUrl = $"https://graph.facebook.com/v24.0/{pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,message_echoes,message_reactions,feed&access_token={pageToken}";
 				await _httpClient.PostAsync(subscribeUrl, null);
 			}
 			catch (Exception ex)

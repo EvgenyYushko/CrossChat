@@ -1,10 +1,11 @@
+using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Data.Entities.Inbox;
 using CrossChat.Hubs;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Integrations.Models; // <-- Подключаем DTO
+using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.SignalR;
@@ -17,20 +18,22 @@ namespace CrossChat.Services
 		private readonly AppDbContext _db;
 		private readonly IHubContext<InboxHub> _hubContext;
 		private readonly IInstagramService _instaService;
+		private readonly IFaceBookService _fbService; // <-- 1. ВНЕДРЯЕМ FACEBOOK SERVICE
 		private readonly ILogger<InboxService> _logger;
-
 		private readonly SiteSettings _siteSettings;
 
 		public InboxService(
 			AppDbContext db,
 			IHubContext<InboxHub> hubContext,
 			IInstagramService instaService,
-			SiteSettings siteSettings, // <-- ДОБАВЛЕНО
+			IFaceBookService fbService, // <-- 1. ВНЕДРЯЕМ FACEBOOK SERVICE
+			SiteSettings siteSettings,
 			ILogger<InboxService> logger)
 		{
 			_db = db;
 			_hubContext = hubContext;
 			_instaService = instaService;
+			_fbService = fbService;
 			_siteSettings = siteSettings;
 			_logger = logger;
 		}
@@ -45,9 +48,13 @@ namespace CrossChat.Services
 			string? avatarUrl)
 		{
 			var conversation = await _db.InboxConversations
-				.FirstOrDefaultAsync(c => c.NetworkType == networkType && c.BotId == botId && c.ExternalUserId == externalUserId);
+				.FirstOrDefaultAsync(c => c.NetworkType == networkType &&
+					c.ExternalUserId == externalUserId &&
+					(c.BotId == botId || c.ProfileId == profileId));
 
-			// АВТО-ПОДГРУЗКА АВАТАРКИ И ЮЗЕРНЕЙМА ДЛЯ INSTAGRAM, ЕСЛИ ИХ НЕТ:
+			// ===================================================================
+			// 1. АВТО-ПОДГРУЗКА АВАТАРКИ И ИМЕНИ ДЛЯ INSTAGRAM
+			// ===================================================================
 			if ((string.IsNullOrEmpty(avatarUrl) || username == "instagram_user" || string.IsNullOrEmpty(username))
 				&& networkType == (int)NetworkType.Instagram)
 			{
@@ -63,7 +70,6 @@ namespace CrossChat.Services
 							fullName = !string.IsNullOrEmpty(userProfile.Name) ? userProfile.Name : username;
 							if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl)) avatarUrl = userProfile.ProfilePicUrl;
 
-							// Сохраняем в кэш клиентов
 							var customer = await _db.InstagramBotCustomers
 								.FirstOrDefaultAsync(c => c.InstagramSettingsId == botId && c.InstagramSenderId == externalUserId);
 
@@ -79,6 +85,37 @@ namespace CrossChat.Services
 				catch (Exception ex)
 				{
 					_logger.LogWarning(ex, "Не удалось получить профиль клиента Instagram {UserId}", externalUserId);
+				}
+			}
+
+			// ===================================================================
+			// 2. АВТО-ПОДГРУЗКА ИМЕНИ ДЛЯ FACEBOOK MESSENGER (ТОЛЬКО 1 РАЗ ПРИ СОЗДАНИИ!)
+			// ===================================================================
+			if (networkType == (int)NetworkType.Facebook &&
+				(conversation == null || conversation.FullName == "Пользователь Facebook" || string.IsNullOrEmpty(conversation.FullName)))
+			{
+				try
+				{
+					var settings = await _db.FacebookSettings.FindAsync(botId);
+					if (settings != null && !string.IsNullOrEmpty(settings.PageAccessToken))
+					{
+						var fbUser = await _fbService.GetFacebookUserProfileAsync(externalUserId, settings.PageAccessToken);
+						if (fbUser != null && !string.IsNullOrWhiteSpace(fbUser.Name))
+						{
+							fullName = fbUser.Name;
+							username = fbUser.Name;
+							_logger.LogInformation("👤 [Facebook Profile] Определено настоящее имя клиента: {Name}", fullName);
+						}
+						else if (string.IsNullOrEmpty(fullName))
+						{
+							fullName = "Пользователь Facebook";
+							username = "Пользователь Facebook";
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Не удалось получить профиль клиента Facebook {UserId}", externalUserId);
 				}
 			}
 
@@ -103,8 +140,12 @@ namespace CrossChat.Services
 			else
 			{
 				bool isUpdated = false;
-				if (!string.IsNullOrEmpty(username) && conversation.Username != username) { conversation.Username = username; isUpdated = true; }
-				if (!string.IsNullOrEmpty(avatarUrl) && conversation.AvatarUrl != avatarUrl) { conversation.AvatarUrl = avatarUrl; isUpdated = true; }
+				if (!string.IsNullOrEmpty(fullName) && fullName != "Пользователь Facebook" && conversation.FullName != fullName)
+				{
+					conversation.FullName = fullName;
+					conversation.Username = fullName;
+					isUpdated = true;
+				}
 				if (isUpdated) await _db.SaveChangesAsync();
 			}
 
@@ -194,33 +235,14 @@ namespace CrossChat.Services
 			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == conversationId);
 			if (conv == null) return (false, "Диалог не найден");
 
-			// 1. АВТОМАТИЧЕСКИЙ ПЕРЕХВАТ (HUMAN TAKEOVER):
 			conv.IsHumanTakeover = true;
 			conv.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
 
-			// ==================================================================================
-			// 2. СОХРАНЯЕМ В БД СРАЗУ (ДО ОТПРАВКИ В СЕТЬ!)
-			// Это исключает гонку потоков: когда через 200мс прилетит вебхук-эхо от Meta,
-			// оно уже увидит это сообщение в базе данных и НЕ создаст дубликат!
-			// ==================================================================================
-			var message = new InboxMessage
-			{
-				ConversationId = conv.Id,
-				Text = text,
-				IsIncoming = false,
-				IsSentByBot = false, // Отправил человек (менеджер)
-				IsReadByManager = true,
-				CreatedAtUtc = DateTime.UtcNow
-			};
-
-			_db.InboxMessages.Add(message);
-			conv.LastMessageSnippet = text;
-			conv.LastMessageAt = DateTime.UtcNow;
-			await _db.SaveChangesAsync();
-
 			try
 			{
-				// 3. Отправляем в Instagram
+				// ===================================================================
+				// 1. ОТПРАВКА В СООТВЕТСТВУЮЩУЮ СОЦСЕТЬ
+				// ===================================================================
 				if ((NetworkType)conv.NetworkType == NetworkType.Instagram)
 				{
 					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
@@ -229,22 +251,51 @@ namespace CrossChat.Services
 
 					await _instaService.SendMessageAsync(conv.ExternalUserId, text, settings.AccessToken);
 				}
+				else if ((NetworkType)conv.NetworkType == NetworkType.Facebook)
+				{
+					// УМНЫЙ ПОИСК С АВТО-ЛЕЧЕНИЕМ
+					var settings = await GetFacebookSettingsForConversationAsync(conv);
+					if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+						throw new Exception("Настройки Facebook страницы не найдены");
 
-				// 4. Успешно отправлено — пушим в SignalR ровно 1 раз
+					bool ok = await _fbService.SendReplyAsync(conv.ExternalUserId, text, settings.PageAccessToken);
+					if (!ok) throw new Exception("Не удалось отправить сообщение в Facebook Messenger");
+				}
+
+				// ===================================================================
+				// 2. ФИКСИРУЕМ В БАЗЕ ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ОТПРАВКИ!
+				// (Никаких фантомных сообщений в превью при сбоях!)
+				// ===================================================================
+				var message = new InboxMessage
+				{
+					ConversationId = conv.Id,
+					Text = text,
+					IsIncoming = false,
+					IsSentByBot = false,
+					IsReadByManager = true,
+					CreatedAtUtc = DateTime.UtcNow
+				};
+
+				_db.InboxMessages.Add(message);
+				conv.LastMessageSnippet = text;
+				conv.LastMessageAt = DateTime.UtcNow;
+
+				await _db.SaveChangesAsync();
+
+				// 3. Пушим в браузер
 				await NotifySignalRNewMessage(conv, message);
 				return (true, null);
 			}
 			catch (Exception ex)
 			{
-				// 5. ЕСЛИ ОТПРАВКА СОРВАЛАСЬ (например, 24-часовое окно закрыто) —
-				// удаляем черновик из базы, чтобы не засорять переписку неотправленным сообщением
-				_db.InboxMessages.Remove(message);
-				await _db.SaveChangesAsync();
-
 				_logger.LogError(ex, "Ошибка при ручной отправке ответа в инбоксе");
 
 				string userFriendlyMessage = ex.Message;
-				if (ex.Message.Contains("outside of allowed window") || ex.Message.Contains("2534022"))
+				if (ex.Message.Contains("outside of allowed window") ||
+					ex.Message.Contains("2534022") ||
+					ex.Message.Contains("2018278") ||
+					ex.Message.Contains("2018028") ||
+					ex.Message.Contains("вне разрешенного окна"))
 				{
 					userFriendlyMessage = "OUTSIDE_24H_WINDOW";
 				}
@@ -280,8 +331,8 @@ namespace CrossChat.Services
 					text = msg.Text,
 					isIncoming = msg.IsIncoming,
 					isSentByBot = msg.IsSentByBot,
-					mediaUrl = msg.MediaUrl,       // <-- ПЕРЕДАЕМ В SIGNALR
-					mediaType = msg.MediaType,     // <-- ПЕРЕДАЕМ В SIGNALR
+					mediaUrl = msg.MediaUrl,
+					mediaType = msg.MediaType,
 					reaction = msg.Reaction,
 					time = msg.CreatedAtUtc.ToString("HH:mm"),
 					lastSnippet = conv.LastMessageSnippet,
@@ -301,8 +352,11 @@ namespace CrossChat.Services
 		{
 			int totalSynced = 0;
 
+			// ===================================================================
+			// 1. СИНХРОНИЗАЦИЯ ДИАЛОГОВ INSTAGRAM
+			// ===================================================================
 			var instaAccounts = await _db.InstagramSettings
-				.Where(s => s.ProfileId == profileId && s.IsActive && !string.IsNullOrEmpty(s.AccessToken) && !string.IsNullOrEmpty(s.InstagramBusinessId))
+				.Where(s => s.ProfileId == profileId && !string.IsNullOrEmpty(s.AccessToken) && !string.IsNullOrEmpty(s.InstagramBusinessId))
 				.ToListAsync();
 
 			foreach (var account in instaAccounts)
@@ -311,7 +365,6 @@ namespace CrossChat.Services
 				{
 					_logger.LogInformation("🔄 [Inbox Sync] Опрос диалогов Instagram для @{User}...", account.Username);
 
-					// ПЕРЕДАЕМ InstagramBusinessId ДЛЯ ФИЛЬТРАЦИИ САМОГО СЕБЯ:
 					var convos = await _instaService.GetRecentConversationsAsync(account.AccessToken!, account.InstagramBusinessId!, 15);
 
 					foreach (var c in convos)
@@ -324,7 +377,6 @@ namespace CrossChat.Services
 						string username = c.ClientUsername ?? customer?.Username ?? "instagram_user";
 						string? avatar = customer?.ProfilePictureUrl;
 
-						// Если данных нет — запрашиваем профиль
 						if (string.IsNullOrEmpty(avatar) || username == "instagram_user")
 						{
 							try
@@ -419,35 +471,190 @@ namespace CrossChat.Services
 				}
 			}
 
+			// ===================================================================
+			// 2. СИНХРОНИЗАЦИЯ ДИАЛОГОВ FACEBOOK MESSENGER
+			// ===================================================================
+			var fbAccounts = await _db.FacebookSettings
+				.Where(s => s.ProfileId == profileId && !string.IsNullOrEmpty(s.PageAccessToken) && !string.IsNullOrEmpty(s.PageId))
+				.ToListAsync();
+
+			foreach (var fb in fbAccounts)
+			{
+				try
+				{
+					_logger.LogInformation("🔄 [Inbox Sync] Опрос диалогов Facebook для '{PageName}'...", fb.PageName);
+
+					// Запрашиваем последние диалоги страницы
+					string convsUrl = $"https://graph.facebook.com/v24.0/{fb.PageId}/conversations?platform=messenger&fields=id,updated_time,participants,messages.limit(10){{id,message,from,created_time}}&access_token={fb.PageAccessToken}";
+
+					using var httpClient = new HttpClient();
+					var resp = await httpClient.GetAsync(convsUrl);
+					if (!resp.IsSuccessStatusCode) continue;
+
+					var json = await resp.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+
+					if (doc.RootElement.TryGetProperty("data", out var dataArr))
+					{
+						foreach (var c in dataArr.EnumerateArray())
+						{
+							string convId = c.GetProperty("id").GetString()!;
+
+							// Находим клиента среди участников диалога
+							string? senderId = null;
+							string clientName = "Пользователь Facebook";
+
+							if (c.TryGetProperty("participants", out var parts) && parts.TryGetProperty("data", out var pArr))
+							{
+								foreach (var p in pArr.EnumerateArray())
+								{
+									var pid = p.GetProperty("id").GetString();
+									if (pid != fb.PageId)
+									{
+										senderId = pid;
+										clientName = p.TryGetProperty("name", out var n) ? n.GetString() ?? clientName : clientName;
+										break;
+									}
+								}
+							}
+
+							if (string.IsNullOrEmpty(senderId)) continue;
+
+							// Подгружаем аватарку
+							var profile = await _fbService.GetFacebookUserProfileAsync(senderId, fb.PageAccessToken!);
+							if (profile != null)
+							{
+								clientName = profile.Name;
+							}
+
+							var conversation = await _db.InboxConversations
+								.FirstOrDefaultAsync(x => x.NetworkType == (int)NetworkType.Facebook &&
+														  x.BotId == fb.Id &&
+														  x.ExternalUserId == senderId);
+
+							if (conversation == null)
+							{
+								conversation = new InboxConversation
+								{
+									ProfileId = profileId,
+									NetworkType = (int)NetworkType.Facebook,
+									BotId = fb.Id,
+									ExternalChatId = convId,
+									ExternalUserId = senderId,
+									Username = clientName,
+									FullName = clientName,
+									AvatarUrl = profile?.ProfilePicUrl,
+									LastMessageSnippet = "Диалог синхронизирован",
+									LastMessageAt = DateTime.UtcNow,
+									CreatedAt = DateTime.UtcNow,
+									UnreadCount = 0
+								};
+
+								_db.InboxConversations.Add(conversation);
+								await _db.SaveChangesAsync();
+								totalSynced++;
+							}
+							else
+							{
+								if (!string.IsNullOrEmpty(profile?.ProfilePicUrl)) conversation.AvatarUrl = profile.ProfilePicUrl;
+								conversation.FullName = clientName;
+							}
+
+							// СИНХРОНИЗИРУЕМ ИСТОРИЮ (ДО 10 ПОСЛЕДНИХ СООБЩЕНИЙ)
+							if (c.TryGetProperty("messages", out var msgsObj) && msgsObj.TryGetProperty("data", out var mList))
+							{
+								foreach (var m in mList.EnumerateArray())
+								{
+									string mid = m.GetProperty("id").GetString()!;
+									string text = m.TryGetProperty("message", out var mt) ? mt.GetString() ?? "" : "";
+									string fromId = m.TryGetProperty("from", out var f) && f.TryGetProperty("id", out var fid) ? fid.GetString() ?? "" : "";
+									bool isFromClient = fromId != fb.PageId;
+
+									if (string.IsNullOrEmpty(text)) continue;
+
+									bool msgExists = await _db.InboxMessages.AnyAsync(msg => msg.ExternalMessageId == mid);
+									if (!msgExists)
+									{
+										_db.InboxMessages.Add(new InboxMessage
+										{
+											ConversationId = conversation.Id,
+											ExternalMessageId = mid,
+											Text = text,
+											IsIncoming = isFromClient,
+											IsSentByBot = false,
+											IsReadByManager = !isFromClient,
+											CreatedAtUtc = DateTime.UtcNow
+										});
+									}
+								}
+
+								var lastOne = mList.EnumerateArray().FirstOrDefault();
+								if (lastOne.ValueKind != JsonValueKind.Undefined)
+								{
+									conversation.LastMessageSnippet = lastOne.TryGetProperty("message", out var mt) ? mt.GetString() : conversation.LastMessageSnippet;
+								}
+							}
+
+							await _db.SaveChangesAsync();
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Ошибка синхронизации Facebook для профиля {ProfileId}", profileId);
+				}
+			}
+
 			return totalSynced;
 		}
 
 		public async Task<bool> SaveEchoMessageAsync(
-			int networkType,
-			string businessAccountId,
-			string customerId,
-			string messageId,
-			string text)
+	int networkType,
+	string businessAccountId,
+	string customerId,
+	string messageId,
+	string text,
+	string? mediaUrl = null,
+	string? mediaType = null)
 		{
 			try
 			{
-				// 1. Ищем настройки аккаунта
-				var settings = await _db.InstagramSettings
-					.AsNoTracking()
-					.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
+				int botId = 0;
 
-				if (settings == null) return false;
+				if (networkType == (int)NetworkType.Instagram)
+				{
+					var igSettings = await _db.InstagramSettings
+						.AsNoTracking()
+						.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
+					if (igSettings == null) return false;
+					botId = igSettings.Id;
+				}
+				else if (networkType == (int)NetworkType.Facebook)
+				{
+					var fbSettings = await _db.FacebookSettings
+						.AsNoTracking()
+						.FirstOrDefaultAsync(s => s.PageId == businessAccountId);
+					if (fbSettings == null) return false;
+					botId = fbSettings.Id;
+				}
 
-				// 2. Ищем существующий диалог
+				if (botId == 0) return false;
+
+				// 1. Ищем существующий диалог
 				var conversation = await _db.InboxConversations
-					.FirstOrDefaultAsync(c => c.NetworkType == networkType && c.BotId == settings.Id && c.ExternalUserId == customerId);
+					.FirstOrDefaultAsync(c => c.NetworkType == networkType &&
+											  c.ExternalUserId == customerId &&
+											  (c.BotId == botId || c.ExternalChatId == businessAccountId));
 
 				if (conversation == null) return false;
 
-				// ==================================================================================
-				// 3. ЗАЩИТА ОТ ДУБЛИРОВАНИЯ (СКЛЕЙКА С СООБЩЕНИЕМ, ОТПРАВЛЕННЫМ С САЙТА):
-				// Ищем наше собственное исходящее сообщение с таким же текстом за последние 30 секунд
-				// ==================================================================================
+				if (conversation.BotId != botId)
+				{
+					conversation.BotId = botId;
+					conversation.ExternalChatId = businessAccountId;
+				}
+
+				// 2. Защита от дублей сообщений, отправленных с нашего сайта за последние 30 секунд
 				var thresholdUtc = DateTime.UtcNow.AddSeconds(-30);
 				var recentSentMessage = await _db.InboxMessages
 					.Where(m => m.ConversationId == conversation.Id &&
@@ -459,26 +666,21 @@ namespace CrossChat.Services
 
 				if (recentSentMessage != null)
 				{
-					// Это подтверждение нашего сообщения с сайта!
-					// Привязываем официальный ID от Meta и НЕ создаем дубль!
 					if (string.IsNullOrEmpty(recentSentMessage.ExternalMessageId))
 					{
 						recentSentMessage.ExternalMessageId = messageId;
 						await _db.SaveChangesAsync();
 					}
-					return false; // ВЫХОДИМ: второй раз в базу не пишем и в SignalR не шлем!
+					return false; // Склеено с сообщением с сайта
 				}
 
-				// Защита от дублей по MessageId (если вебхук прилетел повторно)
 				if (!string.IsNullOrEmpty(messageId))
 				{
 					bool alreadyExists = await _db.InboxMessages.AnyAsync(m => m.ExternalMessageId == messageId);
 					if (alreadyExists) return false;
 				}
 
-				// ==================================================================================
-				// 4. ЕСЛИ ДОШЛИ СЮДА — ЭТО РЕАЛЬНОЕ СООБЩЕНИЕ, ОТПРАВЛЕННОЕ С ТЕЛЕФОНА!
-				// ==================================================================================
+				// 3. Сохраняем эхо-сообщение с медиафайлом
 				conversation.IsHumanTakeover = true;
 				conversation.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
 
@@ -487,8 +689,10 @@ namespace CrossChat.Services
 					ConversationId = conversation.Id,
 					ExternalMessageId = messageId,
 					Text = text,
+					MediaUrl = mediaUrl,     // <-- СОХРАНЯЕМ ССЫЛКУ НА ФОТО/ВИДЕО
+					MediaType = mediaType,   // <-- СОХРАНЯЕМ ТИП (image/video/audio)
 					IsIncoming = false,
-					IsSentByBot = false, // Отправил человек с телефона
+					IsSentByBot = false,
 					IsReadByManager = true,
 					CreatedAtUtc = DateTime.UtcNow
 				};
@@ -501,9 +705,10 @@ namespace CrossChat.Services
 
 				await _db.SaveChangesAsync();
 
-				_logger.LogInformation("📱 [Echo] Зафиксирован ответ менеджера с телефона клиенту {CustomerId}: «{Text}»", customerId, text);
+				_logger.LogInformation("📱 [{Net} Echo] ✅ Медиа/текст с телефона сохранены в диалог {ConvId}: «{Text}»",
+					(NetworkType)networkType, conversation.Id, text);
 
-				// Пушим в SignalR на сайт (теперь ровно 1 раз!)
+				// Пушим в браузер через SignalR (он сразу отобразит фото/видео/голосовое!)
 				await NotifySignalRNewMessage(conversation, message);
 
 				await _hubContext.Clients.Group($"profile_inbox_{conversation.ProfileId}")
@@ -513,7 +718,7 @@ namespace CrossChat.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Ошибка обработки эхо-сообщения");
+				_logger.LogError(ex, "Ошибка обработки эхо-сообщения с медиа");
 				return false;
 			}
 		}
@@ -531,6 +736,9 @@ namespace CrossChat.Services
 
 				var conv = msg.Conversation;
 
+				// ===================================================================
+				// 1. ОТПРАВКА РЕАКЦИИ В INSTAGRAM
+				// ===================================================================
 				if (conv.NetworkType == (int)NetworkType.Instagram)
 				{
 					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
@@ -545,26 +753,58 @@ namespace CrossChat.Services
 
 					if (success)
 					{
-						// СОХРАНЯЕМ СЕРДЕЧКО В БАЗУ ДАННЫХ:
 						msg.Reaction = "❤️";
 						await _db.SaveChangesAsync();
 
 						_logger.LogInformation("❤️ [Instagram Reaction] Лайк сохранен в БД для сообщения {MsgId}", msg.Id);
-					}
 
-					return success;
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, "❤️");
+
+						return true;
+					}
+				}
+				// ===================================================================
+				// 2. ОТПРАВКА РЕАКЦИИ В FACEBOOK MESSENGER
+				// ===================================================================
+				else if (conv.NetworkType == (int)NetworkType.Facebook)
+				{
+					var settings = await _db.FacebookSettings.FindAsync(conv.BotId);
+					if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+						return false;
+
+					// В Messenger передаем реальный эмодзи: если пришел "love" -> ставим "❤️"
+					string emojiReaction = (reaction == "love" || string.IsNullOrEmpty(reaction)) ? "❤️" : reaction;
+
+					bool success = await _fbService.SendReactionAsync(
+						conv.ExternalUserId,
+						msg.ExternalMessageId,
+						emojiReaction,
+						settings.PageAccessToken);
+
+					if (success)
+					{
+						msg.Reaction = emojiReaction;
+						await _db.SaveChangesAsync();
+
+						_logger.LogInformation("❤️ [Facebook Reaction] Лайк сохранен в БД для сообщения {MsgId}", msg.Id);
+
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, emojiReaction);
+
+						return true;
+					}
 				}
 
 				return false;
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Ошибка отправки реакции");
+				_logger.LogError(ex, "Ошибка отправки реакции для сообщения {Id}", messageId);
 				return false;
 			}
 		}
 
-		// 1. ПЕРЕКЛЮЧЕНИЕ РЕАКЦИИ С САЙТА (ТОГГЛ)
 		public async Task<(bool Success, string? NewReaction)> ToggleMessageReactionAsync(int messageId)
 		{
 			try
@@ -577,37 +817,58 @@ namespace CrossChat.Services
 					return (false, null);
 
 				var conv = msg.Conversation;
-				if (conv.NetworkType != (int)NetworkType.Instagram)
-					return (false, null);
-
-				var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
-				if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
-					return (false, null);
-
-				// Если реакция уже стояла — мы её СНИМАЕМ (null), иначе СТАВИМ ("❤️")
 				bool isAlreadyLiked = !string.IsNullOrEmpty(msg.Reaction);
 				string? newReaction = isAlreadyLiked ? null : "❤️";
-				string apiReactionParam = isAlreadyLiked ? "" : "love";
 
-				// Отправляем в Instagram API
-				bool success = await _instaService.SendReactionAsync(
-					conv.ExternalUserId,
-					msg.ExternalMessageId,
-					apiReactionParam,
-					settings.AccessToken);
-
-				if (success)
+				// === INSTAGRAM ===
+				if (conv.NetworkType == (int)NetworkType.Instagram)
 				{
-					// Сохраняем новое состояние в БД
-					msg.Reaction = newReaction;
-					await _db.SaveChangesAsync();
+					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
+					if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+						return (false, null);
 
-					// Уведомляем все вкладки через SignalR
-					await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
-						.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, newReaction);
+					string apiReactionParam = isAlreadyLiked ? "" : "love";
+					bool success = await _instaService.SendReactionAsync(
+						conv.ExternalUserId,
+						msg.ExternalMessageId,
+						apiReactionParam,
+						settings.AccessToken);
 
-					_logger.LogInformation("❤️ [Reaction Toggle] Реакция для {MsgId}: {Status}", msg.Id, newReaction ?? "СНЯТА");
-					return (true, newReaction);
+					if (success)
+					{
+						msg.Reaction = newReaction;
+						await _db.SaveChangesAsync();
+
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, newReaction);
+
+						return (true, newReaction);
+					}
+				}
+				// === FACEBOOK MESSENGER ===
+				else if (conv.NetworkType == (int)NetworkType.Facebook)
+				{
+					// ИСПОЛЬЗУЕМ УМНЫЙ ПОИСК
+					var settings = await GetFacebookSettingsForConversationAsync(conv);
+					if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+						return (false, null);
+
+					bool success = await _fbService.SendReactionAsync(
+						conv.ExternalUserId,
+						msg.ExternalMessageId,
+						newReaction,
+						settings.PageAccessToken);
+
+					if (success)
+					{
+						msg.Reaction = newReaction;
+						await _db.SaveChangesAsync();
+
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, newReaction);
+
+						return (true, newReaction);
+					}
 				}
 
 				return (false, msg.Reaction);
@@ -619,19 +880,16 @@ namespace CrossChat.Services
 			}
 		}
 
-		// 2. ОБРАБОТКА РЕАКЦИИ ИЗ ВЕБХУКА (С ТЕЛЕФОНА)
 		public async Task<bool> HandleReactionWebhookAsync(string businessAccountId, string externalMessageId, string? emoji, string? action)
 		{
 			try
 			{
-				// Ищем сообщение по ExternalMessageId от Meta
 				var msg = await _db.InboxMessages
 					.Include(m => m.Conversation)
 					.FirstOrDefaultAsync(m => m.ExternalMessageId == externalMessageId);
 
 				if (msg == null) return false;
 
-				// Meta присылает action: "react" или "unreact"
 				string? updatedReaction = null;
 				if (action == "react")
 				{
@@ -639,15 +897,14 @@ namespace CrossChat.Services
 				}
 				else if (action == "unreact")
 				{
-					updatedReaction = null; // Сняли лайк
+					updatedReaction = null;
 				}
 
 				msg.Reaction = updatedReaction;
 				await _db.SaveChangesAsync();
 
-				_logger.LogInformation("📱 [Reaction Webhook] Реакция с телефона синхронизирована для msg {Id}: {React}", msg.Id, updatedReaction ?? "СНЯТА");
+				_logger.LogInformation("📱 [Reaction Webhook] Реакция синхронизирована для msg {Id}: {React}", msg.Id, updatedReaction ?? "СНЯТА");
 
-				// Моментально пушим в браузер через SignalR!
 				await _hubContext.Clients.Group($"profile_inbox_{msg.Conversation.ProfileId}")
 					.SendAsync("UpdateMessageReaction", msg.ConversationId, msg.Id, updatedReaction);
 
@@ -660,7 +917,6 @@ namespace CrossChat.Services
 			}
 		}
 
-		// 1. УДАЛЕНИЕ СООБЩЕНИЯ ИЗ ВЕБХУКА (ОТМЕНА ОТПРАВКИ В INSTAGRAM)
 		public async Task<bool> DeleteMessageByExternalIdAsync(string externalMessageId)
 		{
 			try
@@ -678,7 +934,6 @@ namespace CrossChat.Services
 
 				_db.InboxMessages.Remove(msg);
 
-				// Обновляем сниппет последнего сообщения на предыдущее
 				var previousMsg = await _db.InboxMessages
 					.Where(m => m.ConversationId == convId && m.Id != msgId)
 					.OrderByDescending(m => m.CreatedAtUtc)
@@ -688,9 +943,7 @@ namespace CrossChat.Services
 				conv.LastMessageAt = previousMsg?.CreatedAtUtc ?? conv.CreatedAt;
 
 				await _db.SaveChangesAsync();
-				_logger.LogInformation("🗑️ [Inbox Unsend] Сообщение {MsgId} (ext: {ExtId}) удалено по вебхуку Instagram.", msgId, externalMessageId);
 
-				// Уведомляем браузер через SignalR, чтобы бабл исчез с экрана
 				await _hubContext.Clients.Group($"profile_inbox_{profileId}")
 					.SendAsync("MessageDeleted", convId, msgId, conv.LastMessageSnippet);
 
@@ -703,7 +956,6 @@ namespace CrossChat.Services
 			}
 		}
 
-		// 2. УДАЛЕНИЕ СООБЩЕНИЯ МЕНЕДЖЕРОМ ИЗ ИНБОКСА
 		public async Task<bool> DeleteMessageFromInboxAsync(int messageId)
 		{
 			try
@@ -753,9 +1005,7 @@ namespace CrossChat.Services
 				string mediaType = "image";
 				string snippetLabel = "📷 Фотография";
 
-				// ===================================================================
-				// 1. ПРОВЕРКА АУДИО (ПЕРВОЙ ОЧЕРЕДЬЮ!)
-				// ===================================================================
+				// 1. АУДИО
 				if (file.ContentType.StartsWith("audio/") ||
 					file.FileName.StartsWith("voice_") ||
 					ext == ".mp3" || ext == ".ogg" || ext == ".wav" || ext == ".m4a" || ext == ".webm")
@@ -764,7 +1014,7 @@ namespace CrossChat.Services
 					snippetLabel = "🎙️ Голосовое сообщение";
 					ext = ".m4a";
 				}
-				// 2. ПРОВЕРКА ВИДЕО
+				// 2. ВИДЕО
 				else if (file.ContentType.StartsWith("video/") || ext == ".mp4" || ext == ".mov" || ext == ".avi")
 				{
 					mediaType = "video";
@@ -772,7 +1022,7 @@ namespace CrossChat.Services
 					ext = ".mp4";
 				}
 
-				// 3. Сохраняем исходный файл
+				// 3. Сохранение исходного файла
 				string tempFolder = _siteSettings.TempFolder;
 				if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
 
@@ -784,12 +1034,9 @@ namespace CrossChat.Services
 					await file.CopyToAsync(stream);
 				}
 
-				// ===================================================================
-				// 4. ОБРАБОТКА МЕДИАФАЙЛОВ ПЕРЕД ОТПРАВКОЙ В META
-				// ===================================================================
+				// 4. ОБРАБОТКА МЕДИАФАЙЛОВ
 				if (mediaType == "video")
 				{
-					// Передаем делегат: каждый шаг сжатия сразу летит в SignalR в браузер!
 					await VideoService.CompressVideoForDirectAsync(localPath, _logger, async (percent, statusText) =>
 					{
 						try
@@ -807,7 +1054,6 @@ namespace CrossChat.Services
 				}
 				else if (mediaType == "audio")
 				{
-					// Конвертация браузерного WebM/WAV в эталонный Instagram AAC (.m4a)
 					string convertedAudioPath = await VideoService.ConvertToInstagramAudioAsync(localPath, _logger);
 					tempFileName = Path.GetFileName(convertedAudioPath);
 				}
@@ -818,7 +1064,7 @@ namespace CrossChat.Services
 				conv.IsHumanTakeover = true;
 				conv.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
 
-				// 6. Отправка в Instagram Direct
+				// 6. ОТПРАВКА В ЗАВИСИМОСТИ ОТ СОЦСЕТИ
 				if ((NetworkType)conv.NetworkType == NetworkType.Instagram)
 				{
 					var settings = await _db.InstagramSettings.FindAsync(conv.BotId);
@@ -827,8 +1073,18 @@ namespace CrossChat.Services
 
 					await _instaService.SendMediaAttachmentAsync(conv.ExternalUserId, mediaType, publicUrl, settings.AccessToken);
 				}
+				// === FACEBOOK MESSENGER ===
+				else if ((NetworkType)conv.NetworkType == NetworkType.Facebook)
+				{
+					var settings = await _db.FacebookSettings.FindAsync(conv.BotId);
+					if (settings == null || string.IsNullOrEmpty(settings.PageAccessToken))
+						return (false, "Настройки Facebook страницы не найдены");
 
-				// 7. Сохранение в базу Инбокса
+					bool ok = await _fbService.SendMediaAttachmentAsync(conv.ExternalUserId, mediaType, publicUrl, settings.PageAccessToken);
+					if (!ok) return (false, "Ошибка отправки медиафайла в Facebook Messenger");
+				}
+
+				// 7. Сохранение сообщения в БД
 				var message = new InboxMessage
 				{
 					ConversationId = conv.Id,
@@ -857,13 +1113,50 @@ namespace CrossChat.Services
 				_logger.LogError(ex, "Ошибка отправки медиафайла менеджером");
 
 				string userFriendlyMessage = ex.Message;
-				if (ex.Message.Contains("outside of allowed window") || ex.Message.Contains("2534022"))
+				// 2018278 - это точный сабкод закрытого окна Facebook Messenger!
+				if (ex.Message.Contains("outside of allowed window") ||
+					ex.Message.Contains("2534022") ||
+					ex.Message.Contains("2018278") ||
+					ex.Message.Contains("2018028") ||
+					ex.Message.Contains("вне разрешенного окна"))
 				{
 					userFriendlyMessage = "OUTSIDE_24H_WINDOW";
 				}
-
 				return (false, userFriendlyMessage);
+
 			}
+		}
+
+		private async Task<FacebookSettings?> GetFacebookSettingsForConversationAsync(InboxConversation conv)
+		{
+			// 1. Пробуем найти по сохраненному BotId
+			var settings = await _db.FacebookSettings.FindAsync(conv.BotId);
+			if (settings != null && !string.IsNullOrEmpty(settings.PageAccessToken))
+				return settings;
+
+			// 2. Если аккаунт переподключали и Id сменился — ищем по PageId (ExternalChatId)
+			if (!string.IsNullOrEmpty(conv.ExternalChatId))
+			{
+				settings = await _db.FacebookSettings
+					.FirstOrDefaultAsync(s => s.PageId == conv.ExternalChatId && !string.IsNullOrEmpty(s.PageAccessToken));
+			}
+
+			// 3. Или берем первую доступную страницу Facebook в рамках этого же профиля
+			if (settings == null)
+			{
+				settings = await _db.FacebookSettings
+					.FirstOrDefaultAsync(s => s.ProfileId == conv.ProfileId && s.IsActive && !string.IsNullOrEmpty(s.PageAccessToken));
+			}
+
+			// АВТО-ЛЕЧЕНИЕ: если нашли актуальные настройки — чиним диалог прямо в базе!
+			if (settings != null)
+			{
+				conv.BotId = settings.Id;
+				conv.ExternalChatId = settings.PageId;
+				await _db.SaveChangesAsync();
+			}
+
+			return settings;
 		}
 	}
 }

@@ -58,5 +58,46 @@ namespace CrossChat.Controllers
 
 			await PostCleanupHelper.CleanupLinkedPostsAsync(db, uploader, networkType, botId, logger);
 		}
+
+		/// <summary>
+		/// ОЧИСТКА ДИАЛОГОВ И СООБЩЕНИЙ ИНБОКСА ПРИ ОТКЛЮЧЕНИИ АККАУНТА:
+		/// Удаляет все диалоги и связанные с ними сообщения, предотвращая появление "зомби-чатов".
+		/// </summary>
+		protected async Task CleanupLinkedInboxAsync(NetworkType networkType, int botId)
+		{
+			var db = HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var logger = HttpContext.RequestServices.GetService<ILogger<BaseController>>();
+
+			try
+			{
+				int netTypeInt = (int)networkType;
+
+				// 1. Находим ID всех диалогов этого бота в Инбоксе
+				var conversationIds = await db.InboxConversations
+					.Where(c => c.NetworkType == netTypeInt && c.BotId == botId)
+					.Select(c => c.Id)
+					.ToListAsync();
+
+				if (conversationIds.Any())
+				{
+					// 2. Удаляем все сообщения этих диалогов (быстрый массовый DELETE в БД)
+					await db.InboxMessages
+						.Where(m => conversationIds.Contains(m.ConversationId))
+						.ExecuteDeleteAsync();
+
+					// 3. Удаляем сами диалоги
+					await db.InboxConversations
+						.Where(c => conversationIds.Contains(c.Id))
+						.ExecuteDeleteAsync();
+
+					logger?.LogInformation("🧹 [Inbox Cleanup] Успешно удалено диалогов: {Count} для {Network} (BotId: {BotId})",
+						conversationIds.Count, networkType, botId);
+				}
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "Ошибка при очистке диалогов Инбокса для {Network} (BotId: {BotId})", networkType, botId);
+			}
+		}
 	}
 }

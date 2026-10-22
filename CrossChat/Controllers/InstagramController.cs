@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
@@ -96,10 +95,13 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
-				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И GOOGLE DRIVE ИЗ BaseController:
+				// 1. Очистка публикаций планировщика и Google Drive
 				await CleanupLinkedPostsAsync(NetworkType.Instagram, botId);
 
-				// 2. Отписка от вебхуков Meta
+				// 2. 🧹 ОЧИСТКА ДИАЛОГОВ И СООБЩЕНИЙ ИНБОКСА:
+				await CleanupLinkedInboxAsync(NetworkType.Instagram, botId);
+
+				// 3. Отписка от вебхуков Meta
 				if (!string.IsNullOrEmpty(settings.AccessToken))
 				{
 					try
@@ -112,7 +114,7 @@ namespace CrossChat.Controllers
 					}
 				}
 
-				// 3. Полное удаление аккаунта из БД
+				// 4. Полное удаление аккаунта из БД
 				await DisconnectInstagramUser(settings.InstagramBusinessId, fullDataDelete: true);
 			}
 
@@ -474,6 +476,9 @@ namespace CrossChat.Controllers
 				return false;
 			}
 
+			// 🧹 ОЧИЩАЕМ ИНБОКС ПЕРЕД УДАЛЕНИЕМ:
+			await CleanupLinkedInboxAsync(NetworkType.Instagram, settings.Id);
+
 			if (!string.IsNullOrEmpty(settings.AccessToken))
 			{
 				try
@@ -590,6 +595,6 @@ namespace CrossChat.Controllers
 
 			var insights = await _instagramService.GetMediaInsightsAsync(mediaId, mediaType, settings.AccessToken);
 			return Json(insights);
-		}		
+		}
 	}
 }

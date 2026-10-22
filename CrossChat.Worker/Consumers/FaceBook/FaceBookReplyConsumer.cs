@@ -1,4 +1,5 @@
 using CrossChat.Data;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
@@ -18,13 +19,16 @@ namespace CrossChat.Worker.Consumers.FaceBook
 		private readonly IDatabase _redis;
 		private readonly ILogger<FaceBookReplyConsumer> _logger;
 
+		private readonly IInboxService _inboxService;
+
 		public FaceBookReplyConsumer(
 			AppDbContext db,
 			IFaceBookService faceBookService,
 			IAiService aiService,
 			IConnectionMultiplexer redis,
 			IFaceBookConsole console,
-			ILogger<FaceBookReplyConsumer> logger)
+			ILogger<FaceBookReplyConsumer> logger,
+			IInboxService inboxService) // <-- ВНЕДРЯЕМ
 		{
 			_db = db;
 			_faceBookService = faceBookService;
@@ -32,6 +36,7 @@ namespace CrossChat.Worker.Consumers.FaceBook
 			_console = console;
 			_redis = redis.GetDatabase();
 			_logger = logger;
+			_inboxService = inboxService; // <-- СОХРАНЯЕМ
 		}
 
 		public async Task Consume(ConsumeContext<ProcessFacebookDialogReply> context)
@@ -79,6 +84,26 @@ namespace CrossChat.Worker.Consumers.FaceBook
 
 				if (bot == null || !bot.IsActive || !bot.IsDirectEnabled || string.IsNullOrEmpty(bot.PageAccessToken))
 					return;
+
+				// === ПРОВЕРКА HUMAN TAKEOVER (ПЕРЕХВАТ ОПЕРАТОРОМ) ===
+				var conversation = await _inboxService.GetOrCreateConversationAsync(
+					bot.ProfileId,
+					(int)NetworkType.Facebook,
+					bot.Id,
+					msg.SenderId,
+					"Пользователь Facebook",
+					"Пользователь Facebook",
+					null);
+
+				if (conversation.IsHumanTakeover)
+				{
+					if (conversation.HumanTakeoverUntil.HasValue && conversation.HumanTakeoverUntil.Value > DateTime.UtcNow)
+					{
+						_logger.LogInformation("[Facebook Direct] 👤 Диалог с {Sender} перехвачен оператором (до {Time} UTC). Бот молчит.",
+							msg.SenderId, conversation.HumanTakeoverUntil.Value.ToString("HH:mm"));
+						return;
+					}
+				}
 
 				// 2. Скачиваем ВСЮ пачку сообщений, накопившихся за всё время печати
 				var messages = await _faceBookService.GetMessagesBySenderIdAsync(bot.PageId, msg.SenderId, bot.PageAccessToken, 15);
@@ -148,6 +173,9 @@ namespace CrossChat.Worker.Consumers.FaceBook
 				{
 					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(10), When.NotExists);
 					await _console.Log($"✅ Ответили на серию сообщений в ЛС {msg.SenderId}: «{replyText}»", bot.UserId, bot.Id);
+
+					// 🚀 СОХРАНЯЕМ ОТВЕТ БОТА В ИНБОКС:
+					await _inboxService.SaveBotReplyAsync(conversation.Id, replyText);
 				}
 			}
 			catch (Exception ex)

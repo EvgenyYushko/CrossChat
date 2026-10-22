@@ -8,5 +8,9 @@ namespace CrossChat.Worker.Contracts
 		public string MessageId { get; set; } = string.Empty;
 		public string Text { get; set; } = string.Empty;
 		public int AttachmentCount { get; set; } = 0;
+
+		// === НОВЫЕ ПОЛЯ ДЛЯ МЕДИАФАЙЛОВ ===
+		public string? MediaUrl { get; set; }
+		public string? MediaType { get; set; } // "image", "video", "audio"
 	}
 }

@@ -1,20 +1,19 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using CrossChat.Data.Entities;
 
 namespace CrossChat.Data.Entities;
 public class TelegramSettings
 {
-    [Key]
-    [ForeignKey("User")]
-    public int UserId { get; set; }
-    public User User { get; set; } = null!;
+	[Key]
+	[ForeignKey("User")]
+	public int UserId { get; set; }
+	public User User { get; set; } = null!;
 
-    public string? BotToken { get; set; }
-    public string? BotUsername { get; set; }
-    public bool IsActive { get; set; } = false;
-    public string SystemPrompt { get; set; } = "Ты бот в Telegram. Отвечай вежливо.";
+	public string? BotToken { get; set; }
+	public string? BotUsername { get; set; }
+	public bool IsActive { get; set; } = false;
+	public string SystemPrompt { get; set; } = "Ты бот в Telegram. Отвечай вежливо.";
 
-    public int ProfileId { get; set; }
+	public int ProfileId { get; set; }
 	public Profile Profile { get; set; } = null!;
 }
