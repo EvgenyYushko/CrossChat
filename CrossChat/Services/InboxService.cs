@@ -21,12 +21,16 @@ namespace CrossChat.Services
 		private readonly IFaceBookService _fbService; // <-- 1. ВНЕДРЯЕМ FACEBOOK SERVICE
 		private readonly ILogger<InboxService> _logger;
 		private readonly SiteSettings _siteSettings;
+		private readonly IBlueSkyService _bskyService;
+		private readonly IBlueSkyTokenManager _bskyTokenManager;
 
 		public InboxService(
 			AppDbContext db,
 			IHubContext<InboxHub> hubContext,
 			IInstagramService instaService,
-			IFaceBookService fbService, // <-- 1. ВНЕДРЯЕМ FACEBOOK SERVICE
+			IFaceBookService fbService,
+			IBlueSkyService bskyService,               // <-- ВНЕДРЯЕМ
+			IBlueSkyTokenManager bskyTokenManager,     // <-- ВНЕДРЯЕМ
 			SiteSettings siteSettings,
 			ILogger<InboxService> logger)
 		{
@@ -34,6 +38,8 @@ namespace CrossChat.Services
 			_hubContext = hubContext;
 			_instaService = instaService;
 			_fbService = fbService;
+			_bskyService = bskyService;
+			_bskyTokenManager = bskyTokenManager;
 			_siteSettings = siteSettings;
 			_logger = logger;
 		}
@@ -119,6 +125,32 @@ namespace CrossChat.Services
 				}
 			}
 
+			// ===================================================================
+			// 3. АВТО-ПОДГРУЗКА ИМЕНИ И АВАТАРКИ ДЛЯ BLUESKY
+			// ===================================================================
+			if (networkType == (int)NetworkType.BlueSky &&
+				(conversation == null || string.IsNullOrEmpty(avatarUrl) || username == "bluesky_user" || string.IsNullOrEmpty(username)))
+			{
+				try
+				{
+					var botModel = await _bskyTokenManager.GetValidTokenAsync(botId);
+					if (botModel != null)
+					{
+						var actorProfile = await _bskyService.GetActorProfileAsync(botModel, externalUserId);
+						if (actorProfile.HasValue)
+						{
+							if (!string.IsNullOrEmpty(actorProfile.Value.Handle)) username = actorProfile.Value.Handle;
+							fullName = !string.IsNullOrEmpty(actorProfile.Value.DisplayName) ? actorProfile.Value.DisplayName : username;
+							if (!string.IsNullOrEmpty(actorProfile.Value.AvatarUrl)) avatarUrl = actorProfile.Value.AvatarUrl;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "[BlueSky Inbox] Не удалось получить профиль собеседника {Did}", externalUserId);
+				}
+			}
+
 			if (conversation == null)
 			{
 				conversation = new InboxConversation
@@ -156,6 +188,7 @@ namespace CrossChat.Services
 				NetworkType = conversation.NetworkType,
 				BotId = conversation.BotId,
 				ExternalUserId = conversation.ExternalUserId,
+				ExternalChatId = conversation.ExternalChatId,
 				Username = conversation.Username,
 				FullName = conversation.FullName,
 				AvatarUrl = conversation.AvatarUrl,
@@ -261,6 +294,19 @@ namespace CrossChat.Services
 					bool ok = await _fbService.SendReplyAsync(conv.ExternalUserId, text, settings.PageAccessToken);
 					if (!ok) throw new Exception("Не удалось отправить сообщение в Facebook Messenger");
 				}
+				// === BLUESKY CHAT ===
+				else if ((NetworkType)conv.NetworkType == NetworkType.BlueSky)
+				{
+					var botModel = await _bskyTokenManager.GetValidTokenAsync(conv.BotId);
+					if (botModel == null)
+						throw new Exception("Не удалось получить валидный токен BlueSky");
+
+					if (string.IsNullOrEmpty(conv.ExternalChatId))
+						throw new Exception("ID чата (ConvoId) BlueSky отсутствует в диалоге");
+
+					bool ok = await _bskyService.SendChatMessageAsync(botModel, conv.ExternalChatId, text);
+					if (!ok) throw new Exception("Не удалось отправить сообщение в чат BlueSky");
+				}
 
 				// ===================================================================
 				// 2. ФИКСИРУЕМ В БАЗЕ ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ОТПРАВКИ!
@@ -352,11 +398,25 @@ namespace CrossChat.Services
 		{
 			int totalSynced = 0;
 
+			// Вспомогательная локальная функция отправки статуса в браузер
+			async Task ReportProgress(string text, int percent)
+			{
+				try
+				{
+					await _hubContext.Clients.Group($"profile_inbox_{profileId}")
+						.SendAsync("SyncStatusProgress", new { text = text, percent = percent });
+				}
+				catch { }
+			}
+
+			await ReportProgress("Опрос аккаунтов Instagram...", 15);
+
 			// ===================================================================
 			// 1. СИНХРОНИЗАЦИЯ ДИАЛОГОВ INSTAGRAM
 			// ===================================================================
 			var instaAccounts = await _db.InstagramSettings
-				.Where(s => s.ProfileId == profileId && !string.IsNullOrEmpty(s.AccessToken) && !string.IsNullOrEmpty(s.InstagramBusinessId))
+				.Where(s => s.ProfileId == profileId && !string.IsNullOrEmpty(s.AccessToken)
+					&& !string.IsNullOrEmpty(s.InstagramBusinessId))
 				.ToListAsync();
 
 			foreach (var account in instaAccounts)
@@ -470,6 +530,8 @@ namespace CrossChat.Services
 					_logger.LogError(ex, "Ошибка синхронизации Instagram для профиля {ProfileId}", profileId);
 				}
 			}
+
+			await ReportProgress("Опрос страниц Facebook...", 50);
 
 			// ===================================================================
 			// 2. СИНХРОНИЗАЦИЯ ДИАЛОГОВ FACEBOOK MESSENGER
@@ -605,17 +667,133 @@ namespace CrossChat.Services
 				}
 			}
 
+			await ReportProgress("Опрос чатов BlueSky...", 80);
+
+			// ===================================================================
+			// 3. СИНХРОНИЗАЦИЯ ДИАЛОГОВ BLUESKY (DIRECT MESSAGES)
+			// ===================================================================
+			var bskyAccounts = await _db.BlueSkySettings
+				.Where(s => s.ProfileId == profileId && !string.IsNullOrEmpty(s.AccessToken))
+				.ToListAsync();
+
+			foreach (var bsky in bskyAccounts)
+			{
+				try
+				{
+					_logger.LogInformation("🔄 [Inbox Sync] Опрос диалогов BlueSky для @{Handle}...", bsky.Handle);
+					var botModel = await _bskyTokenManager.GetValidTokenAsync(bsky.Id);
+					if (botModel == null) continue;
+
+					var convos = await _bskyService.GetAllConversationsAsync(botModel, 20);
+
+					foreach (var c in convos)
+					{
+						// Ищем собеседника (участника, чей DID не равен нашему боту)
+						var clientMember = c.Members?.FirstOrDefault(m => m.Did != botModel.Did);
+						if (clientMember == null || string.IsNullOrEmpty(clientMember.Did)) continue;
+
+						string clientDid = clientMember.Did;
+						string clientName = "Пользователь BlueSky";
+						string clientHandle = "bluesky_user";
+						string? clientAvatar = null;
+
+						// Запрашиваем актуальный профиль собеседника
+						var profile = await _bskyService.GetActorProfileAsync(botModel, clientDid);
+						if (profile.HasValue)
+						{
+							clientHandle = profile.Value.Handle ?? clientHandle;
+							clientName = profile.Value.DisplayName ?? clientHandle;
+							clientAvatar = profile.Value.AvatarUrl;
+						}
+
+						var conversation = await _db.InboxConversations
+							.FirstOrDefaultAsync(x => x.NetworkType == (int)NetworkType.BlueSky &&
+													  x.BotId == bsky.Id &&
+													  x.ExternalUserId == clientDid);
+
+						string lastSnippet = c.LastMessage?.Text ?? "[Сообщение]";
+
+						if (conversation == null)
+						{
+							conversation = new InboxConversation
+							{
+								ProfileId = profileId,
+								NetworkType = (int)NetworkType.BlueSky,
+								BotId = bsky.Id,
+								ExternalChatId = c.Id, // ConvoId в BlueSky
+								ExternalUserId = clientDid,
+								Username = clientHandle,
+								FullName = clientName,
+								AvatarUrl = clientAvatar,
+								LastMessageSnippet = lastSnippet,
+								LastMessageAt = DateTime.UtcNow,
+								CreatedAt = DateTime.UtcNow,
+								UnreadCount = c.UnreadCount
+							};
+
+							_db.InboxConversations.Add(conversation);
+							await _db.SaveChangesAsync();
+							totalSynced++;
+						}
+						else
+						{
+							conversation.ExternalChatId = c.Id;
+							if (!string.IsNullOrEmpty(clientAvatar)) conversation.AvatarUrl = clientAvatar;
+							conversation.FullName = clientName;
+							conversation.Username = clientHandle;
+							conversation.LastMessageSnippet = lastSnippet;
+							conversation.LastMessageAt = DateTime.UtcNow;
+						}
+
+						// СИНХРОНИЗАЦИЯ ИСТОРИИ СООБЩЕНИЙ ЧАТА (ДО 15 ШТУК)
+						var messages = await _bskyService.GetMessagesAsync(botModel, c.Id, 15);
+						if (messages != null && messages.Any())
+						{
+							foreach (var m in messages)
+							{
+								if (string.IsNullOrEmpty(m.Id) || string.IsNullOrEmpty(m.Text)) continue;
+
+								bool exists = await _db.InboxMessages.AnyAsync(msg => msg.ExternalMessageId == m.Id);
+								if (!exists)
+								{
+									bool isFromClient = m.Sender?.Did == clientDid;
+
+									_db.InboxMessages.Add(new InboxMessage
+									{
+										ConversationId = conversation.Id,
+										ExternalMessageId = m.Id,
+										Text = m.Text,
+										IsIncoming = isFromClient,
+										IsSentByBot = false,
+										IsReadByManager = !isFromClient,
+										CreatedAtUtc = DateTime.UtcNow
+									});
+								}
+							}
+						}
+
+						await _db.SaveChangesAsync();
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Ошибка синхронизации BlueSky для профиля {ProfileId}", profileId);
+				}
+			}
+
+			await ReportProgress("Завершение синхронизации...", 100);
+
 			return totalSynced;
 		}
 
 		public async Task<bool> SaveEchoMessageAsync(
-	int networkType,
-	string businessAccountId,
-	string customerId,
-	string messageId,
-	string text,
-	string? mediaUrl = null,
-	string? mediaType = null)
+			int networkType,
+			string businessAccountId,
+			string customerId,
+			string messageId,
+			string text,
+			string? mediaUrl = null,
+			string? mediaType = null)
 		{
 			try
 			{
@@ -795,6 +973,26 @@ namespace CrossChat.Services
 						return true;
 					}
 				}
+				else if (conv.NetworkType == (int)NetworkType.BlueSky)
+				{
+					var botModel = await _bskyTokenManager.GetValidTokenAsync(conv.BotId);
+					if (botModel == null || string.IsNullOrEmpty(conv.ExternalChatId))
+						return false;
+
+					string emoji = (reaction == "love" || string.IsNullOrEmpty(reaction)) ? "❤️" : reaction;
+					bool success = await _bskyService.AddReactionAsync(botModel, conv.ExternalChatId, msg.ExternalMessageId, emoji);
+
+					if (success)
+					{
+						msg.Reaction = emoji;
+						await _db.SaveChangesAsync();
+
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, emoji);
+
+						return true;
+					}
+				}
 
 				return false;
 			}
@@ -858,6 +1056,38 @@ namespace CrossChat.Services
 						msg.ExternalMessageId,
 						newReaction,
 						settings.PageAccessToken);
+
+					if (success)
+					{
+						msg.Reaction = newReaction;
+						await _db.SaveChangesAsync();
+
+						await _hubContext.Clients.Group($"profile_inbox_{conv.ProfileId}")
+							.SendAsync("UpdateMessageReaction", conv.Id, msg.Id, newReaction);
+
+						return (true, newReaction);
+					}
+				}
+				// === BLUESKY CHAT REACTIONS ===
+				else if (conv.NetworkType == (int)NetworkType.BlueSky)
+				{
+					var botModel = await _bskyTokenManager.GetValidTokenAsync(conv.BotId);
+					if (botModel == null || string.IsNullOrEmpty(conv.ExternalChatId))
+						return (false, null);
+
+					bool isAlreadyLiked1 = !string.IsNullOrEmpty(msg.Reaction);
+					bool success;
+
+					if (isAlreadyLiked1)
+					{
+						// Снимаем реакцию
+						success = await _bskyService.RemoveReactionAsync(botModel, conv.ExternalChatId, msg.ExternalMessageId, "❤️");
+					}
+					else
+					{
+						// Ставим реакцию
+						success = await _bskyService.AddReactionAsync(botModel, conv.ExternalChatId, msg.ExternalMessageId, "❤️");
+					}
 
 					if (success)
 					{
@@ -1082,6 +1312,11 @@ namespace CrossChat.Services
 
 					bool ok = await _fbService.SendMediaAttachmentAsync(conv.ExternalUserId, mediaType, publicUrl, settings.PageAccessToken);
 					if (!ok) return (false, "Ошибка отправки медиафайла в Facebook Messenger");
+				}
+				else if ((NetworkType)conv.NetworkType == NetworkType.BlueSky)
+				{
+					// В официальном API BlueSky чат пока поддерживает только текстовые сообщения!
+					return (false, "Личные сообщения BlueSky пока поддерживают только текст. Отправка фото и видео не поддерживается самой соцсетью.");
 				}
 
 				// 7. Сохранение сообщения в БД

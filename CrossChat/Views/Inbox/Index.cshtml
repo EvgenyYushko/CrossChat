@@ -77,39 +77,52 @@
             color: var(--text-secondary);
         }
 
-        .network-filter-pills {
+       .network-filter-pills {
             display: flex;
             gap: 6px;
             overflow-x: auto;
-            scrollbar-width: none;
-            padding-bottom: 2px;
+            overflow-y: hidden;
+            padding-bottom: 4px;
+            /* Разрешаем плавный скролл */
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            /* Тонкий аккуратный скроллбар вместо невидимого */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
         }
 
-            .network-filter-pills::-webkit-scrollbar {
-                display: none;
-            }
+        .network-filter-pills::-webkit-scrollbar {
+            height: 4px; /* Тонкая элегантная полоска */
+        }
 
-        .pill-btn {
+        .network-filter-pills::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+       .pill-btn {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--glass-border);
             border-radius: 14px;
-            padding: 4px 10px;
+            padding: 5px 12px;
             font-size: 0.75rem;
             font-weight: 600;
             color: var(--text-secondary);
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.2s;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
+            /* ГЛАВНОЕ: запрещаем сжимать кнопки! */
+            flex-shrink: 0 !important;
         }
 
-            .pill-btn:hover, .pill-btn.active {
-                background: var(--accent-color, #6366f1);
-                border-color: var(--accent-color, #6366f1);
-                color: #fff;
-            }
+        .pill-btn:hover, .pill-btn.active {
+            background: var(--accent-color, #6366f1);
+            border-color: var(--accent-color, #6366f1);
+            color: #fff;
+        }
 
         .dialogs-list {
             flex: 1 1 0;
@@ -1162,8 +1175,52 @@
 }
 
 @section NavbarActions {
-    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">
-        ← Профили
+    @{
+        var network = Context.Request.Query["network"].ToString();
+        var botId = Context.Request.Query["botId"].ToString();
+        var qProfileId = Context.Request.Query["profileId"].ToString();
+
+        // Подхватываем profileId из query или из текущего активного профиля
+        string effectiveProfileId = !string.IsNullOrEmpty(qProfileId) && qProfileId != "0"
+            ? qProfileId
+            : (ViewBag.ActiveProfileId?.ToString() ?? "0");
+
+        string backUrl;
+        string backText = "← Назад";
+
+        // 1. Пришли из конкретной соцсети:
+        if (!string.IsNullOrEmpty(network) && !network.Equals("All", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(botId))
+        {
+            backUrl = network.ToLowerInvariant() switch
+            {
+                "instagram" => $"/instagram?botId={botId}",
+                "facebook" => $"/facebook?botId={botId}",
+                "threads" => $"/threads?botId={botId}",
+                "telegramchannel" or "telegram" => $"/telegram-channel?botId={botId}",
+                "bluesky" => $"/bluesky?botId={botId}",
+                "x" or "twitter" => $"/x?botId={botId}",
+                "youtube" => $"/youtube?botId={botId}",
+                _ => effectiveProfileId != "0" ? $"/profile?profileId={effectiveProfileId}" : "/profiles"
+            };
+        }
+        // 2. Пришли из общего профиля (со всеми соцсетями):
+        else if (effectiveProfileId != "0")
+        {
+            backUrl = $"/profile?profileId={effectiveProfileId}";
+        }
+        // 3. Запасной фоллбек (на список всех профилей):
+        else
+        {
+            backText = "← Все профили";
+            backUrl = "/profiles";
+        }
+    }
+
+    <a href="@backUrl"
+       style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; font-weight:600; display:inline-flex; align-items:center; gap:4px; transition:color 0.2s ease, transform 0.15s ease;"
+       onmouseover="this.style.color='var(--text-main)'; this.style.transform='translateX(-2px)';"
+       onmouseout="this.style.color='var(--text-secondary)'; this.style.transform='none';">
+        @backText
     </a>
 }
 
@@ -1182,6 +1239,17 @@
                     <button type="button" class="pill-btn" onclick="syncInbox()" id="syncBtn" title="Синхронизировать диалоги из соцсетей" style="padding: 8px 10px; font-size: 0.9rem;">
                         🔄
                     </button>
+                </div>
+
+                <!-- ПЛАШКА ЖИВОГО ПРОГРЕССА СИНХРОНИЗАЦИИ (СКРЫТА ПО УМОЛЧАНИЮ) -->
+                <div id="syncProgressBanner" style="display:none; margin-top:8px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:10px; padding:6px 10px; font-size:0.75rem; color:#818cf8; flex-direction:column; gap:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span id="syncProgressText">🔄 Синхронизация...</span>
+                        <span id="syncProgressPercent" style="font-weight:bold;">0%</span>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.1); height:3px; border-radius:3px; overflow:hidden;">
+                        <div id="syncProgressBar" style="width:0%; height:100%; background:#818cf8; transition:width 0.3s ease;"></div>
+                    </div>
                 </div>
 
                 <!-- Фильтры соцсетей -->
@@ -1408,6 +1476,20 @@
             }
         });
 
+        // Слушатель прогресса синхронизации из SignalR:
+        connection.on("SyncStatusProgress", (payload) => {
+            const banner = document.getElementById('syncProgressBanner');
+            const text = document.getElementById('syncProgressText');
+            const percent = document.getElementById('syncProgressPercent');
+            const bar = document.getElementById('syncProgressBar');
+
+            if (banner) banner.style.display = 'flex';
+            if (text) text.textContent = payload.text;
+            if (percent) percent.textContent = payload.percent + '%';
+            if (bar) bar.style.width = payload.percent + '%';
+        });
+
+
         // ЖИВОЙ ПРОГРЕСС СЖАТИЯ ВИДЕО С СЕРВЕРА
         connection.on("ServerProcessingProgress", (payload) => {
             console.log("⚙️ [Server Progress]:", payload);
@@ -1446,6 +1528,17 @@
                 connection.invoke("JoinProfileRoom", profileId);
             }
         }).catch(err => console.error("Ошибка подключения SignalR:", err));
+
+        // Поддержка прокрутки фильтров колесиком мыши на компьютере:
+        const pillsBar = document.querySelector('.network-filter-pills');
+        if (pillsBar) {
+            pillsBar.addEventListener('wheel', (e) => {
+                if (e.deltaY !== 0) {
+                    e.preventDefault();
+                    pillsBar.scrollLeft += e.deltaY;
+                }
+            }, { passive: false });
+        }
 
         // 2. ЗАГРУЗКА ДИАЛОГОВ
         async function loadDialogs() {
@@ -1897,9 +1990,12 @@
             switch (networkType) {
                 case 1: return { name: "Instagram Direct", icon: "📸", color: "#e1306c" };
                 case 2: return { name: "Facebook Messenger", icon: "📘", color: "#1877F2" };
-                case 3: return { name: "Telegram", icon: "✈️", color: "#2AABEE" };
-                case 4: return { name: "Threads", icon: "🧵", color: "#000000" };
-                case 5: return { name: "BlueSky", icon: "🦋", color: "#0085ff" };
+                case 3: return { name: "BlueSky", icon: "🦋", color: "#0085ff" }; // <-- ТЕПЕРЬ СТРОГО 3!
+                case 4:
+                case 5:
+                case 6: return { name: "Telegram", icon: "✈️", color: "#2AABEE" };
+                case 7: return { name: "X (Twitter)", icon: "✖️", color: "#000000" };
+                case 8: return { name: "Threads", icon: "🧵", color: "#000000" };
                 default: return { name: "Соцсеть", icon: "💬", color: "#6366f1" };
             }
         }
@@ -1953,29 +2049,57 @@
             });
         }
 
+        // Обновленная функция синхронизации с защитой от спама (Cooldown 15 сек):
+        let isSyncing = false;
         async function syncInbox() {
+            if (isSyncing) return;
+            isSyncing = true;
+
             const syncBtn = document.getElementById('syncBtn');
-            if (syncBtn) {
-                syncBtn.style.transform = 'rotate(360deg)';
-                syncBtn.style.transition = 'transform 0.8s ease';
+            const banner = document.getElementById('syncProgressBanner');
+            const text = document.getElementById('syncProgressText');
+            const bar = document.getElementById('syncProgressBar');
+
+            if (syncBtn) syncBtn.disabled = true;
+            if (banner) {
+                banner.style.display = 'flex';
+                bar.style.width = '5%';
+                text.textContent = '🔄 Подключение к соцсетям...';
             }
 
             try {
                 const res = await fetch(`/inbox/sync?profileId=${profileId}`, { method: 'POST' });
+                const data = await res.json();
+
                 if (res.ok) {
+                    if (text) text.textContent = `✅ Готово! Синхронизировано: ${data.count || 0}`;
+                    if (bar) bar.style.width = '100%';
                     await loadDialogs();
                 } else {
-                    alert("Не удалось синхронизировать диалоги");
+                    if (text) text.textContent = '❌ Ошибка синхронизации';
                 }
             } catch {
-                alert("Ошибка сети при синхронизации");
+                if (text) text.textContent = '❌ Сбой сети';
             } finally {
-                if (syncBtn) {
-                    setTimeout(() => {
-                        syncBtn.style.transform = 'none';
-                        syncBtn.style.transition = 'none';
-                    }, 800);
-                }
+                // Плавное скрытие плашки через 3 секунды
+                setTimeout(() => {
+                    if (banner) banner.style.display = 'none';
+                }, 3000);
+
+                // Обратный отсчет кулдауна на кнопке (15 секунд):
+                let countdown = 15;
+                const timer = setInterval(() => {
+                    if (syncBtn) syncBtn.textContent = `⏳ ${countdown}s`;
+                    countdown--;
+                    if (countdown < 0) {
+                        clearInterval(timer);
+                        if (syncBtn) {
+                            syncBtn.textContent = '🔄';
+                            syncBtn.disabled = false;
+                        }
+                        isSyncing = false;
+                    }
+                }, 1000);
             }
         }
 

@@ -395,10 +395,124 @@
 }
 
 @section NavbarActions {
-    <a href="/inbox" class="nav-link">
-        💬 Сообщения
-    </a>
-    <a href="/profiles" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem;">← Назад</a>
+    @{
+        int currentProfileId = 0;
+        try { currentProfileId = Model?.Id ?? 0; } catch { }
+
+        if (currentProfileId == 0 && int.TryParse(Context.Request.Query["profileId"], out var qId))
+        {
+            currentProfileId = qId;
+        }
+        else if (currentProfileId == 0 && ViewBag.ActiveProfileId != null)
+        {
+            currentProfileId = (int)ViewBag.ActiveProfileId;
+        }
+
+        string inboxUrl = currentProfileId > 0 ? $"/inbox?profileId={currentProfileId}" : "/inbox";
+    }
+
+    <style>
+        .profile-nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-nav-inbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            padding: 6px 14px;
+            color: #818cf8;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+            .btn-nav-inbox:hover {
+                background: var(--accent-color, #6366f1);
+                color: #ffffff;
+                border-color: var(--accent-color, #6366f1);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            }
+
+        .btn-nav-back {
+            color: var(--text-secondary, #94a3b8);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 10px;
+            border-radius: 10px;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+            .btn-nav-back:hover {
+                color: var(--text-main, #ffffff);
+                background: rgba(255, 255, 255, 0.05);
+                transform: translateX(-2px);
+            }
+
+        .nav-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--glass-border, rgba(255, 255, 255, 0.12));
+            margin: 0 2px;
+        }
+
+        /* === МОБИЛЬНАЯ АДАПТИВНОСТЬ (ЭКРАНЫ МЕНЬШЕ 640px) === */
+        @@media (max-width: 640px) {
+            .profile-nav-actions {
+                gap: 4px;
+            }
+
+            .btn-nav-inbox {
+                padding: 6px 10px;
+                border-radius: 10px;
+            }
+            /* Скрываем текст "Сообщения", оставляем только иконку 💬 */
+            .inbox-btn-label {
+                display: none !important;
+            }
+            /* Сокращаем надпись возврата */
+            .back-btn-word {
+                display: none !important;
+            }
+
+            .btn-nav-back {
+                padding: 6px 6px;
+                font-size: 0.82rem;
+            }
+        }
+    </style>
+
+    <div class="profile-nav-actions">
+        <!-- КНОПКА ИНБОКСА -->
+        <a href="@inboxUrl" class="btn-nav-inbox" title="Сообщения профиля">
+            <span style="font-size: 0.95rem; line-height: 1;">💬</span>
+            <span class="inbox-btn-label">Сообщения</span>
+        </a>
+
+        <!-- РАЗДЕЛИТЕЛЬ -->
+        <div class="nav-divider"></div>
+
+        <!-- КНОПКА НАЗАД -->
+        <a href="/profiles" class="btn-nav-back" title="Назад ко всем профилям">
+            <span>←</span>
+            <span class="back-btn-word">Все </span>
+            <span>Профили</span>
+        </a>
+    </div>
 }
 
 <div class="container">

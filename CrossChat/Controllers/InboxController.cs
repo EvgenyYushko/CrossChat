@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using CrossChat.Data;
+using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -53,16 +54,26 @@ namespace CrossChat.Controllers
 
 			if (!string.IsNullOrEmpty(network) && network != "ALL")
 			{
-				int netId = network switch
+				if (network == "TELEGRAM")
 				{
-					"INSTAGRAM" => 1,
-					"FACEBOOK" => 2,
-					"TELEGRAM" => 3,
-					"THREADS" => 4,
-					"BLUESKY" => 5,
-					_ => 0
-				};
-				if (netId > 0) query = query.Where(c => c.NetworkType == netId);
+					// Telegram у нас разбит на 3 типа: Public (4), Private (5), Channel (6)
+					query = query.Where(c => c.NetworkType == (int)NetworkType.TelegramPublic ||
+											 c.NetworkType == (int)NetworkType.TelegramPrivate ||
+											 c.NetworkType == (int)NetworkType.TelegramChannel);
+				}
+				else
+				{
+					int netId = network switch
+					{
+						"INSTAGRAM" => (int)NetworkType.Instagram, // 1
+						"FACEBOOK" => (int)NetworkType.Facebook,   // 2
+						"BLUESKY" => (int)NetworkType.BlueSky,     // 3
+						"THREADS" => (int)NetworkType.Threads,     // 8
+						"X" => (int)NetworkType.X,                 // 7
+						_ => 0
+					};
+					if (netId > 0) query = query.Where(c => c.NetworkType == netId);
+				}
 			}
 
 			var dialogs = await query

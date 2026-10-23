@@ -615,6 +615,131 @@ namespace CrossChat.Integrations.Services
 
 			return result;
 		}
+
+		/// <summary>
+		/// Получает список ВСЕХ последних диалогов в BlueSky (для синхронизации Инбокса)
+		/// </summary>
+		public async Task<List<Convo>> GetAllConversationsAsync(BlueSkyModel settings, int limit = 25)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.listConvos?limit={limit}";
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					var result = JsonSerializer.Deserialize<ConvoListResponse>(json);
+					return result?.Convos ?? new List<Convo>();
+				}
+				else
+				{
+					var err = await response.Content.ReadAsStringAsync();
+					_logger.LogError("[BlueSky] Ошибка GetAllConversations (HTTP {Code}): {Err}", response.StatusCode, err);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Исключение в GetAllConversations");
+			}
+
+			return new List<Convo>();
+		}
+
+		/// <summary>
+		/// Получает профиль ЛЮБОГО пользователя BlueSky (собеседника) по его DID
+		/// </summary>
+		public async Task<(string? Handle, string? AvatarUrl, string? DisplayName)?> GetActorProfileAsync(BlueSkyModel settings, string actorDid)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var profileUrl = $"{pdsUrl}/xrpc/app.bsky.actor.getProfile?actor={Uri.EscapeDataString(actorDid)}";
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Get, profileUrl, settings, null);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+					var root = doc.RootElement;
+
+					string? handle = root.TryGetProperty("handle", out var h) ? h.GetString() : null;
+					string? avatarUrl = root.TryGetProperty("avatar", out var av) ? av.GetString() : null;
+					string? displayName = root.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
+
+					return (handle, avatarUrl, displayName);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка получения профиля собеседника {Did}", actorDid);
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Ставит эмодзи-реакцию на сообщение в чате BlueSky (chat.bsky.convo.addReaction)
+		/// </summary>
+		public async Task<bool> AddReactionAsync(BlueSkyModel settings, string convoId, string messageId, string emoji)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.addReaction";
+
+			var payload = new
+			{
+				convoId = convoId,
+				messageId = messageId,
+				value = emoji
+			};
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
+				if (response.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("[BlueSky] ✅ Реакция {Emoji} поставлена на сообщение {MsgId}", emoji, messageId);
+					return true;
+				}
+
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogWarning("[BlueSky] Не удалось поставить реакцию: {Err}", err);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка при установке реакции");
+			}
+
+			return false;
+		}
+
+		/// <summary>
+		/// Снимает эмодзи-реакцию с сообщения в чате BlueSky (chat.bsky.convo.removeReaction)
+		/// </summary>
+		public async Task<bool> RemoveReactionAsync(BlueSkyModel settings, string convoId, string messageId, string emoji)
+		{
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/chat.bsky.convo.removeReaction";
+
+			var payload = new
+			{
+				convoId = convoId,
+				messageId = messageId,
+				value = emoji
+			};
+
+			try
+			{
+				var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, payload);
+				return response.IsSuccessStatusCode;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка при снятии реакции");
+				return false;
+			}
+		}
 	}
 
 	#region Models

@@ -81,14 +81,17 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
-				// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ И ФАЙЛОВ GOOGLE DRIVE В 1 СТРОКУ:
+				// 1. Очистка публикаций и файлов Google Drive
 				await CleanupLinkedPostsAsync(NetworkType.BlueSky, botId);
 
-				// 2. Удаляем сам аккаунт из БД
+				// 2. 🧹 ОЧИСТКА ДИАЛОГОВ И СООБЩЕНИЙ ИНБОКСА:
+				await CleanupLinkedInboxAsync(NetworkType.BlueSky, botId);
+
+				// 3. Удаляем сам аккаунт из БД
 				_db.BlueSkySettings.Remove(settings);
 				await _db.SaveChangesAsync();
 
-				_logger.LogInformation("✅ [BlueSky] Бот @{Handle} и все связанные посты успешно удалены.", settings.Handle);
+				_logger.LogInformation("✅ [BlueSky] Бот @{Handle} и все связанные посты/чаты успешно удалены.", settings.Handle);
 			}
 
 			return RedirectToAction("Profile", "Auth");

@@ -32,4 +32,10 @@ public interface IBlueSkyService
 
 	Task<BlueSkyFullProfileDto?> GetFullProfileAsync(BlueSkyModel settings);
 	Task<BlueSkyFeedPageDto> GetAuthorFeedAsync(BlueSkyModel settings, int limit = 24, string? cursor = null);
+
+	Task<List<Convo>> GetAllConversationsAsync(BlueSkyModel settings, int limit = 25);
+	Task<(string? Handle, string? AvatarUrl, string? DisplayName)?> GetActorProfileAsync(BlueSkyModel settings, string actorDid);
+
+	Task<bool> AddReactionAsync(BlueSkyModel settings, string convoId, string messageId, string emoji);
+	Task<bool> RemoveReactionAsync(BlueSkyModel settings, string convoId, string messageId, string emoji);
 }
