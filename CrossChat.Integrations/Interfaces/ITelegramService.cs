@@ -38,5 +38,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<int> GetChatMemberCountAsync(long channelId);
 		Task<List<TelegramChannelPostDto>> GetPublicChannelPostsAsync(string channelUsername, int subscribersCount);
+
+		public UpdateType [] GetAllowedUpdates();
 	}
 }

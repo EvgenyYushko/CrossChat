@@ -21,6 +21,19 @@ namespace CrossChat.Integrations.Services.Telegram
 			ADMIN_ID = long.Parse(adminId); ;
 		}
 
+		public UpdateType [] GetAllowedUpdates()
+		{
+			return new[]
+			{
+				UpdateType.Message,
+				UpdateType.MyChatMember,
+				UpdateType.ChannelPost,
+				UpdateType.ChatJoinRequest,
+				UpdateType.ChatMember,
+				UpdateType.CallbackQuery
+			};
+		}
+
 		public Task<Message> SendMessage(long senderId, string text, ReplyMarkup replyMarkup)
 		{
 			return _telegramBotClient.SendMessage(senderId, text, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
@@ -799,7 +812,7 @@ namespace CrossChat.Integrations.Services.Telegram
 		public async Task SetWebhookAsync(string token, string webhookUrl)
 		{
 			var bot = new TelegramBotClient(token);
-			await bot.SetWebhook(webhookUrl);
+			await bot.SetWebhook(webhookUrl, allowedUpdates: GetAllowedUpdates());
 		}
 
 		public async Task DeleteWebhookAsync(string token)
@@ -812,6 +825,6 @@ namespace CrossChat.Integrations.Services.Telegram
 		{
 			var bot = new TelegramBotClient(token);
 			await bot.SendMessage(chatId, text);
-		}
+		}		
 	}
 }

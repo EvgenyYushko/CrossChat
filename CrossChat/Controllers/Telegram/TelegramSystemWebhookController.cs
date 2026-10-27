@@ -27,7 +27,7 @@ namespace CrossChat.Controllers
 		private readonly IServiceScopeFactory _serviceScopeFactory;
 		private readonly ITelegramService _telegramService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
-
+		
 		public TelegramSystemWebhookController(
 			AppDbContext db,
 			IDistributedCache cache,
@@ -54,7 +54,7 @@ namespace CrossChat.Controllers
 
 				var receiverOptions = new ReceiverOptions
 				{
-					AllowedUpdates = [] // Получать все типы обновлений
+					AllowedUpdates = _telegramService.GetAllowedUpdates()
 				};
 
 				// Запускаем прослушивание с помощью нашего исправленного HandleUpdateAsync
@@ -438,9 +438,110 @@ namespace CrossChat.Controllers
 									$"<b>Статус:</b> {actionDesc}\n" +
 									$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}";
 
-								await _telegramService.SendMessageToAdmin(adminMessage);
+								// 🚀 ФОРМИРУЕМ ИНТЕРАКТИВНЫЕ КНОПКИ:
+								var buttonRow = new List<InlineKeyboardButton>();
+
+								// 1. Кнопка бана (только если он ушел сам, а не уже забанен)
+								if (newStatus == ChatMemberStatus.Left)
+								{
+									buttonRow.Add(InlineKeyboardButton.WithCallbackData(
+										"🚫 Забанить",
+										$"ban_ch:{channelId}:{leftUser.Id}"));
+								}
+
+								// 2. Кнопка прямого перехода в диалог с пользователем
+								string userDirectUrl = !string.IsNullOrEmpty(leftUser.Username)
+									? $"https://t.me/{leftUser.Username}"
+									: $"tg://user?id={leftUser.Id}";
+
+								buttonRow.Add(InlineKeyboardButton.WithUrl("💬 Написать в ЛС", userDirectUrl));
+
+								var inlineKeyboard = new InlineKeyboardMarkup(buttonRow);
+
+								await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
 							}
 						}
+					}
+				}
+				// ===================================================================
+				// 6. СЦЕНАРИЙ: Нажатие инлайн-кнопок админом (CallbackQuery)
+				// ===================================================================
+				if (update.Type == UpdateType.CallbackQuery && update.CallbackQuery != null)
+				{
+					var callback = update.CallbackQuery;
+					var data = callback.Data ?? "";
+
+					// Обработка кнопки "Забанить в канале" (ban_ch:{channelId}:{userId})
+					if (data.StartsWith("ban_ch:"))
+					{
+						var parts = data.Split(':');
+						if (parts.Length == 3 &&
+							long.TryParse(parts[1], out var targetChannelId) &&
+							long.TryParse(parts[2], out var targetUserId))
+						{
+							try
+							{
+								// 1. Безопасность: проверяем, что кнопку нажал реальный владелец этого канала
+								var isOwner = await _db.TelegramChannelSettings
+									.AnyAsync(c => c.ChannelId == targetChannelId && c.User.TelegramUserId == callback.From.Id);
+
+								if (!isOwner)
+								{
+									await _telegramBotClient.AnswerCallbackQuery(
+										callback.Id,
+										"⚠️ У вас нет прав на модерацию этого канала.",
+										showAlert: true);
+									return Ok();
+								}
+
+								// 2. БАНИМ ПОЛЬЗОВАТЕЛЯ В КАНАЛЕ (он больше не сможет войти)
+								await _telegramBotClient.BanChatMember(
+									chatId: targetChannelId,
+									userId: targetUserId);
+
+								_logger.LogInformation($"[Telegram Admin] Админ {callback.From.Id} забанил пользователя {targetUserId} в канале {targetChannelId}");
+
+								// 3. Красивое всплывающее уведомление админу
+								await _telegramBotClient.AnswerCallbackQuery(
+									callback.Id,
+									"✅ Пользователь успешно забанен в канале и не сможет вернуться!",
+									showAlert: true);
+
+								// 4. Обновляем разметку сообщения: меняем кнопку бана на статус "✅ Забанен"
+								if (callback.Message != null)
+								{
+									string userDirectUrl = $"tg://user?id={targetUserId}";
+
+									var updatedMarkup = new InlineKeyboardMarkup(new[]
+									{
+										InlineKeyboardButton.WithCallbackData("✅ Пользователь забанен", "noop"),
+										InlineKeyboardButton.WithUrl("💬 Написать в ЛС", userDirectUrl)
+									});
+
+									await _telegramBotClient.EditMessageReplyMarkup(
+										chatId: callback.Message.Chat.Id,
+										messageId: callback.Message.MessageId,
+										replyMarkup: updatedMarkup);
+								}
+							}
+							catch (Exception ex)
+							{
+								_logger.LogError(ex, $"[Telegram Admin] Ошибка бана пользователя {targetUserId} в канале {targetChannelId}");
+
+								await _telegramBotClient.AnswerCallbackQuery(
+									callback.Id,
+									"⚠️ Не удалось забанить пользователя. Проверьте права бота (нужно право «Блокировка пользователей»).",
+									showAlert: true);
+							}
+
+							return Ok();
+						}
+					}
+					else if (data == "noop")
+					{
+						// Пустой клик по уже забаненной кнопке
+						await _telegramBotClient.AnswerCallbackQuery(callback.Id);
+						return Ok();
 					}
 				}
 			}
