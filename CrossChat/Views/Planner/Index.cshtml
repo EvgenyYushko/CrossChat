@@ -543,20 +543,24 @@
             text-align: center;
         }
 
-        /* --- ЭЛЕГАНТНОЕ БЛОКИРОВАНИЕ ИНТЕРФЕЙСА (РАБОТАЕТ И НА ПК, И НА МОБИЛЬНЫХ) --- */
+        /* --- БЛОКИРОВКА ПРИ ЗАГРУЗКЕ: ФОРМА ЖИВАЯ И СКРОЛЛИТСЯ! --- */
         .modal-card.uploading {
-            pointer-events: none !important;
-            user-select: none !important;
+            /* Саму карточку НЕ блокируем, чтобы работало колесико мыши и скроллбар! */
+            user-select: none;
         }
 
-            .modal-card.uploading .close-modal-btn,
+            /* Блокируем клики ТОЛЬКО по полям ввода, кнопкам и галерее */
             .modal-card.uploading form .form-group,
             .modal-card.uploading form .image-gallery,
-            .modal-card.uploading form .form-actions {
-                opacity: 0.4;
-                transition: opacity 0.3s ease;
+            .modal-card.uploading form .form-actions,
+            .modal-card.uploading .close-modal-btn {
+                pointer-events: none !important;
+                opacity: 0.35;
+                filter: grayscale(30%);
+                transition: opacity 0.3s ease, filter 0.3s ease;
             }
 
+            /* Прогресс-бар и кнопка «✕ Отмена» остаются яркими и кликабельными */
             .modal-card.uploading #uploadProgressContainer {
                 opacity: 1 !important;
                 pointer-events: auto !important;
@@ -931,6 +935,16 @@
             gap: 3px;
             z-index: 5;
             border: 1px solid var(--glass-border);
+        }
+
+        /* Запрет скролла страницы календаря, когда открыта модалка */
+        body.modal-open {
+            overflow: hidden !important;
+        }
+
+        #postModal {
+            /* Предотвращает передачу скролла на страницу календаря */
+            overscroll-behavior: contain;
         }
     </style>
 }
@@ -1956,6 +1970,7 @@
                         '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 10px 0;">⏳ Загрузка изображений...</div>';
 
                     modal.style.display = 'flex';
+                    document.body.classList.add('modal-open');
 
                     fetch(`/planner/get/${postId}`)
                         .then(res => res.json())
@@ -2390,6 +2405,9 @@
                     const modalElem = document.getElementById('postModal');
                     if (modalElem) modalElem.style.display = 'flex';
 
+                    // Замораживаем скролл заднего фона с календарём:
+                    document.body.classList.add('modal-open');
+
                     if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
                     if (typeof updateTelegramButtonVisibility === 'function') updateTelegramButtonVisibility();
                     if (typeof updateFirstCommentVisibility === 'function') updateFirstCommentVisibility();
@@ -2465,9 +2483,15 @@
             });
 
             function closeModal() {
-                if (isUploading) return;
-                modal.style.display = 'none';
-                resetModalFormState(); // Очищаем форму при любом закрытии!
+                if (isUploading) return; // Во время загрузки закрывать нельзя!
+
+                // Размораживаем задний фон:
+                document.body.classList.remove('modal-open');
+
+                const modalElem = document.getElementById('postModal');
+                if (modalElem) modalElem.style.display = 'none';
+
+                resetModalFormState();
             }
 
             // Открытие полноразмерного просмотра
@@ -2510,9 +2534,33 @@
 
             // Закрытие по клику на фон
             window.onclick = function(event) {
-                if (isUploading) return; // ЗАПРЕЩАЕМ закрывать по фону во время загрузки!
-                if (event.target == modal) closeModal();
-            }
+                const modalElem = document.getElementById('postModal');
+                if (event.target === modalElem) {
+                    if (isUploading) {
+                        // Если идет загрузка — привлекаем внимание к кнопке отмены
+                        const cancelBtn = document.getElementById('uploadCancelBtn');
+                        if (cancelBtn) {
+                            cancelBtn.style.transform = 'scale(1.15)';
+                            cancelBtn.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.6)';
+                            setTimeout(() => {
+                                cancelBtn.style.transform = 'none';
+                                cancelBtn.style.boxShadow = 'none';
+                            }, 250);
+                        }
+                        return; // НЕ закрываем форму!
+                    }
+                    closeModal();
+                }
+            };
+
+            // Защита клавиши Escape во время загрузки
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (isUploading) return; // Во время загрузки Escape игнорируется!
+                    closeLightbox();
+                    closeModal();
+                }
+            });
 
             // прогрес бар
             // Инициализация перехвата отправки формы после загрузки DOM
