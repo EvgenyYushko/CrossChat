@@ -315,14 +315,30 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
 	var services = scope.ServiceProvider;
+	var logger = services.GetRequiredService<ILogger<Program>>();
 
 	if (app.Environment.IsDevelopment())
 	{
 		var controller = services.GetRequiredService<TelegramSystemWebhookController>();
 		Task.Run(async () => await controller.RunLocalBotListener());
 	}
+	else
+	{
+		try
+		{
+			var telegramService = services.GetRequiredService<ITelegramService>();
+			var botToken = GetConfigOrThrow(TELEGRAM_BOT_TOKEN);
+			var webhookUrl = $"{APP_URL}/telegram-system/webhook";
 
-	var logger = services.GetRequiredService<ILogger<Program>>();
+			await telegramService.SetWebhookAsync(botToken, webhookUrl);
+			logger.LogInformation("✅ [Telegram System] Вебхук успешно привязан с полным набором allowed_updates: {Url}", webhookUrl);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "❌ [Telegram System] Не удалось привязать вебхук при старте приложения.");
+		}
+	}
+
 	try
 	{
 		var context = services.GetRequiredService<AppDbContext>();

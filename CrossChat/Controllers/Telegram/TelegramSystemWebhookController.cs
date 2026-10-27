@@ -27,7 +27,7 @@ namespace CrossChat.Controllers
 		private readonly IServiceScopeFactory _serviceScopeFactory;
 		private readonly ITelegramService _telegramService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
-		
+
 		public TelegramSystemWebhookController(
 			AppDbContext db,
 			IDistributedCache cache,
@@ -543,6 +543,144 @@ namespace CrossChat.Controllers
 						await _telegramBotClient.AnswerCallbackQuery(callback.Id);
 						return Ok();
 					}
+				}
+
+				// ===================================================================
+				// 7. СЦЕНАРИЙ: Канал получил голос / буст (ChatBoost)
+				// ===================================================================
+				if (update.Type == UpdateType.ChatBoost && update.ChatBoost != null)
+				{
+					var boostUpdate = update.ChatBoost;
+					var channelId = boostUpdate.Chat.Id;
+					var boost = boostUpdate.Boost;
+
+					var channel = await _db.TelegramChannelSettings
+						.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+					if (channel != null)
+					{
+						// 🚀 РАСПАКОВЫВАЕМ USER ИЗ НАСЛЕДНИКОВ ЧЕРЕЗ PATTERN MATCHING:
+						Telegram.Bot.Types.User? boosterUser = boost.Source switch
+						{
+							ChatBoostSourcePremium premium => premium.User,
+							ChatBoostSourceGiftCode gift => gift.User,
+							ChatBoostSourceGiveaway giveaway => giveaway.User,
+							_ => null
+						};
+
+						// Определяем источник буста
+						string sourceDesc = boost.Source switch
+						{
+							ChatBoostSourcePremium => "⭐️ Telegram Premium",
+							ChatBoostSourceGiftCode => "🎁 Подарочный код (Gift Code)",
+							ChatBoostSourceGiveaway => "🎉 Розыгрыш (Giveaway)",
+							_ => "Голос за канал"
+						};
+
+						string userDisplay = boosterUser != null
+							? (!string.IsNullOrEmpty(boosterUser.Username) ? $"@{boosterUser.Username}" : $"{boosterUser.FirstName} {boosterUser.LastName}".Trim())
+							: "Участник розыгрыша";
+
+						string expirationText = boost.ExpirationDate.ToString("dd.MM.yyyy HH:mm");
+
+						string adminMessage =
+							$"🚀 <b>КАНАЛ ПОЛУЧИЛ БУСТ (ГОЛОС)!</b>\n\n" +
+							$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+							$"<b>От кого:</b> {userDisplay}\n" +
+							(boosterUser != null ? $"<b>ID:</b> <code>{boosterUser.Id}</code>\n" : "") +
+							$"<b>Источник:</b> {sourceDesc}\n" +
+							$"<b>Действует до:</b> {expirationText} UTC\n\n" +
+							$"<i>Уровень канала повышен, доступны новые сторис и кастомные эмодзи!</i>";
+
+						// Кнопка перехода к профилю (если есть username)
+						InlineKeyboardMarkup? inlineKeyboard = null;
+						if (boosterUser != null && !string.IsNullOrEmpty(boosterUser.Username))
+						{
+							inlineKeyboard = new InlineKeyboardMarkup(new[]
+							{
+								InlineKeyboardButton.WithUrl("👤 Профиль пользователя", $"https://t.me/{boosterUser.Username}")
+							});
+						}
+
+						await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
+						_logger.LogInformation($"[Telegram Boost] Канал {channel.ChannelTitle} получил буст ({sourceDesc}) от {userDisplay}");
+					}
+				}
+
+				// ===================================================================
+				// 8. СЦЕНАРИЙ: Платная реакция (Telegram Star Reaction) на пост
+				// ===================================================================
+				if (update.Type == UpdateType.MessageReaction && update.MessageReaction != null)
+				{
+					var reactUpdate = update.MessageReaction;
+					var channelId = reactUpdate.Chat.Id;
+
+					// Проверяем, есть ли среди новых реакций платная реакция-звезда (ReactionTypePaid)
+					bool hasPaidReaction = reactUpdate.NewReaction.Any(r => r is ReactionTypePaid);
+
+					if (hasPaidReaction)
+					{
+						var channel = await _db.TelegramChannelSettings
+							.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+						if (channel != null)
+						{
+							var senderUser = reactUpdate.User;
+							string userDisplay = senderUser != null
+								? (!string.IsNullOrEmpty(senderUser.Username) ? $"@{senderUser.Username}" : $"{senderUser.FirstName} {senderUser.LastName}".Trim())
+								: "Подписчик (анонимно)";
+
+							int messageId = reactUpdate.MessageId;
+							string postUrl = !string.IsNullOrEmpty(channel.ChannelUsername)
+								? $"https://t.me/{channel.ChannelUsername}/{messageId}"
+								: "";
+
+							string adminMessage =
+								$"⭐ <b>ДОНАТ: ПЛАТНАЯ РЕАКЦИЯ В КАНАЛЕ!</b>\n\n" +
+								$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+								$"<b>Отправитель:</b> {userDisplay}\n" +
+								$"<b>ID сообщения:</b> #{messageId}\n" +
+								$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}\n\n" +
+								$"<i>Звёзды зачислены на баланс монетизации вашего канала!</i>";
+
+							InlineKeyboardMarkup? inlineKeyboard = null;
+							if (!string.IsNullOrEmpty(postUrl))
+							{
+								inlineKeyboard = new InlineKeyboardMarkup(new[]
+								{
+									InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+								});
+							}
+
+							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
+							_logger.LogInformation($"[Telegram Star Reaction] Получена платная реакция в канале {channel.ChannelTitle}");
+						}
+					}
+				}
+
+				// ===================================================================
+				// 9. СЦЕНАРИЙ: Покупка платного медиаконтента (PurchasedPaidMedia)
+				// ===================================================================
+				if (update.Type == UpdateType.PurchasedPaidMedia && update.PurchasedPaidMedia != null)
+				{
+					var purchase = update.PurchasedPaidMedia;
+					var buyer = purchase.From;
+					string payload = purchase.PaidMediaPayload ?? "";
+
+					string buyerDisplay = !string.IsNullOrEmpty(buyer.Username)
+						? $"@{buyer.Username}"
+						: $"{buyer.FirstName} {buyer.LastName}".Trim();
+
+					string adminMessage =
+						$"💰 <b>ПОКУПКА ПЛАТНОГО КОНТЕНТА!</b>\n\n" +
+						$"<b>Покупатель:</b> {buyerDisplay}\n" +
+						$"<b>ID покупателя:</b> <code>{buyer.Id}</code>\n" +
+						$"<b>Payload:</b> <code>{payload}</code>\n" +
+						$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}\n\n" +
+						$"<i>Платный пост успешно оплачен и открыт пользователю!</i>";
+
+					await _telegramService.SendMessageToAdmin(adminMessage);
+					_logger.LogInformation($"[Telegram Paid Media] Пользователь {buyerDisplay} приобрел платный контент.");
 				}
 			}
 			catch (Exception ex)

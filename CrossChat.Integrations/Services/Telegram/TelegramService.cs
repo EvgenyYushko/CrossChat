@@ -30,7 +30,11 @@ namespace CrossChat.Integrations.Services.Telegram
 				UpdateType.ChannelPost,
 				UpdateType.ChatJoinRequest,
 				UpdateType.ChatMember,
-				UpdateType.CallbackQuery
+				UpdateType.CallbackQuery,
+
+				UpdateType.ChatBoost,           // Бусты и голоса за канал
+				UpdateType.MessageReaction,     // Платные реакции (Stars)
+				UpdateType.PurchasedPaidMedia   // Покупка платных медиа
 			};
 		}
 
