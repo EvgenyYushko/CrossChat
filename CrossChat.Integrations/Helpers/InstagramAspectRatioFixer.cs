@@ -90,4 +90,53 @@ public static class InstagramAspectRatioFixer
 			return base64Image;
 		}
 	}
+
+	/// <summary>
+	/// Универсальная очистка фото от меток ИИ (C2PA, EXIF, IPTC, XMP) 
+	/// с пересборкой в чистый JPEG. Поддерживает и путь к файлу на диске, и Base64!
+	/// </summary>
+	public static byte[] CleanAndPrepareImageBytes(string imageInput)
+	{
+		byte[] imageBytes;
+
+		// 1. Читаем байты (с диска или из Base64)
+		if (File.Exists(imageInput))
+		{
+			imageBytes = File.ReadAllBytes(imageInput);
+		}
+		else
+		{
+			string cleanBase64 = imageInput.Contains(",") ? imageInput.Split(',')[1] : imageInput;
+			imageBytes = Convert.FromBase64String(cleanBase64);
+		}
+
+		try
+		{
+			using var image = Image.Load(imageBytes);
+
+			// 2. ГАРАНТИРОВАННОЕ УДАЛЕНИЕ МЕТОК ИИ
+			image.Metadata.ExifProfile = null;
+			image.Metadata.IptcProfile = null;
+			image.Metadata.XmpProfile = null;
+
+			// 3. Минимальный микро-кроп (1 пиксель), чтобы сбить нейросетевые хеши водяных знаков (SynthID)
+			if (image.Width > 10 && image.Height > 10)
+			{
+				// Легкий кроп по 1px с краев (глазом незаметно, но хеш картинки полностью меняется)
+				image.Mutate(ctx => ctx.Crop(new Rectangle(1, 1, image.Width - 2, image.Height - 2)));
+			}
+
+			// 4. Пересборка в чистый JPEG высокого качества (98%)
+			using var ms = new MemoryStream();
+			var encoder = new JpegEncoder { Quality = 98 };
+			image.SaveAsJpeg(ms, encoder);
+
+			return ms.ToArray();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[Image Cleaner] Ошибка очистки метаданных: {ex.Message}. Отправляем оригинал.");
+			return imageBytes;
+		}
+	}
 }

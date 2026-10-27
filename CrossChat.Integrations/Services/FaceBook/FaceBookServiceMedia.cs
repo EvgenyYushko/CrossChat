@@ -104,11 +104,15 @@ namespace CrossChat.Integrations.Services
 
 			byte[] videoBytes;
 
-			// =========================================================================
-			// 1. УМНАЯ АДАПТАЦИЯ: Если это файл на диске — читаем напрямую без Base64!
-			// =========================================================================
 			if (File.Exists(videoItem))
 			{
+				// 🚀 СРЕЗАЕМ МЕТКИ ИИ ИЗ ВИДЕО ДЛЯ FACEBOOK REELS ТАК ЖЕ, КАК В INSTAGRAM:
+				try
+				{
+					await VideoService.StripAiMetadataAsync(videoItem, null);
+				}
+				catch { }
+
 				videoBytes = await File.ReadAllBytesAsync(videoItem);
 			}
 			else
@@ -339,29 +343,8 @@ namespace CrossChat.Integrations.Services
 
 		private async Task<string?> UploadImageAsync(string pageAccessToken, string pageId, string imageInput, HttpClient httpClient)
 		{
-			byte[] imageBytes;
-
-			// =========================================================================
-			// 1. ЕСЛИ ЭТО ФАЙЛ НА ДИСКЕ (пришел из фасада):
-			// =========================================================================
-			if (File.Exists(imageInput))
-			{
-				imageBytes = await File.ReadAllBytesAsync(imageInput);
-			}
-			else
-			{
-				// 2. ЕСЛИ ЭТО BASE64:
-				string cleanBase64 = imageInput.Contains(",") ? imageInput.Split(',')[1] : imageInput;
-				try
-				{
-					imageBytes = Convert.FromBase64String(cleanBase64);
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("Ошибка: Неверный формат Base64 для фото Facebook.");
-					return null;
-				}
-			}
+			// 🚀 ГАРАНТИРОВАННО ВЫРЕЗАЕМ ВСЕ МЕТКИ ИИ ПЕРЕД ОТПРАВКОЙ В FACEBOOK:
+			byte[] imageBytes = InstagramAspectRatioFixer.CleanAndPrepareImageBytes(imageInput);
 
 			string url = $"https://graph.facebook.com/v24.0/{pageId}/photos";
 
@@ -371,7 +354,7 @@ namespace CrossChat.Integrations.Services
 
 			content.Add(imageContent, "source", "image.jpg");
 			content.Add(new StringContent(pageAccessToken), "access_token");
-			content.Add(new StringContent("false"), "published"); // published=false для подготовки к альбому или сторис
+			content.Add(new StringContent("false"), "published"); // published=false для альбома или сторис
 
 			var response = await httpClient.PostAsync(url, content);
 
