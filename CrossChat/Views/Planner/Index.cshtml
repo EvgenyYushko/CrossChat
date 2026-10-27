@@ -1179,7 +1179,28 @@
                 <div id="imageGallery" class="image-gallery"></div>
 
                 <div class="form-group" id="fileUploadGroup">
-                    <label>Добавить фото/видео</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin: 0;">Медиафайлы публикации</label>
+                        <!-- КНОПКА ЗАПИСИ ГОЛОСОВОГО -->
+                        <button type="button" id="startVoiceBtn" onclick="startPlannerVoiceRecording()"
+                                style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 4px 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s ease;">
+                            <span>🎙️</span> Записать голос
+                        </button>
+                    </div>
+
+                    <!-- ПАНЕЛЬ ЗАПИСИ ГОЛОСА (ПО УМОЛЧАНИЮ СКРЫТА) -->
+                    <div id="plannerVoiceRecordingUi" style="display: none; align-items: center; justify-content: space-between; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; color: #f87171; font-size: 0.9rem; font-weight: 600;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; background: #ef4444; display: inline-block; animation: recPulse 1s infinite alternate;"></span>
+                            <span>Запись: <strong id="plannerVoiceTimer" style="font-family: monospace;">0:00</strong></span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button type="button" onclick="cancelPlannerVoiceRecording()" title="Отменить" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 4px 8px; border-radius: 6px;">❌</button>
+                            <button type="button" onclick="stopAndAttachPlannerVoice()" title="Прикрепить к посту" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981; font-size: 0.85rem; font-weight: bold; cursor: pointer; padding: 4px 10px; border-radius: 8px;">✅ Прикрепить</button>
+                        </div>
+                    </div>
+
+                    <!-- ЗОНА ПЕРЕТАСКИВАНИЯ ФАЙЛОВ -->
                     <div class="file-upload-zone" id="dropZone">
                         <span class="upload-text">📁 Нажмите для выбора файлов или перетащите их сюда</span>
                         <input type="file" id="fileInput" name="images" multiple accept="image/*,video/*,audio/*">
@@ -1451,151 +1472,220 @@
                 fileInput.files = dataTransfer.files;
             }
 
-            // Рендеринг галереи превью
-            function renderGallery() {
-                const gallery = document.getElementById('imageGallery');
-                const hiddenContainer = document.getElementById('hiddenInputsContainer');
-                gallery.innerHTML = '';
-                hiddenContainer.innerHTML = '';
+                   // Вспомогательная функция создания интерактивной карточки-плеера
+        function createAudioThumbnail(audioSrc) {
+            const audioCard = document.createElement('div');
+            audioCard.className = 'thumb';
+            audioCard.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(15, 23, 42, 0.85); cursor:pointer; position:relative; overflow:hidden; border: 1px solid var(--glass-border); border-radius: 8px; padding: 4px; box-sizing: border-box;';
 
-                // 1. Отрисовка медиа, уже сохраненных в Google Drive
-                existingMedia.forEach((media, index) => {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'thumb-wrapper';
+            const audioElem = document.createElement('audio');
+            audioElem.src = audioSrc;
+            audioElem.preload = 'metadata';
 
-                    // Защита от регистра C# / JS:
-                    const driveId = media.googleDriveFileId || media.GoogleDriveFileId;
-                    const thumbDriveId = media.thumbnailDriveFileId || media.ThumbnailDriveFileId;
-                    const mediaType = media.mediaType !== undefined ? media.mediaType : media.MediaType;
-                    const isVideo = mediaType === 1 || mediaType === "Video";
-                    const isAudio = mediaType === 2 || mediaType === "Audio";
+            const playBtn = document.createElement('div');
+            playBtn.className = 'audio-play-icon';
+            playBtn.style.cssText = 'font-size: 20px; line-height: 1; transition: transform 0.15s ease;';
+            playBtn.innerHTML = '▶️';
 
-                    if (!driveId || driveId === "undefined") return;
+            const durationLabel = document.createElement('span');
+            durationLabel.style.cssText = 'font-size: 8.5px; font-weight: 700; color: #38bdf8; margin-top: 4px; font-family: monospace;';
+            durationLabel.textContent = '0:00';
 
-                    const mediaUrl = `/planner/media/${driveId}`;
+            audioElem.onloadedmetadata = () => {
+                if (audioElem.duration && isFinite(audioElem.duration)) {
+                    const m = Math.floor(audioElem.duration / 60);
+                    const s = Math.floor(audioElem.duration % 60);
+                    durationLabel.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+                }
+            };
 
-                    if (isVideo) {
-                        // ЕСЛИ ЕСТЬ ОБЛОЖКА: Показываем легкую картинку (20 КБ) вместо тяжелого видеопотока!
-                        if (thumbDriveId && thumbDriveId !== "undefined") {
-                            const thumbUrl = `/planner/media/${thumbDriveId}`;
-                            const img = document.createElement('img');
-                            img.className = 'thumb';
-                            img.src = thumbUrl;
-                            img.onclick = () => openLightbox(mediaUrl, true); // При клике открываем полное видео!
-                            wrapper.appendChild(img);
-                        } else {
-                            // Фоллбек для старых видео: тег video
-                            const video = document.createElement('video');
-                            video.className = 'thumb';
-                            video.src = mediaUrl;
-                            video.muted = true;
-                            video.preload = 'metadata';
-                            video.onclick = () => openLightbox(mediaUrl, true);
-                            wrapper.appendChild(video);
+            audioElem.ontimeupdate = () => {
+                if (audioElem.duration) {
+                    const rem = audioElem.duration - audioElem.currentTime;
+                    const m = Math.floor(rem / 60);
+                    const s = Math.floor(rem % 60);
+                    durationLabel.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+                }
+            };
+
+            audioElem.onended = () => {
+                playBtn.innerHTML = '▶️';
+                audioCard.style.borderColor = 'var(--glass-border)';
+            };
+
+            // Клик по карточке включает/ставит на паузу
+            audioCard.onclick = (e) => {
+                e.stopPropagation();
+
+                // Останавливаем другие играющие аудио в галерее
+                document.querySelectorAll('#imageGallery audio').forEach(a => {
+                    if (a !== audioElem) {
+                        a.pause();
+                        a.currentTime = 0;
+                        const parent = a.closest('.thumb');
+                        if (parent) {
+                            const icon = parent.querySelector('.audio-play-icon');
+                            if (icon) icon.innerHTML = '▶️';
+                            parent.style.borderColor = 'var(--glass-border)';
                         }
-
-                        const badge = document.createElement('span');
-                        badge.className = 'video-badge';
-                        badge.innerHTML = '▶ Видео';
-                        wrapper.appendChild(badge);
-                    } else if (isAudio) {
-                        const audioCard = document.createElement('div');
-                        audioCard.className = 'thumb';
-                        audioCard.style.display = 'flex';
-                        audioCard.style.flexDirection = 'column';
-                        audioCard.style.alignItems = 'center';
-                        audioCard.style.justifyContent = 'center';
-                        audioCard.style.background = 'rgba(15, 23, 42, 0.7)';
-                        audioCard.innerHTML = `<span style="font-size: 24px;">🎙️</span><span style="font-size: 9px; font-weight: bold; color: #38bdf8;">Голосовое</span>`;
-                        wrapper.appendChild(audioCard);
-                    } else {
-                        const img = document.createElement('img');
-                        img.className = 'thumb';
-                        img.src = mediaUrl;
-                        img.onclick = () => openLightbox(mediaUrl, false);
-                        wrapper.appendChild(img);
                     }
-
-                    if (!isImageEditingLocked) {
-                        const removeBtn = document.createElement('button');
-                        removeBtn.type = 'button';
-                        removeBtn.className = 'remove-thumb-btn';
-                        removeBtn.innerHTML = '&times;';
-                        removeBtn.onclick = (e) => {
-                            e.stopPropagation();
-                            existingMedia.splice(index, 1);
-                            renderGallery();
-                        };
-                        wrapper.appendChild(removeBtn);
-                    }
-
-                    gallery.appendChild(wrapper);
-
-                    // Передаем ID файла для сохранения
-                    const hiddenInput = document.createElement('input');
-                    hiddenInput.type = 'hidden';
-                    hiddenInput.name = 'keptMediaDriveIds';
-                    hiddenInput.value = driveId;
-                    hiddenContainer.appendChild(hiddenInput);
                 });
 
-                // 2. Отрисовка новых локально выбранных файлов
-                selectedFiles.forEach((file, index) => {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'thumb-wrapper';
+                if (audioElem.paused) {
+                    audioElem.play();
+                    playBtn.innerHTML = '⏸️';
+                    audioCard.style.borderColor = '#38bdf8';
+                } else {
+                    audioElem.pause();
+                    playBtn.innerHTML = '▶️';
+                    audioCard.style.borderColor = 'var(--glass-border)';
+                }
+            };
 
-                    const isVideo = file.type.startsWith('video/');
-                    const isAudio = file.type.startsWith('audio/') || file.name.endsWith('.mp3') || file.name.endsWith('.ogg') || file.name.endsWith('.wav') || file.name.endsWith('.m4a');
-                    const blobUrl = URL.createObjectURL(file);
+            audioCard.appendChild(audioElem);
+            audioCard.appendChild(playBtn);
+            audioCard.appendChild(durationLabel);
+            return audioCard;
+        }
 
-                    if (isVideo) {
+        // Главная функция рендеринга галереи
+        function renderGallery() {
+            const gallery = document.getElementById('imageGallery');
+            const hiddenContainer = document.getElementById('hiddenInputsContainer');
+            gallery.innerHTML = '';
+            hiddenContainer.innerHTML = '';
+
+            // ==========================================================
+            // 1. Отрисовка медиа, уже сохраненных в Google Drive
+            // ==========================================================
+            existingMedia.forEach((media, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'thumb-wrapper';
+
+                const driveId = media.googleDriveFileId || media.GoogleDriveFileId;
+                const thumbDriveId = media.thumbnailDriveFileId || media.ThumbnailDriveFileId;
+                const mediaType = media.mediaType !== undefined ? media.mediaType : media.MediaType;
+                const isVideo = mediaType === 1 || mediaType === "Video";
+                const isAudio = mediaType === 2 || mediaType === "Audio";
+
+                if (!driveId || driveId === "undefined") return;
+
+                const mediaUrl = `/planner/media/${driveId}`;
+
+                if (isVideo) {
+                    if (thumbDriveId && thumbDriveId !== "undefined") {
+                        const thumbUrl = `/planner/media/${thumbDriveId}`;
+                        const img = document.createElement('img');
+                        img.className = 'thumb';
+                        img.src = thumbUrl;
+                        img.onclick = () => openLightbox(mediaUrl, true);
+                        wrapper.appendChild(img);
+                    } else {
                         const video = document.createElement('video');
                         video.className = 'thumb';
-                        video.src = blobUrl;
+                        video.src = mediaUrl;
                         video.muted = true;
                         video.preload = 'metadata';
-                        video.onclick = () => openLightbox(blobUrl, true);
+                        video.onclick = () => openLightbox(mediaUrl, true);
                         wrapper.appendChild(video);
-
-                        const badge = document.createElement('span');
-                        badge.className = 'video-badge';
-                        badge.innerHTML = '▶ Видео';
-                        wrapper.appendChild(badge);
-                    } else if (isAudio) {
-                        const audioCard = document.createElement('div');
-                        audioCard.className = 'thumb';
-                        audioCard.style.display = 'flex';
-                        audioCard.style.flexDirection = 'column';
-                        audioCard.style.alignItems = 'center';
-                        audioCard.style.justifyContent = 'center';
-                        audioCard.style.background = 'rgba(15, 23, 42, 0.7)';
-                        audioCard.innerHTML = `<span style="font-size: 24px;">🎙️</span><span style="font-size: 9px; font-weight: bold; color: #38bdf8;">Голосовое</span>`;
-                        wrapper.appendChild(audioCard);
-                    } else {
-                        const img = document.createElement('img');
-                        img.className = 'thumb';
-                        img.src = blobUrl;
-                        img.onclick = () => openLightbox(blobUrl, false);
-                        wrapper.appendChild(img);
                     }
 
-                    if (!isImageEditingLocked) {
-                        const removeBtn = document.createElement('button');
-                        removeBtn.type = 'button';
-                        removeBtn.className = 'remove-thumb-btn';
-                        removeBtn.innerHTML = '&times;';
-                        removeBtn.onclick = (e) => {
-                            e.stopPropagation();
-                            selectedFiles.splice(index, 1);
-                            URL.revokeObjectURL(blobUrl);
-                            syncFileInput();
-                            renderGallery();
-                        };
-                        wrapper.appendChild(removeBtn);
-                    }
+                    const badge = document.createElement('span');
+                    badge.className = 'video-badge';
+                    badge.innerHTML = '▶ Видео';
+                    wrapper.appendChild(badge);
+                } else if (isAudio) {
+                    // Аудиоплеер для сохраненного файла:
+                    wrapper.appendChild(createAudioThumbnail(mediaUrl));
+                } else {
+                    const img = document.createElement('img');
+                    img.className = 'thumb';
+                    img.src = mediaUrl;
+                    img.onclick = () => openLightbox(mediaUrl, false);
+                    wrapper.appendChild(img);
+                }
 
-                    gallery.appendChild(wrapper);
-                });
+                if (!isImageEditingLocked) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'remove-thumb-btn';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        existingMedia.splice(index, 1);
+                        renderGallery();
+                    };
+                    wrapper.appendChild(removeBtn);
+                }
+
+                gallery.appendChild(wrapper);
+
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'keptMediaDriveIds';
+                hiddenInput.value = driveId;
+                hiddenContainer.appendChild(hiddenInput);
+            });
+
+            // ==========================================================
+            // 2. Отрисовка новых локальных файлов и записей с микрофона
+            // ==========================================================
+            selectedFiles.forEach((file, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'thumb-wrapper';
+
+                const isVideo = file.type.startsWith('video/') && !file.name.startsWith('voice_');
+                const isAudio = file.type.startsWith('audio/') ||
+                                file.name.startsWith('voice_') ||
+                                file.name.endsWith('.mp3') ||
+                                file.name.endsWith('.ogg') ||
+                                file.name.endsWith('.wav') ||
+                                file.name.endsWith('.m4a') ||
+                                file.name.endsWith('.webm');
+
+                const blobUrl = URL.createObjectURL(file);
+
+                if (isVideo) {
+                    const video = document.createElement('video');
+                    video.className = 'thumb';
+                    video.src = blobUrl;
+                    video.muted = true;
+                    video.preload = 'metadata';
+                    video.onclick = () => openLightbox(blobUrl, true);
+                    wrapper.appendChild(video);
+
+                    const badge = document.createElement('span');
+                    badge.className = 'video-badge';
+                    badge.innerHTML = '▶ Видео';
+                    wrapper.appendChild(badge);
+                } else if (isAudio) {
+                    // Аудиоплеер для локального / записанного файла (ИСПОЛЬЗУЕТ blobUrl!):
+                    wrapper.appendChild(createAudioThumbnail(blobUrl));
+                } else {
+                    const img = document.createElement('img');
+                    img.className = 'thumb';
+                    img.src = blobUrl;
+                    img.onclick = () => openLightbox(blobUrl, false);
+                    wrapper.appendChild(img);
+                }
+
+                if (!isImageEditingLocked) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'remove-thumb-btn';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        selectedFiles.splice(index, 1);
+                        URL.revokeObjectURL(blobUrl);
+                        syncFileInput();
+                        renderGallery();
+                    };
+                    wrapper.appendChild(removeBtn);
+                }
+
+                gallery.appendChild(wrapper);
+            });
 
                 updateTelegramVideoNoteVisibility();
             }
@@ -2508,6 +2598,8 @@
 
                 const defaultRadio = document.querySelector('input[name="updateSeriesRadio"][value="false"]');
                 if (defaultRadio) defaultRadio.checked = true;
+
+                cleanupPlannerVoice();
             }
 
             // Переключение галочки "Один текст для всех соцсетей"
@@ -3308,6 +3400,73 @@
                 }
 
                 ytGroup.style.display = isYtActive ? 'block' : 'none';
+            }
+
+            let plannerMediaRecorder = null;
+            let plannerAudioChunks = [];
+            let plannerTimerInterval = null;
+            let plannerRecordSeconds = 0;
+
+            // 1. Старт записи
+            async function startPlannerVoiceRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    plannerMediaRecorder = new MediaRecorder(stream);
+                    plannerAudioChunks = [];
+
+                    plannerMediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) plannerAudioChunks.push(e.data);
+                    };
+
+                    plannerMediaRecorder.start();
+
+                    document.getElementById('startVoiceBtn').style.display = 'none';
+                    document.getElementById('plannerVoiceRecordingUi').style.display = 'flex';
+
+                    plannerRecordSeconds = 0;
+                    document.getElementById('plannerVoiceTimer').textContent = "0:00";
+                    plannerTimerInterval = setInterval(() => {
+                        plannerRecordSeconds++;
+                        const m = Math.floor(plannerRecordSeconds / 60);
+                        const s = plannerRecordSeconds % 60;
+                        document.getElementById('plannerVoiceTimer').textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+                    }, 1000);
+
+                } catch (err) {
+                    alert("Не удалось получить доступ к микрофону. Разрешите доступ в настройках браузера.");
+                }
+            }
+
+            // 2. Отмена записи
+            function cancelPlannerVoiceRecording() {
+                cleanupPlannerVoice();
+            }
+
+            // 3. Сохранение и прикрепление к посту
+            function stopAndAttachPlannerVoice() {
+                if (!plannerMediaRecorder || plannerMediaRecorder.state === 'inactive') return;
+
+                plannerMediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(plannerAudioChunks, { type: plannerMediaRecorder.mimeType || 'audio/webm' });
+                    // Даем имя voice_*.webm — бэкенд четко поймет, что это аудио
+                    const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+
+                    selectedFiles.push(audioFile);
+                    syncFileInput();
+                    renderGallery();
+                };
+
+                plannerMediaRecorder.stop();
+                cleanupPlannerVoice();
+            }
+
+            function cleanupPlannerVoice() {
+                if (plannerTimerInterval) clearInterval(plannerTimerInterval);
+                if (plannerMediaRecorder && plannerMediaRecorder.stream) {
+                    plannerMediaRecorder.stream.getTracks().forEach(t => t.stop());
+                }
+                document.getElementById('plannerVoiceRecordingUi').style.display = 'none';
+                document.getElementById('startVoiceBtn').style.display = 'inline-flex';
             }
         </script>
 }

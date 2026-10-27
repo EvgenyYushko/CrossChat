@@ -66,7 +66,9 @@ namespace CrossChat.Worker.Facades
 							}
 
 							// ЧИСТОЕ ИМЯ: e5629f7b-8ec0-4401-8837-86d7772e4eba.mp4
-							string tempFileName = $"{Guid.NewGuid()}{ext.ToLowerInvariant()}";
+							// Если это аудиофайл — добавляем префикс "audio_", чтобы паблишеры безошибочно узнавали звук
+							string prefix = media.MediaType == MediaType.Audio ? "audio_" : "";
+							string tempFileName = $"{prefix}{Guid.NewGuid()}{ext.ToLowerInvariant()}";
 							string localPath = Path.Combine(tempFolder, tempFileName);
 							tempFilesToCleanup.Add(localPath);
 

@@ -33,8 +33,32 @@ public class TelegramChannelPublisher : ISocialPublisher
 		// 1. Формируем кнопку-ссылку, если она заполнена
 		InlineKeyboardMarkup? inlineKeyboard = _service.BuildInlineButton(state.ButtonText, state.ButtonUrl);
 
-		bool isAudio(string s) => s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) || s.Contains("audio/") || s.EndsWith(".ogg") || s.EndsWith(".mp3");
-		bool isVideo(string s) => s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) || s.Contains("video/") || s.EndsWith(".mp4") || s.EndsWith(".mov");
+		// Вспомогательная проверка расширений (с защитой от url-параметров типа ?token=123)
+		static bool HasExt(string s, params string[] exts)
+		{
+			var cleanPath = s.Split('?')[0];
+			return exts.Any(ext => cleanPath.EndsWith(ext, StringComparison.OrdinalIgnoreCase));
+		}
+
+		// 1. АУДИО (добавили проверку префикса voice_/audio_ и типа из базы данных!)
+		bool isAudio(string s) =>
+			s.StartsWith("data:audio", StringComparison.OrdinalIgnoreCase) ||
+			s.Contains("audio/", StringComparison.OrdinalIgnoreCase) ||
+			s.Contains("voice_", StringComparison.OrdinalIgnoreCase) ||
+			s.Contains("audio_", StringComparison.OrdinalIgnoreCase) ||
+			HasExt(s, ".ogg", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".opus", ".wma", ".weba") ||
+			// Если это .webm, но в посте он сохранен как Audio:
+			(HasExt(s, ".webm") && state.Post.Media.Any(m => m.MediaType == CrossChat.Data.Emuns.MediaType.Audio));
+
+		// 2. ВИДЕО (СТРОГО исключаем аудио, даже если у звука контейнер .webm!)
+		bool isVideo(string s) =>
+			!isAudio(s) && (
+				s.StartsWith("data:video", StringComparison.OrdinalIgnoreCase) ||
+				s.Contains("video/", StringComparison.OrdinalIgnoreCase) ||
+				HasExt(s, ".mp4", ".mov", ".webm", ".avi", ".mkv", ".m4v")
+			);
+
+		// 3. ФОТО
 		bool isImage(string s) => !isAudio(s) && !isVideo(s);
 
 		var audioItem = images?.FirstOrDefault(isAudio);

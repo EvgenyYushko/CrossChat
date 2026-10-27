@@ -298,24 +298,37 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendSinglePhotoAsync(long senderId, string imageInput, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
-			string cleanBase64 = base64Image.Contains(",") ? base64Image.Split(',')[1] : base64Image;
-			var imageBytes = Convert.FromBase64String(cleanBase64);
+			Stream stream;
 
-			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
-
-			using (var stream = new MemoryStream(imageBytes))
+			// 1. Умная проверка: читаем файл с диска через FileStream (без лишней нагрузки на RAM) или декодируем Base64
+			if (File.Exists(imageInput))
 			{
+				stream = File.OpenRead(imageInput);
+			}
+			else
+			{
+				string cleanBase64 = imageInput.Contains(",") ? imageInput.Split(',')[1] : imageInput;
+				stream = new MemoryStream(Convert.FromBase64String(cleanBase64));
+			}
+
+			using (stream)
+			{
+				bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
+				var inputFile = InputFile.FromStream(stream, "image.jpg");
+
 				if (isCaptionTooLong)
 				{
-					var photoMsg = await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"));
+					var photoMsg = await _telegramBotClient.SendPhoto(senderId, inputFile);
 					await _telegramBotClient.SendMessage(senderId, caption, replyMarkup: replyMarkup, parseMode: parseMode);
 					return photoMsg;
 				}
 				else
 				{
-					return await _telegramBotClient.SendPhoto(senderId, InputFile.FromStream(stream, "image.jpg"),
+					return await _telegramBotClient.SendPhoto(
+						senderId,
+						inputFile,
 						caption: string.IsNullOrEmpty(caption) ? null : caption,
 						replyMarkup: replyMarkup,
 						parseMode: parseMode);
@@ -490,11 +503,22 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendVoiceAsync(long senderId, string audioInput, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
 		{
-			string cleanBase64 = base64Audio.Contains(",") ? base64Audio.Split(',')[1] : base64Audio;
-			var rawBytes = Convert.FromBase64String(cleanBase64);
+			byte[] rawBytes;
 
+			// 1. Умная проверка: файл на диске или Base64 строка
+			if (File.Exists(audioInput))
+			{
+				rawBytes = await File.ReadAllBytesAsync(audioInput);
+			}
+			else
+			{
+				string cleanBase64 = audioInput.Contains(",") ? audioInput.Split(',')[1] : audioInput;
+				rawBytes = Convert.FromBase64String(cleanBase64);
+			}
+
+			// 2. Конвертируем в эталонный Telegram Voice OGG (Opus)
 			var voiceOggBytes = await VideoService.ConvertToTelegramVoiceOggAsync(rawBytes);
 
 			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;

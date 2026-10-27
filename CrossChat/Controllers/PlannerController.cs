@@ -362,6 +362,9 @@ namespace CrossChat.Controllers
 							state.LocationName = netData.LocationName;
 						}
 					}
+
+					// 🚀 СБРАСЫВАЕМ СТАРЫЙ КЭШ ДЛЯ КАЖДОГО ПОСТА СЕРИИ:
+					_postService.InvalidateCache(fPost.Id);
 				}
 
 				await _db.SaveChangesAsync();
@@ -384,15 +387,16 @@ namespace CrossChat.Controllers
 
 				try
 				{
-					var isVideo = file.ContentType.StartsWith("video/") ||
-								  file.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-								  file.FileName.EndsWith(".mov", StringComparison.OrdinalIgnoreCase);
-
 					var isAudio = file.ContentType.StartsWith("audio/") ||
+								  file.FileName.StartsWith("voice_") ||
 								  file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
 								  file.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
 								  file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
 								  file.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase);
+
+					var isVideo = !isAudio && (file.ContentType.StartsWith("video/") ||
+								  file.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+								  file.FileName.EndsWith(".mov", StringComparison.OrdinalIgnoreCase));
 
 					var mediaType = isVideo ? MediaType.Video : (isAudio ? MediaType.Audio : MediaType.Image);
 
