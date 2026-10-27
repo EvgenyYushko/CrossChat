@@ -1335,14 +1335,25 @@
                 <!-- Предупреждение о коллективном редактировании -->
                 <div id="multiPostWarning" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;"></div>
 
-                <!-- Блок прогресс-бара -->
-                <div id="uploadProgressContainer" class="upload-progress-container" style="display: none;">
-                    <div class="progress-bar-bg">
-                        <div id="uploadProgressFill" class="progress-bar-fill"></div>
+                <!-- Блок прогресс-бара с кнопкой отмены ✕ -->
+                <div id="uploadProgressContainer" class="upload-progress-container" style="display: none; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--glass-border); padding: 12px 14px; border-radius: 14px; margin-top: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span id="uploadProgressStatusTitle" style="font-size: 0.82rem; font-weight: 700; color: var(--text-main);">
+                            📤 Загрузка публикации...
+                        </span>
+                        <button type="button" id="uploadCancelBtn" onclick="abortPostUpload()" title="Отменить загрузку"
+                                style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; border-radius: 8px; padding: 2px 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: all 0.15s ease;">
+                            ✕ Отмена
+                        </button>
                     </div>
-                    <span id="uploadProgressText" class="progress-text">Загрузка: 0%</span>
+                    <div class="progress-bar-bg" style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 6px; overflow: hidden; margin-bottom: 6px;">
+                        <div id="uploadProgressFill" class="progress-bar-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #38bdf8, #818cf8); border-radius: 6px; transition: width 0.15s ease;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-secondary); font-family: monospace;">
+                        <span id="uploadProgressText">Загрузка: 0%</span>
+                        <span id="uploadProgressBytes">0 / 0 МБ</span>
+                    </div>
                 </div>
-
                 <div class="form-actions">
                     <button id="postForm-ok" type="submit" class="btn-primary">Сохранить</button>
                     <button type="button" class="btn-cancel" onclick="closeModal()">Отмена</button>
@@ -1370,13 +1381,52 @@
 
 @section Scripts {
         <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
         <!-- Подключаем русский перевод и региональные стандарты -->
         <script>
             let isEditMode = false;
             let isUploading = false; // Глобальный флаг процесса загрузки
-            let isImageEditingLocked = false; 
+            let isImageEditingLocked = false;
+            let currentPostUploadXhr = null; // <-- Хранит активный запрос для возможности отмены
+            let currentUploadId = null; // <-- Хранит уникальный ключ текущей загрузки
             let contextEventId = null; // Глобальный ID поста, на который кликнули ПКМ
             let currentPostRecurrenceGroupId = null; // Запоминает ID серии при редактировании
+
+            // === ПОДКЛЮЧЕНИЕ SIGNALR ДЛЯ ЖИВОГО ПРОГРЕССА GOOGLE DRIVE ===
+            const profileId = @ViewBag.ProfileId;
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/inboxHub")
+                .withAutomaticReconnect()
+                .build();
+
+            // Слушатель прогресса отправки с сервера в Google Drive:
+            connection.on("ServerUploadProgress", (payload) => {
+                const statusTitle = document.getElementById('uploadProgressStatusTitle');
+                const fill = document.getElementById('uploadProgressFill');
+                const text = document.getElementById('uploadProgressText');
+                const bytesText = document.getElementById('uploadProgressBytes');
+
+                if (payload.stage === "drive") {
+                    if (statusTitle) statusTitle.textContent = "☁️ Сохранение в Google Drive...";
+                    if (text) text.textContent = payload.text;
+                    if (bytesText) bytesText.textContent = payload.percent + '%';
+                    if (fill) {
+                        fill.classList.remove('pulse');
+                        fill.style.width = payload.percent + '%';
+                        // Фиолетовый градиент облачной фазы:
+                        fill.style.background = 'linear-gradient(90deg, #6366f1, #a855f7)';
+                    }
+                } else if (payload.stage === "thumb") {
+                    if (statusTitle) statusTitle.textContent = "🖼️ Создание обложки видео...";
+                    if (text) text.textContent = payload.text;
+                }
+            });
+
+            connection.start().then(() => {
+                if (profileId > 0) {
+                    connection.invoke("JoinProfileRoom", Number(profileId));
+                }
+            }).catch(err => console.error("SignalR Planner Error:", err));
 
             const modal = document.getElementById('postModal');
             const dateInput = document.getElementById('showDateInput');
@@ -2267,12 +2317,18 @@
                     resetModalFormState();
 
                     const currentNetwork = "@ViewBag.Network";
-                    document.getElementById('postForm').action = "/planner/create";
-                    document.getElementById('deleteBtn').style.display = 'none';
-                    document.getElementById('postForm-ok').textContent = `Запланировать`;
+                    const postForm = document.getElementById('postForm');
+                    if (postForm) postForm.action = "/planner/create";
 
-                    dateInput.disabled = false;
-                    document.getElementById('fileInput').disabled = false;
+                    const deleteBtn = document.getElementById('deleteBtn');
+                    if (deleteBtn) deleteBtn.style.display = 'none';
+
+                    const postFormOk = document.getElementById('postForm-ok');
+                    if (postFormOk) postFormOk.textContent = `Запланировать`;
+
+                    if (dateInput) dateInput.disabled = false;
+                    const fileInput = document.getElementById('fileInput');
+                    if (fileInput) fileInput.disabled = false;
 
                     const fileUploadGroup = document.getElementById('fileUploadGroup');
                     if (fileUploadGroup) fileUploadGroup.style.display = 'block';
@@ -2284,19 +2340,24 @@
                     const stickyName = localStorage.getItem('crosschat_last_loc_name');
 
                     if (stickyId && stickyName) {
-                        document.getElementById('locationInput').value = stickyName;
-                        document.getElementById('locationIdHidden').value = stickyId;
-                        document.getElementById('locationNameHidden').value = stickyName;
-                        document.getElementById('clearLocationBtn').style.display = 'inline-block';
+                        const locInput = document.getElementById('locationInput');
+                        const locIdHidden = document.getElementById('locationIdHidden');
+                        const locNameHidden = document.getElementById('locationNameHidden');
+                        const clearLocBtn = document.getElementById('clearLocationBtn');
+
+                        if (locInput) locInput.value = stickyName;
+                        if (locIdHidden) locIdHidden.value = stickyId;
+                        if (locNameHidden) locNameHidden.value = stickyName;
+                        if (clearLocBtn) clearLocBtn.style.display = 'inline-block';
                     } else {
-                        clearLocationSelection();
+                        if (typeof clearLocationSelection === 'function') clearLocationSelection();
                     }
 
                     if (currentNetwork === "All") {
                         if (netSelectGroup) netSelectGroup.style.display = 'block';
-                        document.getElementById('unifiedTextGroup').style.display = 'block';
+                        const unifiedTextGroup = document.getElementById('unifiedTextGroup');
+                        if (unifiedTextGroup) unifiedTextGroup.style.display = 'block';
 
-                        // По умолчанию "Один текст" включен, поэтому показываем дефолтный текстареа
                         if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
                         const defCapInput = document.getElementById('captionInput');
                         if (defCapInput) {
@@ -2309,12 +2370,13 @@
                         });
                     } else {
                         if (netSelectGroup) netSelectGroup.style.display = 'none';
-                        document.getElementById('unifiedTextGroup').style.display = 'none';
+                        const unifiedTextGroup = document.getElementById('unifiedTextGroup');
+                        if (unifiedTextGroup) unifiedTextGroup.style.display = 'none';
                         if (defaultCaptionGroup) defaultCaptionGroup.style.display = 'block';
 
                         const defCapInput = document.getElementById('captionInput');
                         if (defCapInput) {
-                        defCapInput.required = false;
+                            defCapInput.required = false;
                             defCapInput.value = "";
                         }
                     }
@@ -2322,11 +2384,15 @@
                     let selectedDate = info.date;
                     if (info.allDay) selectedDate.setHours(12, 0);
 
-                    dateInput.value = formatToInput(selectedDate);
-                    modal.style.display = 'flex';
-                    updateTelegramPaidVisibility();
-                    updateTelegramButtonVisibility();
-                    updateFirstCommentVisibility();
+                    if (dateInput) dateInput.value = formatToInput(selectedDate);
+
+                    // Открываем модальное окно безопасно:
+                    const modalElem = document.getElementById('postModal');
+                    if (modalElem) modalElem.style.display = 'flex';
+
+                    if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
+                    if (typeof updateTelegramButtonVisibility === 'function') updateTelegramButtonVisibility();
+                    if (typeof updateFirstCommentVisibility === 'function') updateFirstCommentVisibility();
 
                     const createGroup = document.getElementById('recurrenceCreateGroup');
                     if (createGroup) createGroup.style.display = 'block';
@@ -2334,11 +2400,11 @@
                     const editGroup = document.getElementById('recurrenceEditGroup');
                     if (editGroup) editGroup.style.display = 'none';
 
-                    updateRecurrencePreviewText();
+                    if (typeof updateRecurrencePreviewText === 'function') updateRecurrencePreviewText();
 
                     const privacySelect = document.getElementById('youtubePrivacySelect');
                     if (privacySelect) privacySelect.value = "public";
-                    updateYouTubePrivacyVisibility();
+                    if (typeof updateYouTubePrivacyVisibility === 'function') updateYouTubePrivacyVisibility();
                 }
                 });
                 calendar.render();
@@ -2708,6 +2774,9 @@
                 cancelBtn.style.display = 'none';
 
                 // Базовые поля формы
+                // Генерируем уникальный ID загрузки:
+                currentUploadId = 'upl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+                formData.append('uploadId', currentUploadId);
                 formData.append('profileId', form.querySelector('[name="profileId"]').value);
                 formData.append('networkType', form.querySelector('[name="networkType"]').value);
                 formData.append('showDate', form.querySelector('[name="showDate"]').value);
@@ -2744,24 +2813,39 @@
                 });
 
                 // Отправка через XMLHttpRequest с прогрессом
-                const xhr = new XMLHttpRequest();
+                currentPostUploadXhr = new XMLHttpRequest();
+                const xhr = currentPostUploadXhr;
                 xhr.open('POST', url, true);
 
                 xhr.upload.onprogress = function(e) {
                     if (e.lengthComputable) {
                         const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        const fill = document.getElementById('uploadProgressFill');
+                        const text = document.getElementById('uploadProgressText');
+                        const bytesText = document.getElementById('uploadProgressBytes');
+                        const statusTitle = document.getElementById('uploadProgressStatusTitle');
+
                         if (percentComplete < 100) {
-                            progressFill.style.width = percentComplete + '%';
-                            progressText.textContent = `Загрузка в облако: ${percentComplete}% (${formatBytes(e.loaded)} из ${formatBytes(e.total)})`;
+                            // ФАЗА 1: Передача с телефона/ПК на сервер (голубой градиент)
+                            if (statusTitle) statusTitle.textContent = "📤 Загрузка на сервер...";
+                            if (fill) fill.style.width = percentComplete + '%';
+                            if (text) text.textContent = `Загрузка: ${percentComplete}%`;
+                            if (bytesText) bytesText.textContent = `${formatBytes(e.loaded)} / ${formatBytes(e.total)}`;
                         } else {
-                            progressFill.style.width = '100%';
-                            progressFill.classList.add('pulse');
-                            progressText.textContent = 'Сохранение в Google Drive...';
+                            // ФАЗА 2: Файл на сервере, переключаемся на фазу Google Drive
+                            if (statusTitle) statusTitle.textContent = "⚙️ Обработка на сервере...";
+                            if (text) text.textContent = "☁️ Отправка в Google Drive...";
+                            if (bytesText) bytesText.textContent = "Подготовка...";
+                            if (fill) {
+                                fill.style.width = '10%';
+                                fill.style.background = 'linear-gradient(90deg, #6366f1, #a855f7)';
+                            }
                         }
                     }
                 };
 
                 xhr.onload = function() {
+                    currentPostUploadXhr = null;
                     if (xhr.status >= 200 && xhr.status < 300) {
                         isUploading = false;
                         document.querySelector('.modal-card').classList.remove('uploading');
@@ -2845,6 +2929,33 @@
                 formData.append('youtubePrivacy', document.getElementById('youtubePrivacySelect')?.value || 'public');
 
                 xhr.send(formData);
+            }
+
+            // Функция отмены с гарантированным сигналом на сервер:
+            function abortPostUpload() {
+                console.log("🛑 Нажата отмена публикации. UploadId:", currentUploadId);
+
+                // 1. Посылаем сигнал на сервер немедленно прервать Google Drive:
+                if (currentUploadId) {
+                    const idToCancel = currentUploadId;
+                    fetch(`/planner/cancel-upload?uploadId=${encodeURIComponent(idToCancel)}`, {
+                        method: 'POST',
+                        keepalive: true
+                    })
+                    .then(res => res.json())
+                    .then(data => console.log("Ответ сервера на отмену:", data))
+                    .catch(err => console.error("Ошибка запроса отмены:", err));
+                }
+
+                // 2. Обрываем XHR в браузере:
+                if (currentPostUploadXhr) {
+                    currentPostUploadXhr.abort();
+                    currentPostUploadXhr = null;
+                }
+
+                currentUploadId = null;
+                resetUploadProgress();
+                alert("Загрузка публикации отменена.");
             }
 
             // Сброс состояния прогресс-бара в случае ошибки
@@ -3465,8 +3576,11 @@
                 if (plannerMediaRecorder && plannerMediaRecorder.stream) {
                     plannerMediaRecorder.stream.getTracks().forEach(t => t.stop());
                 }
-                document.getElementById('plannerVoiceRecordingUi').style.display = 'none';
-                document.getElementById('startVoiceBtn').style.display = 'inline-flex';
+                const voiceUi = document.getElementById('plannerVoiceRecordingUi');
+                if (voiceUi) voiceUi.style.display = 'none';
+
+                const startBtn = document.getElementById('startVoiceBtn');
+                if (startBtn) startBtn.style.display = 'inline-flex';
             }
         </script>
 }

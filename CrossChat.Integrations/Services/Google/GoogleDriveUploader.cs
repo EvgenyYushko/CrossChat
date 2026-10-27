@@ -1,3 +1,4 @@
+using System.Threading;
 using CrossChat.Integrations.Interfaces.Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Drive.v3;
@@ -23,7 +24,13 @@ namespace CrossChat.Integrations.Services.Google
 			});
 		}
 
-		public async Task<string> UploadStreamAsync(Stream stream, string fileName, string driveFolderId, string? contentType = null)
+		public async Task<string> UploadStreamAsync(
+			Stream stream,
+			string fileName,
+			string driveFolderId,
+			string? contentType = null,
+			Action<long, long>? progressCallback = null,
+			CancellationToken cancellationToken = default) // <-- ДОБАВЛЕН КОЛЛБЭК
 		{
 			var mimeType = !string.IsNullOrEmpty(contentType) ? contentType : GetMimeType(fileName);
 
@@ -41,7 +48,20 @@ namespace CrossChat.Integrations.Services.Google
 			var request = _driveService.Files.Create(fileMetadata, stream, mimeType);
 			request.Fields = "id";
 
-			var result = await request.UploadAsync(CancellationToken.None);
+			// 🚀 ПОДПИСЫВАЕМСЯ НА СОБЫТИЕ РЕАЛЬНОЙ ПЕРЕДАЧИ В GOOGLE DRIVE:
+			if (progressCallback != null)
+			{
+				long totalBytes = stream.CanSeek ? stream.Length : 0;
+				request.ProgressChanged += (IUploadProgress progress) =>
+				{
+					if (progress.Status == UploadStatus.Uploading)
+					{
+						progressCallback(progress.BytesSent, totalBytes);
+					}
+				};
+			}
+
+			var result = await request.UploadAsync(cancellationToken);
 
 			if (result.Status != UploadStatus.Completed)
 			{

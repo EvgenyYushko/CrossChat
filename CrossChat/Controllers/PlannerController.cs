@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -5,6 +6,7 @@ using CrossChat.Data;
 using CrossChat.Data.Emuns;
 using CrossChat.Data.Entities;
 using CrossChat.Data.Entities.Posting;
+using CrossChat.Hubs;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
@@ -13,9 +15,10 @@ using CrossChat.Integrations.Models.Posting;
 using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using static CrossChat.Worker.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.EnvConstants;
+using static CrossChat.Worker.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Controllers
 {
@@ -23,20 +26,29 @@ namespace CrossChat.Controllers
 	[Route("planner")]
 	public class PlannerController : Controller
 	{
+		// 1. Активные токены (когда Create уже выполняется):
+		private static readonly ConcurrentDictionary<string, CancellationTokenSource> _uploadTokens = new();
+
+		// 2. 🚀 ЧЕРНЫЙ СПИСОК (если отмена прилетела РАНЬШЕ, чем докачался файл):
+		private static readonly ConcurrentDictionary<string, DateTime> _cancelledUploadIds = new();
+
 		private readonly AppDbContext _db;
 		private readonly IPostService _postService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
+		private readonly IHubContext<InboxHub> _hubContext; // <-- ВНЕДРЯЕМ ХАБ
 		private readonly ILogger<PlannerController> _logger;
 
 		public PlannerController(
 			AppDbContext db,
 			IPostService postService,
 			IGoogleDriveUploader googleDriveUploader,
+			IHubContext<InboxHub> hubContext, // <-- ВНЕДРЯЕМ ХАБ
 			ILogger<PlannerController> logger)
 		{
 			_db = db;
 			_postService = postService;
 			_googleDriveUploader = googleDriveUploader;
+			_hubContext = hubContext;
 			_logger = logger;
 		}
 
@@ -176,95 +188,138 @@ namespace CrossChat.Controllers
 			[FromForm] string? caption,
 			[FromForm] DateTime showDate,
 			[FromForm] int? botId,
-			// ПАРАМЕТРЫ ПОВТОРЕНИЯ:
 			[FromForm] bool isRecurring,
 			[FromForm] int recurrenceInterval,
 			[FromForm] int recurrenceCount,
+			[FromForm] string? uploadId,
 			List<IFormFile> images)
 		{
-			var utcDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
-
-			var post = new BlogPost
+			// 🚀 ПРОВЕРКА №1: Вдруг пользователь нажал отмену ЕЩЁ ДО того, как файл докачался на сервер?
+			if (!string.IsNullOrEmpty(uploadId) && _cancelledUploadIds.ContainsKey(uploadId))
 			{
-				Id = Guid.NewGuid(),
-				ProfileId = profileId,
-				CreatedAt = DateTimeNow,
-				ShowDate = utcDate,
-				Access = AccessLevel.Public
-			};
-
-			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
-			{
-				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
+				_logger.LogWarning("🛑 [Planner] Запрос {UploadId} был отменен клиентом еще ДО запуска! Прерываем без отправки в Google Drive.", uploadId);
+				_cancelledUploadIds.TryRemove(uploadId, out _);
+				return Ok(); // Мгновенно выходим!
 			}
 
-			// Загружаем файлы в Google Drive ОДИН РАЗ
-			await UploadMedia(images, post);
-
-			// ЕСЛИ ВКЛЮЧЕНО ПОВТОРЕНИЕ (ГЕНЕРАЦИЯ СЕРИИ):
-			if (isRecurring && recurrenceCount > 1)
+			using var cts = new CancellationTokenSource();
+			if (!string.IsNullOrEmpty(uploadId))
 			{
-				int interval = recurrenceInterval > 0 ? recurrenceInterval : 7;
-				int count = Math.Clamp(recurrenceCount, 1, 24); // максимум 24 цикла
-				var groupId = Guid.NewGuid();
+				_uploadTokens[uploadId] = cts;
+				_logger.LogInformation("🔑 [Planner] Зарегистрирован ключ отмены: {UploadId}", uploadId);
 
-				post.RecurrenceGroupId = groupId;
-				await _postService.AddPostAsync(post);
-
-				// Генерируем последующие посты серии
-				for (int i = 1; i < count; i++)
+				// Двойная страховка от микросекундной гонки:
+				if (_cancelledUploadIds.ContainsKey(uploadId))
 				{
-					var repeatPost = new BlogPost
-					{
-						Id = Guid.NewGuid(),
-						ProfileId = profileId,
-						CreatedAt = DateTimeNow,
-						ShowDate = utcDate.AddDays(interval * i),
-						Access = AccessLevel.Public,
-						RecurrenceGroupId = groupId,
-						// Ссылаемся на те же самые файлы в Google Диске (без дублирования места!)
-						Media = post.Media.Select(m => new PostMediaItem
-						{
-							MediaType = m.MediaType,
-							GoogleDriveFileId = m.GoogleDriveFileId,
-							ThumbnailDriveFileId = m.ThumbnailDriveFileId,
-							FileName = m.FileName,
-							MimeType = m.MimeType,
-							FileSizeBytes = m.FileSizeBytes,
-							SortOrder = m.SortOrder
-						}).ToList()
-					};
+					_logger.LogWarning("🛑 [Planner] Отмена прилетела во время регистрации {UploadId}! Прерываем.", uploadId);
+					return Ok();
+				}
+			}
 
-					// Копируем настройки соцсетей (текст, кнопки, геолокацию, звезды)
-					foreach (var kvp in post.Networks)
-					{
-						repeatPost.Networks[kvp.Key] = new NetworkPostData
-						{
-							Status = kvp.Value.Status,
-							Caption = kvp.Value.Caption,
-							FirstComment = kvp.Value.FirstComment,
-							IsPaid = kvp.Value.IsPaid,
-							Price = kvp.Value.Price,
-							IsVideoNote = kvp.Value.IsVideoNote,
-							ButtonText = kvp.Value.ButtonText,
-							ButtonUrl = kvp.Value.ButtonUrl,
-							LocationId = kvp.Value.LocationId,
-							LocationName = kvp.Value.LocationName,
-							PrivacyStatus = kvp.Value.PrivacyStatus,
-						};
-					}
+			try
+			{
+				var utcDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
+				var post = new BlogPost
+				{
+					Id = Guid.NewGuid(),
+					ProfileId = profileId,
+					CreatedAt = DateTimeNow,
+					ShowDate = utcDate,
+					Access = AccessLevel.Public
+				};
 
-					await _postService.AddPostAsync(repeatPost);
+				if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
+				{
+					return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть для публикации.");
 				}
 
-				_logger.LogInformation("[Planner] Создана серия из {Count} повторяющихся постов с шагом {Days} дн. GroupId: {GroupId}", count, interval, groupId);
-			}
-			else
-			{
-				await _postService.AddPostAsync(post);
-			}
+				// Загрузка в Google Drive с контролем отмены
+				await UploadMedia(images, post, cts.Token);
 
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
+				if (isRecurring && recurrenceCount > 1)
+				{
+					int interval = recurrenceInterval > 0 ? recurrenceInterval : 7;
+					int count = Math.Clamp(recurrenceCount, 1, 24); // максимум 24 цикла
+					var groupId = Guid.NewGuid();
+
+					post.RecurrenceGroupId = groupId;
+					await _postService.AddPostAsync(post);
+
+					// Генерируем последующие посты серии
+					for (int i = 1; i < count; i++)
+					{
+						var repeatPost = new BlogPost
+						{
+							Id = Guid.NewGuid(),
+							ProfileId = profileId,
+							CreatedAt = DateTimeNow,
+							ShowDate = utcDate.AddDays(interval * i),
+							Access = AccessLevel.Public,
+							RecurrenceGroupId = groupId,
+							// Ссылаемся на те же самые файлы в Google Диске (без дублирования места!)
+							Media = post.Media.Select(m => new PostMediaItem
+							{
+								MediaType = m.MediaType,
+								GoogleDriveFileId = m.GoogleDriveFileId,
+								ThumbnailDriveFileId = m.ThumbnailDriveFileId,
+								FileName = m.FileName,
+								MimeType = m.MimeType,
+								FileSizeBytes = m.FileSizeBytes,
+								SortOrder = m.SortOrder
+							}).ToList()
+						};
+
+						// Копируем настройки соцсетей (текст, кнопки, геолокацию, звезды)
+						foreach (var kvp in post.Networks)
+						{
+							repeatPost.Networks[kvp.Key] = new NetworkPostData
+							{
+								Status = kvp.Value.Status,
+								Caption = kvp.Value.Caption,
+								FirstComment = kvp.Value.FirstComment,
+								IsPaid = kvp.Value.IsPaid,
+								Price = kvp.Value.Price,
+								IsVideoNote = kvp.Value.IsVideoNote,
+								ButtonText = kvp.Value.ButtonText,
+								ButtonUrl = kvp.Value.ButtonUrl,
+								LocationId = kvp.Value.LocationId,
+								LocationName = kvp.Value.LocationName,
+								PrivacyStatus = kvp.Value.PrivacyStatus,
+							};
+						}
+
+						await _postService.AddPostAsync(repeatPost);
+					}
+
+					_logger.LogInformation("[Planner] Создана серия из {Count} повторяющихся постов с шагом {Days} дн. GroupId: {GroupId}", count, interval, groupId);
+				}
+				else
+				{
+					await _postService.AddPostAsync(post);
+				}
+
+				return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
+			}
+			// 1. Клиент нажал отмену во время передачи на сервер (с телефона):
+			catch (BadHttpRequestException)
+			{
+				_logger.LogWarning("⚠️ [Planner] Клиент оборвал соединение до завершения передачи файлов на сервер.");
+				return Ok(); // Отвечаем 200, пост не создаем
+			}
+			// 2. Клиент нажал отмену во время передачи в Google Drive (с ПК):
+			catch (OperationCanceledException)
+			{
+				_logger.LogWarning("🛑 [Planner] Отмена подтверждена. Загрузка в Google Drive остановлена, файлы удалены.");
+				return Ok(); // Пост не создаем
+			}
+			finally
+			{
+				if (!string.IsNullOrEmpty(uploadId))
+				{
+					_uploadTokens.TryRemove(uploadId, out _);
+					_cancelledUploadIds.TryRemove(uploadId, out _);
+				}
+			}
 		}
 
 		// ==========================================================
@@ -284,109 +339,186 @@ namespace CrossChat.Controllers
 			[FromForm] List<string> selectedNetworks,
 			// ФЛАГ: ПРИМЕНИТЬ КО ВСЕЙ СЕРИИ:
 			[FromForm] bool updateSeries,
+			[FromForm] string? uploadId,
 			List<IFormFile> images)
 		{
-			var post = await _postService.GetPostByIdAsync(id);
-			if (post == null) return NotFound();
-
-			post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
-
-			if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
+			// 🚀 ПРОВЕРКА №1: Вдруг пользователь нажал отмену ЕЩЁ ДО того, как файл докачался на сервер?
+			if (!string.IsNullOrEmpty(uploadId) && _cancelledUploadIds.ContainsKey(uploadId))
 			{
-				return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть.");
+				_logger.LogWarning("🛑 [Planner] Запрос {UploadId} был отменен клиентом еще ДО запуска! Прерываем без отправки в Google Drive.", uploadId);
+				_cancelledUploadIds.TryRemove(uploadId, out _);
+				return Ok(); // Мгновенно выходим!
 			}
 
-			// Безопасное удаление убранных медиа
-			var keptSet = keptMediaDriveIds != null ? new HashSet<string>(keptMediaDriveIds) : new HashSet<string>();
-			var removedMedia = post.Media.Where(m => !keptSet.Contains(m.GoogleDriveFileId)).ToList();
-
-			foreach (var media in removedMedia)
+			// Создаем токен, который реагирует И на сигнал отмены, И на обрыв соединения
+			using var cts = new CancellationTokenSource();
+			if (!string.IsNullOrEmpty(uploadId))
 			{
-				await SafeDeleteMediaFileAsync(media.GoogleDriveFileId, excludingPostId: post.Id);
-				if (!string.IsNullOrEmpty(media.ThumbnailDriveFileId))
+				_uploadTokens[uploadId] = cts;
+
+				// Двойная страховка от микросекундной гонки:
+				if (_cancelledUploadIds.ContainsKey(uploadId))
 				{
-					await SafeDeleteMediaFileAsync(media.ThumbnailDriveFileId, excludingPostId: post.Id);
+					_logger.LogWarning("🛑 [Planner] Отмена прилетела во время регистрации {UploadId}! Прерываем.", uploadId);
+					return Ok();
 				}
 			}
 
-			post.Media = post.Media.Where(m => keptSet.Contains(m.GoogleDriveFileId)).ToList();
-			await UploadMedia(images, post);
-
-			// Обновляем текущий пост
-			await _postService.UpdatePostAsync(post);
-
-			// ЕСЛИ ПОЛЬЗОВАТЕЛЬ ВЫБРАЛ: "ПРИМЕНИТЬ КО ВСЕЙ СЕРИИ"
-			if (post.RecurrenceGroupId.HasValue && updateSeries)
+			try
 			{
-				var futurePosts = await _db.Posts
-					.Include(p => p.Media)
-					.Include(p => p.NetworkStates)
-					.Where(p => p.RecurrenceGroupId == post.RecurrenceGroupId.Value &&
-								p.Id != post.Id &&
-								p.ShowDate >= post.ShowDate)
-					.ToListAsync();
+				var post = await _postService.GetPostByIdAsync(id);
+				if (post == null) return NotFound();
 
-				foreach (var fPost in futurePosts)
+				post.ShowDate = DateTime.SpecifyKind(showDate, DateTimeKind.Utc);
+
+				if (!FillNetworkData(post, networkType, selectedNetworks, caption, botId))
 				{
-					// Обновляем медиафайлы (ссылаемся на актуальный набор)
-					fPost.Media.Clear();
-					foreach (var m in post.Media)
-					{
-						fPost.Media.Add(new PostMediaEntity
-						{
-							PostId = fPost.Id,
-							MediaType = m.MediaType,
-							GoogleDriveFileId = m.GoogleDriveFileId,
-							ThumbnailDriveFileId = m.ThumbnailDriveFileId,
-							FileName = m.FileName,
-							MimeType = m.MimeType,
-							FileSizeBytes = m.FileSizeBytes,
-							SortOrder = m.SortOrder
-						});
-					}
+					return BadRequest("Пожалуйста, выберите хотя бы одну социальную сеть.");
+				}
 
-					// Обновляем тексты, кнопки, звезды, локацию
-					foreach (var state in fPost.NetworkStates)
+				// Безопасное удаление убранных медиа
+				var keptSet = keptMediaDriveIds != null ? new HashSet<string>(keptMediaDriveIds) : new HashSet<string>();
+				var removedMedia = post.Media.Where(m => !keptSet.Contains(m.GoogleDriveFileId)).ToList();
+
+				foreach (var media in removedMedia)
+				{
+					await SafeDeleteMediaFileAsync(media.GoogleDriveFileId, excludingPostId: post.Id);
+					if (!string.IsNullOrEmpty(media.ThumbnailDriveFileId))
 					{
-						string netKey = $"{((NetworkType)state.NetworkType).ToString()}_{state.BotId}";
-						if (post.Networks.TryGetValue(netKey, out var netData))
+						await SafeDeleteMediaFileAsync(media.ThumbnailDriveFileId, excludingPostId: post.Id);
+					}
+				}
+
+				post.Media = post.Media.Where(m => keptSet.Contains(m.GoogleDriveFileId)).ToList();
+				await UploadMedia(images, post, cts.Token);
+
+				// Обновляем текущий пост
+				await _postService.UpdatePostAsync(post);
+
+				// ЕСЛИ ПОЛЬЗОВАТЕЛЬ ВЫБРАЛ: "ПРИМЕНИТЬ КО ВСЕЙ СЕРИИ"
+				if (post.RecurrenceGroupId.HasValue && updateSeries)
+				{
+					var futurePosts = await _db.Posts
+						.Include(p => p.Media)
+						.Include(p => p.NetworkStates)
+						.Where(p => p.RecurrenceGroupId == post.RecurrenceGroupId.Value &&
+									p.Id != post.Id &&
+									p.ShowDate >= post.ShowDate)
+						.ToListAsync();
+
+					foreach (var fPost in futurePosts)
+					{
+						// Обновляем медиафайлы (ссылаемся на актуальный набор)
+						fPost.Media.Clear();
+						foreach (var m in post.Media)
 						{
-							state.Caption = netData.Caption;
-							state.FirstComment = netData.FirstComment;
-							state.IsPaid = netData.IsPaid;
-							state.Price = netData.Price;
-							state.IsVideoNote = netData.IsVideoNote;
-							state.ButtonText = netData.ButtonText;
-							state.ButtonUrl = netData.ButtonUrl;
-							state.LocationId = netData.LocationId;
-							state.LocationName = netData.LocationName;
+							fPost.Media.Add(new PostMediaEntity
+							{
+								PostId = fPost.Id,
+								MediaType = m.MediaType,
+								GoogleDriveFileId = m.GoogleDriveFileId,
+								ThumbnailDriveFileId = m.ThumbnailDriveFileId,
+								FileName = m.FileName,
+								MimeType = m.MimeType,
+								FileSizeBytes = m.FileSizeBytes,
+								SortOrder = m.SortOrder
+							});
 						}
+
+						// Обновляем тексты, кнопки, звезды, локацию
+						foreach (var state in fPost.NetworkStates)
+						{
+							string netKey = $"{((NetworkType)state.NetworkType).ToString()}_{state.BotId}";
+							if (post.Networks.TryGetValue(netKey, out var netData))
+							{
+								state.Caption = netData.Caption;
+								state.FirstComment = netData.FirstComment;
+								state.IsPaid = netData.IsPaid;
+								state.Price = netData.Price;
+								state.IsVideoNote = netData.IsVideoNote;
+								state.ButtonText = netData.ButtonText;
+								state.ButtonUrl = netData.ButtonUrl;
+								state.LocationId = netData.LocationId;
+								state.LocationName = netData.LocationName;
+							}
+						}
+
+						// 🚀 СБРАСЫВАЕМ СТАРЫЙ КЭШ ДЛЯ КАЖДОГО ПОСТА СЕРИИ:
+						_postService.InvalidateCache(fPost.Id);
 					}
 
-					// 🚀 СБРАСЫВАЕМ СТАРЫЙ КЭШ ДЛЯ КАЖДОГО ПОСТА СЕРИИ:
-					_postService.InvalidateCache(fPost.Id);
+					await _db.SaveChangesAsync();
+					_logger.LogInformation("[Planner] Серия постов (GroupId: {GroupId}) успешно обновлена.", post.RecurrenceGroupId.Value);
 				}
 
-				await _db.SaveChangesAsync();
-				_logger.LogInformation("[Planner] Серия постов (GroupId: {GroupId}) успешно обновлена.", post.RecurrenceGroupId.Value);
+				return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
 			}
-
-			return RedirectToAction("Index", "Planner", new { profileId, network = networkType, botId });
+			catch (BadHttpRequestException)
+			{
+				_logger.LogWarning("⚠️ [Planner] Клиент оборвал соединение до завершения передачи файлов на сервер.");
+				return Ok();
+			}
+			catch (OperationCanceledException)
+			{
+				_logger.LogWarning("🛑 [Planner] Отмена подтверждена. Загрузка в Google Drive остановлена, файлы удалены.");
+				return Ok();
+			}
+			finally
+			{
+				if (!string.IsNullOrEmpty(uploadId))
+				{
+					_uploadTokens.TryRemove(uploadId, out _);
+					_cancelledUploadIds.TryRemove(uploadId, out _);
+				}
+			}
 		}
 
-		private async Task UploadMedia(List<IFormFile> files, BlogPost post)
+		[HttpPost("cancel-upload")]
+		[HttpGet("cancel-upload")]
+		[IgnoreAntiforgeryToken]
+		[AllowAnonymous]
+		public IActionResult CancelUpload([FromQuery] string uploadId)
+		{
+			if (string.IsNullOrEmpty(uploadId)) return Ok();
+
+			_logger.LogInformation(">>> [Cancel Signal Received] UploadId: {UploadId}", uploadId);
+
+			// 1. СРАЗУ ВНОСИМ В ЧЕРНЫЙ СПИСОК (на случай, если Create еще принимает 15 МБ):
+			_cancelledUploadIds[uploadId] = DateTime.UtcNow.AddMinutes(5);
+
+			// 2. Если Create уже выполняется прямо сейчас — обрываем токен:
+			if (_uploadTokens.TryGetValue(uploadId, out var cts))
+			{
+				_logger.LogWarning("🛑 [Planner] Активная передача в Google Drive остановлена для {UploadId}!", uploadId);
+				try { cts.Cancel(); } catch { }
+			}
+			else
+			{
+				_logger.LogWarning("⏳ [Planner] Отмена зафиксирована ЗАРАНЕЕ для {UploadId} (сервер еще принимает файл).", uploadId);
+			}
+
+			return Ok(new { success = true });
+		}
+
+		private async Task UploadMedia(List<IFormFile> files, BlogPost post, CancellationToken cancellationToken = default)
 		{
 			if (files == null || files.Count == 0) return;
 
+			int profileId = post.ProfileId;
+			var uploadedDriveIds = new List<string>(); // Список для отката при отмене
+
 			_logger.LogInformation("=== ЗАГРУЗКА МЕДИА В GOOGLE DRIVE ===");
 
-			for (int i = 0; i < files.Count; i++)
+			try
 			{
-				var file = files[i];
-				if (file.Length == 0) continue;
-
-				try
+				for (int i = 0; i < files.Count; i++)
 				{
+					// Проверяем: не нажал ли пользователь крестик прямо сейчас?
+					cancellationToken.ThrowIfCancellationRequested();
+
+					var file = files[i];
+					if (file.Length == 0) continue;
+
 					var isAudio = file.ContentType.StartsWith("audio/") ||
 								  file.FileName.StartsWith("voice_") ||
 								  file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
@@ -403,32 +535,53 @@ namespace CrossChat.Controllers
 					string driveFileId;
 					string? thumbDriveId = null;
 
-					// ЕСЛИ ЭТО ВИДЕО — СОХРАНЯЕМ НА ДИСК ДЛЯ ГЕНЕРАЦИИ ОБЛОЖКИ (THUMBNAIL)
+					int lastPercent = -1;
+					Action<long, long> reportDriveProgress = (sent, total) =>
+					{
+						if (total <= 0 || cancellationToken.IsCancellationRequested) return;
+						int percent = (int)((sent * 100) / total);
+						if (percent >= lastPercent + 5 || percent == 100)
+						{
+							lastPercent = percent;
+							_hubContext.Clients.Group($"profile_inbox_{profileId}")
+								.SendAsync("ServerUploadProgress", new
+								{
+									stage = "drive",
+									fileName = file.FileName,
+									percent = percent,
+									text = $"☁️ Google Drive: {percent}%"
+								});
+						}
+					};
+
 					if (isVideo)
 					{
 						string tempVideoPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_{file.FileName}");
 
 						try
 						{
-							// Записываем временный файл для быстрой работы FFmpeg
 							using (var fs = new FileStream(tempVideoPath, FileMode.Create))
 							{
-								await file.CopyToAsync(fs);
+								await file.CopyToAsync(fs, cancellationToken);
 							}
 
-							// Загружаем видео в Google Drive
+							cancellationToken.ThrowIfCancellationRequested();
+
 							using (var videoStream = new FileStream(tempVideoPath, FileMode.Open, FileAccess.Read))
 							{
 								driveFileId = await _googleDriveUploader.UploadStreamAsync(
 									videoStream,
 									file.FileName,
 									GOOGLE_POSTS_FOLDER_ID,
-									file.ContentType);
+									file.ContentType,
+									reportDriveProgress,
+									cancellationToken); // <-- ПЕРЕДАЕМ ТОКЕН В GOOGLE DRIVE!
+
+								uploadedDriveIds.Add(driveFileId);
 							}
 
-							// Генерируем компактный кадр-обложку (20-30 КБ)
+							// Обложка видео
 							string? thumbLocalPath = await VideoService.GenerateVideoThumbnailAsync(tempVideoPath);
-
 							if (!string.IsNullOrEmpty(thumbLocalPath) && System.IO.File.Exists(thumbLocalPath))
 							{
 								try
@@ -440,9 +593,11 @@ namespace CrossChat.Controllers
 										thumbStream,
 										thumbName,
 										GOOGLE_POSTS_FOLDER_ID,
-										"image/jpeg");
+										"image/jpeg",
+										null,
+										cancellationToken);
 
-									_logger.LogInformation("Обложка для видео успешно создана и загружена. ThumbId: {ThumbId}", thumbDriveId);
+									if (!string.IsNullOrEmpty(thumbDriveId)) uploadedDriveIds.Add(thumbDriveId);
 								}
 								finally
 								{
@@ -457,32 +612,50 @@ namespace CrossChat.Controllers
 					}
 					else
 					{
-						// Фото и аудио загружаем потоком напрямую в Google Drive
 						using var stream = file.OpenReadStream();
 						driveFileId = await _googleDriveUploader.UploadStreamAsync(
 							stream,
 							file.FileName,
 							GOOGLE_POSTS_FOLDER_ID,
-							file.ContentType);
+							file.ContentType,
+							reportDriveProgress,
+							cancellationToken); // <-- ПЕРЕДАЕМ ТОКЕН В GOOGLE DRIVE!
+
+						uploadedDriveIds.Add(driveFileId);
 					}
 
 					post.Media.Add(new PostMediaItem
 					{
 						MediaType = mediaType,
 						GoogleDriveFileId = driveFileId,
-						ThumbnailDriveFileId = thumbDriveId, // Сохраняем ID легкой обложки!
+						ThumbnailDriveFileId = thumbDriveId,
 						FileName = file.FileName,
 						MimeType = file.ContentType,
 						FileSizeBytes = file.Length,
 						SortOrder = post.Media.Count
 					});
 
-					_logger.LogInformation("Файл {FileName} ({Size} байт) сохранен. DriveId: {DriveId}", file.FileName, file.Length, driveFileId);
+					_logger.LogInformation("Файл {FileName} сохранен. DriveId: {DriveId}", file.FileName, driveFileId);
 				}
-				catch (Exception ex)
+			}
+			catch (OperationCanceledException)
+			{
+				// 🧹 ПОЛЬЗОВАТЕЛЬ НАЖАЛ «ОТМЕНА» ➔ ЧИСТИМ ВСЁ, ЧТО УСПЕЛО ЗАГРУЗИТЬСЯ!
+				_logger.LogWarning("[Planner] Загрузка отменена пользователем! Удаляем сиротские файлы из Google Drive ({Count} шт)...", uploadedDriveIds.Count);
+
+				foreach (var fileId in uploadedDriveIds)
 				{
-					_logger.LogError(ex, "Ошибка при сохранении медиафайла {FileName}", file.FileName);
+					try
+					{
+						await _googleDriveUploader.DeleteFileByIdAsync(fileId);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "[Planner] Не удалось удалить временный файл {Id}", fileId);
+					}
 				}
+
+				throw; // Пробрасываем отмену, чтобы пост не создался в базе данных
 			}
 
 			_logger.LogInformation("=========================================");
