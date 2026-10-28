@@ -399,6 +399,22 @@
                 gap: 16px;
             }
         }
+
+        /* Аккуратная встроенная заглушка, если превью не пришло от Meta */
+        .post-fallback-box {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-weight: 600;
+            user-select: none;
+        }
     </style>
 }
 
@@ -548,16 +564,31 @@
                         @if (post.MediaType == "VIDEO")
                         {
                             <span class="badge-type">▶ REELS</span>
-                            <img src="@(post.ThumbnailUrl ?? post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
                         }
                         else if (post.MediaType == "CAROUSEL_ALBUM")
                         {
                             <span class="badge-type">📑 КАРУСЕЛЬ</span>
-                            <img src="@(post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
+                        }
+
+                        @{
+                            // Приоритет: обложка видео ➔ прямая ссылка на медиа
+                            string? mediaSrc = post.ThumbnailUrl ?? post.MediaUrl;
+                        }
+
+                        @if (!string.IsNullOrEmpty(mediaSrc))
+                        {
+                            <img src="@mediaSrc"
+                                 alt="Post media"
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'post-fallback-box\'><span>📷</span><span>Превью недоступно</span></div>';" />
                         }
                         else
                         {
-                            <img src="@(post.MediaUrl ?? "/images/placeholder.jpg")" alt="Post thumbnail" loading="lazy" />
+                            <div class="post-fallback-box">
+                                <span>📷</span>
+                                <span>Без превью</span>
+                            </div>
                         }
                     </div>
 
