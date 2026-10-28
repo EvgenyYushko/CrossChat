@@ -1760,11 +1760,23 @@
 
                 var calendarEl = document.getElementById('calendar');
 
+                // 🚀 ВОССТАНАВЛИВАЕМ СОХРАНЕННЫЙ РЕЖИМ И ДАТУ (С ПРИВЯЗКОЙ К ПРОФИЛЮ):
+                const currentProfileId = "@ViewBag.ProfileId" || "default";
+                const storageKeyView = `crosschat_planner_view_${currentProfileId}`;
+                const storageKeyDate = `crosschat_planner_date_${currentProfileId}`;
+
+                const savedView = localStorage.getItem(storageKeyView) || 'dayGridMonth';
+                const savedDateStr = localStorage.getItem(storageKeyDate);
+                const savedDate = (savedDateStr && !isNaN(Date.parse(savedDateStr)))
+                    ? new Date(savedDateStr)
+                    : undefined;
+
                 var calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'dayGridMonth',
+                    initialView: savedView,       // <-- Восстанавливает: день / неделя / месяц / год
+                    initialDate: savedDate,       // <-- Восстанавливает выбранный месяц/день без сброса на "Сегодня"!
                     locale: 'ru',
-                    firstDay: 1, // <-- Указывает, что неделя начинается с Понедельника
-                    editable: true, // <-- Включает перетаскивание и изменение размеров событий на календаре!
+                    firstDay: 1,
+                    editable: true,
                     selectable: true,
                     height: 'auto',
                     headerToolbar: {
@@ -1773,41 +1785,40 @@
                         right: 'multiMonthYear,dayGridMonth,timeGridWeek,timeGridDay'
                     },
 
-                    // --- ФИЧА: ОТСЛЕЖИВАНИЕ КЛИКА ПРАВОЙ КНОПКОЙ МЫШИ (ПКМ) ---
-                    eventDidMount: function(info) {
-                        if (window.innerWidth < 600) return; // На мобильных телефонах отключаем ПКМ
-
-                        // Слушаем нажатие правой кнопки мыши на ярлыке события
-                        info.el.addEventListener('contextmenu', function(e) {
-                            e.preventDefault(); // Блокируем стандартное контекстное меню браузера
-                            showContextMenu(e, info.event); // Показываем наше кастомное меню
-                        });
-                    },
-
-                    // --- АВТОСКРОЛЛ К ТЕКУЩЕМУ МЕСЯЦУ ПРИ ОТКРЫТИИ ГОДА ---
+                    // --- ЕДИНСТВЕННЫЙ И ПРАВИЛЬНЫЙ datesSet (И СОХРАНЕНИЕ, И СКРОЛЛ ГОДА) ---
                     datesSet: function(info) {
-                        // Если пользователь включил годовой режим просмотра
+                        // 1. Запоминаем текущий режим (month, week, day, year) и выбранную дату:
+                        localStorage.setItem(storageKeyView, info.view.type);
+                        localStorage.setItem(storageKeyDate, info.view.currentStart.toISOString());
+
+                        // 2. Автоскролл к сегодняшнему дню, если открыт годовой режим:
                         if (info.view.type === 'multiMonthYear') {
-                            // Ищем ячейку сегодняшнего дня
                             const todayCell = document.querySelector('.fc-day-today');
-                        
                             if (todayCell) {
-                                // Находим контейнер месяца, в котором лежит этот день
                                 const monthContainer = todayCell.closest('.fc-multimonth-month');
-                            
                                 if (monthContainer) {
-                                    // Делаем небольшую задержку (100мс), чтобы браузер успел отрисовать сетку,
-                                    // и плавно скроллим текущий месяц в самый центр экрана
                                     setTimeout(() => {
-                                        monthContainer.scrollIntoView({ 
-                                            behavior: 'smooth', 
-                                            block: 'center' 
+                                        monthContainer.scrollIntoView({
+                                            behavior: 'smooth',
+                                            block: 'center'
                                         });
                                     }, 100);
                                 }
                             }
                         }
                     },
+
+                    // --- ФИЧА: ОТСЛЕЖИВАНИЕ КЛИКА ПРАВОЙ КНОПКОЙ МЫШИ (ПКМ) ---
+                    eventDidMount: function(info) {
+                        if (window.innerWidth < 600) return; // На мобильных телефонах отключаем ПКМ
+
+                        info.el.addEventListener('contextmenu', function(e) {
+                            e.preventDefault();
+                            showContextMenu(e, info.event);
+                        });
+                    },
+
+                    // (ВТОРОЙ ДУБЛЬ datesSet ОТСЮДА УДАЛЕН!)
 
                     // --- РЕНДЕРИНГ СОДЕРЖИМОГО СОБЫТИЯ ---
                     eventContent: function(arg) {
@@ -1816,13 +1827,11 @@
                         const titleText = arg.event.title;
 
                         if (currentNetwork === "All") {
-                            // Если мы в общем режиме — выводим иконки ВСЕХ активных сетей в ряд!
                             const activeNets = arg.event.extendedProps.activeNetworks || [];
                             activeNets.forEach(net => {
                                 iconsHtml += getNetworkIcon(net);
                             });
                         } else {
-                            // Если в одиночной сети — выводим только иконку этой соцсети
                             iconsHtml = getNetworkIcon(currentNetwork);
                         }
 
