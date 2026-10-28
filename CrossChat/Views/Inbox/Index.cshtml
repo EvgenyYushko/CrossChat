@@ -1256,9 +1256,9 @@
                 <div class="network-filter-pills">
                     <button type="button" class="pill-btn active" data-net="ALL" onclick="filterNetwork('ALL', this)">Все</button>
                     <button type="button" class="pill-btn" data-net="INSTAGRAM" onclick="filterNetwork('INSTAGRAM', this)">📸 Instagram</button>
-                    <button type="button" class="pill-btn" data-net="TELEGRAM" onclick="filterNetwork('TELEGRAM', this)">✈️ Telegram</button>
-                    <button type="button" class="pill-btn" data-net="FACEBOOK" onclick="filterNetwork('FACEBOOK', this)">📘 Messenger</button>
+                    <button type="button" class="pill-btn" data-net="FACEBOOK" onclick="filterNetwork('FACEBOOK', this)">📘 Facebook</button>
                     <button type="button" class="pill-btn" data-net="BLUESKY" onclick="filterNetwork('BLUESKY', this)">🦋 BlueSky</button>
+                    <button type="button" class="pill-btn" data-net="TELEGRAM" onclick="filterNetwork('TELEGRAM', this)">✈️ Telegram</button>
                     <button type="button" class="pill-btn" data-net="THREADS" onclick="filterNetwork('THREADS', this)">🧵 Threads</button>
                 </div>
             </div>
@@ -2004,8 +2004,8 @@
         function getNetworkBadge(networkType) {
             switch (networkType) {
                 case 1: return { name: "Instagram Direct", icon: "📸", color: "#e1306c" };
-                case 2: return { name: "Facebook Messenger", icon: "📘", color: "#1877F2" };
-                case 3: return { name: "BlueSky", icon: "🦋", color: "#0085ff" }; // <-- ТЕПЕРЬ СТРОГО 3!
+                case 2: return { name: "Facebook", icon: "📘", color: "#1877F2" }; // <-- Переименовали в Facebook
+                case 3: return { name: "BlueSky", icon: "🦋", color: "#0085ff" };
                 case 4:
                 case 5:
                 case 6: return { name: "Telegram", icon: "✈️", color: "#2AABEE" };
