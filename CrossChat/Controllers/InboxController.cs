@@ -18,17 +18,20 @@ namespace CrossChat.Controllers
 		private readonly IInboxService _inboxService;
 		private readonly ILogger<InboxController> _logger;
 		private readonly HttpClient _httpClient; // <-- ОБЪЯВЛЯЕМ ПОЛЕ
+		private readonly IAiService _aiService;
 
 		public InboxController(
 			AppDbContext db,
 			IInboxService inboxService,
 			ILogger<InboxController> logger,
-			HttpClient httpClient) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
+			HttpClient httpClient,
+			IAiService aiService) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
 		{
 			_db = db;
 			_inboxService = inboxService;
 			_logger = logger;
 			_httpClient = httpClient;
+			_aiService = aiService;
 		}
 
 
@@ -260,54 +263,151 @@ namespace CrossChat.Controllers
 		}
 
 		/// <summary>
-		/// Быстрый бесплатный перевод сообщения на русский язык
+		/// Бесплатный каскадный переводчик (Google Chrome API ➔ Google Mobile ➔ MyMemory ➔ Резерв ИИ)
 		/// </summary>
 		[HttpPost("translate")]
+		[IgnoreAntiforgeryToken] // 🚀 Защита от ошибки 400 Bad Request
 		public async Task<IActionResult> TranslateMessage([FromBody] TranslateRequestDto dto)
 		{
-			if (string.IsNullOrWhiteSpace(dto.Text))
+			if (string.IsNullOrWhiteSpace(dto?.Text))
+			{
+				_logger.LogWarning("[Translate] Получен пустой текст для перевода");
 				return BadRequest("Текст пуст");
+			}
 
+			string text = dto.Text.Trim();
+			_logger.LogInformation("[Translate] Запрос бесплатного перевода: «{Text}»", text);
+
+			// ===================================================================
+			// ЛИНИЯ 1: Google Chrome Extension API (clients5.google.com)
+			// ===================================================================
 			try
 			{
-				// Используем быстрый эндпоинт Google (работает без API-ключей):
-				string url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q={Uri.EscapeDataString(dto.Text)}";
+				string url1 = $"https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=ru&q={Uri.EscapeDataString(text)}";
+				using var req1 = new HttpRequestMessage(HttpMethod.Get, url1);
+				req1.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
-				using var client = new HttpClient();
-				client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
-
-				var response = await client.GetAsync(url);
-				if (response.IsSuccessStatusCode)
+				var resp1 = await _httpClient.SendAsync(req1);
+				if (resp1.IsSuccessStatusCode)
 				{
-					var json = await response.Content.ReadAsStringAsync();
-					using var doc = JsonDocument.Parse(json);
-
-					// Google возвращает структуру [[["Перевод","Оригинал",...]]]
+					var json1 = await resp1.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json1);
 					var root = doc.RootElement;
+
+					// Ответ может быть ["Перевод"] или [["Перевод"]]
 					if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
 					{
-						var sentences = root[0];
-						var translatedBuilder = new StringBuilder();
+						var first = root[0];
+						string? trans = first.ValueKind == JsonValueKind.String
+							? first.GetString()
+							: (first.ValueKind == JsonValueKind.Array && first.GetArrayLength() > 0 ? first[0].GetString() : null);
+
+						if (!string.IsNullOrWhiteSpace(trans))
+						{
+							_logger.LogInformation("[Translate] ✅ Успех через Google Chrome API: «{Trans}»", trans);
+							return Ok(new { success = true, translation = trans.Trim() });
+						}
+					}
+					else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("sentences", out var sentences))
+					{
+						var sb = new StringBuilder();
 						foreach (var s in sentences.EnumerateArray())
 						{
-							if (s.GetArrayLength() > 0)
-							{
-								translatedBuilder.Append(s[0].GetString());
-							}
+							if (s.TryGetProperty("trans", out var tr)) sb.Append(tr.GetString());
 						}
-
-						string translated = translatedBuilder.ToString();
-						return Ok(new { success = true, translation = translated });
+						if (sb.Length > 0)
+						{
+							_logger.LogInformation("[Translate] ✅ Успех через Google Sentences API: «{Trans}»", sb.ToString());
+							return Ok(new { success = true, translation = sb.ToString().Trim() });
+						}
 					}
 				}
-
-				return BadRequest("Не удалось получить перевод");
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Ошибка перевода сообщения");
-				return StatusCode(500, "Ошибка сервиса перевода");
+				_logger.LogWarning(ex, "[Translate] Сбой Линии 1 (Google Chrome API). Переход на Линию 2...");
 			}
+
+			// ===================================================================
+			// ЛИНИЯ 2: Google Mobile Web (translate.google.com/m)
+			// ===================================================================
+			try
+			{
+				string url2 = $"https://translate.google.com/m?sl=auto&tl=ru&q={Uri.EscapeDataString(text)}";
+				using var req2 = new HttpRequestMessage(HttpMethod.Get, url2);
+				req2.Headers.UserAgent.ParseAdd("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
+
+				var resp2 = await _httpClient.SendAsync(req2);
+				if (resp2.IsSuccessStatusCode)
+				{
+					var html = await resp2.Content.ReadAsStringAsync();
+					// Результат перевода в мобильной версии лежит в class="result-container"
+					var match = System.Text.RegularExpressions.Regex.Match(html, @"class=""result-container"">([^<]+)</div>");
+					if (match.Success)
+					{
+						string trans = System.Net.WebUtility.HtmlDecode(match.Groups[1].Value).Trim();
+						if (!string.IsNullOrWhiteSpace(trans))
+						{
+							_logger.LogInformation("[Translate] ✅ Успех через Google Mobile Web: «{Trans}»", trans);
+							return Ok(new { success = true, translation = trans });
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "[Translate] Сбой Линии 2 (Google Mobile Web). Переход на Линию 3...");
+			}
+
+			// ===================================================================
+			// ЛИНИЯ 3: MyMemory Free Translation API (api.mymemory.translated.net)
+			// ===================================================================
+			try
+			{
+				string url3 = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(text)}&langpair=auto|ru";
+				var resp3 = await _httpClient.GetAsync(url3);
+				if (resp3.IsSuccessStatusCode)
+				{
+					var json3 = await resp3.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json3);
+					if (doc.RootElement.TryGetProperty("responseData", out var respData) &&
+						respData.TryGetProperty("translatedText", out var trText))
+					{
+						string trans = trText.GetString() ?? "";
+						if (!string.IsNullOrWhiteSpace(trans) && !trans.StartsWith("MYMEMORY WARNING"))
+						{
+							trans = System.Net.WebUtility.HtmlDecode(trans).Trim();
+							_logger.LogInformation("[Translate] ✅ Успех через MyMemory API: «{Trans}»", trans);
+							return Ok(new { success = true, translation = trans });
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "[Translate] Сбой Линии 3 (MyMemory). Переход на аварийный ИИ...");
+			}
+
+			// ===================================================================
+			// ЛИНИЯ 4 (АВАРИЙНЫЙ РЕЗЕРВ): Gemini только если все 3 бесплатных упали
+			// ===================================================================
+			try
+			{
+				_logger.LogWarning("[Translate] ⚠️ Все бесплатные переводчики не ответили. Используем резервный вызов Gemini...");
+				var prompt = $"Translate the following message to Russian naturally. Return ONLY the translated text, no quotes:\n\n{text}";
+				var aiTrans = await _aiService.GeminiRequest(prompt, null);
+
+				if (!string.IsNullOrWhiteSpace(aiTrans))
+				{
+					return Ok(new { success = true, translation = aiTrans.Trim().Trim('"', '«', '»') });
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[Translate] Критический сбой всех линий перевода");
+			}
+
+			return BadRequest("Не удалось перевести сообщение ни одним сервисом");
 		}
 
 		public class TranslateRequestDto
