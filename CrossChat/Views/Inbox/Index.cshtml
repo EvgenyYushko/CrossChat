@@ -2562,11 +2562,10 @@
             const parent = btn.closest('.msg-bubble');
             if (!parent) return;
 
-            // Считываем оригинальный текст безопасно
             const originalText = parent.dataset.rawText;
             if (!originalText) return;
 
-            // Если перевод уже открыт — повторный клик скрывает его:
+            // Если перевод уже открыт — клик скрывает его:
             let existingTrans = parent.querySelector('.translated-text-block');
             if (existingTrans) {
                 existingTrans.remove();
@@ -2576,6 +2575,42 @@
 
             btn.textContent = '⏳ Перевод...';
 
+            // Вспомогательная функция отображения перевода:
+            function showTranslation(translatedText) {
+                const transDiv = document.createElement('div');
+                transDiv.className = 'translated-text-block';
+                transDiv.style.cssText = 'margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.15); font-size: 0.82rem; color: #38bdf8; line-height: 1.3; font-style: italic;';
+                transDiv.innerHTML = `<span>🌐 ${escapeHtml(translatedText)}</span>`;
+
+                btn.parentElement.insertBefore(transDiv, btn);
+                btn.textContent = '✕ Скрыть перевод';
+            }
+
+            // ===================================================================
+            // 1. ПРЯМОЙ БЕСПЛАТНЫЙ ПЕРЕВОД ИЗ БРАУЗЕРА (С ТВОЕГО ЧИСТОГО IP!)
+            // ===================================================================
+            try {
+                const directUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(originalText)}&langpair=auto|ru`;
+                const directRes = await fetch(directUrl);
+
+                if (directRes.ok) {
+                    const data = await directRes.json();
+                    const trans = data?.responseData?.translatedText;
+
+                    // Проверяем, что вернулся реальный перевод, а не предупреждение и не тот же текст
+                    if (trans && !trans.startsWith("MYMEMORY WARNING") && trans.trim().toLowerCase() !== originalText.trim().toLowerCase()) {
+                        console.log("✅ Бесплатный перевод выполнен напрямую из браузера:", trans);
+                        showTranslation(trans);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn("Прямой перевод из браузера не удался, пробуем через сервер...", e);
+            }
+
+            // ===================================================================
+            // 2. РЕЗЕРВ ЧЕРЕЗ СЕРВЕР (ЕСЛИ ПРЯМОЙ ВЫЗОВ НЕ СРАБОТАЛ)
+            // ===================================================================
             try {
                 const res = await fetch('/inbox/translate', {
                     method: 'POST',
@@ -2585,14 +2620,7 @@
 
                 if (res.ok) {
                     const data = await res.json();
-                    const transDiv = document.createElement('div');
-                    transDiv.className = 'translated-text-block';
-                    transDiv.style.cssText = 'margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.15); font-size: 0.82rem; color: #38bdf8; line-height: 1.3; font-style: italic;';
-                    transDiv.innerHTML = `<span>🌐 ${escapeHtml(data.translation)}</span>`;
-
-                    // Вставляем блок перевода прямо над кнопкой перевода
-                    btn.parentElement.insertBefore(transDiv, btn);
-                    btn.textContent = '✕ Скрыть перевод';
+                    showTranslation(data.translation);
                 } else {
                     btn.textContent = '⚠️ Ошибка перевода';
                 }
