@@ -1335,10 +1335,21 @@
 
                 <!-- Намертво закрепленная панель ввода внизу -->
                 <div class="chat-input-panel">
-                    <div class="input-tools-row">
+                    <div class="input-tools-row" style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 0.72rem; color: var(--text-secondary);" id="replyingAsNotice">
                             ✍️ Ответ клиенту
                         </span>
+
+                        <!-- 🌐 УМНЫЙ ВИДЖЕТ ПЕРЕВОДА НА ЯЗЫК СОБЕСЕДНИКА -->
+                        <div id="outgoingTranslateWidget" style="display: none; align-items: center; gap: 6px;">
+                            <button type="button" id="btnTranslateOutgoing" onclick="translateOutgoingText()"
+                                    style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.35); color: #818cf8; border-radius: 8px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                                🌐 RU ➔ EN
+                            </button>
+                            <button type="button" id="btnRevertOutgoing" onclick="revertOutgoingText()" style="display: none; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: 8px; padding: 2px 6px; font-size: 0.72rem; cursor: pointer;" title="Вернуть русский текст">
+                                ↩️ RU
+                            </button>
+                        </div>
                     </div>
 
                     <div class="input-row" id="normalInputRow">
@@ -1454,6 +1465,10 @@
                         updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
                         return; // <-- ВТОРОЙ БАБЛ НЕ РИСУЕТСЯ!
                     }
+                }
+
+                if (payload.isIncoming && payload.text) {
+                    updateClientLanguage(payload.text); // Мгновенно адаптирует кнопку под свежий язык!
                 }
 
                 // Вставляем бабл для входящих от клиента, ответов бота или ответов с другого устройства
@@ -1683,6 +1698,14 @@
                             m.mediaType
                         );
                     });
+
+                    // Находим самое последнее входящее сообщение от клиента:
+                    const lastClientMsg = [...data.messages].reverse().find(m => m.isIncoming && m.text);
+                    if (lastClientMsg) {
+                        updateClientLanguage(lastClientMsg.text);
+                    } else {
+                        updateClientLanguage(null);
+                    }
                 } 
                 else {
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
@@ -1755,6 +1778,10 @@
                     } else {
                         alert("Ошибка отправки: " + err);
                     }
+                }
+                else{
+                    originalRussianDraft = '';
+                    document.getElementById('btnRevertOutgoing')?.style.setProperty('display', 'none');
                 }
             } catch (err) {
                 tempBubble.remove();
@@ -2656,6 +2683,114 @@
                 }, { passive: true });
             }
         });
+
+        // Переменные переводчика собеседника:
+        let activeClientLang = null; // Текущий язык клиента (pt, en, es, de...)
+        let originalRussianDraft = ''; // Запоминает русский текст до перевода
+
+        // 1. АВТООПРЕДЕЛЕНИЕ ЯЗЫКА КЛИЕНТА (ПО ПОСЛЕДНЕМУ СООБЩЕНИЮ)
+        async function updateClientLanguage(incomingText) {
+            const widget = document.getElementById('outgoingTranslateWidget');
+            const btn = document.getElementById('btnTranslateOutgoing');
+            const revertBtn = document.getElementById('btnRevertOutgoing');
+            if (!widget || !btn) return;
+
+            if (!incomingText || typeof incomingText !== 'string') {
+                widget.style.display = 'none';
+                activeClientLang = null;
+                return;
+            }
+
+            const clean = incomingText.trim();
+
+            // Быстрая проверка: если текст содержит преимущественно кириллицу — это русский!
+            // Скрываем кнопку перевода, так как клиент пишет по-русски.
+            const cyrillicMatch = clean.match(/[а-яА-ЯёЁ]/g);
+            if (cyrillicMatch && cyrillicMatch.length > clean.length * 0.3) {
+                widget.style.display = 'none';
+                activeClientLang = null;
+                if (revertBtn) revertBtn.style.display = 'none';
+                return;
+            }
+
+            // Если это иностранный текст — за 30 мс узнаем точный код языка через Google Translate:
+            try {
+                const detectUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q=${encodeURIComponent(clean.substring(0, 80))}`;
+                const res = await fetch(detectUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    // Google возвращает код языка в data[2] (например "pt", "en", "es", "de")
+                    const detectedCode = data[2];
+
+                    if (detectedCode && detectedCode !== 'ru') {
+                        activeClientLang = detectedCode.toLowerCase();
+                        btn.textContent = `🌐 RU ➔ ${activeClientLang.toUpperCase()}`;
+                        widget.style.display = 'inline-flex';
+                        if (revertBtn) revertBtn.style.display = 'none';
+                        return;
+                    }
+                }
+            } catch { }
+
+            widget.style.display = 'none';
+            activeClientLang = null;
+        }
+
+        // 2. ПЕРЕВОД НАПИСАННОГО РУССКОГО ТЕКСТА НА ЯЗЫК КЛИЕНТА
+        async function translateOutgoingText() {
+            const input = document.getElementById('messageInput');
+            const btn = document.getElementById('btnTranslateOutgoing');
+            const revertBtn = document.getElementById('btnRevertOutgoing');
+            if (!input || !activeClientLang) return;
+
+            const currentText = input.value.trim();
+            if (!currentText) {
+                alert("Сначала напишите текст ответа по-русски!");
+                return;
+            }
+
+            // Запоминаем исходный русский черновик:
+            originalRussianDraft = currentText;
+
+            const originalBtnText = btn.textContent;
+            btn.textContent = '⏳ Перевод...';
+
+            try {
+                const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=${activeClientLang}&dt=t&q=${encodeURIComponent(currentText)}`;
+                const res = await fetch(translateUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data[0]) {
+                        const translated = data[0].map(item => item[0]).filter(Boolean).join('');
+                        if (translated) {
+                            input.value = translated; // Заменяем текст прямо в поле ввода!
+                            btn.textContent = originalBtnText;
+                            if (revertBtn) revertBtn.style.display = 'inline-block';
+                            input.focus();
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Ошибка перевода исходящего сообщения:", e);
+            }
+
+            btn.textContent = originalBtnText;
+            alert("Не удалось перевести текст на язык собеседника.");
+        }
+
+        // 3. ОТКАТ ОБРАТНО НА РУССКИЙ ТЕКСТ
+        function revertOutgoingText() {
+            const input = document.getElementById('messageInput');
+            const revertBtn = document.getElementById('btnRevertOutgoing');
+
+            if (input && originalRussianDraft) {
+                input.value = originalRussianDraft;
+                originalRussianDraft = '';
+                if (revertBtn) revertBtn.style.display = 'none';
+                input.focus();
+            }
+        }
         
     </script>
 }
