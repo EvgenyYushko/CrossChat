@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Integrations.Enums;
@@ -263,7 +262,7 @@ namespace CrossChat.Controllers
 		}
 
 		/// <summary>
-		/// Бесплатный каскадный переводчик с подробным логированием каждого шага
+		/// Бесплатный каскадный переводчик с защитой от ложных переводов (Google Mobile ➔ Google Dict ➔ Lingva ➔ Gemini)
 		/// </summary>
 		[HttpPost("translate")]
 		[IgnoreAntiforgeryToken]
@@ -276,136 +275,136 @@ namespace CrossChat.Controllers
 			_logger.LogInformation("==================================================");
 			_logger.LogInformation("[Translate] 🌐 Новый запрос перевода: «{Text}»", text);
 
+			// Вспомогательная проверка: реально ли текст перевелся, или сервис вернул оригинал
+			bool IsRealTranslation(string? result)
+			{
+				if (string.IsNullOrWhiteSpace(result)) return false;
+				// Если перевод совпадает с оригиналом — значит сервис не смог перевести
+				return !string.Equals(result.Trim(), text, StringComparison.OrdinalIgnoreCase);
+			}
+
 			// ===================================================================
-			// ЛИНИЯ 1: Google Translate (Классический GTX с браузерными заголовками)
+			// ЛИНИЯ 1: Google Mobile Web (translate.google.com/m) - САМЫЙ НАДЕЖНЫЙ!
 			// ===================================================================
 			try
 			{
-				string url1 = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q={Uri.EscapeDataString(text)}";
+				string url1 = $"https://translate.google.com/m?sl=auto&tl=ru&hl=ru&q={Uri.EscapeDataString(text)}";
 				using var req1 = new HttpRequestMessage(HttpMethod.Get, url1);
-				req1.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-				req1.Headers.Add("Accept", "*/*");
-				req1.Headers.Add("Referer", "https://translate.google.com/");
+				req1.Headers.UserAgent.ParseAdd("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
+				req1.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
 				var resp1 = await _httpClient.SendAsync(req1);
-				var body1 = await resp1.Content.ReadAsStringAsync();
-				_logger.LogInformation("[Translate Line 1 - Google GTX] Статус: {Code}, Длина ответа: {Len}", resp1.StatusCode, body1.Length);
+				_logger.LogInformation("[Translate Line 1 - Google Mobile] HTTP Статус: {Code}", resp1.StatusCode);
 
 				if (resp1.IsSuccessStatusCode)
 				{
-					using var doc = JsonDocument.Parse(body1);
-					var root = doc.RootElement;
-					if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+					var html1 = await resp1.Content.ReadAsStringAsync();
+					// Ищем результат в result-container или t0
+					var match = System.Text.RegularExpressions.Regex.Match(html1, @"(?s)<div[^>]*class=""(?:result-container|t0)""[^>]*>(.*?)</div>");
+					if (match.Success)
 					{
-						var sentences = root[0];
-						var sb = new StringBuilder();
-						foreach (var s in sentences.EnumerateArray())
+						string trans = System.Net.WebUtility.HtmlDecode(match.Groups[1].Value).Trim();
+						if (IsRealTranslation(trans))
 						{
-							if (s.GetArrayLength() > 0 && s[0].ValueKind == JsonValueKind.String)
-							{
-								sb.Append(s[0].GetString());
-							}
+							_logger.LogInformation("✅ [Translate] Успех через Линию 1 (Google Mobile HTML): «{Trans}»", trans);
+							return Ok(new { success = true, translation = trans });
 						}
-
-						if (sb.Length > 0)
+						else
 						{
-							_logger.LogInformation("✅ [Translate] Успех через Линию 1 (Google GTX): «{Trans}»", sb.ToString());
-							return Ok(new { success = true, translation = sb.ToString().Trim() });
+							_logger.LogWarning("[Translate Line 1 - Google Mobile] Текст вернулся без изменений. Переход дальше...");
 						}
 					}
-				}
-				else
-				{
-					_logger.LogWarning("[Translate Line 1 - Google GTX] Отказ: {BodyPreview}", body1.Length > 150 ? body1.Substring(0, 150) : body1);
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogWarning("[Translate Line 1 - Google GTX] Исключение: {Msg}", ex.Message);
+				_logger.LogWarning("[Translate Line 1 - Google Mobile] Ошибка: {Msg}", ex.Message);
 			}
 
 			// ===================================================================
-			// ЛИНИЯ 2: Lingva Translate (Специальный открытый шлюз Google Translate)
+			// ЛИНИЯ 2: Google Chrome Extension API (clients5.google.com)
 			// ===================================================================
 			try
 			{
-				string url2 = $"https://lingva.ml/api/v1/auto/ru/{Uri.EscapeDataString(text)}";
+				string url2 = $"https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=ru&q={Uri.EscapeDataString(text)}";
 				using var req2 = new HttpRequestMessage(HttpMethod.Get, url2);
-				req2.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+				req2.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
 				var resp2 = await _httpClient.SendAsync(req2);
-				var body2 = await resp2.Content.ReadAsStringAsync();
-				_logger.LogInformation("[Translate Line 2 - Lingva] Статус: {Code}, Ответ: {Body}", resp2.StatusCode, body2.Length > 100 ? body2.Substring(0, 100) : body2);
+				_logger.LogInformation("[Translate Line 2 - Google Chrome Dict] HTTP Статус: {Code}", resp2.StatusCode);
 
 				if (resp2.IsSuccessStatusCode)
 				{
-					using var doc = JsonDocument.Parse(body2);
-					if (doc.RootElement.TryGetProperty("translation", out var trProp))
-					{
-						string? trans = trProp.GetString();
-						if (!string.IsNullOrWhiteSpace(trans))
-						{
-							_logger.LogInformation("✅ [Translate] Успех через Линию 2 (Lingva Google): «{Trans}»", trans);
-							return Ok(new { success = true, translation = trans.Trim() });
-						}
-					}
-				}
-			}
-			catch (Exception ex)
-			{
-				_logger.LogWarning("[Translate Line 2 - Lingva] Исключение: {Msg}", ex.Message);
-			}
-
-			// ===================================================================
-			// ЛИНИЯ 3: Google Chrome Extension API (clients5.google.com)
-			// ===================================================================
-			try
-			{
-				string url3 = $"https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=ru&q={Uri.EscapeDataString(text)}";
-				using var req3 = new HttpRequestMessage(HttpMethod.Get, url3);
-				req3.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-
-				var resp3 = await _httpClient.SendAsync(req3);
-				var body3 = await resp3.Content.ReadAsStringAsync();
-				_logger.LogInformation("[Translate Line 3 - Google Chrome API] Статус: {Code}", resp3.StatusCode);
-
-				if (resp3.IsSuccessStatusCode)
-				{
-					using var doc = JsonDocument.Parse(body3);
+					var json2 = await resp2.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json2);
 					var root = doc.RootElement;
+
+					string? trans = null;
 					if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
 					{
 						var first = root[0];
-						string? trans = first.ValueKind == JsonValueKind.String
+						trans = first.ValueKind == JsonValueKind.String
 							? first.GetString()
 							: (first.ValueKind == JsonValueKind.Array && first.GetArrayLength() > 0 ? first[0].GetString() : null);
+					}
 
-						if (!string.IsNullOrWhiteSpace(trans))
+					if (IsRealTranslation(trans))
+					{
+						_logger.LogInformation("✅ [Translate] Успех через Линию 2 (Google Chrome API): «{Trans}»", trans);
+						return Ok(new { success = true, translation = trans!.Trim() });
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning("[Translate Line 2 - Google Chrome Dict] Ошибка: {Msg}", ex.Message);
+			}
+
+			// ===================================================================
+			// ЛИНИЯ 3: Lingva Translate (с явным указанием pt/auto и альтернативным зеркалом)
+			// ===================================================================
+			try
+			{
+				// Используем стабильное зеркало
+				string url3 = $"https://lingva.ml/api/v1/auto/ru/{Uri.EscapeDataString(text)}";
+				using var req3 = new HttpRequestMessage(HttpMethod.Get, url3);
+				req3.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+				var resp3 = await _httpClient.SendAsync(req3);
+				if (resp3.IsSuccessStatusCode)
+				{
+					var json3 = await resp3.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json3);
+					if (doc.RootElement.TryGetProperty("translation", out var trProp))
+					{
+						string? trans = trProp.GetString();
+						if (IsRealTranslation(trans))
 						{
-							_logger.LogInformation("✅ [Translate] Успех через Линию 3 (Google Chrome): «{Trans}»", trans);
-							return Ok(new { success = true, translation = trans.Trim() });
+							_logger.LogInformation("✅ [Translate] Успех через Линию 3 (Lingva): «{Trans}»", trans);
+							return Ok(new { success = true, translation = trans!.Trim() });
 						}
 					}
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogWarning("[Translate Line 3 - Google Chrome API] Исключение: {Msg}", ex.Message);
+				_logger.LogWarning("[Translate Line 3 - Lingva] Ошибка: {Msg}", ex.Message);
 			}
 
 			// ===================================================================
-			// ЛИНИЯ 4 (ЖЕЛЕЗНЫЙ РЕЗЕРВ): Gemini только если все бесплатные упали
+			// ЛИНИЯ 4 (ЖЕЛЕЗНЫЙ РЕЗЕРВ): Gemini только если ВСЕ бесплатные не смогли перевести
 			// ===================================================================
 			try
 			{
-				_logger.LogWarning("⚠️ [Translate] Все 3 бесплатные линии не смогли перевести. Включаем аварийный резерв Gemini...");
-				var prompt = $"Translate the following message to Russian naturally. Return ONLY the translated text, no quotes:\n\n{text}";
+				_logger.LogWarning("⚠️ [Translate] Бесплатные сервисы не дали перевод. Включаем резерв Gemini...");
+				var prompt = $"Translate this social media message to Russian naturally. Keep emojis. Output ONLY the translation without quotes:\n\n{text}";
 				var aiTrans = await _aiService.GeminiRequest(prompt, null);
 
 				if (!string.IsNullOrWhiteSpace(aiTrans))
 				{
-					_logger.LogInformation("✅ [Translate] Переведено через аварийный Gemini: «{Trans}»", aiTrans);
-					return Ok(new { success = true, translation = aiTrans.Trim().Trim('"', '«', '»') });
+					string cleanAi = aiTrans.Trim().Trim('"', '«', '»');
+					_logger.LogInformation("✅ [Translate] Переведено через резервный Gemini: «{Trans}»", cleanAi);
+					return Ok(new { success = true, translation = cleanAi });
 				}
 			}
 			catch (Exception ex)
@@ -413,7 +412,7 @@ namespace CrossChat.Controllers
 				_logger.LogError(ex, "❌ [Translate] Фатальный сбой всех линий перевода");
 			}
 
-			return BadRequest("Не удалось перевести сообщение ни одним сервисом");
+			return BadRequest("Не удалось перевести сообщение");
 		}
 
 		public class TranslateRequestDto
