@@ -1338,7 +1338,10 @@
                         </button>
 
                         <textarea id="messageInput" class="chat-textarea" placeholder="Напишите сообщение..." onkeydown="handleInputKeydown(event)"></textarea>
-                        <button type="button" class="btn-send" onclick="sendManualMessage()">➤</button>
+                        <!-- Кнопка отправки с защитой от закрытия клавиатуры на телефоне -->
+                        <button type="button" class="btn-send" id="btnSendManual" 
+                                onpointerdown="preventSendBlur(event)" 
+                                onclick="sendManualMessage()">➤</button>
                     </div>
 
                     <!-- ИНТЕРФЕЙС ИДЕТ ЗАПИСЬ (СКРЫТ ПО УМОЛЧАНИЮ) -->
@@ -1671,8 +1674,14 @@
                 // Прокрутка вниз
                 scrollChatToBottom();
 
-                // Мобильный режим: открываем чат на весь экран
-                document.getElementById('inboxCard').classList.add('mobile-chat-open');
+                // Мобильный режим: открываем чат на весь экран и фиксируем состояние в истории
+                const card = document.getElementById('inboxCard');
+                if (card) {
+                    card.classList.add('mobile-chat-open');
+                    if (window.innerWidth <= 768) {
+                        history.pushState({ mobileChatOpen: true }, "");
+                    }
+                }
 
             } catch (err) {
                 stream.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Ошибка загрузки переписки</div>';
@@ -1680,6 +1689,11 @@
         }
 
         // 4. РУЧНАЯ ОТПРАВКА С ЗАЩИТОЙ ОТ ДУБЛЕЙ
+        // Запрещаем кнопке отправки отбирать фокус у поля ввода (клавиатура не дергается!)
+        function preventSendBlur(e) {
+            e.preventDefault();
+        }
+
         async function sendManualMessage() {
             if (!currentConversationId) return;
 
@@ -1688,6 +1702,9 @@
             if (!text) return;
 
             input.value = '';
+
+            // 🚀 ГЛАВНОЕ: Удерживаем фокус в поле ввода, чтобы клавиатура на телефоне НЕ ЗАКРЫВАЛАСЬ!
+            input.focus();
 
             // Мгновенно рисуем бабл с меткой ожидания
             const stream = document.getElementById('messagesStream');
@@ -1713,8 +1730,6 @@
 
                 if (!res.ok) {
                     const err = await res.text();
-
-                    // Если ошибка — удаляем бабл и возвращаем текст в поле ввода
                     tempBubble.remove();
                     input.value = text;
 
@@ -2029,9 +2044,36 @@
             }
         }
 
-        function closeMobileChat() {
-            document.getElementById('inboxCard').classList.remove('mobile-chat-open');
+        function closeMobileChat(shouldHistoryBack = true) {
+            // 1. Сначала прячем клавиатуру, если она открыта
+            document.getElementById('messageInput')?.blur();
+
+            // 2. Закрываем окно чата
+            const card = document.getElementById('inboxCard');
+            if (card) card.classList.remove('mobile-chat-open');
+
+            // 3. Синхронизируем историю браузера (для системной кнопки Назад)
+            if (shouldHistoryBack && history.state && history.state.mobileChatOpen) {
+                history.back();
+            }
         }
+
+        // Перехват системной кнопки "Назад" на Android и свайпа назад на iPhone
+        window.addEventListener('popstate', (e) => {
+            const card = document.getElementById('inboxCard');
+            if (card && card.classList.contains('mobile-chat-open')) {
+                // Если клавиатура открыта — сначала закрываем её
+                const input = document.getElementById('messageInput');
+                if (document.activeElement === input) {
+                    input.blur();
+                    // Возвращаем состояние, чтобы остаться в чате:
+                    history.pushState({ mobileChatOpen: true }, "");
+                    return;
+                }
+                // Если клавиатура уже закрыта — выходим к списку диалогов
+                closeMobileChat(false);
+            }
+        });
 
         function filterNetwork(net, btn) {
             currentNetworkFilter = net;
@@ -2489,6 +2531,28 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadDialogs();
+
+            // 📱 NATIVE UX: Скрытие клавиатуры при касании и прокрутке переписки
+            const messagesStream = document.getElementById('messagesStream');
+            if (messagesStream) {
+                let touchStartY = 0;
+
+                messagesStream.addEventListener('touchstart', (e) => {
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+
+                messagesStream.addEventListener('touchmove', (e) => {
+                    const diffY = Math.abs(e.touches[0].clientY - touchStartY);
+                    // Если пользователь свайпнул переписку больше чем на 8px — плавно прячем клавиатуру
+                    if (diffY > 8) {
+                        const input = document.getElementById('messageInput');
+                        if (document.activeElement === input) {
+                            input.blur();
+                        }
+                    }
+                }, { passive: true });
+            }
         });
+        
     </script>
 }

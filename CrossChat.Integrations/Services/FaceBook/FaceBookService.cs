@@ -162,7 +162,8 @@ namespace CrossChat.Integrations.Services
 				{
 					string error = await response.Content.ReadAsStringAsync();
 					Console.WriteLine($"❌ FB: Ошибка отправки сообщения: {error}");
-					return false;
+					// 🚀 Пробрасываем ошибку с текстом от Meta (включая код 2018278):
+					throw new Exception(error);
 				}
 			}
 		}
@@ -731,14 +732,16 @@ namespace CrossChat.Integrations.Services
 					Console.WriteLine($"[Facebook Messenger] ✅ Медиа ({fbType}) успешно отправлено пользователю {recipientPsid}");
 					return true;
 				}
-
-				Console.WriteLine($"[Facebook Messenger] ❌ Ошибка отправки медиа (HTTP {response.StatusCode}): {responseText}");
-				return false;
+				else
+				{
+					Console.WriteLine($"[Facebook Messenger] ❌ Ошибка отправки медиа (HTTP {response.StatusCode}): {responseText}");
+					throw new Exception(responseText); // Пробрасываем ошибку наружу
+				}
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"[Facebook Messenger] Исключение при отправке медиа: {ex.Message}");
-				return false;
+				throw;
 			}
 		}
 

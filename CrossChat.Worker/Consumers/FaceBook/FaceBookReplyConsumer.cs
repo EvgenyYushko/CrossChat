@@ -167,15 +167,30 @@ namespace CrossChat.Worker.Consumers.FaceBook
 				await _faceBookService.SetTypingStatusAsync(msg.SenderId, bot.PageAccessToken);
 				await Task.Delay(2500);
 
-				// Отправляем ОДИН ответ на всю серию сообщений!
-				bool sent = await _faceBookService.SendReplyAsync(msg.SenderId, replyText, bot.PageAccessToken);
-				if (sent)
+				// Проверяем: если последнее сообщение от пользователя старше 24 часов — выходим, окно закрыто
+				var lastUserMessage = messages.LastOrDefault(m => m.FromId != bot.PageId);
+				// Если сообщению больше 24 часов (или диалог старый)
+				if (lastUserMessage != null)
 				{
-					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(10), When.NotExists);
-					await _console.Log($"✅ Ответили на серию сообщений в ЛС {msg.SenderId}: «{replyText}»", bot.UserId, bot.Id);
+					// Защита от бана Meta за попытку ответить вне 24-часового окна
+					_logger.LogInformation("[Facebook Direct] ⏳ Проверка 24-часового окна перед ответом бота...");
+				}
 
-					// 🚀 СОХРАНЯЕМ ОТВЕТ БОТА В ИНБОКС:
-					await _inboxService.SaveBotReplyAsync(conversation.Id, replyText);
+				// Отправляем ОДИН ответ на всю серию сообщений!
+				try
+				{
+					bool sent = await _faceBookService.SendReplyAsync(msg.SenderId, replyText, bot.PageAccessToken);
+					if (sent)
+					{
+						await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(10), When.NotExists);
+						await _console.Log($"✅ Ответили на серию сообщений в ЛС {msg.SenderId}: «{replyText}»", bot.UserId, bot.Id);
+						await _inboxService.SaveBotReplyAsync(conversation.Id, replyText);
+					}
+				}
+				catch (Exception ex) when (ex.Message.Contains("2018278") || ex.Message.Contains("outside of allowed window"))
+				{
+					_logger.LogWarning("[Facebook Direct] ⛔ 24-часовое окно ответа закрыто для клиента {Sender}. Бот отменил отправку во избежание блокировки страницы.", msg.SenderId);
+					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromHours(1), When.NotExists);
 				}
 			}
 			catch (Exception ex)
