@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
@@ -255,6 +257,62 @@ namespace CrossChat.Controllers
 				return BadRequest(error);
 
 			return Ok(new { success = true });
+		}
+
+		/// <summary>
+		/// Быстрый бесплатный перевод сообщения на русский язык
+		/// </summary>
+		[HttpPost("translate")]
+		public async Task<IActionResult> TranslateMessage([FromBody] TranslateRequestDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto.Text))
+				return BadRequest("Текст пуст");
+
+			try
+			{
+				// Используем быстрый эндпоинт Google (работает без API-ключей):
+				string url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q={Uri.EscapeDataString(dto.Text)}";
+
+				using var client = new HttpClient();
+				client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
+
+				var response = await client.GetAsync(url);
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					using var doc = JsonDocument.Parse(json);
+
+					// Google возвращает структуру [[["Перевод","Оригинал",...]]]
+					var root = doc.RootElement;
+					if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+					{
+						var sentences = root[0];
+						var translatedBuilder = new StringBuilder();
+						foreach (var s in sentences.EnumerateArray())
+						{
+							if (s.GetArrayLength() > 0)
+							{
+								translatedBuilder.Append(s[0].GetString());
+							}
+						}
+
+						string translated = translatedBuilder.ToString();
+						return Ok(new { success = true, translation = translated });
+					}
+				}
+
+				return BadRequest("Не удалось получить перевод");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Ошибка перевода сообщения");
+				return StatusCode(500, "Ошибка сервиса перевода");
+			}
+		}
+
+		public class TranslateRequestDto
+		{
+			public string Text { get; set; } = string.Empty;
 		}
 	}
 

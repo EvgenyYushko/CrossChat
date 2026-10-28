@@ -1171,6 +1171,23 @@
             color: var(--text-secondary);
             font-family: monospace;
         }
+
+        .btn-translate {
+            background: none;
+            border: none;
+            color: var(--accent-color, #6366f1);
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            opacity: 0.75;
+            transition: opacity 0.2s;
+        }
+
+        .btn-translate:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
     </style>
 }
 
@@ -1817,7 +1834,7 @@
             }
         });
 
-        // ОБНОВЛЕННЫЙ РЕНДЕР БАБЛА С ПКМ И ДОЛГИМ НАЖАТИЕМ
+        // ОБНОВЛЕННЫЙ РЕНДЕР БАБЛА С ПКМ, ДОЛГИМ НАЖАТИЕМ И ПЕРЕВОДОМ
         function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false, mediaUrl = null, mediaType = null) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
@@ -1846,6 +1863,11 @@
 
                 bubble.addEventListener('touchend', () => clearTimeout(longPressTimer), { passive: true });
                 bubble.addEventListener('touchmove', () => clearTimeout(longPressTimer), { passive: true });
+            }
+
+            // Сохраняем исходный текст в data-атрибут (безопасно для кавычек и переносов строк!)
+            if (text) {
+                bubble.dataset.rawText = text;
             }
 
             let mediaHtml = '';
@@ -1894,10 +1916,17 @@
             const hasRealText = text && !text.startsWith('📷') && !text.startsWith('🎬') && !text.startsWith('🎙️') && text !== '[Медиа]' && text !== '[image]';
             let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaHtml ? `<div>${escapeHtml(text)}</div>` : '');
 
+            // 🚀 Кнопка перевода (вызываем функцию без аргументов текста, она сама прочитает dataset):
+            let translateBtnHtml = (isIncoming && hasRealText)
+                ? `<div style="margin-top: 4px;"><button type="button" class="btn-translate" onclick="translateBubble(this)">🌐 Перевести</button></div>`
+                : '';
+
             if (isIncoming) {
                 bubble.className = 'msg-bubble msg-incoming';
-                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span>${time}</span></div>`;
+                // ВСТАВЛЯЕМ ${translateBtnHtml} ПЕРЕД РЕАКЦИЯМИ И ФУТЕРОМ:
+                bubble.innerHTML = `${mediaHtml}${textHtml}${translateBtnHtml}${reactionHtml}<div class="msg-footer"><span>${time}</span></div>`;
                 bubble.ondblclick = () => handleMessageDoubleClick(bubble, messageId);
+
             } else if (isSentByBot) {
                 bubble.className = 'msg-bubble msg-outgoing-bot';
                 bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
@@ -2527,6 +2556,49 @@
             }
             document.getElementById('voiceRecordingUi').style.display = 'none';
             document.getElementById('normalInputRow').style.display = 'flex';
+        }
+
+        async function translateBubble(btn) {
+            const parent = btn.closest('.msg-bubble');
+            if (!parent) return;
+
+            // Считываем оригинальный текст безопасно
+            const originalText = parent.dataset.rawText;
+            if (!originalText) return;
+
+            // Если перевод уже открыт — повторный клик скрывает его:
+            let existingTrans = parent.querySelector('.translated-text-block');
+            if (existingTrans) {
+                existingTrans.remove();
+                btn.textContent = '🌐 Перевести';
+                return;
+            }
+
+            btn.textContent = '⏳ Перевод...';
+
+            try {
+                const res = await fetch('/inbox/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: originalText })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const transDiv = document.createElement('div');
+                    transDiv.className = 'translated-text-block';
+                    transDiv.style.cssText = 'margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.15); font-size: 0.82rem; color: #38bdf8; line-height: 1.3; font-style: italic;';
+                    transDiv.innerHTML = `<span>🌐 ${escapeHtml(data.translation)}</span>`;
+
+                    // Вставляем блок перевода прямо над кнопкой перевода
+                    btn.parentElement.insertBefore(transDiv, btn);
+                    btn.textContent = '✕ Скрыть перевод';
+                } else {
+                    btn.textContent = '⚠️ Ошибка перевода';
+                }
+            } catch {
+                btn.textContent = '⚠️ Сбой сети';
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
