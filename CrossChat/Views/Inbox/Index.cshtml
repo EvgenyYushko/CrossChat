@@ -1258,6 +1258,23 @@
             color: #ffffff;
         }
 
+        /* 🚀 ГЛОБАЛЬНЫЙ СТИЛЬ: На компьютере тумблеры СТРОГО в один ряд друг за другом! */
+        .chat-header-controls {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 10px !important;
+            flex-shrink: 0 !important;
+        }
+
+        .sync-translator-box, 
+        .human-takeover-box {
+            display: flex !important;
+            align-items: center !important;
+            flex-shrink: 0 !important;
+            margin: 0 !important;
+        }
+
         /* Адаптив для телефонов */
         @@media (max-width: 768px) {
             .sync-translator-box {
@@ -1268,7 +1285,91 @@
             #syncTransSubLabel {
                 display: none !important;
             }
+            /* Контейнер тумблеров */
+            .chat-header-controls {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+
+            .control-label-wrap {
+                text-align: right;
+                line-height: 1.1;
+            }
+            /* === МОБИЛЬНАЯ ОПТИМИЗАЦИЯ ДЛЯ ЭКРАНОВ ДО 768px === */
+            @@media (max-width: 768px) {
+                .chat-header {
+                    padding: 6px 8px !important;
+                    gap: 6px !important;
+                }
+
+                .chat-user-meta {
+                    gap: 6px !important;
+                    min-width: 0 !important;
+                    flex: 1 1 auto !important;
+                }
+
+                .user-text-details {
+                    min-width: 0 !important;
+                    flex: 1 !important;
+                }
+
+                .user-name-title {
+                    font-size: 0.8rem !important;
+                    max-width: 90px !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                }
+
+                .user-handle-subtitle {
+                    font-size: 0.65rem !important;
+                }
+                /* Ультра-компактные тумблеры */
+                .chat-header-controls {
+                    gap: 4px !important;
+                }
+
+                .sync-translator-box,
+                .human-takeover-box {
+                    padding: 3px 6px !important;
+                    border-radius: 8px !important;
+                    gap: 4px !important;
+                }
+                /* Прячем длинные подписи на телефоне */
+                .control-sublabel,
+                #takeoverSubLabel,
+                #syncTransSubLabel {
+                    display: none !important;
+                }
+
+                .takeover-status-label {
+                    font-size: 0.68rem !important;
+                }
+
+                .sync-trans-status-label {
+                    font-size: 0.68rem !important;
+                }
+                /* 🚀 УМЕНЬШЕННЫЙ МОБИЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (30x16px вместо 40x20px) */
+                .switch.mini-switch {
+                    width: 30px !important;
+                    height: 16px !important;
+                }
+
+                .switch.mini-switch .slider:before {
+                    height: 12px !important;
+                    width: 12px !important;
+                    left: 2px !important;
+                    bottom: 2px !important;
+                }
+
+                .switch.mini-switch input:checked + .slider:before {
+                    transform: translateX(14px) !important;
+                }
+            }
         }
+
     </style>
 }
 
@@ -1398,28 +1499,31 @@
                         </div>
                     </div>
 
-                    <!-- ТУМБЛЕР СИНХРОННОГО ПЕРЕВОДЧИКА -->
-                    <div class="sync-translator-box" id="syncTranslatorBox" style="display: none;">
-                        <div style="text-align: right;">
-                            <div class="sync-trans-status-label" id="syncTransLabel">🌐 Синхронный</div>
-                            <div style="font-size: 0.65rem; color: var(--text-secondary);" id="syncTransSubLabel">RU ➔ EN</div>
+                    <!-- КОМПАКТНЫЙ ПРАВЫЙ ТУЛБАР ДЛЯ ТУМБЛЕРОВ -->
+                    <div class="chat-header-controls">
+                        <!-- 1. ТУМБЛЕР СИНХРОННОГО ПЕРЕВОДЧИКА -->
+                        <div class="sync-translator-box" id="syncTranslatorBox" style="display: none;">
+                            <div class="control-label-wrap">
+                                <div class="sync-trans-status-label" id="syncTransLabel">🌐 Синхронный</div>
+                                <div class="control-sublabel" id="syncTransSubLabel">RU ➔ EN</div>
+                            </div>
+                            <label class="switch mini-switch">
+                                <input type="checkbox" id="syncTransToggle" onchange="toggleSyncTranslator(this.checked)">
+                                <span class="slider slider-trans"></span>
+                            </label>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" id="syncTransToggle" onchange="toggleSyncTranslator(this.checked)">
-                            <span class="slider slider-trans"></span>
-                        </label>
-                    </div>
 
-                    <!-- HUMAN TAKEOVER -->
-                    <div class="human-takeover-box">
-                        <div style="text-align: right;">
-                            <div class="takeover-status-label" id="takeoverLabel" style="color: #10b981;">🤖 ИИ</div>
-                            <div style="font-size: 0.65rem; color: var(--text-secondary);" id="takeoverSubLabel">Бот отвечает сам</div>
+                        <!-- 2. HUMAN TAKEOVER -->
+                        <div class="human-takeover-box">
+                            <div class="control-label-wrap">
+                                <div class="takeover-status-label" id="takeoverLabel" style="color: #10b981;">🤖 ИИ</div>
+                                <div class="control-sublabel" id="takeoverSubLabel">Бот отвечает сам</div>
+                            </div>
+                            <label class="switch mini-switch">
+                                <input type="checkbox" id="takeoverToggle" onchange="onTakeoverToggleChanged(this.checked)">
+                                <span class="slider"></span>
+                            </label>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" id="takeoverToggle" onchange="onTakeoverToggleChanged(this.checked)">
-                            <span class="slider"></span>
-                        </label>
                     </div>
                 </div>
 
@@ -1739,6 +1843,23 @@
 
         // 3. ОТКРЫТИЕ ДИАЛОГА
         async function selectDialog(conversationId) {
+
+            // 🚀 МГНОВЕННЫЙ ПОКАЗ ТУМБЛЕРА ИЗ ПАМЯТИ (0 мс задержки!):
+            if (convoLangCache.has(conversationId)) {
+                const cachedLang = convoLangCache.get(conversationId);
+                activeClientLang = cachedLang;
+
+                const transBox = document.getElementById('syncTranslatorBox');
+                const subLabel = document.getElementById('syncTransSubLabel');
+                const btn = document.getElementById('btnTranslateOutgoing');
+                const widget = document.getElementById('outgoingTranslateWidget');
+
+                if (transBox) transBox.style.display = 'flex';
+                if (subLabel) subLabel.textContent = `RU ➔ ${cachedLang.toUpperCase()}`;
+                if (btn) btn.textContent = `🌐 RU ➔ ${cachedLang.toUpperCase()}`;
+                if (widget) widget.style.display = 'inline-flex';
+            }
+
             currentConversationId = conversationId;
 
             document.querySelectorAll('.dialog-item').forEach(el => el.classList.remove('active'));
@@ -2806,6 +2927,7 @@
         // Переменные переводчика собеседника:
         let activeClientLang = null; // Текущий язык клиента (pt, en, es, de...)
         let originalRussianDraft = ''; // Запоминает русский текст до перевода
+        const convoLangCache = new Map(); // 🚀 Мгновенная память: ID диалога -> код языка
 
         // 1. АВТООПРЕДЕЛЕНИЕ ЯЗЫКА КЛИЕНТА (ПО ПОСЛЕДНЕМУ СООБЩЕНИЮ)
         async function updateClientLanguage(incomingText) {
@@ -2850,9 +2972,22 @@
                     if (detectedCode && detectedCode !== 'ru') {
                         activeClientLang = detectedCode.toLowerCase();
 
+                        // Запоминаем для этого диалога:
+                        if (currentConversationId) {
+                            convoLangCache.set(currentConversationId, activeClientLang);
+                        }
+
                         // Показываем тумблер в шапке чата:
                         if (transBox) transBox.style.display = 'flex';
                         if (subLabel) subLabel.textContent = `RU ➔ ${activeClientLang.toUpperCase()}`;
+
+                        // 🚀 На телефонах делаем супер-компактный текст кнопки:
+                        const label = document.getElementById('syncTransLabel');
+                        if (label) {
+                            label.textContent = window.innerWidth <= 768
+                                ? `🌐 ${activeClientLang.toUpperCase()}`
+                                : "🌐 Синхронный";
+                        }
 
                         // Показываем кнопку быстрого перевода над полем ввода:
                         btn.textContent = `🌐 RU ➔ ${activeClientLang.toUpperCase()}`;
@@ -2977,10 +3112,22 @@
             if (box) box.classList.toggle('active', isOn);
 
             if (isOn) {
-                if (label) label.textContent = "🌐 Включен";
-                await applySyncTranslationToAllBubbles(true);
-            } else {
-                if (label) label.textContent = "🌐 Выключен";
+                if (label) {
+                    if (window.innerWidth <= 768 && activeClientLang) {
+                        label.textContent = `🌐 ${activeClientLang.toUpperCase()}`;
+                    } else {
+                        label.textContent = isOn ? "🌐 Включен" : "🌐 Синхронный";
+                    }
+                }
+                    await applySyncTranslationToAllBubbles(true);
+                } else {
+                if (label) {
+                    if (window.innerWidth <= 768 && activeClientLang) {
+                        label.textContent = `🌐 ${activeClientLang.toUpperCase()}`;
+                    } else {
+                        label.textContent = isOn ? "🌐 Включен" : "🌐 Синхронный";
+                    }
+                }
                 applySyncTranslationToAllBubbles(false);
             }
         }
