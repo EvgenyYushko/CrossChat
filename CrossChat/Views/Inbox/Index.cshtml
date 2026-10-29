@@ -1188,6 +1188,24 @@
             opacity: 1;
             text-decoration: underline;
         }
+
+        /* Кнопка перевода внутри наших исходящих сообщений */
+        .msg-outgoing-human .btn-translate,
+        .msg-outgoing-bot .btn-translate {
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+            .msg-outgoing-human .btn-translate:hover,
+            .msg-outgoing-bot .btn-translate:hover {
+                color: #ffffff;
+            }
+
+        /* Цвет переведенного текста внутри исходящих сообщений */
+        .msg-outgoing-human .translated-text-block,
+        .msg-outgoing-bot .translated-text-block {
+            color: #e0e7ff !important;
+            border-top-color: rgba(255, 255, 255, 0.25) !important;
+        }
     </style>
 }
 
@@ -1468,7 +1486,10 @@
                 }
 
                 if (payload.isIncoming && payload.text) {
-                    updateClientLanguage(payload.text); // Мгновенно адаптирует кнопку под свежий язык!
+                    // Если клиент прислал просто смайлик (нет букв) — НЕ сбрасываем язык, оставляем прежний!
+                    if (/\p{L}/u.test(payload.text)) {
+                        updateClientLanguage(payload.text);
+                    }
                 }
 
                 // Вставляем бабл для входящих от клиента, ответов бота или ответов с другого устройства
@@ -1699,10 +1720,10 @@
                         );
                     });
 
-                    // Находим самое последнее входящее сообщение от клиента:
-                    const lastClientMsg = [...data.messages].reverse().find(m => m.isIncoming && m.text);
-                    if (lastClientMsg) {
-                        updateClientLanguage(lastClientMsg.text);
+                    // Ищем язык по истории назад сквозь смайлики:
+                    const meaningfulText = findClientMessageWithLetters(data.messages);
+                    if (meaningfulText) {
+                        updateClientLanguage(meaningfulText);
                     } else {
                         updateClientLanguage(null);
                     }
@@ -1943,8 +1964,11 @@
             const hasRealText = text && !text.startsWith('📷') && !text.startsWith('🎬') && !text.startsWith('🎙️') && text !== '[Медиа]' && text !== '[image]';
             let textHtml = hasRealText ? `<div>${escapeHtml(text)}</div>` : (!mediaHtml ? `<div>${escapeHtml(text)}</div>` : '');
 
-            // 🚀 Кнопка перевода (вызываем функцию без аргументов текста, она сама прочитает dataset):
-            let translateBtnHtml = (isIncoming && hasRealText)
+            // 🚀 Показываем кнопку для ВСЕХ входящих И для наших исходящих на иностранном языке:
+            const isForeignOutgoing = !isIncoming && hasRealText && !/[а-яА-ЯёЁ]/.test(text) && /\p{L}/u.test(text);
+            const canTranslate = hasRealText && (isIncoming || isForeignOutgoing);
+
+            let translateBtnHtml = canTranslate
                 ? `<div style="margin-top: 4px;"><button type="button" class="btn-translate" onclick="translateBubble(this)">🌐 Перевести</button></div>`
                 : '';
 
@@ -1956,10 +1980,12 @@
 
             } else if (isSentByBot) {
                 bubble.className = 'msg-bubble msg-outgoing-bot';
-                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
+                // Добавили ${translateBtnHtml}:
+                bubble.innerHTML = `${mediaHtml}${textHtml}${translateBtnHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#c084fc;">🤖 Бот ИИ</span><span>${time}</span></div>`;
             } else {
                 bubble.className = 'msg-bubble msg-outgoing-human';
-                bubble.innerHTML = `${mediaHtml}${textHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
+                // Добавили ${translateBtnHtml}:
+                bubble.innerHTML = `${mediaHtml}${textHtml}${translateBtnHtml}${reactionHtml}<div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${time}</span></div>`;
             }
 
             stream.appendChild(bubble);
@@ -2790,6 +2816,21 @@
                 if (revertBtn) revertBtn.style.display = 'none';
                 input.focus();
             }
+        }
+
+        // Функция умного поиска языка: ищет назад по истории первое входящее сообщение с БУКВАМИ (игнорируя смайлы)
+        function findClientMessageWithLetters(messages) {
+            if (!messages || !messages.length) return null;
+
+            // Идем с самого конца (от свежих к старым)
+            for (let i = messages.length - 1; i >= 0; i--) {
+                const m = messages[i];
+                // \p{L} в Юникоде означает любую букву любого алфавита мира (латиница, арабский, иероглифы и т.д.)
+                if (m.isIncoming && m.text && /\p{L}/u.test(m.text)) {
+                    return m.text;
+                }
+            }
+            return null;
         }
         
     </script>
