@@ -833,14 +833,28 @@ namespace CrossChat.Services
 				}
 
 				// 2. Защита от дублей сообщений, отправленных с нашего сайта за последние 30 секунд
-				var thresholdUtc = DateTime.UtcNow.AddSeconds(-30);
+				// 🚀 УВЕЛИЧИВАЕМ ОКНО ДО 60 СЕК И ОЧИЩАЕМ ОТ СЛУЖЕБНЫХ СИМВОЛОВ META:
+				var thresholdUtc = DateTime.UtcNow.AddSeconds(-60);
+				string cleanText = (text ?? "").Trim();
+
 				var recentSentMessage = await _db.InboxMessages
 					.Where(m => m.ConversationId == conversation.Id &&
 								!m.IsIncoming &&
-								m.Text == text &&
 								m.CreatedAtUtc >= thresholdUtc)
 					.OrderByDescending(m => m.CreatedAtUtc)
-					.FirstOrDefaultAsync();
+					.FirstOrDefaultAsync(m => m.Text.Trim() == cleanText);
+
+				if (recentSentMessage != null)
+				{
+					// Это эхо нашего же сообщения с сайта! Привязываем ID от Meta и НЕ создаем дубль:
+					if (string.IsNullOrEmpty(recentSentMessage.ExternalMessageId))
+					{
+						recentSentMessage.ExternalMessageId = messageId;
+						await _db.SaveChangesAsync();
+					}
+					_logger.LogInformation("📱 [Echo Deduplicated] Эхо от Meta успешно склеено с сообщением #{Id}", recentSentMessage.Id);
+					return false; // ВЫХОДИМ: второй раз в базу не пишем и в SignalR не шлем!
+				}
 
 				if (recentSentMessage != null)
 				{

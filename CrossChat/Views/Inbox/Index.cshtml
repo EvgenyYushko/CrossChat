@@ -1370,6 +1370,11 @@
             }
         }
 
+        /* Когда синхронный переводчик активен — скрываем ручные кнопки "Перевести", оставляя только чистый бейдж языка */
+        .sync-active-chat .btn-translate {
+            display: none !important;
+        }
+
     </style>
 }
 
@@ -1650,17 +1655,20 @@
             if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
                 const stream = document.getElementById('messagesStream');
 
-                // =========================================================================
-                // ЗАЩИТА: ЕСЛИ ЭТО СООБЩЕНИЕ МЫ САМИ ТОЛЬКО ЧТО ОТПРАВИЛИ С ЭТОЙ ВКЛАДКИ
-                // =========================================================================
+                // 🚀 УМНАЯ ЗАЩИТА: Ищем точное совпадение среди ВСЕХ сообщений, ожидающих отправки:
                 if (!payload.isIncoming && !payload.isSentByBot && stream) {
-                    const pendingBubble = stream.querySelector(`.msg-outgoing-human[data-pending="true"]`);
-                    if (pendingBubble && pendingBubble.dataset.text === payload.text) {
-                        // Снимаем метку ожидания, привязываем ID и ВЫХОДИМ (дубль не создается!)
-                        pendingBubble.removeAttribute('data-pending');
-                        pendingBubble.dataset.msgId = payload.messageId;
-                        updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
-                        return; // <-- ВТОРОЙ БАБЛ НЕ РИСУЕТСЯ!
+                    const pendingBubbles = stream.querySelectorAll(`.msg-outgoing-human[data-pending="true"]`);
+                    for (const pb of pendingBubbles) {
+                        // Сверяем текст без учета регистра и пробелов по краям:
+                        const pbText = (pb.dataset.text || '').trim().toLowerCase();
+                        const incomingText = (payload.text || '').trim().toLowerCase();
+
+                        if (pbText === incomingText) {
+                            pb.removeAttribute('data-pending');
+                            pb.dataset.msgId = payload.messageId;
+                            updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
+                            return; // Точный бабл найден и подтвержден, второй бабл не рисуем!
+                        }
                     }
                 }
 
@@ -1997,13 +2005,16 @@
             e.preventDefault();
         }
 
+        let isSendingManual = false;
+
         async function sendManualMessage() {
-            if (!currentConversationId) return;
+            if (!currentConversationId || isSendingManual) return; // <-- Защита от двойного клика
 
             const input = document.getElementById('messageInput');
             const text = input.value.trim();
             if (!text) return;
 
+            isSendingManual = true; // Блокируем повтор на 100 мс
             input.value = '';
             // Удерживаем клавиатуру на телефоне открытой:
             input.focus();
@@ -2068,6 +2079,8 @@
                 tempBubble.remove();
                 input.value = text;
                 alert("Ошибка сети при отправке сообщения");
+            } finally {
+                setTimeout(() => { isSendingManual = false; }, 150);
             }
         }
 
@@ -3155,7 +3168,9 @@
             isSyncTranslateActive = isOn;
             const box = document.getElementById('syncTranslatorBox');
             const label = document.getElementById('syncTransLabel');
+            const stream = document.getElementById('messagesStream');
             if (box) box.classList.toggle('active', isOn);
+            if (stream) stream.classList.toggle('sync-active-chat', isOn);
 
             if (isOn) {
                 if (label) {
