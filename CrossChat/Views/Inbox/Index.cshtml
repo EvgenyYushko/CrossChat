@@ -1642,7 +1642,7 @@
             .build();
 
         // 2. ОБНОВЛЕННЫЙ СЛУШАТЕЛЬ SIGNALR (БЕЗ СДВИГА АРГУМЕНТОВ)
-        connection.on("ReceiveInboxMessage", (payload) => {
+        connection.on("ReceiveInboxMessage", async (payload) => {
             console.log("⚡ [SignalR] Новое сообщение:", payload);
 
             const localTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1671,7 +1671,22 @@
                     }
                 }
 
-                // Вставляем бабл для входящих от клиента, ответов бота или ответов с другого устройства
+                // 🚀 ЕСЛИ ЭТО ВХОДЯЩЕЕ СООБЩЕНИЕ И ВКЛЮЧЕН СИНХРОННЫЙ ПЕРЕВОДЧИК:
+                let textToDisplay = payload.text;
+                let isAutoTranslated = false;
+
+                if (payload.isIncoming && isSyncTranslateActive && payload.text) {
+                    // Если в тексте иностранные буквы (нет кириллицы)
+                    if (!/[а-яА-ЯёЁ]/.test(payload.text) && /\p{L}/u.test(payload.text)) {
+                        const trans = await quickGoogleTranslate(payload.text, 'auto', 'ru');
+                        if (trans) {
+                            textToDisplay = trans; // Будем показывать русский перевод!
+                            isAutoTranslated = true;
+                        }
+                    }
+                }
+
+                // Вставляем бабл (в rawText сохраняем оригинал на случай выключения тумблера)
                 appendMessageBubble(
                     payload.messageId,
                     payload.text,
@@ -1683,6 +1698,25 @@
                     payload.mediaUrl,
                     payload.mediaType
                 );
+
+                // Если сообщение перевелось на лету — подставляем русский текст и бейдж:
+                if (isAutoTranslated && stream) {
+                    const lastBubble = stream.lastElementChild;
+                    if (lastBubble) {
+                        const textNode = Array.from(lastBubble.children).find(c =>
+                            c.tagName === 'DIV' &&
+                            !c.classList.contains('msg-footer') &&
+                            !c.classList.contains('msg-media-container') &&
+                            !c.classList.contains('reaction-badge') &&
+                            !c.classList.contains('translated-text-block')
+                        );
+                        if (textNode) {
+                            textNode.innerHTML = escapeHtml(textToDisplay);
+                            addOrUpdateTransBadge(lastBubble, activeClientLang || 'lang', payload.text);
+                        }
+                    }
+                }
+
                 scrollChatToBottom();
             }
 
@@ -1916,12 +1950,24 @@
                         );
                     });
 
-                    // Ищем язык по истории назад сквозь смайлики:
+                    // 1. Ищем язык по истории назад сквозь смайлики:
                     const meaningfulText = findClientMessageWithLetters(data.messages);
                     if (meaningfulText) {
-                        updateClientLanguage(meaningfulText);
+                        await updateClientLanguage(meaningfulText);
                     } else {
-                        updateClientLanguage(null);
+                        await updateClientLanguage(null);
+                    }
+
+                    // 2. 🚀 ЕСЛИ ТУМБЛЕР ВКЛЮЧЕН — АВТОМАТИЧЕСКИ ПЕРЕВОДИМ ВСЮ ПЕРЕПИСКУ НА РУССКИЙ ПРИ ВХОДЕ!
+                    const toggle = document.getElementById('syncTransToggle');
+                    if (isSyncTranslateActive || (toggle && toggle.checked)) {
+                        isSyncTranslateActive = true;
+                        if (toggle) toggle.checked = true;
+                        const box = document.getElementById('syncTranslatorBox');
+                        if (box) box.classList.add('active');
+
+                        // Переводим все сообщения диалога на русский сразу (из кэша за 0 мс!):
+                        await applySyncTranslationToAllBubbles(true);
                     }
                 } 
                 else {
