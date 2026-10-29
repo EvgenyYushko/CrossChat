@@ -1206,6 +1206,69 @@
             color: #e0e7ff !important;
             border-top-color: rgba(255, 255, 255, 0.25) !important;
         }
+
+        /* БЛОК СИНХРОННОГО ПЕРЕВОДЧИКА В ШАПКЕ */
+        .sync-translator-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            padding: 5px 10px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .sync-translator-box.active {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .sync-trans-status-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            color: #38bdf8;
+        }
+
+        /* Цвет ползунка при включенном автопереводе */
+        input:checked + .slider-trans {
+            background-color: #38bdf8 !important;
+        }
+
+        /* Маленький бейдж языка у переведенного сообщения */
+        .msg-trans-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+            cursor: help;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-right: 4px;
+        }
+
+        .msg-outgoing-human .msg-trans-badge {
+            background: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+        }
+
+        /* Адаптив для телефонов */
+        @@media (max-width: 768px) {
+            .sync-translator-box {
+                padding: 4px 6px !important;
+                gap: 4px !important;
+            }
+
+            #syncTransSubLabel {
+                display: none !important;
+            }
+        }
     </style>
 }
 
@@ -1333,6 +1396,18 @@
                             <div id="activeChatName" class="user-name-title">Имя Клиента</div>
                             <div id="activeChatHandle" class="user-handle-subtitle">@@username</div>
                         </div>
+                    </div>
+
+                    <!-- ТУМБЛЕР СИНХРОННОГО ПЕРЕВОДЧИКА -->
+                    <div class="sync-translator-box" id="syncTranslatorBox" style="display: none;">
+                        <div style="text-align: right;">
+                            <div class="sync-trans-status-label" id="syncTransLabel">🌐 Синхронный</div>
+                            <div style="font-size: 0.65rem; color: var(--text-secondary);" id="syncTransSubLabel">RU ➔ EN</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="syncTransToggle" onchange="toggleSyncTranslator(this.checked)">
+                            <span class="slider slider-trans"></span>
+                        </label>
                     </div>
 
                     <!-- HUMAN TAKEOVER -->
@@ -1763,11 +1838,23 @@
             if (!text) return;
 
             input.value = '';
-
-            // 🚀 ГЛАВНОЕ: Удерживаем фокус в поле ввода, чтобы клавиатура на телефоне НЕ ЗАКРЫВАЛАСЬ!
+            // Удерживаем клавиатуру на телефоне открытой:
             input.focus();
 
-            // Мгновенно рисуем бабл с меткой ожидания
+            // Текст для отображения у нас (русский) и для отправки клиенту (иностранный)
+            let textToDisplay = text;
+            let textToSend = text;
+
+            // 🚀 1. ПЕРЕВОДИМ ДО ОТПРАВКИ, ЧТОБЫ БАБЛ СРАЗУ ПОЛУЧИЛ ПРАВИЛЬНЫЙ ВИД:
+            if (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru') {
+                const translated = await quickGoogleTranslate(text, 'ru', activeClientLang);
+                if (translated) {
+                    textToSend = translated; // Клиенту пойдет иностранный текст
+                    translationCache.set(`auto_ru_${translated}`, textToDisplay);
+                }
+            }
+
+            // 🚀 2. СОЗДАЕМ БАБЛ (Записываем textToSend в dataset.text для защиты от дублей в SignalR!):
             const stream = document.getElementById('messagesStream');
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1775,18 +1862,25 @@
             const tempBubble = document.createElement('div');
             tempBubble.className = 'msg-bubble msg-outgoing-human';
             tempBubble.setAttribute('data-pending', 'true');
-            tempBubble.dataset.text = text;
-            tempBubble.innerHTML = `<div>${escapeHtml(text)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
+            // ВАЖНО: textToSend совпадет с тем, что вернет SignalR:
+            tempBubble.dataset.text = textToSend;
+            tempBubble.dataset.rawText = textToSend;
+
+            if (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru') {
+                tempBubble.innerHTML = `<div>${escapeHtml(textToDisplay)}</div><div class="msg-footer"><span class="msg-trans-badge">🌐 ${activeClientLang.toUpperCase()}</span><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
+            } else {
+                tempBubble.innerHTML = `<div>${escapeHtml(textToDisplay)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
+            }
+
             stream.appendChild(tempBubble);
             scrollChatToBottom();
-
             updateTakeoverUi(true);
 
             try {
                 const res = await fetch('/inbox/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ conversationId: currentConversationId, text: text })
+                    body: JSON.stringify({ conversationId: currentConversationId, text: textToSend })
                 });
 
                 if (!res.ok) {
@@ -1794,13 +1888,12 @@
                     tempBubble.remove();
                     input.value = text;
 
-                    if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022")) {
+                    if (err.includes("OUTSIDE_24H_WINDOW") || err.includes("outside of allowed window") || err.includes("2534022") || err.includes("2018278")) {
                         openMetaWindowModal();
                     } else {
                         alert("Ошибка отправки: " + err);
                     }
-                }
-                else{
+                } else {
                     originalRussianDraft = '';
                     document.getElementById('btnRevertOutgoing')?.style.setProperty('display', 'none');
                 }
@@ -2719,23 +2812,30 @@
             const widget = document.getElementById('outgoingTranslateWidget');
             const btn = document.getElementById('btnTranslateOutgoing');
             const revertBtn = document.getElementById('btnRevertOutgoing');
+            const transBox = document.getElementById('syncTranslatorBox');
+            const subLabel = document.getElementById('syncTransSubLabel');
+
             if (!widget || !btn) return;
 
-            if (!incomingText || typeof incomingText !== 'string') {
+            // Вспомогательное скрытие всех переводчиков (если язык русский или нет текста)
+            function hideAllTranslators() {
                 widget.style.display = 'none';
+                if (transBox) transBox.style.display = 'none';
+                if (revertBtn) revertBtn.style.display = 'none';
                 activeClientLang = null;
+            }
+
+            if (!incomingText || typeof incomingText !== 'string') {
+                hideAllTranslators();
                 return;
             }
 
             const clean = incomingText.trim();
 
             // Быстрая проверка: если текст содержит преимущественно кириллицу — это русский!
-            // Скрываем кнопку перевода, так как клиент пишет по-русски.
             const cyrillicMatch = clean.match(/[а-яА-ЯёЁ]/g);
             if (cyrillicMatch && cyrillicMatch.length > clean.length * 0.3) {
-                widget.style.display = 'none';
-                activeClientLang = null;
-                if (revertBtn) revertBtn.style.display = 'none';
+                hideAllTranslators();
                 return;
             }
 
@@ -2745,11 +2845,16 @@
                 const res = await fetch(detectUrl);
                 if (res.ok) {
                     const data = await res.json();
-                    // Google возвращает код языка в data[2] (например "pt", "en", "es", "de")
                     const detectedCode = data[2];
 
                     if (detectedCode && detectedCode !== 'ru') {
                         activeClientLang = detectedCode.toLowerCase();
+
+                        // Показываем тумблер в шапке чата:
+                        if (transBox) transBox.style.display = 'flex';
+                        if (subLabel) subLabel.textContent = `RU ➔ ${activeClientLang.toUpperCase()}`;
+
+                        // Показываем кнопку быстрого перевода над полем ввода:
                         btn.textContent = `🌐 RU ➔ ${activeClientLang.toUpperCase()}`;
                         widget.style.display = 'inline-flex';
                         if (revertBtn) revertBtn.style.display = 'none';
@@ -2758,8 +2863,7 @@
                 }
             } catch { }
 
-            widget.style.display = 'none';
-            activeClientLang = null;
+            hideAllTranslators();
         }
 
         // 2. ПЕРЕВОД НАПИСАННОГО РУССКОГО ТЕКСТА НА ЯЗЫК КЛИЕНТА
@@ -2833,5 +2937,111 @@
             return null;
         }
         
+        // === СИНХРОННЫЙ ПЕРЕВОДЧИК В РЕАЛЬНОМ ВРЕМЕНИ ===
+        let isSyncTranslateActive = false; // Состояние тумблера
+        const translationCache = new Map(); // Кэш: исходный текст -> русский перевод
+
+        // Вспомогательная быстрая функция перевода через Google Translate (0 руб)
+        async function quickGoogleTranslate(text, sl, tl) {
+            if (!text || !text.trim()) return null;
+            const clean = text.trim();
+            const cacheKey = `${sl}_${tl}_${clean}`;
+            if (translationCache.has(cacheKey)) {
+                return translationCache.get(cacheKey);
+            }
+
+            try {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(clean)}`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data[0]) {
+                        const trans = data[0].map(item => item[0]).filter(Boolean).join('');
+                        if (trans && trans.toLowerCase() !== clean.toLowerCase()) {
+                            translationCache.set(cacheKey, trans);
+                            return trans;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Ошибка быстрого перевода:", e);
+            }
+            return null;
+        }
+
+        // 1. ПЕРЕКЛЮЧЕНИЕ ТУМБЛЕРА СИНХРОННОГО ПЕРЕВОДЧИКА
+        async function toggleSyncTranslator(isOn) {
+            isSyncTranslateActive = isOn;
+            const box = document.getElementById('syncTranslatorBox');
+            const label = document.getElementById('syncTransLabel');
+            if (box) box.classList.toggle('active', isOn);
+
+            if (isOn) {
+                if (label) label.textContent = "🌐 Включен";
+                await applySyncTranslationToAllBubbles(true);
+            } else {
+                if (label) label.textContent = "🌐 Выключен";
+                applySyncTranslationToAllBubbles(false);
+            }
+        }
+
+        // 2. ПРИМЕНЕНИЕ ИЛИ ОТКАТ ПЕРЕВОДА ДЛЯ ВСЕХ СООБЩЕНИЙ В ЧАТЕ
+        async function applySyncTranslationToAllBubbles(enable) {
+            const bubbles = document.querySelectorAll('#messagesStream .msg-bubble');
+
+            for (const bubble of bubbles) {
+                const rawText = bubble.dataset.rawText;
+                if (!rawText) continue;
+
+                // Находим контейнер самого текста внутри бабла
+                const textNode = Array.from(bubble.children).find(c =>
+                    c.tagName === 'DIV' &&
+                    !c.classList.contains('msg-footer') &&
+                    !c.classList.contains('msg-media-container') &&
+                    !c.classList.contains('reaction-badge') &&
+                    !c.classList.contains('translated-text-block')
+                );
+
+                if (!textNode) continue;
+
+                if (enable) {
+                    // Если текст иностранный (нет кириллицы, но есть буквы)
+                    const isForeign = !/[а-яА-ЯёЁ]/.test(rawText) && /\p{L}/u.test(rawText);
+                    if (isForeign) {
+                        // Берем перевод из кэша или запрашиваем
+                        let trans = await quickGoogleTranslate(rawText, 'auto', 'ru');
+                        if (trans) {
+                            textNode.innerHTML = escapeHtml(trans);
+                            // Добавляем маленький бейдж оригинала
+                            addOrUpdateTransBadge(bubble, activeClientLang || 'lang', rawText);
+                        }
+                    }
+                } else {
+                    // ВОЗВРАЩАЕМ ИСХОДНЫЙ ТЕКСТ:
+                    textNode.innerHTML = escapeHtml(rawText);
+                    removeTransBadge(bubble);
+                }
+            }
+        }
+
+        function addOrUpdateTransBadge(bubble, langCode, originalText) {
+            let footer = bubble.querySelector('.msg-footer');
+            if (!footer) return;
+
+            let badge = footer.querySelector('.msg-trans-badge');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'msg-trans-badge';
+                footer.insertBefore(badge, footer.firstChild);
+            }
+            badge.textContent = `🌐 ${langCode.toUpperCase()}`;
+            badge.title = `Оригинал: ${originalText}`;
+        }
+
+        function removeTransBadge(bubble) {
+            let badge = bubble.querySelector('.msg-trans-badge');
+            if (badge) badge.remove();
+        }
+
     </script>
 }
