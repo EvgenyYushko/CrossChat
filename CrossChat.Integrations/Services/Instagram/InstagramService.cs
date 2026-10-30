@@ -308,12 +308,15 @@ public partial class InstagramService : IInstagramService
 	/// <summary>
 	/// Получает все комментарии к публикации со всеми вложенными ответами за 1 сетевой запрос
 	/// </summary>
+	/// <summary>
+	/// Получает комментарии публикации с правильным разделением на корень и ветки (без дублей)
+	/// </summary>
 	public async Task<List<InstagramCommentItemDto>> GetMediaCommentsAsync(string mediaId, string accessToken)
 	{
-		var result = new List<InstagramCommentItemDto>();
+		var rootComments = new List<InstagramCommentItemDto>();
 
-		// Запрашиваем комментарии и вложенный массив replies за один вызов Graph API
-		string fields = "id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}";
+		// 🚀 ЗАПРАШИВАЕМ from{id,username} И parent_id:
+		string fields = "id,text,timestamp,username,from,like_count,parent_id,replies{id,text,timestamp,username,from,like_count,parent_id}";
 		string url = $"{ApiVersion}/{mediaId}/comments?fields={fields}&limit=50&access_token={accessToken}";
 
 		try
@@ -323,9 +326,8 @@ public partial class InstagramService : IInstagramService
 
 			if (!response.IsSuccessStatusCode)
 			{
-				_logger.LogWarning("[Instagram Comments] Ошибка загрузки комментариев для {MediaId} (HTTP {Code}): {Err}",
-					mediaId, response.StatusCode, json);
-				return result;
+				_logger.LogWarning("[Instagram Comments] Ошибка загрузки комментариев для {MediaId}: {Err}", mediaId, json);
+				return rootComments;
 			}
 
 			using var doc = JsonDocument.Parse(json);
@@ -335,10 +337,17 @@ public partial class InstagramService : IInstagramService
 			{
 				foreach (var item in dataArr.EnumerateArray())
 				{
+					// 🚀 БАГ 1: Если у комментария есть parent_id — это ВЛОЖЕННЫЙ ОТВЕТ!
+					// Мы НЕ добавляем его в корень, так как он уже лежит (или будет добавлен) в ветку своего родителя!
+					if (item.TryGetProperty("parent_id", out var pIdProp) && !string.IsNullOrEmpty(pIdProp.GetString()))
+					{
+						continue; // Пропускаем вложенный ответ, чтобы не было дубля сверху!
+					}
+
 					var comment = ParseSingleComment(item);
 					if (comment == null) continue;
 
-					// Парсим вложенные ответы (Replies), если они есть
+					// Парсим вложенные ответы (Replies)
 					if (item.TryGetProperty("replies", out var repliesObj) &&
 						repliesObj.TryGetProperty("data", out var repliesArr))
 					{
@@ -351,25 +360,24 @@ public partial class InstagramService : IInstagramService
 							}
 						}
 
-						// Сортируем ответы в ветке хронологически (старые сверху, новые снизу)
 						comment.Replies = comment.Replies.OrderBy(r => r.Timestamp).ToList();
 					}
 
-					result.Add(comment);
+					rootComments.Add(comment);
 				}
 
-				// Сортируем корневые комментарии: свежие сверху (или наоборот, по желанию)
-				result = result.OrderByDescending(c => c.Timestamp).ToList();
+				// Корневые комментарии сортируем: свежие сверху
+				rootComments = rootComments.OrderByDescending(c => c.Timestamp).ToList();
 			}
 
-			_logger.LogInformation("[Instagram Comments] Успешно загружено корневых комментариев: {Count} для поста {MediaId}", result.Count, mediaId);
+			_logger.LogInformation("[Instagram Comments] Корневых комментариев: {Count} для поста {MediaId}", rootComments.Count, mediaId);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, "[Instagram Comments] Исключение при получении комментариев для {MediaId}", mediaId);
+			_logger.LogError(ex, "[Instagram Comments] Ошибка получения комментариев {MediaId}", mediaId);
 		}
 
-		return result;
+		return rootComments;
 	}
 
 	/// <summary>
@@ -408,8 +416,20 @@ public partial class InstagramService : IInstagramService
 
 		string id = idProp.GetString()!;
 		string text = elem.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
-		string username = elem.TryGetProperty("username", out var u) ? u.GetString() ?? "user" : "user";
 		int likes = elem.TryGetProperty("like_count", out var lc) ? lc.GetInt32() : 0;
+
+		// Ищем настоящий никнейм: сначала в from.username, затем в username
+		string username = "user";
+		if (elem.TryGetProperty("from", out var fromObj) &&
+			fromObj.TryGetProperty("username", out var fromUser) &&
+			!string.IsNullOrWhiteSpace(fromUser.GetString()))
+		{
+			username = fromUser.GetString()!;
+		}
+		else if (elem.TryGetProperty("username", out var u) && !string.IsNullOrWhiteSpace(u.GetString()))
+		{
+			username = u.GetString()!;
+		}
 
 		DateTime dt = DateTime.UtcNow;
 		if (elem.TryGetProperty("timestamp", out var ts) && DateTime.TryParse(ts.GetString(), out var parsedDate))

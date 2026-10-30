@@ -905,7 +905,7 @@
                         <div class="post-stats-row">
                             <span style="color: #ef4444;">❤️ @post.LikeCount.ToString("N0")</span>
                             <button type="button" class="btn-comment-counter"
-                                    onclick="openCommentsDrawer('@post.Id', '@(post.ThumbnailUrl ?? post.MediaUrl)', '@@(Escape(post.Caption))', @post.CommentsCount)"
+                                    onclick='openCommentsDrawer("@post.Id", "@(post.ThumbnailUrl ?? post.MediaUrl)", @Html.Raw(System.Text.Json.JsonSerializer.Serialize(post.Caption ?? "")), @post.CommentsCount)'
                                     title="Посмотреть и ответить на комментарии">
                                 💬 @post.CommentsCount.ToString("N0")
                             </button>
@@ -1292,19 +1292,42 @@
         }
 
         // Вспомогательная функция создания карточки одного комментария/ответа
+        // Переменные автора профиля из Razor:
+        const myAccountUsername = "@ViewBag.Username".toLowerCase().replace('@@', '');
+        const myAccountAvatarUrl = "@ViewBag.AvatarUrl";
+
         function createCommentNode(c, isReply = false, parentId = null) {
             const card = document.createElement('div');
             card.className = 'comment-main-card';
             card.id = `node_${c.id}`;
 
-            const initials = (c.username || 'U').substring(0, 2).toUpperCase();
+            const cleanUsername = (c.username || 'user').toLowerCase().replace('@@', '');
+            const isMe = cleanUsername === myAccountUsername;
             const formattedTime = formatCommentTime(c.timestamp);
 
+            // Аватарка: если это наш аккаунт и есть аватар — показываем фото, иначе цветной бейдж с буквами ника
+            let avatarHtml;
+            const size = isReply ? '26px' : '32px';
+            const fontSize = isReply ? '0.65rem' : '0.75rem';
+
+            if (isMe && myAccountAvatarUrl) {
+                avatarHtml = `<img src="${myAccountAvatarUrl}" class="comment-avatar" style="width:${size}; height:${size}; object-fit:cover; border:1px solid #e1306c;" alt="My Avatar">`;
+            } else {
+                const initials = cleanUsername.substring(0, 2).toUpperCase();
+                // Разный градиент для автора и для гостей
+                const bgGrad = isMe 
+                    ? 'linear-gradient(135deg, #e1306c, #f77737)' 
+                    : 'linear-gradient(135deg, #6366f1, #38bdf8)';
+                avatarHtml = `<div class="comment-avatar" style="width:${size}; height:${size}; font-size:${fontSize}; background:${bgGrad};">${initials}</div>`;
+            }
+
             card.innerHTML = `
-                <div class="comment-avatar" style="${isReply ? 'width:26px; height:26px; font-size:0.65rem;' : ''}">${initials}</div>
+                ${avatarHtml}
                 <div class="comment-content">
                     <div class="comment-author-line">
-                        <span class="comment-username">@@${escapeHtml(c.username)}</span>
+                        <span class="comment-username" style="${isMe ? 'color:#ec4899; font-weight:800;' : ''}">
+                            @@${escapeHtml(c.username)} ${isMe ? '✨' : ''}
+                        </span>
                         <span class="comment-time">${formattedTime}</span>
                     </div>
                     <div class="comment-text">${escapeHtml(c.text)}</div>
