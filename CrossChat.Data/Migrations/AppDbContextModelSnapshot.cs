@@ -497,6 +497,9 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("FirstComment")
                         .HasColumnType("text");
 
+                    b.Property<bool>("HasSpoiler")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsPaid")
                         .HasColumnType("boolean");
 

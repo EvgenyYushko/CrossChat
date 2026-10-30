@@ -55,5 +55,8 @@ namespace CrossChat.Data.Entities.Posting
 
 		[MaxLength(20)]
 		public string PrivacyStatus { get; set; } = "public";
+
+		// Скрыть фото/видео под спойлер (бесплатный мерцающий блюр Telegram)
+		public bool HasSpoiler { get; set; } = false;
 	}
 }

@@ -315,7 +315,7 @@ namespace CrossChat.Integrations.Services.Telegram
 			}
 		}
 
-		public async Task<Message> SendSinglePhotoAsync(long senderId, string imageInput, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendSinglePhotoAsync(long senderId, string imageInput, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null, bool hasSpoiler = false)
 		{
 			Stream stream;
 
@@ -348,12 +348,13 @@ namespace CrossChat.Integrations.Services.Telegram
 						inputFile,
 						caption: string.IsNullOrEmpty(caption) ? null : caption,
 						replyMarkup: replyMarkup,
-						parseMode: parseMode);
+						parseMode: parseMode,
+						hasSpoiler: hasSpoiler);
 				}
 			}
 		}
 
-		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null)
+		public async Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null, bool hasSpoiler = false)
 		{
 			bool isCaptionTooLong = !string.IsNullOrEmpty(caption) && caption.Length > 1024;
 			using var stream = GetMediaStream(base64Video, out _);
@@ -385,7 +386,8 @@ namespace CrossChat.Integrations.Services.Telegram
 					duration: duration,
 					width: width,
 					height: height,
-					supportsStreaming: true);
+					supportsStreaming: true,
+					hasSpoiler: hasSpoiler); 
 
 				await _telegramBotClient.SendMessage(
 					chatId: senderId,
@@ -406,7 +408,8 @@ namespace CrossChat.Integrations.Services.Telegram
 					caption: string.IsNullOrEmpty(caption) ? null : caption,
 					replyMarkup: replyMarkup,
 					parseMode: parseMode,
-					supportsStreaming: true);
+					supportsStreaming: true,
+					hasSpoiler: hasSpoiler); 
 			}
 		}
 
@@ -414,7 +417,7 @@ namespace CrossChat.Integrations.Services.Telegram
 		/// Универсальная публикация медиа-альбома в Telegram (до 10 фото и/или видео)
 		/// Поддерживает как файлы с диска (0 МБ RAM), так и Base64, сохраняя оригинальные пропорции (Width/Height)
 		/// </summary>
-		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null)
+		public async Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null, bool hasSpoiler = false)
 		{
 			if (base64MediaList == null || !base64MediaList.Any()) return null;
 
@@ -473,7 +476,8 @@ namespace CrossChat.Integrations.Services.Telegram
 							Duration = duration, // <-- Длительность
 							SupportsStreaming = true,
 							Caption = itemCaption,
-							ParseMode = itemParseMode
+							ParseMode = itemParseMode,
+							HasSpoiler = hasSpoiler
 						};
 					}
 					else
@@ -481,7 +485,8 @@ namespace CrossChat.Integrations.Services.Telegram
 						inputMedia = new InputMediaPhoto(InputFile.FromStream(stream, $"image_{i}.jpg"))
 						{
 							Caption = itemCaption,
-							ParseMode = itemParseMode
+							ParseMode = itemParseMode,
+							HasSpoiler = hasSpoiler
 						};
 					}
 

@@ -99,19 +99,19 @@ public class TelegramChannelPublisher : ISocialPublisher
 					else
 					{
 						await _console.Log("Отправка видео с кнопкой в Telegram...", settings.UserId, state.BotId);
-						await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard);
+						await _service.SendSingleVideoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard, hasSpoiler: state.HasSpoiler);
 					}
 				}
 				else
 				{
 					await _console.Log("Отправка фото с кнопкой в Telegram...", settings.UserId, state.BotId);
-					await _service.SendSinglePhotoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard);
+					await _service.SendSinglePhotoAsync(settings.ChannelId, visualMedia[0], caption, parseMode: ParseMode.Html, replyMarkup: inlineKeyboard, hasSpoiler: state.HasSpoiler);
 				}
 			}
 			else
 			{
 				await _console.Log($"Отправка альбома из {visualMedia.Count} файлов в Telegram...", settings.UserId, state.BotId);
-				await _service.SendMediaAlbumAsync(settings.ChannelId, visualMedia, caption, inlineKeyboard);
+				await _service.SendMediaAlbumAsync(settings.ChannelId, visualMedia, caption, inlineKeyboard, hasSpoiler: state.HasSpoiler);
 			}
 
 			if (audioItem != null)

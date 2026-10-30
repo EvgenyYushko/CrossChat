@@ -909,6 +909,7 @@ namespace CrossChat.Controllers
 			// 1. ЗАЩИТА: Если текст не ввели, заменяем null на пустую строку ""
 			var safeCaption = caption ?? string.Empty;
 
+			bool hasSpoilerTelegram = Request.Form["hasSpoilerTelegram"] == "true";
 			bool isVideoNoteTelegram = Request.Form["isVideoNoteTelegram"] == "true";
 			string? tgButtonText = Request.Form["tgButtonText"].FirstOrDefault();
 			string? tgButtonUrl = Request.Form["tgButtonUrl"].FirstOrDefault();
@@ -1014,6 +1015,7 @@ namespace CrossChat.Controllers
 										channelButtonUrl = channelButtonUrl.Split(',')[0].Trim();
 								}
 
+								post.Networks[netKey].HasSpoiler = hasSpoilerTelegram;
 								post.Networks[netKey].IsPaid = channelIsPaid;
 								post.Networks[netKey].Price = channelIsPaid ? channelPrice : 0;
 								post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
@@ -1049,7 +1051,8 @@ namespace CrossChat.Controllers
 								ButtonUrl = isTg && !string.IsNullOrWhiteSpace(tgButtonUrl) ? tgButtonUrl.Trim() : null,
 								LocationId = isInstaOrFb ? locationId : null,
 								LocationName = isInstaOrFb ? locationName : null,
-								PrivacyStatus = isYouTube ? youtubePrivacy : "public"
+								PrivacyStatus = isYouTube ? youtubePrivacy : "public",
+								HasSpoiler = isTg && hasSpoilerTelegram,
 							};
 						}
 					}
@@ -1062,6 +1065,7 @@ namespace CrossChat.Controllers
 					var finalBotId = botId ?? FindFirstActiveBotId(post.ProfileId, parsedNet);
 					var netKey = $"{networkType}_{finalBotId}";
 
+					bool isYouTube = parsedNet == NetworkType.YouTube;
 					bool isTg = parsedNet == NetworkType.TelegramChannel || parsedNet == NetworkType.TelegramPublic;
 					bool isCurrentInstaOrFb = parsedNet == NetworkType.Instagram || parsedNet == NetworkType.Facebook;
 
@@ -1071,6 +1075,7 @@ namespace CrossChat.Controllers
 						post.Networks[netKey].FirstComment = isTg ? null : firstComment;
 						if (isTg)
 						{
+							post.Networks[netKey].HasSpoiler = hasSpoilerTelegram;
 							post.Networks[netKey].IsPaid = isPaidTelegram;
 							post.Networks[netKey].Price = isPaidTelegram ? priceTelegram : 0;
 							post.Networks[netKey].IsVideoNote = isVideoNoteTelegram;
@@ -1104,6 +1109,8 @@ namespace CrossChat.Controllers
 							FirstComment = isTg ? null : firstComment,
 							LocationId = isCurrentInstaOrFb ? locationId : null,
 							LocationName = isCurrentInstaOrFb ? locationName : null,
+							PrivacyStatus = isYouTube ? youtubePrivacy : "public",
+							HasSpoiler = isTg && hasSpoilerTelegram,
 						};
 					}
 				}

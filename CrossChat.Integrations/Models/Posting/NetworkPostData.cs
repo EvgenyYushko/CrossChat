@@ -20,5 +20,7 @@ namespace CrossChat.Integrations.Models.Posting
 		public string? LocationId { get; set; }
 		public string? LocationName { get; set; }
 		public string PrivacyStatus { get; set; } = "public";
+
+		public bool HasSpoiler { get; set; } = false;
 	}
 }

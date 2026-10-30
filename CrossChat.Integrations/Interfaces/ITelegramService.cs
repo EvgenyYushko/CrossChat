@@ -19,7 +19,7 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<Message> SendMessage(string text, long senderId, int? replayMsgId = null, ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null, CancellationToken cancellationToken = default);
 
-		Task<Message> SendSinglePhotoAsync(long senderId, string base64Image, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null);
+		Task<Message> SendSinglePhotoAsync(long senderId, string imageInput, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null, bool hasSpoiler = false);
 
 		Task<Message[]> SendPhotoAlbumAsync(long senderId, List<string> base64Images, string caption = "");
 
@@ -30,8 +30,8 @@ namespace CrossChat.Integrations.Interfaces
 		Task<string?> GetChannelAvatarBase64ByFileIdAsync(string fileId);
 		Task<Message> SendVoiceAsync(long senderId, string base64Audio, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null);
 
-		Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.None, ReplyMarkup replyMarkup = null);
-		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null);
+		Task<Message> SendSingleVideoAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html, ReplyMarkup replyMarkup = null, bool hasSpoiler = false);
+		Task<Message[]> SendMediaAlbumAsync(long senderId, List<string> base64MediaList, string caption = "", ReplyMarkup replyMarkup = null, bool hasSpoiler = false);
 
 		Task<Message> SendVideoNoteAsync(long senderId, string base64Video, string caption = "", ParseMode parseMode = ParseMode.Html);
 		InlineKeyboardMarkup? BuildInlineButton(string? text, string? url);

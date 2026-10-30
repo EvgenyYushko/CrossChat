@@ -1278,6 +1278,17 @@
                     <div id="dynamicTelegramPaidContainer" style="display: none; flex-direction: column; gap: 12px; margin-top: 8px;"></div>
                 </div>
 
+                <!-- Блок спойлера Telegram (бесплатный блюр) -->
+                <div class="form-group" id="telegramSpoilerGroup" style="display: none; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 1.25rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600; margin: 0;">
+                        <input type="checkbox" id="hasSpoilerTelegramCheckbox" name="hasSpoilerTelegram" value="true" style="width: 18px; height: 18px; accent-color: #a855f7;">
+                        🙈 Скрыть фото/видео под спойлер (Telegram Spoiler)
+                    </label>
+                    <small style="display: block; margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">
+                        Медиафайлы покроются мерцающим блюром до клика читателя. В Instagram, Facebook и X контент выйдет обычным способом.
+                    </small>
+                </div>
+
                 <!-- Блок видео-кружочка Telegram -->
                 <div class="form-group" id="telegramVideoNoteGroup" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 1.25rem;">
                     <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 0.95rem; cursor: pointer; color: var(--text-main); font-weight: 600;">
@@ -2145,6 +2156,20 @@
                                 }
                             }
 
+                            // Подгружаем состояние спойлера:
+                            let isSpoilerSaved = false;
+                            for (let key in networks) {
+                                if (key.includes("Telegram") && networks[key]) {
+                                    if (networks[key].hasSpoiler || networks[key].HasSpoiler) {
+                                        isSpoilerSaved = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            const spoilerCb = document.getElementById('hasSpoilerTelegramCheckbox');
+                            if (spoilerCb) spoilerCb.checked = isSpoilerSaved;
+                            updateTelegramSpoilerVisibility();
+
                             const unifiedTgPaidCb = document.getElementById('unifiedTelegramPaidCheckbox');
                             if (unifiedTgPaidCb) unifiedTgPaidCb.checked = allSameStars;
 
@@ -2339,6 +2364,7 @@
                 dateClick: function(info) {
                     isEditMode = false;
                     resetModalFormState();
+                    updateTelegramSpoilerVisibility();
 
                     const currentNetwork = "@ViewBag.Network";
                     const postForm = document.getElementById('postForm');
@@ -2722,6 +2748,11 @@
                 const defaultRadio = document.querySelector('input[name="updateSeriesRadio"][value="false"]');
                 if (defaultRadio) defaultRadio.checked = true;
 
+                const spoilerCb = document.getElementById('hasSpoilerTelegramCheckbox');
+                if (spoilerCb) spoilerCb.checked = false;
+                const spoilerGroup = document.getElementById('telegramSpoilerGroup');
+                if (spoilerGroup) spoilerGroup.style.display = 'none';
+
                 cleanupPlannerVoice();
             }
 
@@ -2798,6 +2829,7 @@
                     updateTelegramButtonVisibility();
                     updateFirstCommentVisibility();
                     updateYouTubePrivacyVisibility();
+                    updateTelegramSpoilerVisibility();
                 }
             });
 
@@ -2838,7 +2870,7 @@
                 formData.append('networkType', form.querySelector('[name="networkType"]').value);
                 formData.append('showDate', form.querySelector('[name="showDate"]').value);
                 formData.append('postId', form.querySelector('[name="postId"]').value);
-
+                
                 const botIdInput = form.querySelector('[name="botId"]');
                 if (botIdInput && botIdInput.value) {
                     formData.append('botId', botIdInput.value);
@@ -2927,6 +2959,9 @@
                 // ==========================================================
                 const isUnifiedPaid = document.getElementById('unifiedTelegramPaidCheckbox')?.checked ?? true;
                 formData.append('isUnifiedTelegramPaid', isUnifiedPaid ? 'true' : 'false');
+
+                const isSpoilerChecked = document.getElementById('hasSpoilerTelegramCheckbox')?.checked ?? false;
+                formData.append('hasSpoilerTelegram', isSpoilerChecked ? 'true' : 'false');
 
                 if (isUnifiedPaid) {
                     // Единый режим звезд
@@ -3164,6 +3199,25 @@
             } else {
                 paidGroup.style.display = 'none';
             }
+        }
+
+        // Управление видимостью блока Спойлера Telegram
+        function updateTelegramSpoilerVisibility() {
+            const spoilerGroup = document.getElementById('telegramSpoilerGroup');
+            if (!spoilerGroup) return;
+
+            const currentNetwork = "@ViewBag.Network";
+            let isTgActive = false;
+
+            // 🚀 Если мы в одиночном режиме канала Telegram — чекбокс виден ВСЕГДА!
+            if (currentNetwork.includes("Telegram")) {
+                isTgActive = true;
+            } else if (currentNetwork === "All") {
+                const tgCheckboxes = document.querySelectorAll('input[name="selectedNetworks"][value*="Telegram"]:checked');
+                isTgActive = tgCheckboxes.length > 0;
+            }
+
+            spoilerGroup.style.display = isTgActive ? 'block' : 'none';
         }
 
         function updateTelegramVideoNoteVisibility() {
