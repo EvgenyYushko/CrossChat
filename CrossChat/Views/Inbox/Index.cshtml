@@ -307,15 +307,36 @@
             text-overflow: ellipsis;
         }
 
+        /* 🚀 СТИЛЬНАЯ КНОПКА "НАЗАД" (ИДЕАЛЬНО ВИДНА НА СВЕТЛОЙ И ТЕМНОЙ ТЕМЕ) */
         .back-to-list-btn {
             display: none;
-            background: none;
-            border: none;
-            color: var(--text-main);
-            font-size: 1.4rem;
+            background: var(--input-bg, rgba(125, 125, 125, 0.1));
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            color: var(--text-main) !important;
+            font-size: 1.15rem;
+            font-weight: 800;
+            width: 32px;
+            height: 32px;
             cursor: pointer;
-            padding: 4px;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-right: 4px;
+            padding: 0;
             line-height: 1;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .back-to-list-btn:hover {
+            background: var(--accent-color, #6366f1);
+            color: #ffffff !important;
+            border-color: var(--accent-color, #6366f1);
+        }
+
+        .back-to-list-btn:active {
+            transform: scale(0.92);
         }
 
         /* БЛОК HUMAN TAKEOVER */
@@ -569,10 +590,20 @@
                 display: block !important;
                 margin-right: 4px;
             }
-            /* Компактная шапка на телефоне */
+
+            /* Компактная шапка на телефоне: подстраивается под светлую и темную тему */
             .chat-header {
-                padding: 8px 10px !important;
-                background: #0f172a !important;
+                padding: 6px 8px !important;
+                background: var(--card-bg, #1e293b) !important;
+                border-bottom: 1px solid var(--glass-border) !important;
+            }
+            /* Также делаем панель ввода адаптивной */
+            .chat-input-panel {
+                background: var(--card-bg, #1e293b) !important;
+            }
+
+            .back-to-list-btn {
+                display: flex !important; /* Показываем как flex для идеальной центровки стрелки */
             }
 
             .chat-user-meta {
