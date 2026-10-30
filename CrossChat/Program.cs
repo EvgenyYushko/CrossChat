@@ -280,7 +280,13 @@ builder.Services.AddSession(options =>
 });
 
 // Добавляем SignalR в систему
-builder.Services.AddSignalR();
+// 🚀 НАСТРОЙКА SIGNALR: Пинг каждые 5 секунд спасает от таймаута Render (код 1006)
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5);      // Шлем пинг каждые 5 сек
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30); // Ждем ответ до 30 сек
+    options.EnableDetailedErrors = true;
+});
 
 // Регистрируем наш сервис логирования как Singleton
 builder.Services.AddSingleton<IUserConsoleService, UserConsole>();

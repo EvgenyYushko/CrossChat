@@ -2034,7 +2034,7 @@
 
         let isSendingManual = false;
 
-        // 4. БЫСТРАЯ ОТПРАВКА БЕЗ БЛОКИРОВОК КЛАВИАТУРЫ
+        // 4. НАДЕЖНАЯ ОТПРАВКА С ГАРАНТИРОВАННЫМ ПЕРЕВОДОМ
         async function sendManualMessage() {
             if (!currentConversationId) return;
 
@@ -2042,45 +2042,46 @@
             const text = input.value.trim();
             if (!text) return;
 
-            // Мгновенно очищаем поле и держим клавиатуру открытой
             input.value = '';
             input.focus();
 
-            let textToDisplay = text; // Русский текст на экране
-            let textToSend = text;    // Иностранный текст клиенту
+            let textToDisplay = text; // То, что видит менеджер на экране (русский)
+            let textToSend = text;    // То, что улетит клиенту в соцсеть
+            let isActuallyTranslated = false;
 
-            // 🚀 ПЕРЕВОД С ТАЙМАУТОМ (максимум 400мс, чтобы не тормозить отправку при быстрой печати):
+            // 🚀 ПЕРЕВОДИМ НАСТОЯЩИМ GOOGLE TRANSLATE (с нормальным запасом времени до 2.5 сек):
             if (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru') {
                 try {
-                    // Быстрый перевод через Promise.race с таймаутом 400мс
-                    const translatePromise = quickGoogleTranslate(text, 'ru', activeClientLang);
-                    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 400));
-                    const translated = await Promise.race([translatePromise, timeoutPromise]);
+                    const translated = await quickGoogleTranslate(text, 'ru', activeClientLang);
+                    if (translated && translated.trim().toLowerCase() !== text.toLowerCase()) {
+                        textToSend = translated; // В Instagram улетит ПОРТУГАЛЬСКИЙ!
+                        isActuallyTranslated = true;
 
-                    if (translated) {
-                        textToSend = translated;
                         translationCache.set(`auto_ru_${translated}`, textToDisplay);
                         translationCache.set(`auto_ru_${textToSend}`, textToDisplay);
                     }
-                } catch { }
+                } catch (e) {
+                    console.warn("Сбой перевода перед отправкой:", e);
+                }
             }
 
-            // Создаем бабл ожидания
             const stream = document.getElementById('messagesStream');
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+            // Создаем бабл ожидания
             const tempBubble = document.createElement('div');
             tempBubble.className = 'msg-bubble msg-outgoing-human';
             tempBubble.setAttribute('data-pending', 'true');
             tempBubble.dataset.text = textToSend;
             tempBubble.dataset.rawText = textToSend;
 
-            if (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru') {
-                tempBubble.innerHTML = `<div>${escapeHtml(textToDisplay)}</div><div class="msg-footer"><span class="msg-trans-badge">🌐 ${activeClientLang.toUpperCase()}</span><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
-            } else {
-                tempBubble.innerHTML = `<div>${escapeHtml(textToDisplay)}</div><div class="msg-footer"><span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
-            }
+            // 🚀 ВАЖНО: Бейдж [🌐 PT] показываем ТОЛЬКО если текст реально перевелся!
+            const badgeHtml = isActuallyTranslated
+                ? `<span class="msg-trans-badge">🌐 ${activeClientLang.toUpperCase()}</span>`
+                : '';
+
+            tempBubble.innerHTML = `<div>${escapeHtml(textToDisplay)}</div><div class="msg-footer">${badgeHtml}<span class="sender-tag" style="color:#ffffff;">👤 Вы</span><span>${timeStr}</span></div>`;
 
             stream.appendChild(tempBubble);
             scrollChatToBottom();
