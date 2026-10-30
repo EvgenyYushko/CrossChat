@@ -1646,7 +1646,7 @@
             .withAutomaticReconnect()
             .build();
 
-        // 2. ОБНОВЛЕННЫЙ СЛУШАТЕЛЬ SIGNALR (БЕЗ СДВИГА АРГУМЕНТОВ)
+        // 2. ОБНОВЛЕННЫЙ СЛУШАТЕЛЬ SIGNALR (С ЗАЩИТОЙ ОТ ЭХО-ДУБЛЕЙ И АВТОПЕРЕВОДОМ)
         connection.on("ReceiveInboxMessage", async (payload) => {
             console.log("⚡ [SignalR] Новое сообщение:", payload);
 
@@ -1654,47 +1654,60 @@
 
             if (currentConversationId && Number(currentConversationId) === Number(payload.conversationId)) {
                 const stream = document.getElementById('messagesStream');
+                if (!stream) return;
 
-                // 🚀 УМНАЯ ЗАЩИТА: Ищем точное совпадение среди ВСЕХ сообщений, ожидающих отправки:
-                if (!payload.isIncoming && !payload.isSentByBot && stream) {
-                    const pendingBubbles = stream.querySelectorAll(`.msg-outgoing-human[data-pending="true"]`);
-                    for (const pb of pendingBubbles) {
-                        // Сверяем текст без учета регистра и пробелов по краям:
-                        const pbText = (pb.dataset.text || '').trim().toLowerCase();
-                        const incomingText = (payload.text || '').trim().toLowerCase();
+                // 🚀 ЗАЩИТА 1: Если сообщение с таким ID уже есть на экране — выходим!
+                if (payload.messageId && stream.querySelector(`.msg-bubble[data-msg-id="${payload.messageId}"]`)) {
+                    return;
+                }
 
-                        if (pbText === incomingText) {
-                            pb.removeAttribute('data-pending');
-                            pb.dataset.msgId = payload.messageId;
-                            updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
-                            return; // Точный бабл найден и подтвержден, второй бабл не рисуем!
+                // 🚀 ЗАЩИТА 2: Если это наше исходящее сообщение (или эхо от Meta)
+                if (!payload.isIncoming && !payload.isSentByBot) {
+                    const incomingClean = (payload.text || '').trim().toLowerCase();
+
+                    // А. Сначала ищем среди баблов, ожидающих отправки (data-pending)
+                    const pendingBubble = stream.querySelector(`.msg-outgoing-human[data-pending="true"]`);
+                    if (pendingBubble) {
+                        pendingBubble.removeAttribute('data-pending');
+                        pendingBubble.dataset.msgId = payload.messageId;
+                        updateDialogSnippet(payload.conversationId, payload.lastSnippet, localTime, payload.unreadCount);
+                        return;
+                    }
+
+                    // Б. Ищем среди последних 3 отправленных баблов (поглощаем эхо-дубль от Meta!)
+                    const recentBubbles = Array.from(stream.querySelectorAll('.msg-outgoing-human')).slice(-3);
+                    for (const b of recentBubbles) {
+                        const bText = (b.dataset.rawText || b.dataset.text || '').trim().toLowerCase();
+                        if (bText === incomingClean) {
+                            // Это дублирующее эхо от Meta! Просто обновляем ID и ВЫХОДИМ (второй бабл не рисуем!)
+                            b.dataset.msgId = payload.messageId;
+                            return;
                         }
                     }
                 }
 
                 if (payload.isIncoming && payload.text) {
-                    // Если клиент прислал просто смайлик (нет букв) — НЕ сбрасываем язык, оставляем прежний!
                     if (/\p{L}/u.test(payload.text)) {
                         updateClientLanguage(payload.text);
                     }
                 }
 
-                // 🚀 ЕСЛИ ЭТО ВХОДЯЩЕЕ СООБЩЕНИЕ И ВКЛЮЧЕН СИНХРОННЫЙ ПЕРЕВОДЧИК:
+                // 🚀 АВТОПЕРЕВОД НА РУССКИЙ (для ВСЕХ иностранных сообщений, включая эхо):
                 let textToDisplay = payload.text;
                 let isAutoTranslated = false;
 
-                if (payload.isIncoming && isSyncTranslateActive && payload.text) {
-                    // Если в тексте иностранные буквы (нет кириллицы)
+                if (isSyncTranslateActive && payload.text) {
+                    // Если текст на иностранном языке (нет кириллицы, но есть буквы)
                     if (!/[а-яА-ЯёЁ]/.test(payload.text) && /\p{L}/u.test(payload.text)) {
                         const trans = await quickGoogleTranslate(payload.text, 'auto', 'ru');
                         if (trans) {
-                            textToDisplay = trans; // Будем показывать русский перевод!
+                            textToDisplay = trans;
                             isAutoTranslated = true;
                         }
                     }
                 }
 
-                // Вставляем бабл (в rawText сохраняем оригинал на случай выключения тумблера)
+                // Вставляем бабл
                 appendMessageBubble(
                     payload.messageId,
                     payload.text,
@@ -1707,8 +1720,8 @@
                     payload.mediaType
                 );
 
-                // Если сообщение перевелось на лету — подставляем русский текст и бейдж:
-                if (isAutoTranslated && stream) {
+                // Если переведено — подменяем текст на русский и ставим бейдж языка:
+                if (isAutoTranslated) {
                     const lastBubble = stream.lastElementChild;
                     if (lastBubble) {
                         const textNode = Array.from(lastBubble.children).find(c =>
@@ -1974,8 +1987,13 @@
                         const box = document.getElementById('syncTranslatorBox');
                         if (box) box.classList.add('active');
 
-                        // Переводим все сообщения диалога на русский сразу (из кэша за 0 мс!):
+                        // ВАЖНО: вешаем класс на ленту, чтобы убрать лишние кнопки "Перевести"
+                        stream.classList.add('sync-active-chat');
+
+                        // Переводим все сообщения диалога на русский сразу:
                         await applySyncTranslationToAllBubbles(true);
+                    } else {
+                        stream.classList.remove('sync-active-chat');
                     }
                 } 
                 else {
@@ -2007,32 +2025,38 @@
 
         let isSendingManual = false;
 
+        // 4. БЫСТРАЯ ОТПРАВКА БЕЗ БЛОКИРОВОК КЛАВИАТУРЫ
         async function sendManualMessage() {
-            if (!currentConversationId || isSendingManual) return; // <-- Защита от двойного клика
+            if (!currentConversationId) return;
 
             const input = document.getElementById('messageInput');
             const text = input.value.trim();
             if (!text) return;
 
-            isSendingManual = true; // Блокируем повтор на 100 мс
+            // Мгновенно очищаем поле и держим клавиатуру открытой
             input.value = '';
-            // Удерживаем клавиатуру на телефоне открытой:
             input.focus();
 
-            // Текст для отображения у нас (русский) и для отправки клиенту (иностранный)
-            let textToDisplay = text;
-            let textToSend = text;
+            let textToDisplay = text; // Русский текст на экране
+            let textToSend = text;    // Иностранный текст клиенту
 
-            // 🚀 1. ПЕРЕВОДИМ ДО ОТПРАВКИ, ЧТОБЫ БАБЛ СРАЗУ ПОЛУЧИЛ ПРАВИЛЬНЫЙ ВИД:
+            // 🚀 ПЕРЕВОД С ТАЙМАУТОМ (максимум 400мс, чтобы не тормозить отправку при быстрой печати):
             if (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru') {
-                const translated = await quickGoogleTranslate(text, 'ru', activeClientLang);
-                if (translated) {
-                    textToSend = translated; // Клиенту пойдет иностранный текст
-                    translationCache.set(`auto_ru_${translated}`, textToDisplay);
-                }
+                try {
+                    // Быстрый перевод через Promise.race с таймаутом 400мс
+                    const translatePromise = quickGoogleTranslate(text, 'ru', activeClientLang);
+                    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 400));
+                    const translated = await Promise.race([translatePromise, timeoutPromise]);
+
+                    if (translated) {
+                        textToSend = translated;
+                        translationCache.set(`auto_ru_${translated}`, textToDisplay);
+                        translationCache.set(`auto_ru_${textToSend}`, textToDisplay);
+                    }
+                } catch { }
             }
 
-            // 🚀 2. СОЗДАЕМ БАБЛ (Записываем textToSend в dataset.text для защиты от дублей в SignalR!):
+            // Создаем бабл ожидания
             const stream = document.getElementById('messagesStream');
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -2040,7 +2064,6 @@
             const tempBubble = document.createElement('div');
             tempBubble.className = 'msg-bubble msg-outgoing-human';
             tempBubble.setAttribute('data-pending', 'true');
-            // ВАЖНО: textToSend совпадет с тем, что вернет SignalR:
             tempBubble.dataset.text = textToSend;
             tempBubble.dataset.rawText = textToSend;
 
@@ -2079,8 +2102,6 @@
                 tempBubble.remove();
                 input.value = text;
                 alert("Ошибка сети при отправке сообщения");
-            } finally {
-                setTimeout(() => { isSendingManual = false; }, 150);
             }
         }
 
@@ -3224,7 +3245,9 @@
                             addOrUpdateTransBadge(bubble, activeClientLang || 'lang', rawText);
                         }
                     }
-                } else {
+                } 
+                
+                else {
                     // ВОЗВРАЩАЕМ ИСХОДНЫЙ ТЕКСТ:
                     textNode.innerHTML = escapeHtml(rawText);
                     removeTransBadge(bubble);
