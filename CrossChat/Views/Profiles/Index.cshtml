@@ -55,16 +55,32 @@
         h3 { font-size: 1.25rem; margin-bottom: 0.5rem; }
         p { color: var(--text-secondary); font-size: 0.9rem; }
 
-
+        /* 🚀 АДАПТИВНАЯ КНОПКА "ВЫЙТИ" (ВИДНА НА ОБЕИХ ТЕМАХ) */
         .logout-btn {
-            background: transparent;
+            background: var(--input-bg, rgba(125, 125, 125, 0.08));
             border: 1px solid var(--glass-border);
-            color: white;
-            padding: 6px 12px;
+            color: var(--text-main) !important; /* Тёмный на светлой теме, светлый на тёмной */
+            padding: 6px 14px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            line-height: 1;
         }
+
+            .logout-btn:hover {
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444 !important; /* При наведении подсвечивается мягким красным */
+                border-color: rgba(239, 68, 68, 0.35);
+                transform: translateY(-1px);
+            }
+
+            .logout-btn:active {
+                transform: scale(0.95);
+            }
 
         .card-actions {
             position: absolute;
@@ -79,16 +95,25 @@
             cursor: pointer;
             font-size: 1.5rem;
             padding: 5px 10px;
+            transition: color 0.2s ease;
         }
 
+            .dots-btn:hover {
+                color: var(--text-main);
+            }
+
+        /* 🚀 АДАПТИВНОЕ МЕНЮ ТРЁХ ТОЧЕК (ПОДСТРАИВАЕТСЯ ПОД ТЕМУ) */
         .dropdown-menu {
             display: none;
             position: absolute;
             right: 0;
-            background: #1a1a1a;
+            background: var(--card-bg, #1e293b);
             border: 1px solid var(--glass-border);
-            border-radius: 8px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
             z-index: 10;
+            overflow: hidden;
+            min-width: 150px;
         }
 
             .dropdown-menu.show {
@@ -97,15 +122,35 @@
 
         .dropdown-item {
             display: block;
-            padding: 8px 15px;
-            color: white;
+            padding: 10px 16px;
+            color: var(--text-main); /* 🚀 УБРАЛИ !important — теперь цвет не перебивает красную кнопку */
             text-decoration: none;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
         }
 
             .dropdown-item:hover {
-                background: #333;
+                background: rgba(125, 125, 125, 0.1);
             }
+
+            /* 🔴 КРАСНЫЙ СТИЛЬ ДЛЯ КНОПКИ УДАЛЕНИЯ */
+            .dropdown-item[style*="red"],
+            .dropdown-item[style*="color:red"] {
+                color: #ef4444 !important; /* Приятный современный красный цвет вместо резкого браузерного */
+            }
+
+                .dropdown-item[style*="red"]:hover,
+                .dropdown-item[style*="color:red"]:hover {
+                    background: rgba(239, 68, 68, 0.12) !important;
+                    color: #dc2626 !important;
+                }
+
+            .dropdown-item:hover {
+                background: rgba(125, 125, 125, 0.1);
+            }
+        
     </style>
 }
 
