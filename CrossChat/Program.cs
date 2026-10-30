@@ -200,6 +200,15 @@ builder.Services.AddQuartz(q =>
 		.ForJob(driveGcKey)
 		.WithIdentity($"{nameof(GoogleDriveMaintenanceJob)}-Trigger")
 		.WithCronSchedule("0 0 4 1 * ?"));
+
+	// 12. Плановая ночная очистка архивных сообщений в чатах Инбокса (каждую ночь в 03:30)
+	var inboxGcKey = new JobKey(nameof(InboxCleanupJob));
+	q.AddJob<InboxCleanupJob>(opts => opts.WithIdentity(inboxGcKey));
+	q.AddTrigger(opts => opts
+		.ForJob(inboxGcKey)
+		.WithIdentity($"{nameof(InboxCleanupJob)}-Trigger")
+		// Запуск каждую ночь в 03:30 по расписанию:
+		.WithCronSchedule("0 30 3 * * ?"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
