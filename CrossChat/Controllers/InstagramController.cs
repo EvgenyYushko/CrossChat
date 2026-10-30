@@ -596,5 +596,120 @@ namespace CrossChat.Controllers
 			var insights = await _instagramService.GetMediaInsightsAsync(mediaId, mediaType, settings.AccessToken);
 			return Json(insights);
 		}
+
+		// ==========================================================
+		// РАБОТА С КОММЕНТАРИЯМИ ПОСТА (COMMUNITY MANAGEMENT)
+		// ==========================================================
+
+		/// <summary>
+		/// 1. Получить дерево комментариев и ответов для поста
+		/// </summary>
+		[HttpGet("analytics/comments")]
+		public async Task<IActionResult> GetPostComments([FromQuery] int botId, [FromQuery] string mediaId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return Unauthorized();
+
+			var comments = await _instagramService.GetMediaCommentsAsync(mediaId, settings.AccessToken);
+			return Json(comments);
+		}
+
+		/// <summary>
+		/// 2. Ответить на конкретный комментарий пользователя (вложенный ответ)
+		/// </summary>
+		[HttpPost("analytics/comments/reply")]
+		public async Task<IActionResult> ReplyToComment([FromBody] IgReplyCommentDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto.Text))
+				return BadRequest("Текст ответа не может быть пустым.");
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.Id == dto.BotId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return Unauthorized();
+
+			var replyId = await _instagramService.ReplyToCommentAsync(dto.CommentId, dto.Text.Trim(), settings.AccessToken);
+			if (string.IsNullOrEmpty(replyId))
+				return BadRequest("Не удалось отправить ответ в Instagram.");
+
+			return Ok(new { success = true, id = replyId });
+		}
+
+		/// <summary>
+		/// 3. Опубликовать новый корневой комментарий под постом
+		/// </summary>
+		[HttpPost("analytics/comments/create")]
+		public async Task<IActionResult> CreatePostComment([FromBody] IgCreateCommentDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto.Text))
+				return BadRequest("Текст комментария не может быть пустым.");
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.Id == dto.BotId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return Unauthorized();
+
+			var commentId = await _instagramService.CreateCommentAsync(dto.MediaId, dto.Text.Trim(), settings.AccessToken);
+			if (string.IsNullOrEmpty(commentId))
+				return BadRequest("Не удалось опубликовать комментарий в Instagram.");
+
+			return Ok(new { success = true, id = commentId });
+		}
+
+		/// <summary>
+		/// 4. Удалить комментарий или ответ (модерация спама)
+		/// </summary>
+		[HttpPost("analytics/comments/delete")]
+		public async Task<IActionResult> DeleteComment([FromBody] IgDeleteCommentDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.Id == dto.BotId && s.UserId == userId);
+
+			if (settings == null || string.IsNullOrEmpty(settings.AccessToken))
+				return Unauthorized();
+
+			bool success = await _instagramService.DeleteCommentAsync(dto.CommentId, settings.AccessToken);
+			if (!success)
+				return BadRequest("Не удалось удалить комментарий в Instagram.");
+
+			return Ok(new { success = true });
+		}
+	}
+
+	public class IgReplyCommentDto
+	{
+		public int BotId { get; set; }
+		public string CommentId { get; set; } = string.Empty;
+		public string Text { get; set; } = string.Empty;
+	}
+
+	public class IgCreateCommentDto
+	{
+		public int BotId { get; set; }
+		public string MediaId { get; set; } = string.Empty;
+		public string Text { get; set; } = string.Empty;
+	}
+
+	public class IgDeleteCommentDto
+	{
+		public int BotId { get; set; }
+		public string CommentId { get; set; } = string.Empty;
 	}
 }

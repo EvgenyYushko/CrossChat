@@ -415,6 +415,315 @@
             font-weight: 600;
             user-select: none;
         }
+
+        /* 🚀 СТИЛИ КЛИКАБЕЛЬНОГО СЧЁТЧИКА КОММЕНТАРИЕВ НА КАРТОЧКЕ */
+        .btn-comment-counter {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            color: #38bdf8 !important;
+            border-radius: 8px;
+            padding: 3px 8px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+        }
+
+            .btn-comment-counter:hover {
+                background: #38bdf8;
+                color: #ffffff !important;
+                transform: scale(1.05);
+            }
+
+        /* 🚀 ВЫДВИЖНАЯ ШТОРКА КОММЕНТАРИЕВ (OFFCANVAS DRAWER) */
+        .comments-drawer-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            z-index: 6000;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+            .comments-drawer-overlay.active {
+                display: block;
+                opacity: 1;
+            }
+
+        .comments-drawer {
+            position: fixed;
+            top: 0;
+            right: -480px;
+            width: 100%;
+            max-width: 440px;
+            height: 100vh;
+            height: 100dvh;
+            background: var(--card-bg, #1e293b);
+            border-left: 1px solid var(--glass-border);
+            box-shadow: -10px 0 35px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            z-index: 6001;
+            transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+            .comments-drawer.open {
+                right: 0;
+            }
+
+        .drawer-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.2);
+            flex-shrink: 0;
+        }
+
+        .drawer-post-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .drawer-post-thumb {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+
+        .drawer-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.6rem;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+            .drawer-close-btn:hover {
+                color: var(--text-main);
+            }
+
+        /* ЛЕНТА ДЕРЕВА КОММЕНТАРИЕВ */
+        .drawer-body {
+            flex: 1 1 0;
+            min-height: 0;
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .comment-item-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .comment-main-card {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            position: relative;
+        }
+
+        .comment-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 800;
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+
+        .comment-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .comment-author-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+        }
+
+        .comment-username {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .comment-time {
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+        }
+
+        .comment-text {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: var(--text-main);
+            word-wrap: break-word;
+        }
+
+        .comment-actions-line {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 2px;
+            font-size: 0.75rem;
+        }
+
+        .btn-reply-action {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0;
+            font-weight: 600;
+            transition: color 0.15s;
+        }
+
+            .btn-reply-action:hover {
+                color: var(--accent-color, #6366f1);
+            }
+
+        .btn-delete-comment {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0;
+            font-size: 0.8rem;
+            opacity: 0.6;
+            transition: opacity 0.15s;
+        }
+
+            .btn-delete-comment:hover {
+                opacity: 1;
+                color: #ef4444;
+            }
+
+        /* ВЛОЖЕННЫЕ ОТВЕТЫ (REPLIES С ПОЛОСКОЙ СВЯЗИ) */
+        .comment-replies-list {
+            margin-left: 20px;
+            padding-left: 14px;
+            border-left: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 6px;
+        }
+
+        /* ПОДВАЛ ВВОДА КОММЕНТАРИЯ */
+        .drawer-footer {
+            padding: 0.75rem 1.25rem;
+            border-top: 1px solid var(--glass-border);
+            background: var(--card-bg, #1e293b);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .replying-target-badge {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            color: #818cf8;
+            font-weight: 600;
+        }
+
+        .drawer-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .drawer-textarea {
+            flex: 1;
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            padding: 8px 12px;
+            font-size: 0.88rem;
+            resize: none;
+            outline: none;
+            height: 38px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+            .drawer-textarea:focus {
+                border-color: var(--accent-color, #6366f1);
+            }
+
+        .btn-drawer-send {
+            background: var(--accent-color, #6366f1);
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1rem;
+            flex-shrink: 0;
+            transition: transform 0.15s ease;
+        }
+
+            .btn-drawer-send:active {
+                transform: scale(0.92);
+            }
+
+        /* Адаптив для телефонов */
+        @@media (max-width: 600px) {
+            .comments-drawer {
+                max-width: 100% !important;
+                right: -100% !important;
+            }
+
+                .comments-drawer.open {
+                    right: 0 !important;
+                }
+        }
     </style>
 }
 
@@ -595,7 +904,11 @@
                     <div class="post-body">
                         <div class="post-stats-row">
                             <span style="color: #ef4444;">❤️ @post.LikeCount.ToString("N0")</span>
-                            <span style="color: #38bdf8;">💬 @post.CommentsCount.ToString("N0")</span>
+                            <button type="button" class="btn-comment-counter"
+                                    onclick="openCommentsDrawer('@post.Id', '@(post.ThumbnailUrl ?? post.MediaUrl)', '@@(Escape(post.Caption))', @post.CommentsCount)"
+                                    title="Посмотреть и ответить на комментарии">
+                                💬 @post.CommentsCount.ToString("N0")
+                            </button>
                             <span style="font-size: 0.75rem; color: var(--text-secondary);">@post.Timestamp.ToString("dd.MM.yyyy")</span>
                         </div>
 
@@ -697,6 +1010,47 @@
         </div>
     </div>
 </div>
+
+<!-- ВЫДВИЖНАЯ ШТОРКА КОММЕНТАРИЕВ (INSTAGRAM COMMUNITY DRAWER) -->
+<div id="commentsDrawerOverlay" class="comments-drawer-overlay" onclick="closeCommentsDrawer()"></div>
+
+<div id="commentsDrawer" class="comments-drawer">
+    <!-- ШАПКА ШТОРКИ -->
+    <div class="drawer-header">
+        <div class="drawer-post-meta">
+            <img id="drawerPostThumb" src="/images/placeholder.jpg" class="drawer-post-thumb" alt="Post thumbnail">
+            <div style="min-width:0; flex:1;">
+                <h4 style="margin:0; font-size:0.95rem; font-weight:800; color:var(--text-main);" id="drawerTitle">Комментарии</h4>
+                <div style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="drawerCaption">
+                    Подпись публикации...
+                </div>
+            </div>
+        </div>
+        <button type="button" class="drawer-close-btn" onclick="closeCommentsDrawer()">&times;</button>
+    </div>
+
+    <!-- ТЕЛО ШТОРКИ (ДЕРЕВО КОММЕНТАРИЕВ) -->
+    <div class="drawer-body" id="drawerCommentsStream">
+        <div style="text-align:center; padding:3rem 1rem; color:var(--text-secondary);">
+            ⏳ Загрузка комментариев...
+        </div>
+    </div>
+
+    <!-- ПОДВАЛ ВВОДА ОТВЕТА -->
+    <div class="drawer-footer">
+        <!-- БЕЙДЖ ЦЕЛИ ОТВЕТА (СКРЫТ ПО УМОЛЧАНИЮ) -->
+        <div id="replyTargetBadge" class="replying-target-badge">
+            <span id="replyTargetText">✍️ Ответ для @@username</span>
+            <button type="button" onclick="cancelReplyTarget()" style="background:none; border:none; color:inherit; font-weight:bold; cursor:pointer;">✕</button>
+        </div>
+
+        <div class="drawer-input-row">
+            <textarea id="drawerCommentInput" class="drawer-textarea" placeholder="Оставьте комментарий..." onkeydown="handleDrawerInputKey(event)"></textarea>
+            <button type="button" class="btn-drawer-send" id="btnSendComment" onclick="submitDrawerComment()">➤</button>
+        </div>
+    </div>
+</div>
+
 
 @section Scripts {
     <script>
@@ -832,5 +1186,269 @@
             document.getElementById('insightsModalOverlay').style.display = 'none';
             document.getElementById('modalErProgress').style.width = '0%';
         }
+
+        // === ЛОГИКА ШТОРКИ КОММЕНТАРИЕВ (OFFCANVAS DRAWER) ===
+        let currentDrawerMediaId = null;
+        let currentReplyTarget = null; // { commentId: "...", username: "..." }
+
+        // 1. ОТКРЫТИЕ ШТОРКИ
+        async function openCommentsDrawer(mediaId, thumbUrl, captionText, count) {
+            currentDrawerMediaId = mediaId;
+            currentReplyTarget = null;
+
+            const overlay = document.getElementById('commentsDrawerOverlay');
+            const drawer = document.getElementById('commentsDrawer');
+            const thumb = document.getElementById('drawerPostThumb');
+            const title = document.getElementById('drawerTitle');
+            const caption = document.getElementById('drawerCaption');
+            const input = document.getElementById('drawerCommentInput');
+
+            if (thumb) thumb.src = thumbUrl || '/images/placeholder.jpg';
+            if (title) title.textContent = `Комментарии (${count || 0})`;
+            if (caption) caption.textContent = captionText || 'Без описания';
+            if (input) input.value = '';
+
+            cancelReplyTarget();
+
+            // Плавный выезд шторки
+            overlay.classList.add('active');
+            setTimeout(() => drawer.classList.add('open'), 10);
+
+            // Загружаем комментарии
+            await loadPostComments(mediaId);
+        }
+
+        // 2. ЗАКРЫТИЕ ШТОРКИ
+        function closeCommentsDrawer() {
+            const overlay = document.getElementById('commentsDrawerOverlay');
+            const drawer = document.getElementById('commentsDrawer');
+
+            drawer.classList.remove('open');
+            setTimeout(() => {
+                overlay.classList.remove('active');
+                currentDrawerMediaId = null;
+                currentReplyTarget = null;
+            }, 280);
+        }
+
+        // Закрытие по Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeCommentsDrawer();
+        });
+
+        // 3. ЗАГРУЗКА ДЕРЕВА КОММЕНТАРИЕВ ЧЕРЕЗ API
+        async function loadPostComments(mediaId) {
+            const stream = document.getElementById('drawerCommentsStream');
+            stream.innerHTML = '<div style="text-align:center; padding:3rem 1rem; color:var(--text-secondary);">⏳ Загрузка комментариев...</div>';
+
+            try {
+                const res = await fetch(`/instagram/analytics/comments?botId=${botId}&mediaId=${mediaId}`);
+                if (!res.ok) throw new Error("Ошибка загрузки");
+
+                const comments = await res.json();
+                renderCommentsTree(comments);
+            } catch (err) {
+                stream.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Не удалось загрузить комментарии</div>';
+            }
+        }
+
+        // 4. ОТРИСОВКА ДЕРЕВА КОММЕНТАРИЕВ
+        function renderCommentsTree(comments) {
+            const stream = document.getElementById('drawerCommentsStream');
+            stream.innerHTML = '';
+
+            if (!comments || comments.length === 0) {
+                stream.innerHTML = `
+                    <div style="text-align:center; padding:3rem 1rem; color:var(--text-secondary);">
+                        <div style="font-size:2.5rem; margin-bottom:0.5rem;">💬</div>
+                        <div style="font-weight:700; color:var(--text-main);">Пока нет комментариев</div>
+                        <div style="font-size:0.8rem; margin-top:4px;">Напишите первый комментарий под этим постом!</div>
+                    </div>`;
+                return;
+            }
+
+            comments.forEach(c => {
+                const wrap = document.createElement('div');
+                wrap.className = 'comment-item-wrap';
+                wrap.id = `comment_${c.id}`;
+
+                // Главный (корневой) комментарий
+                wrap.appendChild(createCommentNode(c, false));
+
+                // Вложенные ответы (Replies)
+                if (c.replies && c.replies.length > 0) {
+                    const repliesContainer = document.createElement('div');
+                    repliesContainer.className = 'comment-replies-list';
+
+                    c.replies.forEach(r => {
+                        repliesContainer.appendChild(createCommentNode(r, true, c.id));
+                    });
+
+                    wrap.appendChild(repliesContainer);
+                }
+
+                stream.appendChild(wrap);
+            });
+        }
+
+        // Вспомогательная функция создания карточки одного комментария/ответа
+        function createCommentNode(c, isReply = false, parentId = null) {
+            const card = document.createElement('div');
+            card.className = 'comment-main-card';
+            card.id = `node_${c.id}`;
+
+            const initials = (c.username || 'U').substring(0, 2).toUpperCase();
+            const formattedTime = formatCommentTime(c.timestamp);
+
+            card.innerHTML = `
+                <div class="comment-avatar" style="${isReply ? 'width:26px; height:26px; font-size:0.65rem;' : ''}">${initials}</div>
+                <div class="comment-content">
+                    <div class="comment-author-line">
+                        <span class="comment-username">@@${escapeHtml(c.username)}</span>
+                        <span class="comment-time">${formattedTime}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(c.text)}</div>
+                    <div class="comment-actions-line">
+                        <button type="button" class="btn-reply-action" onclick="setReplyTarget('${parentId || c.id}', '${escapeHtml(c.username)}')">Ответить</button>
+                        <button type="button" class="btn-delete-comment" onclick="deleteComment('${c.id}')" title="Удалить комментарий">🗑️</button>
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // 5. ВЫБОР ЦЕЛИ ДЛЯ ОТВЕТА (REPLY)
+        function setReplyTarget(commentId, username) {
+            currentReplyTarget = { commentId, username };
+
+            const badge = document.getElementById('replyTargetBadge');
+            const text = document.getElementById('replyTargetText');
+            const input = document.getElementById('drawerCommentInput');
+
+            badge.style.display = 'flex';
+            text.textContent = `✍️ Ответ для @@${username}`;
+
+            input.placeholder = `Ответить @@${username}...`;
+            input.focus();
+        }
+
+        function cancelReplyTarget() {
+            currentReplyTarget = null;
+
+            const badge = document.getElementById('replyTargetBadge');
+            const input = document.getElementById('drawerCommentInput');
+
+            if (badge) badge.style.display = 'none';
+            if (input) input.placeholder = 'Оставьте комментарий...';
+        }
+
+        // 6. ОТПРАВКА КОММЕНТАРИЯ ИЛИ ОТВЕТА
+        async function submitDrawerComment() {
+            if (!currentDrawerMediaId) return;
+
+            const input = document.getElementById('drawerCommentInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const btn = document.getElementById('btnSendComment');
+            btn.disabled = true;
+
+            try {
+                let res;
+
+                // Если это ответ на конкретный комментарий:
+                if (currentReplyTarget) {
+                    res = await fetch('/instagram/analytics/comments/reply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            botId: botId,
+                            commentId: currentReplyTarget.commentId,
+                            text: text
+                        })
+                    });
+                } 
+                // Иначе — новый корневой комментарий к посту:
+                else {
+                    res = await fetch('/instagram/analytics/comments/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            botId: botId,
+                            mediaId: currentDrawerMediaId,
+                            text: text
+                        })
+                    });
+                }
+
+                if (res.ok) {
+                    input.value = '';
+                    cancelReplyTarget();
+                    // Перезагружаем дерево комментариев для отображения нового ответа
+                    await loadPostComments(currentDrawerMediaId);
+                } else {
+                    const err = await res.text();
+                    alert("Ошибка отправки: " + err);
+                }
+            } catch {
+                alert("Сетевая ошибка при отправке комментария.");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function handleDrawerInputKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitDrawerComment();
+            }
+        }
+
+        // 7. УДАЛЕНИЕ КОММЕНТАРИЯ (СПАМА)
+        async function deleteComment(commentId) {
+            if (!confirm("Удалить этот комментарий из Instagram?")) return;
+
+            const node = document.getElementById(`node_${commentId}`) || document.getElementById(`comment_${commentId}`);
+            if (node) node.style.opacity = '0.4';
+
+            try {
+                const res = await fetch('/instagram/analytics/comments/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ botId: botId, commentId: commentId })
+                });
+
+                if (res.ok) {
+                    if (node) {
+                        node.style.transition = 'all 0.3s ease';
+                        node.style.maxHeight = '0';
+                        node.style.overflow = 'hidden';
+                        setTimeout(() => node.remove(), 300);
+                    }
+                } else {
+                    if (node) node.style.opacity = '1';
+                    alert("Не удалось удалить комментарий в Instagram.");
+                }
+            } catch {
+                if (node) node.style.opacity = '1';
+                alert("Сетевая ошибка при удалении комментария.");
+            }
+        }
+
+        function formatCommentTime(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Вспомогательный экранировщик текста в C# строках
+        function escapeHtml(str) {
+            if (!str) return '';
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+
     </script>
 }

@@ -58,8 +58,6 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<(string? username, string? instagramScopedUserId, string? profilePicUrl)> GetMeInfo(string? accessToken);
 
-		Task ReplyToCommentAsync(string commentId, string text, string accessToken);
-
 		Task<string?> CreateCommentAsync(string mediaId, string text, string accessToken);
 
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
@@ -83,5 +81,23 @@ namespace CrossChat.Integrations.Interfaces
 		Task<List<InstagramConversationSummaryDto>> GetRecentConversationsAsync(string accessToken, string businessAccountId, int limit = 15);
 
 		Task<string?> SendMediaAttachmentAsync(string recipientId, string mediaType, string mediaUrl, string accessToken);
+
+		// === КОММЕНТАРИИ ПОСТОВ INSTAGRAM ===
+
+		/// <summary>
+		/// Получает дерево комментариев поста с вложенными ответами (Replies)
+		/// </summary>
+		Task<List<InstagramCommentItemDto>> GetMediaCommentsAsync(string mediaId, string accessToken);
+
+		
+		/// <summary>
+		/// Отправляет ответ на конкретный комментарий и возвращает ID созданного ответа
+		/// </summary>
+		Task<string?> ReplyToCommentAsync(string commentId, string text, string accessToken);
+
+		/// <summary>
+		/// Удаляет комментарий или ответ в Instagram (для модерации спама)
+		/// </summary>
+		Task<bool> DeleteCommentAsync(string commentId, string accessToken);
 	}
 }

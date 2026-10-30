@@ -277,23 +277,154 @@ public partial class InstagramService : IInstagramService
 		return JsonSerializer.Deserialize<InstagramUserProfile>(json);
 	}
 
-	public async Task ReplyToCommentAsync(string commentId, string text, string accessToken)
+	public async Task<string?> ReplyToCommentAsync(string commentId, string text, string accessToken)
 	{
 		var url = $"{ApiVersion}/{commentId}/replies?access_token={accessToken}";
-
 		var payload = new { message = text };
-		var response = await _httpClient.PostAsJsonAsync(url, payload);
 
-		if (response.IsSuccessStatusCode)
+		try
 		{
-			_logger.LogInformation($"[Instagram] ✅ Ответ на комментарий {commentId} отправлен.");
+			var response = await _httpClient.PostAsJsonAsync(url, payload);
+			var content = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				using var doc = JsonDocument.Parse(content);
+				string? replyId = doc.RootElement.TryGetProperty("id", out var idElem) ? idElem.GetString() : null;
+				_logger.LogInformation("[Instagram] ✅ Ответ на комментарий {CommentId} отправлен. Reply ID: {ReplyId}", commentId, replyId);
+				return replyId;
+			}
+
+			_logger.LogError("[Instagram] ❌ Ошибка ответа на коммент: {Error}", content);
+			return null;
 		}
-		else
+		catch (Exception ex)
 		{
-			var errorContent = await response.Content.ReadAsStringAsync();
-			_logger.LogError($"[Instagram] ❌ Ошибка ответа на коммент: {errorContent}");
-			throw new Exception($"Instagram API Error: {errorContent}");
+			_logger.LogError(ex, "[Instagram] Исключение при ответе на комментарий {CommentId}", commentId);
+			return null;
 		}
+	}
+
+	/// <summary>
+	/// Получает все комментарии к публикации со всеми вложенными ответами за 1 сетевой запрос
+	/// </summary>
+	public async Task<List<InstagramCommentItemDto>> GetMediaCommentsAsync(string mediaId, string accessToken)
+	{
+		var result = new List<InstagramCommentItemDto>();
+
+		// Запрашиваем комментарии и вложенный массив replies за один вызов Graph API
+		string fields = "id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}";
+		string url = $"{ApiVersion}/{mediaId}/comments?fields={fields}&limit=50&access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.GetAsync(url);
+			var json = await response.Content.ReadAsStringAsync();
+
+			if (!response.IsSuccessStatusCode)
+			{
+				_logger.LogWarning("[Instagram Comments] Ошибка загрузки комментариев для {MediaId} (HTTP {Code}): {Err}",
+					mediaId, response.StatusCode, json);
+				return result;
+			}
+
+			using var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			if (root.TryGetProperty("data", out var dataArr))
+			{
+				foreach (var item in dataArr.EnumerateArray())
+				{
+					var comment = ParseSingleComment(item);
+					if (comment == null) continue;
+
+					// Парсим вложенные ответы (Replies), если они есть
+					if (item.TryGetProperty("replies", out var repliesObj) &&
+						repliesObj.TryGetProperty("data", out var repliesArr))
+					{
+						foreach (var rItem in repliesArr.EnumerateArray())
+						{
+							var reply = ParseSingleComment(rItem);
+							if (reply != null)
+							{
+								comment.Replies.Add(reply);
+							}
+						}
+
+						// Сортируем ответы в ветке хронологически (старые сверху, новые снизу)
+						comment.Replies = comment.Replies.OrderBy(r => r.Timestamp).ToList();
+					}
+
+					result.Add(comment);
+				}
+
+				// Сортируем корневые комментарии: свежие сверху (или наоборот, по желанию)
+				result = result.OrderByDescending(c => c.Timestamp).ToList();
+			}
+
+			_logger.LogInformation("[Instagram Comments] Успешно загружено корневых комментариев: {Count} для поста {MediaId}", result.Count, mediaId);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram Comments] Исключение при получении комментариев для {MediaId}", mediaId);
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Удаляет комментарий или ответ в Instagram (модерация спама)
+	/// </summary>
+	public async Task<bool> DeleteCommentAsync(string commentId, string accessToken)
+	{
+		if (string.IsNullOrEmpty(commentId)) return false;
+
+		string url = $"{ApiVersion}/{commentId}?access_token={accessToken}";
+
+		try
+		{
+			var response = await _httpClient.DeleteAsync(url);
+			if (response.IsSuccessStatusCode)
+			{
+				_logger.LogInformation("🗑️ [Instagram Comments] Комментарий {CommentId} успешно удален.", commentId);
+				return true;
+			}
+
+			var err = await response.Content.ReadAsStringAsync();
+			_logger.LogWarning("[Instagram Comments] Не удалось удалить комментарий {CommentId}: {Err}", commentId, err);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "[Instagram Comments] Ошибка при удалении комментария {CommentId}", commentId);
+			return false;
+		}
+	}
+
+	// Вспомогательный безопасный парсер одного комментария/ответа
+	private static InstagramCommentItemDto? ParseSingleComment(JsonElement elem)
+	{
+		if (!elem.TryGetProperty("id", out var idProp)) return null;
+
+		string id = idProp.GetString()!;
+		string text = elem.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
+		string username = elem.TryGetProperty("username", out var u) ? u.GetString() ?? "user" : "user";
+		int likes = elem.TryGetProperty("like_count", out var lc) ? lc.GetInt32() : 0;
+
+		DateTime dt = DateTime.UtcNow;
+		if (elem.TryGetProperty("timestamp", out var ts) && DateTime.TryParse(ts.GetString(), out var parsedDate))
+		{
+			dt = parsedDate.ToUniversalTime();
+		}
+
+		return new InstagramCommentItemDto
+		{
+			Id = id,
+			Text = text,
+			Username = username,
+			LikeCount = likes,
+			Timestamp = dt
+		};
 	}
 
 	/// <summary>
