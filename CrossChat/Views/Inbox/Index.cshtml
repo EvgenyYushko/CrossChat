@@ -1642,8 +1642,11 @@
 
         // 1. SIGNALR
         const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/inboxHub")
-            .withAutomaticReconnect()
+            .withUrl("/inboxHub", {
+                // Если прокси временно заблокирует WebSocket — SignalR плавно перейдет на LongPolling без ошибки:
+                transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+            })
+            .withAutomaticReconnect([0, 2000, 5000, 10000, 20000]) // Плавные попытки реконнекта
             .build();
 
         // 2. ОБНОВЛЕННЫЙ СЛУШАТЕЛЬ SIGNALR (С ЗАЩИТОЙ ОТ ЭХО-ДУБЛЕЙ И АВТОПЕРЕВОДОМ)
@@ -1830,10 +1833,14 @@
             }, { passive: false });
         }
 
-        // 2. ЗАГРУЗКА ДИАЛОГОВ
-        async function loadDialogs() {
+        // 🚀 БЕСШОВНАЯ ЗАГРУЗКА (если isSilent=true — экран НЕ моргает!)
+        async function loadDialogs(isSilent = false) {
             const container = document.getElementById('dialogsContainer');
-            container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">⏳ Загрузка диалогов...</div>';
+
+            // Показываем спиннер "Загрузка..." ТОЛЬКО при первом открытии страницы:
+            if (!isSilent && (!allLoadedDialogs || allLoadedDialogs.length === 0)) {
+                container.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">⏳ Загрузка диалогов...</div>';
+            }
 
             try {
                 const res = await fetch(`/inbox/dialogs?profileId=${profileId}&network=${currentNetworkFilter}`);
@@ -1842,7 +1849,9 @@
                 allLoadedDialogs = await res.json();
                 renderDialogsList(allLoadedDialogs);
             } catch (err) {
-                container.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Ошибка загрузки диалогов</div>';
+                if (!isSilent) {
+                    container.innerHTML = '<div style="text-align:center; padding:2rem; color:#ef4444;">❌ Ошибка загрузки диалогов</div>';
+                }
             }
         }
 
@@ -2529,7 +2538,8 @@
                     await connection.invoke("JoinProfileRoom", profileId);
                     console.log("✅ [SignalR] Успешно вернулись в комнату профиля!");
                     // Освежаем список диалогов на случай, если что-то пропустили во время обрыва
-                    await loadDialogs();
+                    // 🚀 Передаем true: диалоги обновятся тихо в памяти, без моргания экрана!
+                    await loadDialogs(true);
                 } catch (e) {
                     console.error("Ошибка повторного входа в комнату:", e);
                 }
