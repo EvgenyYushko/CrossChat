@@ -2009,16 +2009,21 @@
                     stream.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-secondary);">История сообщений пуста</div>';
                 }
 
-                // Прокрутка вниз
-                scrollChatToBottom();
-
-                // Мобильный режим: открываем чат на весь экран и фиксируем состояние в истории
+                // 1. СНАЧАЛА открываем чат на весь экран на телефоне (чтобы браузер посчитал размеры):
                 const card = document.getElementById('inboxCard');
                 if (card) {
                     card.classList.add('mobile-chat-open');
                     if (window.innerWidth <= 768) {
                         history.pushState({ mobileChatOpen: true }, "");
                     }
+                }
+
+                // 2. СРАЗУ прокручиваем в самый низ:
+                scrollChatToBottom(false);
+
+                // 3. Если работал синхронный перевод — дожимаем вниз после перевода:
+                if (isSyncTranslateActive) {
+                    setTimeout(() => scrollChatToBottom(false), 200);
                 }
 
             } catch (err) {
@@ -2231,6 +2236,7 @@
                     mediaHtml = `
                         <div class="msg-media-container">
                             <img src="${srcUrl}" class="msg-media-img" alt="Photo"
+                                 onload="onMediaImageLoaded()"
                                  onclick="openInboxLightbox('${srcUrl}')"
                                  onerror="handleMediaExpired(this, '📷 Фотография')">
                         </div>
@@ -2414,13 +2420,33 @@
             return p.innerHTML;
         }
 
-        function scrollChatToBottom() {
+        // 🚀 БРОНЕБОЙНЫЙ СКРОЛЛ В САМЫЙ НИЗ (срабатывает в 4 фазы по мере догрузки контента)
+        function scrollChatToBottom(smooth = false) {
             const stream = document.getElementById('messagesStream');
-            if (stream) {
-                setTimeout(() => {
-                    stream.scrollTop = stream.scrollHeight;
-                }, 80);
-            }
+            if (!stream) return;
+
+            const doScroll = () => {
+                stream.scrollTo({
+                    top: stream.scrollHeight,
+                    behavior: smooth ? 'smooth' : 'auto'
+                });
+            };
+
+            // 1. Мгновенно в этот же миг
+            doScroll();
+            // 2. В следующем кадре анимации браузера
+            requestAnimationFrame(doScroll);
+            // 3. Через 60мс (когда отрендерился DOM и шрифты)
+            setTimeout(doScroll, 60);
+            // 4. Через 180мс (когда применился синхронный перевод)
+            setTimeout(doScroll, 180);
+            // 5. Через 350мс (контрольный замер для медленных мобильных процессоров)
+            setTimeout(doScroll, 350);
+        }
+
+        // Вызывается автоматически, когда любая картинка завершила загрузку:
+        function onMediaImageLoaded() {
+            scrollChatToBottom(false);
         }
 
         function handleInputKeydown(e) {
