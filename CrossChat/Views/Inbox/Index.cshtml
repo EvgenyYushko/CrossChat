@@ -1420,6 +1420,75 @@
             }
         }
 
+        /* 🚀 ИДЕНТИЧНЫЙ ДИЗАЙН ДЛЯ ОБЕИХ КНОПОК (#syncBtn и #inboxThemeBtn) */
+        #syncBtn,
+        #inboxThemeBtn {
+            width: 36px !important;
+            height: 36px !important;
+            min-width: 36px !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 10px !important;
+            font-size: 0.95rem !important;
+            cursor: pointer !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            line-height: 1 !important;
+            box-shadow: none !important;
+            transition: all 0.15s ease !important;
+            -webkit-tap-highlight-color: transparent;
+            /* ТЕМНАЯ ТЕМА ПО УМОЛЧАНИЮ: глубокий темный стеклянный фон */
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12)) !important;
+            color: var(--text-main, #ffffff) !important;
+        }
+
+        /* ☀️ СВЕТЛАЯ ТЕМА: одинаковый мягкий СЕРЫЙ фон для обеих кнопок! */
+        [data-theme="light"] #syncBtn,
+        [data-theme="light"] #inboxThemeBtn,
+        body.light-theme #syncBtn,
+        body.light-theme #inboxThemeBtn {
+            background: #e2e8f0 !important; /* Чистый серый цвет (никакого белого!) */
+            border: 1px solid #cbd5e1 !important;
+            color: #1e293b !important;
+        }
+
+        /* НАВЕДЕНИЕ И ТАП (Одинаковое нейтральное затемнение) */
+        #syncBtn:hover,
+        #syncBtn:focus,
+        #inboxThemeBtn:hover,
+        #inboxThemeBtn:focus {
+            filter: brightness(0.92);
+        }
+
+        #syncBtn:active,
+        #inboxThemeBtn:active {
+            transform: scale(0.92) !important;
+            filter: brightness(0.85);
+        }
+
+        /* На компьютере кнопка темы скрыта (видна в шапке сайта) */
+        .mobile-theme-btn {
+            display: none;
+        }
+
+        /* На мобильных устройствах — показываем рядом с синхронизацией */
+        @@media (max-width: 768px) {
+            .mobile-theme-btn {
+                display: inline-flex !important;
+            }
+        }
+
+       
+        /* На мобильных устройствах — показываем кнопку темы в ряд */
+        @@media (max-width: 768px) {
+            .mobile-theme-btn {
+                display: inline-flex !important;
+            }
+        }
+
     </style>
 }
 
@@ -1484,12 +1553,12 @@
                         <span class="search-icon">🔍</span>
                         <input type="text" id="searchInput" placeholder="Поиск по имени или тексту..." oninput="onSearchInput(this.value)">
                     </div>
-                    <!-- КНОПКА СИНХРОНИЗАЦИИ -->
-                    <button type="button" class="pill-btn" onclick="syncInbox()" id="syncBtn" title="Синхронизировать диалоги из соцсетей" style="padding: 8px 10px; font-size: 0.9rem;">
+                    <!-- 1. КНОПКА СИНХРОНИЗАЦИИ -->
+                    <button type="button" class="header-action-btn" onclick="syncInbox()" id="syncBtn" title="Синхронизировать диалоги">
                         🔄
                     </button>
-                    <!-- 🌙 КНОПКА СМЕНЫ ТЕМЫ (ДЛЯ МОБИЛЬНЫХ) -->
-                    <button type="button" class="pill-btn mobile-theme-btn" id="inboxThemeBtn" onclick="toggleAppTheme()" title="Сменить тему оформления" style="padding: 8px 10px; font-size: 0.95rem;">
+                    <!-- 2. КНОПКА СМЕНЫ ТЕМЫ -->
+                    <button type="button" class="header-action-btn mobile-theme-btn" id="inboxThemeBtn" onclick="toggleAppTheme()" title="Сменить тему оформления">
                         🌙
                     </button>
                 </div>
