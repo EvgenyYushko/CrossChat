@@ -130,6 +130,7 @@ namespace CrossChat.Controllers
 				{
 					id = m.Id,
 					text = m.Text,
+					translatedText = m.TranslatedText, // <-- 🚀 ОТДАЕМ ГОТОВЫЙ ПЕРЕВОД ИЗ БАЗЫ!
 					isIncoming = m.IsIncoming,
 					isSentByBot = m.IsSentByBot,
 					mediaUrl = m.MediaUrl,
@@ -385,10 +386,34 @@ namespace CrossChat.Controllers
 			return BadRequest("Не удалось перевести сообщение");
 		}
 
+		/// <summary>
+		/// Тихое сохранение готового перевода в БД (вызывается браузером 1 раз в фоне)
+		/// </summary>
+		[HttpPost("save-translation")]
+		[IgnoreAntiforgeryToken]
+		public async Task<IActionResult> SaveTranslation([FromBody] SaveTranslationDto dto)
+		{
+			if (dto.MessageId <= 0 || string.IsNullOrWhiteSpace(dto.TranslatedText))
+				return BadRequest();
+
+			// Обновляем только если перевода еще нет в базе:
+			await _db.InboxMessages
+				.Where(m => m.Id == dto.MessageId && m.TranslatedText == null)
+				.ExecuteUpdateAsync(s => s.SetProperty(m => m.TranslatedText, dto.TranslatedText.Trim()));
+
+			return Ok(new { success = true });
+		}
+
 		public class TranslateRequestDto
 		{
 			public string Text { get; set; } = string.Empty;
 		}
+	}
+
+	public class SaveTranslationDto
+	{
+		public int MessageId { get; set; }
+		public string TranslatedText { get; set; } = string.Empty;
 	}
 
 	public class DeleteMessageDto

@@ -41,5 +41,8 @@ namespace CrossChat.Data.Entities.Inbox
 
 		[MaxLength(20)]
 		public string? Reaction { get; set; }
+
+		// 🚀 КЭШ ПЕРЕВОДА: готовый перевод на русском языке (для мгновенного открытия чата без ожидания)
+		public string? TranslatedText { get; set; }
 	}
 }

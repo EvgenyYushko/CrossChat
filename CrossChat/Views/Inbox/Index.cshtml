@@ -2094,7 +2094,8 @@
                             m.reaction,
                             false,
                             m.mediaUrl,
-                            m.mediaType
+                            m.mediaType,
+                            m.translatedText // <-- 🚀 ПЕРЕДАЕМ ПЕРЕВОД ИЗ БД 10-М ПАРАМЕТРОМ!
                         );
                     });
 
@@ -2310,7 +2311,7 @@
         });
 
         // ОБНОВЛЕННЫЙ РЕНДЕР БАБЛА С ПКМ, ДОЛГИМ НАЖАТИЕМ И ПЕРЕВОДОМ
-        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false, mediaUrl = null, mediaType = null) {
+        function appendMessageBubble(messageId, text, isIncoming, isSentByBot, time, reaction = null, isPending = false, mediaUrl = null, mediaType = null, translatedText = null) {
             const stream = document.getElementById('messagesStream');
             const bubble = document.createElement('div');
 
@@ -2343,6 +2344,10 @@
             // Сохраняем исходный текст в data-атрибут (безопасно для кавычек и переносов строк!)
             if (text) {
                 bubble.dataset.rawText = text;
+            }
+
+            if (translatedText) {
+                bubble.dataset.translatedText = translatedText; // <-- Сохраняем готовый перевод из БД
             }
 
             let mediaHtml = '';
@@ -3369,15 +3374,15 @@
             }
         }
 
-        // 2. ПРИМЕНЕНИЕ ИЛИ ОТКАТ ПЕРЕВОДА ДЛЯ ВСЕХ СООБЩЕНИЙ В ЧАТЕ
+        // 2. ПРИМЕНЕНИЕ ИЛИ ОТКАТ ПЕРЕВОДА (ПЕРЕВОД СНИЗУ ВВЕРХ + МГНОВЕННЫЙ БД-КЭШ)
         async function applySyncTranslationToAllBubbles(enable) {
-            const bubbles = document.querySelectorAll('#messagesStream .msg-bubble');
+            // 🚀 ПЕРЕВОРАЧИВАЕМ МАССИВ: переводим СНИЗУ ВВЕРХ (от самых свежих сообщений к старым!)
+            const bubbles = Array.from(document.querySelectorAll('#messagesStream .msg-bubble')).reverse();
 
             for (const bubble of bubbles) {
                 const rawText = bubble.dataset.rawText;
                 if (!rawText) continue;
 
-                // Находим контейнер самого текста внутри бабла
                 const textNode = Array.from(bubble.children).find(c =>
                     c.tagName === 'DIV' &&
                     !c.classList.contains('msg-footer') &&
@@ -3389,21 +3394,38 @@
                 if (!textNode) continue;
 
                 if (enable) {
-                    // Если текст иностранный (нет кириллицы, но есть буквы)
                     const isForeign = !/[а-яА-ЯёЁ]/.test(rawText) && /\p{L}/u.test(rawText);
                     if (isForeign) {
-                        // Берем перевод из кэша или запрашиваем
-                        let trans = await quickGoogleTranslate(rawText, 'auto', 'ru');
+                        let trans = null;
+
+                        // А. Если готовый перевод УЖЕ пришел из базы данных — берем мгновенно (0 мс ожидания!):
+                        if (bubble.dataset.translatedText) {
+                            trans = bubble.dataset.translatedText;
+                        }
+                        // Б. Иначе переводим через быстрый Google Translate:
+                        else {
+                            trans = await quickGoogleTranslate(rawText, 'auto', 'ru');
+                            if (trans) {
+                                bubble.dataset.translatedText = trans;
+                                // 💾 Фоновое тихое сохранение перевода в БД:
+                                const msgId = bubble.dataset.msgId;
+                                if (msgId && !bubble.hasAttribute('data-pending')) {
+                                    fetch('/inbox/save-translation', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ messageId: Number(msgId), translatedText: trans })
+                                    }).catch(() => {});
+                                }
+                            }
+                        }
+
                         if (trans) {
                             textNode.innerHTML = escapeHtml(trans);
-                            // Добавляем маленький бейдж оригинала
                             addOrUpdateTransBadge(bubble, activeClientLang || 'lang', rawText);
                         }
                     }
-                } 
-                
-                else {
-                    // ВОЗВРАЩАЕМ ИСХОДНЫЙ ТЕКСТ:
+                } else {
+                    // ВОЗВРАТ К ОРИГИНАЛУ ПРИ ВЫКЛЮЧЕНИИ ТУМБЛЕРА:
                     textNode.innerHTML = escapeHtml(rawText);
                     removeTransBadge(bubble);
                 }

@@ -322,6 +322,9 @@ namespace CrossChat.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TranslatedText")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConversationId");
