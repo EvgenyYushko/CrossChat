@@ -325,6 +325,12 @@ builder.Services.Configure<ResendClientOptions>(options =>
 builder.Services.AddHttpClient<IResend, ResendClient>();
 builder.Services.AddTransient<IEmailService, EmailService>();
 
+// Запрещаем падению фоновых сервисов (Telegram/Quartz) убивать весь веб-сервер:
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())

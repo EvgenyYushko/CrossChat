@@ -211,33 +211,50 @@ fi
 
 log_success "База данных $NEW_DB_NAME успешно восстановлена! (NEW_DB_ID=$NEW_DB_ID)"
 
+# ===================================================================
 # Обновление переменных окружения (DB_URL_POSTGRESQL)
+# ===================================================================
 log_info "Обновление переменных окружения..."
 CONNECTION_STRING="Host=$NEW_DB_ID;Database=$NEW_DB_NAME;Username=$NEW_DB_USER;Password=$NEW_DB_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true"
+
 render_api_request "PUT" "services/$RENDER_SERVICE_ID/env-vars/DB_URL_POSTGRESQL" "{\"value\":\"$CONNECTION_STRING\"}" > /dev/null
 log_success "Переменные окружения обновлены!"
 
-# Перезапуск веб-сервиса
-log_info "🔄 Перезапуск веб-сервиса..."
-render_api_request "POST" "services/$RENDER_SERVICE_ID/resume" "" > /dev/null
-render_api_request "POST" "services/$RENDER_SERVICE_ID/deploys" "{\"clearCache\":\"do_not_clear\"}" > /dev/null
-log_success "Веб-сервис запущен!"
+# 🚀 ВАЖНО: Даем 15 секунд Render на сохранение переменной и регистрацию DNS новой БД
+log_info "⏳ Ожидание фиксации новой БД в системе Render (15 сек)..."
+sleep 15
 
+# ===================================================================
+# Перезапуск веб-сервиса
+# ===================================================================
+log_info "🔄 Снятие сервиса с паузы (Resume)..."
+render_api_request "POST" "services/$RENDER_SERVICE_ID/resume" "" > /dev/null
+sleep 5
+
+log_info "🚀 Запуск явного деплоя с новой базой данных..."
+render_api_request "POST" "services/$RENDER_SERVICE_ID/deploys" "{\"clearCache\":\"do_not_clear\"}" > /dev/null
+log_success "Команда на деплой успешно отправлена!"
+
+# ===================================================================
 # Проверка доступности веб-сервиса
+# ===================================================================
 log_info "Проверка доступности веб-сервиса..."
+IS_SITE_UP=false
+
 for i in $(seq 1 $MAX_RETRIES); do
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE_URL")
     if [ "$HTTP_STATUS" -eq 200 ]; then
+        IS_SITE_UP=true
         break
     fi
-    log_info "⏳ Статус сервиса: $HTTP_STATUS. Повтор через $RETRY_INTERVAL секунд..."
+    log_info "⏳ Попытка $i/$MAX_RETRIES. Статус сервиса: $HTTP_STATUS. Повтор через $RETRY_INTERVAL сек..."
     sleep $RETRY_INTERVAL
 done
 
-if [ "$HTTP_STATUS" -eq 200 ]; then
-    log_success "Сервис доступен! 🚀🚀🚀"
+if [ "$IS_SITE_UP" = true ]; then
+    log_success "Сервис успешно запущен и доступен! 🚀🚀🚀"
+    exit 0
 else
-    log_error "Сервис недоступен"
+    log_error "❌ Сервис не поднялся после обновления базы данных!"
+    exit 1 # Если сайт лежит — шлем честную ошибку в GitHub Actions и Telegram!
 fi
-
-exit 0
