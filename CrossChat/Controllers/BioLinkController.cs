@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Helpers;
 using CrossChat.Infrastructure.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -241,9 +242,24 @@ namespace CrossChat.Controllers
 		[AllowAnonymous]
 		public async Task<IActionResult> TrackClick(int linkId)
 		{
-			await _db.BioLinkItems
-				.Where(l => l.Id == linkId)
-				.ExecuteUpdateAsync(s => s.SetProperty(l => l.ClicksCount, l => l.ClicksCount + 1));
+			var link = await _db.BioLinkItems.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkId);
+			if (link == null) return Ok();
+
+			// 🚀 ФОНОВЫЙ ТРЕКИНГ КЛИКА
+			var analyticsEvent = BioAnalyticsTracker.ParseRequest(HttpContext, link.BioPageId, link.Id, "click");
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					using var scope = HttpContext.RequestServices.CreateScope();
+					var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+					scopedDb.BioPageEvents.Add(analyticsEvent);
+					await scopedDb.BioLinkItems.Where(l => l.Id == linkId).ExecuteUpdateAsync(s => s.SetProperty(l => l.ClicksCount, l => l.ClicksCount + 1));
+					await scopedDb.SaveChangesAsync();
+				}
+				catch { }
+			});
 
 			return Ok();
 		}
@@ -268,13 +284,24 @@ namespace CrossChat.Controllers
 
 			if (bioPage == null)
 			{
-				return NotFound(); // Если нет такой страницы — отдаем стандартный 404
+				return NotFound();
 			}
 
-			// Тихо инкрементируем счётчик просмотров
-			await _db.BioPages
-				.Where(b => b.Id == bioPage.Id)
-				.ExecuteUpdateAsync(s => s.SetProperty(b => b.ViewsCount, b => b.ViewsCount + 1));
+			// 🚀 АБСОЛЮТНО НЕ БЛОКИРУЮЩИЙ ТРЕКИНГ ПРОСМОТРА (0 мс задержки для пользователя!)
+			var analyticsEvent = BioAnalyticsTracker.ParseRequest(HttpContext, bioPage.Id, null, "view");
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					using var scope = HttpContext.RequestServices.CreateScope();
+					var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+					scopedDb.BioPageEvents.Add(analyticsEvent);
+					await scopedDb.BioPages.Where(b => b.Id == bioPage.Id).ExecuteUpdateAsync(s => s.SetProperty(b => b.ViewsCount, b => b.ViewsCount + 1));
+					await scopedDb.SaveChangesAsync();
+				}
+				catch { }
+			});
 
 			return View("~/Views/BioLink/PublicBio.cshtml", bioPage);
 		}
@@ -397,6 +424,133 @@ namespace CrossChat.Controllers
 			}
 
 			await _db.SaveChangesAsync();
+		}
+
+		// ==========================================================
+		// 6. 📊 ДАШБОРД СКВОЗНОЙ АНАЛИТИКИ (/biolink/analytics)
+		// ==========================================================
+		[HttpGet("biolink/analytics")]
+		public async Task<IActionResult> Analytics([FromQuery] int? profileId, [FromQuery] int days = 30)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			int activeProfileId = profileId ?? await GetActiveProfileIdSafeAsync(_db, userId);
+
+			var bioPage = await _db.BioPages
+				.Include(b => b.Links)
+				.FirstOrDefaultAsync(b => b.ProfileId == activeProfileId && b.Profile.UserId == userId);
+
+			if (bioPage == null) return RedirectToAction("Index", new { profileId = activeProfileId });
+
+			// 🚀 ПЛАН Б: Отложенное определение стран по сохраненным IP (только при входе админа!)
+			await ResolvePendingCountriesAsync(bioPage.Id);
+
+			var startDate = DateTime.UtcNow.AddDays(-days);
+
+			var events = await _db.BioPageEvents
+				.AsNoTracking()
+				.Where(e => e.BioPageId == bioPage.Id && e.CreatedAtUtc >= startDate)
+				.OrderByDescending(e => e.CreatedAtUtc)
+				.ToListAsync();
+
+			int totalViews = events.Count(e => e.EventType == "view");
+			int totalClicks = events.Count(e => e.EventType == "click");
+			double conversionRate = totalViews > 0 ? Math.Round(((double)totalClicks / totalViews) * 100.0, 1) : 0;
+
+			// 1. Источники трафика
+			var trafficSources = events
+				.Where(e => e.EventType == "view")
+				.GroupBy(e => e.TrafficSource)
+				.Select(g => new { Source = g.Key, Count = g.Count() })
+				.OrderByDescending(x => x.Count)
+				.ToList();
+
+			// 2. Топ нажатых кнопок
+			var linkClicks = events
+				.Where(e => e.EventType == "click" && e.BioLinkItemId.HasValue)
+				.GroupBy(e => e.BioLinkItemId!.Value)
+				.Select(g =>
+				{
+					var link = bioPage.Links.FirstOrDefault(l => l.Id == g.Key);
+					return new
+					{
+						LinkId = g.Key,
+						Title = link?.Title ?? "Удаленная ссылка",
+						IconType = link?.IconType ?? "custom",
+						Clicks = g.Count()
+					};
+				})
+				.OrderByDescending(x => x.Clicks)
+				.ToList();
+
+			// 3. Страны
+			var countries = events
+				.Where(e => !string.IsNullOrEmpty(e.CountryCode))
+				.GroupBy(e => e.CountryCode!)
+				.Select(g => new { Country = g.Key.ToUpperInvariant(), Count = g.Count() })
+				.OrderByDescending(x => x.Count)
+				.Take(8)
+				.ToList();
+
+			// 4. Устройства и In-App браузеры
+			int mobileCount = events.Count(e => e.DeviceType == "mobile" || e.DeviceType == "tablet");
+			double mobilePercent = events.Count > 0 ? Math.Round(((double)mobileCount / events.Count) * 100.0, 1) : 0;
+			int inAppBrowserCount = events.Count(e => e.Browser.Contains("inapp"));
+
+			ViewBag.BioPage = bioPage;
+			ViewBag.TotalViews = totalViews;
+			ViewBag.TotalClicks = totalClicks;
+			ViewBag.ConversionRate = conversionRate;
+			ViewBag.TrafficSources = trafficSources;
+			ViewBag.LinkClicks = linkClicks;
+			ViewBag.Countries = countries;
+			ViewBag.MobilePercent = mobilePercent;
+			ViewBag.InAppBrowserCount = inAppBrowserCount;
+			ViewBag.Days = days;
+			ViewBag.RecentEvents = events.Take(40).ToList();
+
+			return View("Analytics", bioPage);
+		}
+
+		/// <summary>
+		/// ПЛАН Б: Бесплатное пакетированное определение стран по IP (до 15 штук за проход)
+		/// </summary>
+		private async Task ResolvePendingCountriesAsync(int bioPageId)
+		{
+			try
+			{
+				var pendingIps = await _db.BioPageEvents
+					.Where(e => e.BioPageId == bioPageId && e.CountryCode == null && !string.IsNullOrEmpty(e.IpAddress) && e.IpAddress != "::1" && e.IpAddress != "127.0.0.1")
+					.Select(e => e.IpAddress!)
+					.Distinct()
+					.Take(15)
+					.ToListAsync();
+
+				if (!pendingIps.Any()) return;
+
+				using var client = new HttpClient();
+				client.Timeout = TimeSpan.FromSeconds(3);
+
+				foreach (var ip in pendingIps)
+				{
+					try
+					{
+						// Бесплатный эндпоинт без ключей (возвращает countryCode: US, RU, BR)
+						var res = await client.GetFromJsonAsync<JsonElement>($"http://ip-api.com/json/{ip}?fields=countryCode");
+						if (res.TryGetProperty("countryCode", out var cc))
+						{
+							string? code = cc.GetString();
+							if (!string.IsNullOrEmpty(code))
+							{
+								await _db.BioPageEvents
+									.Where(e => e.IpAddress == ip && e.CountryCode == null)
+									.ExecuteUpdateAsync(s => s.SetProperty(e => e.CountryCode, code));
+							}
+						}
+					}
+					catch { }
+				}
+			}
+			catch { }
 		}
 
 		/// <summary>

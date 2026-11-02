@@ -126,6 +126,73 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("BioPages");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.BioPageEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("BioLinkItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BioPageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Browser")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DeviceType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("OperatingSystem")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("RefererUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TrafficSource")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BioLinkItemId");
+
+                    b.HasIndex("BioPageId", "CreatedAtUtc");
+
+                    b.ToTable("BioPageEvents");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>
                 {
                     b.Property<int>("Id")
@@ -1280,6 +1347,23 @@ namespace CrossChat.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Profile");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.BioPageEvent", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.BioLinkItem", "BioLinkItem")
+                        .WithMany()
+                        .HasForeignKey("BioLinkItemId");
+
+                    b.HasOne("CrossChat.Data.Entities.BioPage", "BioPage")
+                        .WithMany()
+                        .HasForeignKey("BioPageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BioLinkItem");
+
+                    b.Navigation("BioPage");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>

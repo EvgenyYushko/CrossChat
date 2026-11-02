@@ -41,6 +41,8 @@ namespace CrossChat.Data
 		public DbSet<BioPage> BioPages { get; set; }
 		public DbSet<BioLinkItem> BioLinkItems { get; set; }
 
+		public DbSet<BioPageEvent> BioPageEvents { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);
@@ -65,6 +67,9 @@ namespace CrossChat.Data
 			modelBuilder.Entity<BioPage>()
 				.HasIndex(b => b.Slug)
 				.IsUnique();
+
+			modelBuilder.Entity<BioPageEvent>()
+				.HasIndex(e => new { e.BioPageId, e.CreatedAtUtc });
 		}
 	}
 }

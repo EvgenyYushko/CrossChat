@@ -1,0 +1,405 @@
+@model CrossChat.Data.Entities.BioPage
+@using CrossChat.Infrastructure.Constants
+@{
+    ViewData["Title"] = "Статистика перехода — " + Model.Title;
+    int days = ViewBag.Days ?? 30;
+    var bioPage = ViewBag.BioPage as CrossChat.Data.Entities.BioPage ?? Model;
+    var recentEvents = ViewBag.RecentEvents as List<CrossChat.Data.Entities.BioPageEvent> ?? new();
+}
+
+@section Styles {
+    <style>
+        .analytics-container {
+            max-width: 1100px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .header-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        /* КАРТОЧКИ KPI */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .kpi-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .kpi-val {
+            font-size: 1.8rem;
+            font-weight: 900;
+            line-height: 1.1;
+        }
+
+        /* ГРИД ДЕТАЛЬНОЙ СТАТИСТИКИ */
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stats-block {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .block-title {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 10px;
+            margin: 0;
+        }
+
+        .progress-stat-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .stat-bar-bg {
+            background: rgba(255, 255, 255, 0.08);
+            height: 6px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            background: var(--accent-color, #6366f1);
+        }
+
+        /* ТАБЛИЦА СОБЫТИЙ */
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+            .events-table th, .events-table td {
+                padding: 10px 12px;
+                text-align: left;
+                border-bottom: 1px solid var(--glass-border);
+            }
+
+            .events-table th {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                color: var(--text-secondary);
+            }
+
+        @@media (max-width: 800px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="/biolink?profileId=@bioPage.ProfileId" class="btn-cancel" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem;">
+            ← Конструктор
+        </a>
+    </div>
+}
+
+<div class="analytics-container">
+
+    <!-- ШАПКА -->
+    <div class="header-box">
+        <div>
+            <h2 style="margin:0; font-size: 1.3rem; font-weight: 800;">
+                📊 Аналитика: @bioPage.Title
+            </h2>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                Ссылка: <strong style="color: #38bdf8;">@AppConstants.APP_DOMAIN/@bioPage.Slug</strong>
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <a href="/biolink/analytics?profileId=@bioPage.ProfileId&days=7" class="btn-action @(days == 7 ? "btn-primary" : "btn-cancel")" style="padding: 6px 12px; font-size: 0.8rem; text-decoration: none;">7 дней</a>
+            <a href="/biolink/analytics?profileId=@bioPage.ProfileId&days=30" class="btn-action @(days == 30 ? "btn-primary" : "btn-cancel")" style="padding: 6px 12px; font-size: 0.8rem; text-decoration: none;">30 дней</a>
+            <a href="/@bioPage.Slug" target="_blank" class="btn-action btn-insta-link" style="padding: 6px 10px; text-decoration: none;" title="Открыть">↗️</a>
+        </div>
+    </div>
+
+    <!-- 4 ГЛАВНЫХ KPI -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-title">Просмотры страницы</div>
+            <div class="kpi-val" style="color: #38bdf8;">@ViewBag.TotalViews.ToString("N0")</div>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Переходов по ссылке в Bio</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Клики по кнопкам</div>
+            <div class="kpi-val" style="color: #10b981;">@ViewBag.TotalClicks.ToString("N0")</div>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Ушли в соцсети/мессенджеры</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Конверсия воронки</div>
+            <div class="kpi-val" style="color: #ec4899;">@ViewBag.ConversionRate%</div>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Нажали целевую кнопку</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Трафик со смартфонов</div>
+            <div class="kpi-val" style="color: #f59e0b;">@ViewBag.MobilePercent%</div>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Из них In-App: @ViewBag.InAppBrowserCount</span>
+        </div>
+    </div>
+
+    <!-- ДЕТАЛЬНАЯ РАСКЛАДКА -->
+    <div class="details-grid">
+
+        <!-- 1. ИСТОЧНИКИ ТРАФИКА (ОТКУДА ПРИШЛИ) -->
+        <div class="stats-block">
+            <h3 class="block-title">
+                <span>🌐 Откуда пришли (Соцсети)</span>
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Доли</span>
+            </h3>
+
+            @{
+                var sources = ViewBag.TrafficSources as dynamic ?? new List<dynamic>();
+                int maxSrc = sources.Count > 0 ? (int)sources[0].Count : 1;
+            }
+
+            @if (sources.Count == 0)
+            {
+                <div style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem 0;">Пока нет переходов за выбранный период.</div>
+            }
+            else
+            {
+                @foreach (var s in sources)
+                {
+                    string srcName = (string)s.Source;
+                    int count = (int)s.Count;
+                    double percent = ViewBag.TotalViews > 0 ? Math.Round(((double)count / ViewBag.TotalViews) * 100.0, 1) : 0;
+                    string icon = srcName switch
+                    {
+                        "instagram" => "📸 Instagram",
+                        "facebook" => "📘 Facebook",
+                        "bluesky" => "🦋 BlueSky",
+                        "telegram" => "✈️ Telegram",
+                        "x" => "✖️ X (Twitter)",
+                        "youtube" => "🎬 YouTube",
+                        _ => "🔗 Прямой переход"
+                    };
+
+                    <div class="progress-stat-row">
+                        <div class="stat-labels">
+                            <span>@icon</span>
+                            <span>@count (@percent%)</span>
+                        </div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width: @percent%;"></div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- 2. ТОП КНОПОК (КУДА УШЛИ) -->
+        <div class="stats-block">
+            <h3 class="block-title">
+                <span>🎯 Куда кликают (Популярность)</span>
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Клики</span>
+            </h3>
+
+            @{
+                var links = ViewBag.LinkClicks as dynamic ?? new List<dynamic>();
+            }
+
+            @if (links.Count == 0)
+            {
+                <div style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem 0;">Пока не было кликов по кнопкам.</div>
+            }
+            else
+            {
+                @foreach (var l in links)
+                {
+                    string lTitle = (string)l.Title;
+                    int clicks = (int)l.Clicks;
+                    double clickPercent = ViewBag.TotalClicks > 0 ? Math.Round(((double)clicks / ViewBag.TotalClicks) * 100.0, 1) : 0;
+
+                    <div class="progress-stat-row">
+                        <div class="stat-labels">
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;">@lTitle</span>
+                            <span style="color:#10b981;">@clicks (@clickPercent%)</span>
+                        </div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width: @clickPercent%; background:#10b981;"></div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- 3. ГЕОГРАФИЯ (СТРАНЫ) -->
+        <div class="stats-block">
+            <h3 class="block-title">
+                <span>🌍 Топ стран посетителей</span>
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Гео</span>
+            </h3>
+
+            @{
+                var countries = ViewBag.Countries as dynamic ?? new List<dynamic>();
+            }
+
+            @if (countries.Count == 0)
+            {
+                <div style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem 0;">Страны еще определяются...</div>
+            }
+            else
+            {
+                @foreach (var c in countries)
+                {
+                    string cCode = (string)c.Country;
+                    int count = (int)c.Count;
+                    string flag = GetFlagEmoji(cCode);
+
+                    <div class="progress-stat-row">
+                        <div class="stat-labels">
+                            <span>@flag @cCode</span>
+                            <span>@count визитов</span>
+                        </div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width: @(Math.Min(100, count * 5))%; background:#38bdf8;"></div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- 4. ТИПЫ УСТРОЙСТВ -->
+        <div class="stats-block">
+            <h3 class="block-title">
+                <span>📱 Устройства и браузеры</span>
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Девайсы</span>
+            </h3>
+
+            <div style="display:flex; flex-direction:column; gap:10px; font-size:0.9rem;">
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+                    <span>📱 Смартфоны / Планшеты:</span>
+                    <strong>@ViewBag.MobilePercent%</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+                    <span>💻 Компьютеры (Desktop):</span>
+                    <strong>@(100 - ViewBag.MobilePercent)%</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+                    <span>⚡ Встроенный браузер Instagram/FB:</span>
+                    <strong style="color:#ec4899;">@ViewBag.InAppBrowserCount переходов</strong>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ТАБЛИЦА ПОСЛЕДНИХ ПЕРЕХОДОВ -->
+    <div class="stats-block" style="overflow-x: auto;">
+        <h3 class="block-title">
+            <span>🕒 Живая лента переходов (Последние 40 событий)</span>
+        </h3>
+
+        <table class="events-table">
+            <thead>
+                <tr>
+                    <th>Время (UTC)</th>
+                    <th>Событие</th>
+                    <th>Источник</th>
+                    <th>Гео</th>
+                    <th>Устройство</th>
+                    <th>ОС / Браузер</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var ev in recentEvents)
+                {
+                    bool isClick = ev.EventType == "click";
+                    string flag = !string.IsNullOrEmpty(ev.CountryCode) ? GetFlagEmoji(ev.CountryCode) : "🌐";
+
+                    <tr>
+                        <td style="color:var(--text-secondary); font-family:monospace;">@ev.CreatedAtUtc.ToString("dd.MM HH:mm:ss")</td>
+                        <td>
+                            @if (isClick)
+                            {
+                                <span style="color:#10b981; font-weight:700;">🎯 Клик по кнопке</span>
+                            }
+                            else
+                            {
+                                <span style="color:#38bdf8;">👀 Просмотр</span>
+                            }
+                        </td>
+                        <td><strong>@ev.TrafficSource</strong></td>
+                        <td>@flag @(ev.CountryCode ?? "Определяется")</td>
+                        <td>@ev.DeviceType</td>
+                        <td style="color:var(--text-secondary); font-size:0.75rem;">@ev.OperatingSystem • @ev.Browser</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+@functions {
+    // Хелпер генерации флага страны по ее коду (US -> 🇺🇸, RU -> 🇷🇺, BR -> 🇧🇷)
+    private string GetFlagEmoji(string countryCode)
+    {
+        if (string.IsNullOrEmpty(countryCode) || countryCode.Length != 2) return "🌐";
+        countryCode = countryCode.ToUpperInvariant();
+        return string.Concat(countryCode.Select(c => char.ConvertFromUtf32(c + 0x1F1A5)));
+    }
+}
