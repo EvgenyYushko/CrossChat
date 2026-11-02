@@ -22,6 +22,110 @@ namespace CrossChat.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CrossChat.Data.Entities.BioLinkItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BioPageId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ClicksCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("IconType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsHighlighted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BioPageId");
+
+                    b.ToTable("BioLinkItems");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.BioPage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CustomBackgroundValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("ThemeType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long>("ViewsCount")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("BioPages");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>
                 {
                     b.Property<int>("Id")
@@ -1156,6 +1260,28 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("YouTubeSettings");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.BioLinkItem", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.BioPage", "BioPage")
+                        .WithMany("Links")
+                        .HasForeignKey("BioPageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BioPage");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.BioPage", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Profile");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.BlueSkySettings", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
@@ -1446,6 +1572,11 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("Profile");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.BioPage", b =>
+                {
+                    b.Navigation("Links");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.Inbox.InboxConversation", b =>

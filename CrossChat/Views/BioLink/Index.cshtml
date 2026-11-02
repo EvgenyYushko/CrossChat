@@ -1,0 +1,745 @@
+@model CrossChat.Data.Entities.BioPage
+@using CrossChat.Infrastructure.Constants
+@{
+    ViewData["Title"] = "Конструктор переходника — " + Model.Title;
+    string publicUrl = $"{AppConstants.APP_URL}/{Model.Slug}";
+}
+
+@section Styles {
+    <style>
+        .biolink-container {
+            max-width: 1200px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .editor-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 0 0 0.5rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+            .form-group label {
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+        .input-addon-group {
+            display: flex;
+            align-items: center;
+            background: var(--input-bg, rgba(15, 23, 42, 0.3));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .addon-prefix {
+            padding: 0.75rem 0.5rem 0.75rem 1rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: monospace;
+            background: rgba(255, 255, 255, 0.03);
+            border-right: 1px solid var(--glass-border);
+            user-select: none;
+        }
+
+        .input-addon-group input {
+            border: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            padding: 0.75rem 1rem;
+        }
+
+        /* ТЕМЫ ОФОРМЛЕНИЯ */
+        .themes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+        }
+
+        .theme-pill {
+            height: 60px;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 4px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+            .theme-pill.active {
+                border-color: #38bdf8;
+                transform: scale(1.05);
+                box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+            }
+
+        /* СПИСОК ССЫЛОК */
+        .links-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .link-item-row {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .link-row-top {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .link-row-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            padding-top: 6px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.08);
+        }
+
+        /* --- МАКЕТ СМАРТФОНА (LIVE PREVIEW) --- */
+        .phone-wrapper {
+            position: sticky;
+            top: 5.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .phone-frame {
+            width: 320px;
+            height: 640px;
+            background: #000000;
+            border: 10px solid #1e293b;
+            border-radius: 44px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 18px;
+            background: #1e293b;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            z-index: 10;
+        }
+
+        .phone-screen {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: none;
+            padding: 2.5rem 1rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            position: relative;
+            background-size: cover !important;
+            background-position: center !important;
+            transition: background 0.3s ease;
+        }
+
+            .phone-screen::-webkit-scrollbar {
+                display: none;
+            }
+
+        .preview-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            margin-bottom: 10px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .preview-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin: 0;
+            text-align: center;
+        }
+
+        .preview-bio {
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.75);
+            text-align: center;
+            margin: 4px 0 16px 0;
+            line-height: 1.3;
+            max-width: 240px;
+        }
+
+        .preview-links {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .preview-btn {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start; /* ВЫРАВНИВАЕМ ПО ЛЕВОМУ КРАЮ */
+            gap: 12px;
+            text-decoration: none;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        /* Круглый стильный бейдж под иконку бренда */
+        .brand-icon-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.12);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .brand-icon-svg {
+            width: 18px;
+            height: 18px;
+        }
+
+            .preview-btn.highlighted {
+                background: rgba(255, 255, 255, 0.22);
+                border-color: #38bdf8;
+                box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+                animation: pulseGlow 2s infinite;
+            }
+
+        @@keyframes pulseGlow {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @@media (max-width: 900px) {
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .phone-wrapper {
+                display: none; /* На мобилке скрываем живой макет для компактности */
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="/profile?profileId=@Model.ProfileId" class="btn-cancel" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem;">
+            ← В профиль
+        </a>
+    </div>
+}
+
+<div class="biolink-container">
+    <div class="editor-grid">
+
+        <!-- ========================================================== -->
+        <!-- ЛЕВАЯ КОЛОНКА: РЕДАКТОР И УПРАВЛЕНИЕ                       -->
+        <!-- ========================================================== -->
+        <div class="editor-card">
+
+            <!-- ШАПКА -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--glass-border); padding-bottom: 1rem;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.4rem; font-weight: 800; color: var(--text-main);">
+                        🔗 Страница-переходник (Bio Link)
+                    </h2>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                        Безопасная мультиссылка для шапки Instagram без банов за Telegram
+                    </div>
+                </div>
+
+                <!-- 🚀 КНОПКА АВТОЗАПОЛНЕНИЯ В 1 КЛИК -->
+                <form action="/biolink/autofill?bioPageId=@Model.Id" method="post" onsubmit="return confirm('Заполнить кнопки ссылками из всех подключенных соцсетей профиля?');">
+                    <button type="submit" class="btn-action" style="background: linear-gradient(135deg, #a855f7, #6366f1); color: #fff; font-weight: 700; padding: 8px 14px; border-radius: 10px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <span>✨</span> <span>Автозаполнить из профиля</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- ССЫЛКА НА ГОТОВЫЙ САЙТ -->
+            <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Ваша ссылка для Instagram Bio:</span>
+                    <div style="font-size: 0.95rem; font-weight: 800; color: #38bdf8; font-family: monospace;">
+                        @publicUrl
+                    </div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn-action btn-copy-tags" onclick="copyPublicUrl('@publicUrl', this)" style="padding: 6px 12px; font-size: 0.8rem;">
+                        📋 Скопировать
+                    </button>
+                    <a href="@publicUrl" target="_blank" class="btn-action btn-insta-link" style="padding: 6px 10px; font-size: 0.85rem;" title="Открыть в новой вкладке">
+                        ↗️
+                    </a>
+                </div>
+            </div>
+
+            <!-- ФОРМА РЕДАКТИРОВАНИЯ -->
+            <form id="bioForm" enctype="multipart/form-data">
+                <input type="hidden" name="bioPageId" value="@Model.Id">
+                <input type="hidden" name="themeType" id="selectedThemeInput" value="@Model.ThemeType">
+                <input type="hidden" name="customBackgroundValue" id="customBgValueInput" value="@Model.CustomBackgroundValue">
+                <input type="hidden" name="linksJson" id="linksJsonHidden">
+
+                <!-- 1. АДРЕС ССЫЛКИ (SLUG) -->
+                <div class="form-group">
+                    <label>Короткий адрес ссылки (Slug):</label>
+                    <div class="input-addon-group">
+                        <span class="addon-prefix">@AppConstants.APP_DOMAIN/</span>
+                        <input type="text" name="slug" id="slugInput" class="text-input" value="@Model.Slug" required placeholder="lanaroads" oninput="onSlugChanged(this.value)">
+                    </div>
+                </div>
+
+                <!-- 2. ИМЯ И ОПИСАНИЕ -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Имя / Заголовок:</label>
+                        <input type="text" name="title" id="titleInput" class="text-input" value="@Model.Title" required placeholder="Lana Roads" oninput="updateLivePreview()">
+                    </div>
+                    <div class="form-group">
+                        <label>Сменить аватарку:</label>
+                        <input type="file" name="avatarImageFile" accept="image/*" class="text-input" onchange="previewAvatarUpload(this)">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Краткое био / статус:</label>
+                    <textarea name="bio" id="bioInput" rows="2" class="text-input" style="min-height: 60px;" placeholder="Эксклюзивный контент и связь со мной 👇" oninput="updateLivePreview()">@Model.Bio</textarea>
+                </div>
+
+                <!-- 3. ВЫБОР ТЕМЫ И ФОНА -->
+                <div class="form-group">
+                    <label>Фон и тема оформления:</label>
+                    <div class="themes-grid">
+                        <div class="theme-pill @(Model.ThemeType == "gradient-dark" ? "active" : "")"
+                             style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);"
+                             onclick="selectTheme('gradient-dark', 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)', this)">
+                            Тёмный
+                        </div>
+                        <div class="theme-pill @(Model.ThemeType == "gradient-neon" ? "active" : "")"
+                             style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%);"
+                             onclick="selectTheme('gradient-neon', 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%)', this)">
+                            Неон
+                        </div>
+                        <div class="theme-pill @(Model.ThemeType == "gradient-sunset" ? "active" : "")"
+                             style="background: linear-gradient(180deg, #1e1b4b 0%, #831843 50%, #ea580c 100%);"
+                             onclick="selectTheme('gradient-sunset', 'linear-gradient(180deg, #1e1b4b 0%, #831843 50%, #ea580c 100%)', this)">
+                            Закат
+                        </div>
+                        <div class="theme-pill @(Model.ThemeType == "gradient-ocean" ? "active" : "")"
+                             style="background: linear-gradient(180deg, #022c22 0%, #064e3b 50%, #0f766e 100%);"
+                             onclick="selectTheme('gradient-ocean', 'linear-gradient(180deg, #022c22 0%, #064e3b 50%, #0f766e 100%)', this)">
+                            Изумруд
+                        </div>
+                        <div class="theme-pill @(Model.ThemeType == "custom-image" ? "active" : "")"
+                             style="background: #334155; border: 1px dashed var(--glass-border);"
+                             onclick="selectCustomTheme(this)">
+                            📷 Свой фон
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Поле загрузки файла фона (если выбран custom-image) -->
+                <div class="form-group" id="bgUploadBox" style="display: @(Model.ThemeType == "custom-image" ? "block" : "none");">
+                    <label>Загрузить изображение для фона:</label>
+                    <input type="file" name="bgImageFile" accept="image/*" class="text-input" onchange="previewBackgroundUpload(this)">
+                </div>
+
+                <!-- 4. УПРАВЛЕНИЕ СПИСКОМ КНОПОК -->
+                <div class="form-group">
+                    <div class="section-title">
+                        <span>Кнопки-ссылки (@Model.Links.Count):</span>
+                        <button type="button" class="btn-action" onclick="addNewLinkRow()" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-size: 0.8rem; padding: 4px 10px;">
+                            + Добавить ссылку
+                        </button>
+                    </div>
+
+                    <div class="links-list" id="linksListContainer">
+                        @foreach (var l in Model.Links.OrderBy(x => x.SortOrder))
+                        {
+                            <div class="link-item-row" data-id="@l.Id">
+                                <div class="link-row-top">
+                                    <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
+                                        <option value="telegram" selected="@(l.IconType == "telegram")">✈️ Telegram</option>
+                                        <option value="instagram" selected="@(l.IconType == "instagram")">📸 Instagram</option>
+                                        <option value="youtube" selected="@(l.IconType == "youtube")">🎬 YouTube</option>
+                                        <option value="bluesky" selected="@(l.IconType == "bluesky")">🦋 BlueSky</option>
+                                        <option value="threads" selected="@(l.IconType == "threads")">🧵 Threads</option>
+                                        <option value="x" selected="@(l.IconType == "x")">✖️ X</option>
+                                        <option value="facebook" selected="@(l.IconType == "facebook")">📘 Facebook</option>
+                                        <option value="custom" selected="@(l.IconType == "custom")">🔗 Ссылка</option>
+                                    </select>
+                                    <input type="text" class="text-input link-title-input" value="@l.Title" placeholder="Название кнопки (напр. Мой Telegram)" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="url" class="text-input link-url-input" value="@l.Url" placeholder="https://..." style="flex: 1; padding: 6px 10px; font-size: 0.85rem;" oninput="updateLivePreview()">
+                                </div>
+                                <div class="link-row-actions">
+                                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.78rem;">
+                                        <input type="checkbox" class="link-highlight-cb" checked="@l.IsHighlighted" onchange="updateLivePreview()" style="accent-color: #38bdf8;">
+                                        ⭐ Свечение (Главная ссылка)
+                                    </label>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <span style="color: var(--text-secondary); font-size: 0.75rem;">Кликов: <strong>@l.ClicksCount</strong></span>
+                                        <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; line-height: 1;">🗑️</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- КНОПКА СОХРАНЕНИЯ -->
+                <button type="button" class="btn btn-primary" id="btnSaveBio" onclick="saveBioPage()" style="margin-top: 1.5rem; padding: 14px; font-size: 1rem;">
+                    💾 Сохранить изменения
+                </button>
+            </form>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- ПРАВАЯ КОЛОНКА: ЖИВОЙ МАКЕТ СМАРТФОНА IPHONE               -->
+        <!-- ========================================================== -->
+        <div class="phone-wrapper">
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>📱</span> Живой просмотр на смартфоне
+            </div>
+            <div class="phone-frame">
+                <div class="phone-notch"></div>
+                <div class="phone-screen" id="previewScreen" style="background: @(Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue) ? $"url('{Model.CustomBackgroundValue}')" : Model.CustomBackgroundValue);">
+                    <img id="previewAvatarImg" src="@(Model.AvatarUrl ?? "/images/placeholder.jpg")" class="preview-avatar" alt="Avatar">
+                    <h3 id="previewTitleText" class="preview-title">@Model.Title</h3>
+                    <p id="previewBioText" class="preview-bio">@Model.Bio</p>
+
+                    <div id="previewLinksContainer" class="preview-links">
+                        <!-- Сюда JS рисует живые кнопки -->
+                    </div>
+
+                    <div style="margin-top: auto; padding-top: 2rem; font-size: 0.65rem; opacity: 0.5;">
+                        ⚡ Powered by CrossChat
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentBgValue = "@(Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)")";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateLivePreview();
+        });
+
+        // 1. ПЕРЕКЛЮЧЕНИЕ ТЕМЫ ФОНА
+        function selectTheme(themeName, bgValue, pillElem) {
+            document.querySelectorAll('.theme-pill').forEach(p => p.classList.remove('active'));
+            pillElem.classList.add('active');
+
+            document.getElementById('selectedThemeInput').value = themeName;
+            document.getElementById('customBgValueInput').value = bgValue;
+            document.getElementById('bgUploadBox').style.display = 'none';
+
+            currentBgValue = bgValue;
+            document.getElementById('previewScreen').style.background = bgValue;
+        }
+
+        function selectCustomTheme(pillElem) {
+            document.querySelectorAll('.theme-pill').forEach(p => p.classList.remove('active'));
+            pillElem.classList.add('active');
+
+            document.getElementById('selectedThemeInput').value = 'custom-image';
+            document.getElementById('bgUploadBox').style.display = 'block';
+        }
+
+        // 2. ПРЕДПРОСМОТР ЗАГРУЖЕННЫХ ФАЙЛОВ
+        function previewAvatarUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('previewAvatarImg').src = e.target.result;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function previewBackgroundUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    currentBgValue = `url('${e.target.result}')`;
+                    document.getElementById('previewScreen').style.background = currentBgValue;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // 3. ДОБАВЛЕНИЕ НОВОЙ СТРОКИ ССЫЛКИ
+        function addNewLinkRow() {
+            const container = document.getElementById('linksListContainer');
+            const row = document.createElement('div');
+            row.className = 'link-item-row';
+            row.innerHTML = `
+                <div class="link-row-top">
+                    <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
+                        <option value="telegram">✈️ Telegram</option>
+                        <option value="instagram">📸 Instagram</option>
+                        <option value="youtube">🎬 YouTube</option>
+                        <option value="bluesky">🦋 BlueSky</option>
+                        <option value="threads">🧵 Threads</option>
+                        <option value="x">✖️ X</option>
+                        <option value="facebook">📘 Facebook</option>
+                        <option value="custom" selected>🔗 Ссылка</option>
+                    </select>
+                    <input type="text" class="text-input link-title-input" placeholder="Название кнопки" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="url" class="text-input link-url-input" placeholder="https://..." style="flex: 1; padding: 6px 10px; font-size: 0.85rem;" oninput="updateLivePreview()">
+                </div>
+                <div class="link-row-actions">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.78rem;">
+                        <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8;">
+                        ⭐ Свечение (Главная ссылка)
+                    </label>
+                    <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; line-height: 1;">🗑️</button>
+                </div>
+            `;
+            container.appendChild(row);
+            updateLivePreview();
+        }
+
+        function removeLinkRow(btn) {
+            btn.closest('.link-item-row').remove();
+            updateLivePreview();
+        }
+
+        // 4. ЖИВОЕ ОБНОВЛЕНИЕ ПРЕВЬЮ НА ЭКРАНЕ IPHONE
+        function updateLivePreview() {
+            document.getElementById('previewTitleText').textContent = document.getElementById('titleInput').value || 'Имя профиля';
+            document.getElementById('previewBioText').textContent = document.getElementById('bioInput').value || '';
+
+            const previewContainer = document.getElementById('previewLinksContainer');
+            previewContainer.innerHTML = '';
+
+            const rows = document.querySelectorAll('.link-item-row');
+            rows.forEach(r => {
+                let title = r.querySelector('.link-title-input').value.trim();
+                const icon = r.querySelector('.link-icon-select').value;
+                const isHighlight = r.querySelector('.link-highlight-cb').checked;
+
+                if (!title) return;
+
+                // 🚀 АВТОМАТИЧЕСКАЯ ОЧИСТКА: убираем старые эмодзи в начале названия, если они были
+                title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
+
+                const iconSvg = getNetworkBrandSvg(icon);
+                const btn = document.createElement('div');
+                btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+                btn.innerHTML = `
+                    <div class="brand-icon-badge">${iconSvg}</div>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
+                    <span style="opacity:0.4; font-size:0.9rem;">➔</span>
+                `;
+                previewContainer.appendChild(btn);
+            });
+        }
+
+        // 🚀 ГЕНЕРАТОР ОФИЦИАЛЬНЫХ БРЕНДОВЫХ SVG ИКОНОК
+        function getNetworkBrandSvg(type) {
+            switch(type) {
+                case 'telegram':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#2AABEE"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z"/></svg>`;
+                case 'instagram':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <defs>
+                            <linearGradient id="instaGradPreview" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#f09433"/><stop offset="50%" stop-color="#dc2743"/><stop offset="100%" stop-color="#bc1888"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="url(#instaGradPreview)"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke="url(#instaGradPreview)"></path>
+                        <circle cx="17.5" cy="6.5" r="1.2" fill="url(#instaGradPreview)"></circle>
+                    </svg>`;
+                case 'youtube':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`;
+                case 'bluesky':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#0085ff"><path d="M12 10.57c2.16-3.85 4.97-6.9 7.32-6.9 2.92 0 4.68 2.65 4.68 5.38 0 4.42-4.14 7.91-7.31 9.77-1.17.68-2.53 1.12-3.89 1.12h-.8c-1.36 0-2.72-.44-3.89-1.12C4.84 16.96.7 13.47.7 9.05c0-2.73 1.76-5.38 4.68-5.38 2.35 0 5.16 3.05 7.32 6.9z"/></svg>`;
+                case 'threads':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/></svg>`;
+                case 'x':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
+                case 'facebook':
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`;
+                default:
+                    return `<svg class="brand-icon-svg" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+            }
+        }
+
+        function getIconEmoji(type) {
+            switch(type) {
+                case 'telegram': return '✈️';
+                case 'instagram': return '📸';
+                case 'youtube': return '🎬';
+                case 'bluesky': return '🦋';
+                case 'threads': return '🧵';
+                case 'x': return '✖️';
+                case 'facebook': return '📘';
+                default: return '🔗';
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+
+        function onSlugChanged(val) {
+            val = val.toLowerCase().replace(/[^a-z0-9\-_]/g, '');
+            document.getElementById('slugInput').value = val;
+        }
+
+        function copyPublicUrl(url, btn) {
+            navigator.clipboard.writeText(url).then(() => {
+                const old = btn.textContent;
+                btn.textContent = '✅ Скопировано!';
+                setTimeout(() => btn.textContent = old, 2000);
+            });
+        }
+
+        // 5. СОХРАНЕНИЕ ВСЕЙ СТРАНИЦЫ ЧЕРЕЗ AJAX
+        async function saveBioPage() {
+            const form = document.getElementById('bioForm');
+            const btn = document.getElementById('btnSaveBio');
+            btn.disabled = true;
+            btn.textContent = '⏳ Сохранение...';
+
+            // Собираем ссылки в JSON
+            const links = [];
+            document.querySelectorAll('.link-item-row').forEach(r => {
+                const title = r.querySelector('.link-title-input').value.trim();
+                const url = r.querySelector('.link-url-input').value.trim();
+                const icon = r.querySelector('.link-icon-select').value;
+                const isHighlight = r.querySelector('.link-highlight-cb').checked;
+
+                if (title && url) {
+                    links.push({
+                        title: title,
+                        url: url,
+                        iconType: icon,
+                        isHighlighted: isHighlight,
+                        isActive: true
+                    });
+                }
+            });
+
+            document.getElementById('linksJsonHidden').value = JSON.stringify(links);
+
+            const formData = new FormData(form);
+
+            try {
+                const res = await fetch('/biolink/save', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (res.ok) {
+                    alert('✅ Страница-переходник успешно сохранена!');
+                    location.reload();
+                } else {
+                    const err = await res.text();
+                    alert('Ошибка: ' + err);
+                }
+            } catch {
+                alert('Сетевая ошибка при сохранении');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 Сохранить изменения';
+            }
+        }
+    </script>
+}

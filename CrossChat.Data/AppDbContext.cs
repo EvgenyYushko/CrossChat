@@ -38,6 +38,9 @@ namespace CrossChat.Data
 		public DbSet<InboxConversation> InboxConversations { get; set; }
 		public DbSet<InboxMessage> InboxMessages { get; set; }
 
+		public DbSet<BioPage> BioPages { get; set; }
+		public DbSet<BioLinkItem> BioLinkItems { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);
@@ -57,6 +60,11 @@ namespace CrossChat.Data
 			// Защита от дублей сообщений
 			modelBuilder.Entity<InboxMessage>()
 				.HasIndex(m => m.ExternalMessageId);
+
+			// Уникальный slug для коротких ссылок (crosschat.ru/slug)
+			modelBuilder.Entity<BioPage>()
+				.HasIndex(b => b.Slug)
+				.IsUnique();
 		}
 	}
 }

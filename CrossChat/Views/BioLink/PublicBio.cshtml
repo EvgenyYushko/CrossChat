@@ -1,0 +1,296 @@
+@model CrossChat.Data.Entities.BioPage
+@{
+    Layout = null;
+    string bgStyle = Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue)
+        ? $"background: url('{Model.CustomBackgroundValue}') no-repeat center center / cover fixed;"
+        : $"background: {Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%) fixed"};";
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>@Model.Title — Официальные ссылки</title>
+
+    <!-- Meta OpenGraph для красивого превью при отправке ссылки в мессенджерах -->
+    <meta property="og:title" content="@Model.Title" />
+    <meta property="og:description" content="@(Model.Bio ?? "Официальные контакты и социальные сети")" />
+    @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+    {
+        <meta property="og:image" content="@Model.AvatarUrl" />
+    }
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            min-height: 100dvh;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 3rem 1.25rem 2rem;
+            @Html.Raw(bgStyle)
+        }
+
+        .bio-wrapper {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* АВАТАРКА */
+        .avatar-wrap {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+
+        .avatar-img {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            background: #1e293b;
+        }
+
+        .verified-badge {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background: #0085ff;
+            color: #ffffff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            border: 2px solid #0f172a;
+        }
+
+        /* ИМЯ И СТАТУС */
+        .profile-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            letter-spacing: -0.02em;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .profile-bio {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-align: center;
+            margin-bottom: 2rem;
+            line-height: 1.45;
+            max-width: 380px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        /* КНОПКИ */
+        .links-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .link-card {
+            width: 100%;
+            padding: 16px 20px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .link-card:active {
+                transform: scale(0.97);
+            }
+
+        .link-content-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .link-icon {
+            font-size: 1.4rem;
+            line-height: 1;
+        }
+
+        /* ПУЛЬСАЦИЯ ГЛАВНОЙ ССЫЛКИ (TELEGRAM И Т.Д.) */
+        .link-card.highlighted {
+            background: rgba(255, 255, 255, 0.22);
+            border-color: #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+            animation: pulseAttention 2s infinite ease-in-out;
+        }
+
+        @@keyframes pulseAttention {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.025);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .footer-brand {
+            margin-top: auto;
+            padding-top: 3rem;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+            .footer-brand:hover {
+                opacity: 0.9;
+            }
+
+        .brand-icon-badge {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bio-wrapper">
+
+        <!-- АВАТАРКА -->
+        <div class="avatar-wrap">
+            <img src="@(Model.AvatarUrl ?? "/images/placeholder.jpg")" class="avatar-img" alt="Avatar">
+            <div class="verified-badge">✓</div>
+        </div>
+
+        <!-- ИМЯ И БИО -->
+        <h1 class="profile-title">@Model.Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.Bio))
+        {
+            <p class="profile-bio">@Model.Bio</p>
+        }
+
+        <!-- СПИСОК ССЫЛОК -->
+        <div class="links-container">
+            @foreach (var link in Model.Links.Where(l => l.IsActive).OrderBy(l => l.SortOrder))
+            {
+                // Очищаем старые эмодзи из заголовка, если они случайно сохранились в базе:
+                string cleanTitle = System.Text.RegularExpressions.Regex.Replace(link.Title, @"^[\uD83C-\uDBFF\uDC00-\uDFFF\s]+", "").Trim();
+
+                <a href="@link.Url"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="link-card @(link.IsHighlighted ? "highlighted" : "")"
+                   onclick="trackLinkClick(@link.Id)">
+
+                    <div class="link-content-left">
+                        <div class="brand-icon-badge">
+                            @switch (link.IconType?.ToLower())
+                            {
+                                case "telegram":
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#2AABEE"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.74-.4.27-.76.41-1.08.4-.36-.01-1.05-.2-1.56-.37-.63-.2-1.12-.31-1.08-.66.02-.18.3-.37.83-.58 3.27-1.42 5.45-2.36 6.54-2.81 3.1-.12 3.74.03 3.53 1.52z" /></svg>
+                                    break;
+                                case "instagram":
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <defs>
+                                            <linearGradient id="instaGradLive" x1="0%" y1="100%" x2="100%" y2="0%">
+                                                <stop offset="0%" stop-color="#f09433" /><stop offset="50%" stop-color="#dc2743" /><stop offset="100%" stop-color="#bc1888" />
+                                            </linearGradient>
+                                        </defs>
+                                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="url(#instaGradLive)"></rect>
+                                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke="url(#instaGradLive)"></path>
+                                        <circle cx="17.5" cy="6.5" r="1.2" fill="url(#instaGradLive)"></circle>
+                                    </svg>
+                                    break;
+                                case "youtube":
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
+                                    break;
+                                case "bluesky":
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#0085ff"><path d="M12 10.57c2.16-3.85 4.97-6.9 7.32-6.9 2.92 0 4.68 2.65 4.68 5.38 0 4.42-4.14 7.91-7.31 9.77-1.17.68-2.53 1.12-3.89 1.12h-.8c-1.36 0-2.72-.44-3.89-1.12C4.84 16.96.7 13.47.7 9.05c0-2.73 1.76-5.38 4.68-5.38 2.35 0 5.16 3.05 7.32 6.9z" /></svg>
+                                    break;
+                                case "threads":
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z" /></svg>
+                                    break;
+                                case "x":
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                                    break;
+                                case "facebook":
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#1877F2">
+                                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                        </svg>
+                                    break;
+                                default:
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                    break;
+                            }
+                        </div>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@cleanTitle</span>
+                    </div>
+                    <span style="opacity: 0.5; font-size: 1.1rem; flex-shrink: 0;">➔</span>
+                </a>
+            }
+        </div>
+
+        <!-- ФУТЕР БРЕНДА -->
+        <a href="@AppConstants.APP_URL" class="footer-brand" target="_blank">
+            <span>⚡ Сделано на платформе <strong>CrossChat</strong></span>
+        </a>
+
+    </div>
+
+    <!-- ТРЕКИНГ КЛИКОВ (БЕЗ ЗАДЕРЖКИ ПЕРЕХОДА) -->
+    <script>
+        function trackLinkClick(linkId) {
+            try {
+                // keepalive гарантирует доставку запроса, даже если вкладка сразу перешла по ссылке
+                fetch('/biolink/click/' + linkId, { method: 'POST', keepalive: true }).catch(() => {});
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>
