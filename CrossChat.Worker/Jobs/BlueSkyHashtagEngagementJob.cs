@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using StackExchange.Redis;
 
 namespace CrossChat.Worker.Jobs
 {
@@ -17,12 +18,14 @@ namespace CrossChat.Worker.Jobs
 		private readonly IBlueSkyConsole _console;
 		private readonly ILogger<BlueSkyHashtagEngagementJob> _logger;
 		private readonly IHostEnvironment _env;
+		private readonly IDatabase _redis;
 
 		public BlueSkyHashtagEngagementJob(
 			AppDbContext db,
 			IBlueSkyService bskyService,
 			IBlueSkyTokenManager tokenManager,
 			IBlueSkyConsole console,
+			IConnectionMultiplexer redis,
 			ILogger<BlueSkyHashtagEngagementJob> logger,
 			IHostEnvironment env)
 		{
@@ -32,6 +35,7 @@ namespace CrossChat.Worker.Jobs
 			_console = console;
 			_logger = logger;
 			_env = env;
+			_redis = redis.GetDatabase();
 		}
 
 		public async Task Execute(IJobExecutionContext context)
@@ -70,9 +74,33 @@ namespace CrossChat.Worker.Jobs
 
 					if (!tags.Any()) continue;
 
-					// Выбираем 1 случайный тег для этого цикла (чтобы активность была естественной)
-					string selectedTag = tags[Random.Shared.Next(tags.Count)];
-					await _console.Log($"🔍 [Радар] Поиск свежих постов по тегу «{selectedTag}» в BlueSky...", bot.UserId, bot.Id);
+					// =========================================================================
+					// 🚀 АЛГОРИТМ ROUND-ROBIN: ОБХОД ТЕГОВ СТРОГО ПО КРУГУ ЧЕРЕЗ REDIS
+					// =========================================================================
+					var redisTagKey = $"bsky:radar:tag_idx:{bot.Id}";
+					long nextIndex = 0;
+
+					var storedIndex = await _redis.StringGetAsync(redisTagKey);
+					if (storedIndex.HasValue && long.TryParse(storedIndex, out long lastIdx))
+					{
+						// Переходим к следующему элементу по модулю длины списка (зацикливание по кругу)
+						nextIndex = (lastIdx + 1) % tags.Count;
+					}
+					else
+					{
+						nextIndex = 0; // Первый запуск — начинаем с 0
+					}
+
+					// Запоминаем текущий шаг очереди в Redis на 60 дней
+					await _redis.StringSetAsync(redisTagKey, nextIndex, TimeSpan.FromDays(60));
+
+					string selectedTag = tags[(int)nextIndex];
+
+					// Наглядный лог для тебя с номером шага очереди:
+					_logger.LogInformation("🎯 [BlueSky Radar] Очередь тегов: шаг {Step}/{Total} для @{Handle}. Тег: «{Tag}»",
+						nextIndex + 1, tags.Count, bot.Handle, selectedTag);
+
+					await _console.Log($"🔍 [Радар] Шаг {nextIndex + 1}/{tags.Count} по кругу: поиск постов по тегу «{selectedTag}»...", bot.UserId, bot.Id);
 
 					// 2. Ищем 5 самых свежих постов по тегу
 					var searchedPosts = await _bskyService.SearchPostsByQueryAsync(selectedTag, 5, botModel);
