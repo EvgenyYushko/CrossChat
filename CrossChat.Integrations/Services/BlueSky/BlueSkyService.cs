@@ -852,6 +852,56 @@ namespace CrossChat.Integrations.Services
 
 			return result;
 		}
+
+		/// <summary>
+		/// Ставит официальный лайк на публикацию в BlueSky (app.bsky.feed.like)
+		/// </summary>
+		public async Task<bool> LikePostAsync(string postUri, string postCid, BlueSkyModel settings)
+		{
+			if (string.IsNullOrEmpty(settings.AccessToken) || string.IsNullOrEmpty(settings.PdsUrl))
+				return false;
+
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			var endpoint = $"{pdsUrl}/xrpc/com.atproto.repo.createRecord";
+
+			try
+			{
+				var record = new
+				{
+					subject = new { uri = postUri, cid = postCid },
+					createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+				};
+
+				var payload = new
+				{
+					repo = settings.Did,
+					collection = "app.bsky.feed.like",
+					record = record
+				};
+
+				var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+				{
+					DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+				});
+				var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+				var response = await SendWithDPoPAsync(HttpMethod.Post, endpoint, settings, content);
+				if (response.IsSuccessStatusCode)
+				{
+					_logger.LogInformation("❤️ [BlueSky] Лайк успешно поставлен на пост {Uri}", postUri);
+					return true;
+				}
+
+				var err = await response.Content.ReadAsStringAsync();
+				_logger.LogWarning("[BlueSky] Не удалось поставить лайк на {Uri}: {Err}", postUri, err);
+				return false;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky] Ошибка при постановке лайка на пост {Uri}", postUri);
+				return false;
+			}
+		}
 	}
 
 	#region Models

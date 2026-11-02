@@ -40,4 +40,6 @@ public interface IBlueSkyService
 	Task<bool> RemoveReactionAsync(BlueSkyModel settings, string convoId, string messageId, string emoji);
 
 	Task<List<BlueSkySearchedPostDto>> SearchPostsByQueryAsync(string query, int limit, BlueSkyModel settings);
+
+	Task<bool> LikePostAsync(string postUri, string postCid, BlueSkyModel settings);
 }

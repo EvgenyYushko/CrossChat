@@ -7,10 +7,12 @@ using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using CrossChat.Worker.Jobs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Quartz;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
@@ -482,6 +484,20 @@ namespace CrossChat.Controllers
 			ViewBag.FollowersCount = insights.FollowersCount;
 
 			return View(feed);
+		}
+
+		/// <summary>
+		/// Мгновенный ручной запуск радара хештегов для тестирования
+		/// </summary>
+		[HttpPost("test-radar")]
+		[Authorize]
+		public async Task<IActionResult> TestRadar([FromForm] int botId, [FromServices] ISchedulerFactory schedulerFactory)
+		{
+			var scheduler = await schedulerFactory.GetScheduler();
+			await scheduler.TriggerJob(new JobKey(nameof(BlueSkyHashtagEngagementJob)));
+
+			_logger.LogInformation("⚡ [BlueSky Radar] Джоба комментирования принудительно запущена админом через кнопку!");
+			return RedirectToAction("Index", new { botId, radarTriggered = "true" });
 		}
 
 		// ==========================================================

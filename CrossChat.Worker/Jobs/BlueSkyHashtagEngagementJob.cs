@@ -1,7 +1,6 @@
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
-using CrossChat.Worker.Consumers.Instagram; // Для Spintax-генератора
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -105,31 +104,42 @@ namespace CrossChat.Worker.Jobs
 						continue;
 					}
 
-					// Берем от 1 до 2 постов за проход (безопасный органический темп)
+					// Берем от 1 до 2 постов за проход (или до 3-4, если нужно)
 					var postsToEngage = freshPosts.Take(2).ToList();
 					int commentedSuccess = 0;
 
-					foreach (var targetPost in postsToEngage)
+					for (int i = 0; i < postsToEngage.Count; i++)
 					{
+						var targetPost = postsToEngage[i];
+
 						try
 						{
-							// 4. Генерируем живой текст комментария через Spintax-шаблон
+							_logger.LogInformation("🎯 [BlueSky Radar] Обработка поста {Index}/{Total} от @{Author}:\n💬 Текст: «{Text}»\n🔗 Ссылка: {Link}",
+								i + 1,
+								postsToEngage.Count,
+								targetPost.AuthorHandle,
+								targetPost.Text.Length > 50 ? targetPost.Text.Substring(0, 47) + "..." : targetPost.Text,
+								targetPost.WebPermalink);
+
+							// =========================================================================
+							// 1. СТАВИМ ЛАЙК ПОСТУ ❤️ (Первое касание автора)
+							// =========================================================================
+							bool likeOk = await _bskyService.LikePostAsync(targetPost.Uri, targetPost.Cid, botModel);
+							if (likeOk)
+							{
+								await _console.Log($"❤️ Поставили лайк посту @{targetPost.AuthorHandle}", bot.UserId, bot.Id);
+							}
+
+							// Микро-пауза 5–8 секунд (как будто человек прочитал пост и нажал кнопку ответа)
+							await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 9)));
+
+							// =========================================================================
+							// 2. ГЕНЕРИРУЕМ И ПУБЛИКУЕМ КОММЕНТАРИЙ 💬
+							// =========================================================================
 							string commentText = !string.IsNullOrWhiteSpace(bot.EngagementCommentTemplates)
 								? InstagramCommentEngine.GetRandomTemplate(bot.EngagementCommentTemplates)
 								: "Great post! ✨";
 
-							// 📋 ПОДРОБНЫЙ ЛОГ: выводим ссылку на пост прямо в консоль и дашборд!
-							_logger.LogInformation("🎯 [BlueSky Radar] Комментируем пост @{Author}:\n💬 Текст поста: «{Text}»\n🔗 Ссылка: {Link}\n✍️ Наш ответ: «{Reply}»",
-								targetPost.AuthorHandle,
-								targetPost.Text.Length > 50 ? targetPost.Text.Substring(0, 47) + "..." : targetPost.Text,
-								targetPost.WebPermalink,
-								commentText);
-
-							// Пауза 15–25 секунд (имитация чтения и набора текста живым человеком)
-							int humanDelay = Random.Shared.Next(15, 25);
-							await Task.Delay(TimeSpan.FromSeconds(humanDelay));
-
-							// 5. Публикуем комментарий в ветку поста через официальный XRPC
 							bool isSuccess = await _bskyService.ReplyToThreadCommentAsync(
 								commentText,
 								targetPost.Uri,
@@ -147,14 +157,26 @@ namespace CrossChat.Worker.Jobs
 							}
 							else
 							{
-								_logger.LogWarning("⚠️ [BlueSky Radar] Не удалось оставить комментарий под постом {Uri} (возможно, автор ограничил ответы - Threadgate).", targetPost.Uri);
-								// Вносим в список использованных, чтобы не долбиться в закрытый пост снова
+								_logger.LogWarning("⚠️ [BlueSky Radar] Не удалось оставить комментарий под постом {Uri} (Threadgate / закрытые ответы).", targetPost.Uri);
 								usedUris.Add(targetPost.Uri);
+							}
+
+							// =========================================================================
+							// 3. БЕЗОПАСНАЯ ПАУЗА МЕЖДУ РАЗНЫМИ ПОСТАМИ (35–65 СЕКУНД)
+							// =========================================================================
+							// Делаем паузу только если это НЕ последний пост в списке
+							if (i < postsToEngage.Count - 1)
+							{
+								int safeWaitSeconds = Random.Shared.Next(35, 66);
+								_logger.LogInformation("⏳ [BlueSky Radar] Безопасная пауза перед следующим постом: {Sec} сек...", safeWaitSeconds);
+								await _console.Log($"⏳ [Радар] Отдых {safeWaitSeconds}с перед следующим постом...", bot.UserId, bot.Id);
+
+								await Task.Delay(TimeSpan.FromSeconds(safeWaitSeconds));
 							}
 						}
 						catch (Exception ex)
 						{
-							_logger.LogError(ex, "Ошибка при комментировании поста {Uri}", targetPost.Uri);
+							_logger.LogError(ex, "Ошибка при обработке поста {Uri}", targetPost.Uri);
 						}
 					}
 

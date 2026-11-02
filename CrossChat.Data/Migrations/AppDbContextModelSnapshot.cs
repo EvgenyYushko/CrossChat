@@ -46,6 +46,12 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("Did")
                         .HasColumnType("text");
 
+                    b.Property<string>("EngagementCommentTemplates")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EngagementHashtags")
+                        .HasColumnType("text");
+
                     b.Property<string>("Handle")
                         .HasColumnType("text");
 
@@ -57,6 +63,12 @@ namespace CrossChat.Data.Migrations
 
                     b.Property<bool>("IsDirectEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsHashtagEngagementEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastHashtagEngagementAt")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime?>("LastProcessedAt")
                         .HasColumnType("timestamp without time zone");
@@ -82,6 +94,9 @@ namespace CrossChat.Data.Migrations
 
                     b.Property<DateTime?>("TokenExpiresAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UsedPostUrisJson")
+                        .HasColumnType("text");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
