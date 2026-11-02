@@ -2,11 +2,11 @@ namespace CrossChat.Infrastructure.Constants
 {
 	public static class AppConstants
 	{
-		public static string APP_URL = "https://crosschat.ru";
+		public static string APP_DOMAIN = "crosschat.ru";
+		public static string APP_URL = $"https://{APP_DOMAIN}";
 
 		public const string TELEGRAM_API_ID = "TELEGRAM_API_ID";
 		public const string TELEGRAM_API_HASH = "TELEGRAM_API_HASH";
 		public const string TELEGRAM_ADMIN_ID = "TELEGRAM_ADMIN_ID";
-
 	}
 }

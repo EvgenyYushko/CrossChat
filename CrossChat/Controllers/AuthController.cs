@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Integrations.Helpers.HttpHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Controllers;
 
@@ -141,7 +142,7 @@ public class AuthController : Controller
 			_db.Users.Add(user);
 			await _db.SaveChangesAsync();
 
-			var loginUrl = "https://crosschat.ru/profiles";
+			var loginUrl = $"{APP_DOMAIN}/profiles";
 			var userName = user.Name;
 			var userEmail = user.Email;
 

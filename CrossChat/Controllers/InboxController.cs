@@ -7,6 +7,7 @@ using CrossChat.Integrations.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Controllers
 {
@@ -288,8 +289,8 @@ namespace CrossChat.Controllers
 			// ===================================================================
 			try
 			{
-				// Параметр de=support@crosschat.ru поднимает бесплатный лимит до 50 000 символов/день
-				string url1 = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(text)}&langpair=auto|ru&de=support@crosschat.ru";
+				// Параметр de=support@{APP_DOMAIN} поднимает бесплатный лимит до 50 000 символов/день
+				string url1 = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(text)}&langpair=auto|ru&de=support@{APP_DOMAIN}";
 				using var req1 = new HttpRequestMessage(HttpMethod.Get, url1);
 				req1.Headers.UserAgent.ParseAdd("CrossChat-App/1.0");
 

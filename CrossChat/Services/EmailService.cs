@@ -168,7 +168,7 @@ public class EmailService : IEmailService
     {
         var message = new EmailMessage
         {
-            From = $"{fromName} <{fromAddress}>", // Ваш домен: "CrossChat <noreply@crosschat.ru>"
+            From = $"{fromName} <{fromAddress}>", // Ваш домен: "CrossChat <noreply{@APP_DOMAIN>}"
             To = toEmail,                         // Кому отправляем
             Subject = subject,
             HtmlBody = htmlBody

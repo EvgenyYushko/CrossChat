@@ -8,6 +8,7 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Integrations.Services
 {
@@ -61,7 +62,7 @@ namespace CrossChat.Integrations.Services
 		public async Task<(string AccessToken, string RefreshToken, int ExpiresIn)?> RefreshTokenAsync(string refreshToken, string privateKeyJson)
 		{
 			var tokenUrl = "https://bsky.social/oauth/token";
-			var clientId = "https://crosschat.ru/bluesky/client-metadata.json";
+			var clientId = $"{APP_URL}/bluesky/client-metadata.json";
 
 			var values = new Dictionary<string, string>
 			{

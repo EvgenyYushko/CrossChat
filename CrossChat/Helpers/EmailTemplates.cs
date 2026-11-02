@@ -1,4 +1,5 @@
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Helpers
 {
@@ -205,8 +206,8 @@ namespace CrossChat.Helpers
                                     <p style=""color: #475569; font-size: 13px; line-height: 1.6; margin: 0 0 6px 0;"">
                                         💬 Есть вопросы? Наша поддержка всегда рядом:
                                     </p>
-                                    <a href=""mailto:support@crosschat.ru"" style=""color: #4f46e5; text-decoration: none; font-weight: 700; font-size: 14px;"">
-                                        support@crosschat.ru
+                                    <a href=""mailto:support@{APP_DOMAIN}"" style=""color: #4f46e5; text-decoration: none; font-weight: 700; font-size: 14px;"">
+                                        support@{APP_DOMAIN}
                                     </a>
                                 </td>
                             </tr>

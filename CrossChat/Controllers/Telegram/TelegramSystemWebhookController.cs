@@ -13,6 +13,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using static CrossChat.Helpers.TimeZoneHelper;
+using static CrossChat.Infrastructure.Constants.AppConstants;
 
 namespace CrossChat.Controllers
 {
@@ -113,7 +114,7 @@ namespace CrossChat.Controllers
 						// Создаем красивую кнопку-ссылку на ваш сайт
 						var inlineKeyboard = new InlineKeyboardMarkup(new[]
 						{
-							InlineKeyboardButton.WithUrl("🌐 Перейти на сайт CrossChat", "https://crosschat.ru")
+							InlineKeyboardButton.WithUrl("🌐 Перейти на сайт CrossChat", APP_URL)
 						});
 
 						await _telegramBotClient.SendMessage(
