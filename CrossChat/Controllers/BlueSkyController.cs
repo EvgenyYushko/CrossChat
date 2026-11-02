@@ -363,7 +363,7 @@ namespace CrossChat.Controllers
 		}
 
 		// ==========================================================
-		// 5. СОХРАНЕНИЕ НАСТРОЕК (ПРОМПТЫ / АВТООТВЕТЫ)
+		// 5. СОХРАНЕНИЕ НАСТРОЕК (ПРОМПТЫ / АВТООТВЕТЫ / ХЕШТЕГ-РАДАР)
 		// ==========================================================
 		[HttpPost("update")]
 		[Authorize]
@@ -375,7 +375,11 @@ namespace CrossChat.Controllers
 			bool isDirectEnabled,
 			bool isCommentsEnabled,
 			int commentReplyMode,
-			string? commentTemplates)
+			string? commentTemplates,
+			// 🚀 НОВЫЕ ПОЛЯ АВТО-КОММЕНТИНГА ПО ХЕШТЕГАМ:
+			bool isHashtagEngagementEnabled,
+			string? engagementHashtags,
+			string? engagementCommentTemplates)
 		{
 			var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
@@ -385,7 +389,7 @@ namespace CrossChat.Controllers
 
 			if (settings != null)
 			{
-				settings.IsActive = isDirectEnabled || isCommentsEnabled;
+				settings.IsActive = isDirectEnabled || isCommentsEnabled || isHashtagEngagementEnabled;
 				settings.IsDirectEnabled = isDirectEnabled;
 				settings.IsCommentsEnabled = isCommentsEnabled;
 
@@ -395,8 +399,13 @@ namespace CrossChat.Controllers
 				settings.CommentTemplates = commentTemplates;
 				settings.ProfileId = profileId;
 
+				// 🚀 СОХРАНЯЕМ НАСТРОЙКИ АВТО-РАДАРА:
+				settings.IsHashtagEngagementEnabled = isHashtagEngagementEnabled;
+				settings.EngagementHashtags = engagementHashtags;
+				settings.EngagementCommentTemplates = engagementCommentTemplates;
+
 				await _db.SaveChangesAsync();
-				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}.");
+				_logger.LogInformation($"[BlueSky] Настройки обновлены для @{settings.Handle}. Авто-радар: {(isHashtagEngagementEnabled ? "ВКЛ" : "ВЫКЛ")}");
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });

@@ -44,5 +44,21 @@ namespace CrossChat.Data.Entities
 
 		// Дата и время последнего обработанного комментария строго в UTC (защита от повторов)
 		public DateTime? LastProcessedAt { get; set; }
+
+		// === АВТО-КОММЕНТИНГ ПО ХЕШТЕГАМ / ТЕМАМ (ОБХОД И АКТИВНОСТЬ) ===
+		// Включен ли автопоиск и комментирование чужих постов
+		public bool IsHashtagEngagementEnabled { get; set; } = false;
+
+		// Ключевые хештеги/слова через запятую (напр. "#fitness, #smm, #marketing")
+		public string? EngagementHashtags { get; set; } = "#fitness, #lifestyle";
+
+		// Шаблоны комментариев со Spintax (напр. "{Круто|Отличный пост|Интересно}! 🔥")
+		public string? EngagementCommentTemplates { get; set; } = "{Отличный пост|Крутые мысли|Полностью согласна|Интересный взгляд}! ✨\n{Спасибо, что делитесь|Полезно было почитать} 👍";
+
+		// JSON-массив URI постов, которые мы уже комментировали (защита от повторов)
+		public string? UsedPostUrisJson { get; set; } = "[]";
+
+		// Когда последний раз запускался обход
+		public DateTime? LastHashtagEngagementAt { get; set; }
 	}
 }

@@ -648,6 +648,50 @@
                     </div>
                 </div>
 
+                <!-- 3. БЛОК АВТО-РАДАРА ХЕШТЕГОВ (ПРОДВИЖЕНИЕ И КОММЕНТИНГ) -->
+                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 12px; border-color: rgba(0, 133, 255, 0.3); background: rgba(0, 133, 255, 0.04);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label style="margin:0; font-size: 1rem; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <span>🔥</span> <span>Авто-комментинг по хештегам (Продвижение)</span>
+                            </label>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Поиск свежих тематических постов и привлечение живой аудитории</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="hashtagRadarToggle" name="isHashtagEngagementEnabled" value="true" @(Model.IsHashtagEngagementEnabled ? "checked" : "")
+                                   onchange="document.getElementById('hashtagRadarSettingsBlock').style.display = this.checked ? 'flex' : 'none';">
+                            <span class="slider" style="background-color: #333;"></span>
+                        </label>
+                        <input type="hidden" name="isHashtagEngagementEnabled" value="false">
+                    </div>
+
+                    <!-- Настройки авто-радара -->
+                    <div id="hashtagRadarSettingsBlock" style="display: @(Model.IsHashtagEngagementEnabled ? "flex" : "none"); flex-direction: column; gap: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border);">
+                        <div>
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">
+                                🎯 Ключевые хештеги или фразы для поиска (через запятую):
+                            </label>
+                            <input type="text" name="engagementHashtags" class="text-input" 
+                                   placeholder="#fitness, #smm, #lifestyle, #crypto" 
+                                   value="@Model.EngagementHashtags">
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Робот находит самые свежие публикации в ленте BlueSky по этим тегам каждые несколько часов.
+                            </small>
+                        </div>
+
+                        <div>
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                                📝 Шаблоны комментариев со Spintax {вариант1|вариант2}:
+                            </label>
+                            <textarea name="engagementCommentTemplates" rows="3" class="text-input" style="font-size: 0.9rem;"
+                                      placeholder="{Отличный пост|Круто|Интересно}! 🔥&#10;{Спасибо, что делитесь|Полезно} ✨">@(Model.EngagementCommentTemplates ?? "{Отличный пост|Крутые мысли|Полностью согласна|Интересный взгляд}! ✨\n{Спасибо, что делитесь|Полезно было почитать} 👍")</textarea>
+                            <small style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                Рандомизатор фраз исключает подозрения в спаме. В будущем сюда можно будет подключить ИИ для анализа картинок!
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ПРОМПТ ДЛЯ ЛС -->
                 <div class="form-group">
                     <label>Системный промпт для ЛС (Чат)</label>

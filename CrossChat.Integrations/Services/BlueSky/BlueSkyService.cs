@@ -741,9 +741,134 @@ namespace CrossChat.Integrations.Services
 				return false;
 			}
 		}
+
+		/// <summary>
+		/// Поиск самых свежих постов в BlueSky по хештегу или фразе с подробным логированием
+		/// </summary>
+		public async Task<List<BlueSkySearchedPostDto>> SearchPostsByQueryAsync(string query, int limit, BlueSkyModel settings)
+		{
+			var result = new List<BlueSkySearchedPostDto>();
+			if (string.IsNullOrWhiteSpace(query)) return result;
+
+			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
+			// Запрашиваем свежие посты (sort=latest) через официальный ATProto XRPC
+			string endpoint = $"{pdsUrl}/xrpc/app.bsky.feed.searchPosts?q={Uri.EscapeDataString(query.Trim())}&sort=latest&limit={Math.Clamp(limit, 1, 25)}";
+
+			try
+			{
+				_logger.LogInformation("🔍 [BlueSky Search] Поиск постов по запросу: «{Query}»...", query);
+
+				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+				var json = await response.Content.ReadAsStringAsync();
+
+				if (!response.IsSuccessStatusCode)
+				{
+					_logger.LogWarning("[BlueSky Search] Ошибка поиска (HTTP {Code}): {Err}", response.StatusCode, json);
+					return result;
+				}
+
+				using var doc = JsonDocument.Parse(json);
+				var root = doc.RootElement;
+
+				if (root.TryGetProperty("posts", out var postsArr))
+				{
+					foreach (var item in postsArr.EnumerateArray())
+					{
+						string postUri = item.GetProperty("uri").GetString()!;
+						string postCid = item.GetProperty("cid").GetString()!;
+
+						// Достаем автора
+						string authorDid = "";
+						string authorHandle = "user";
+						if (item.TryGetProperty("author", out var authObj))
+						{
+							authorDid = authObj.TryGetProperty("did", out var d) ? d.GetString() ?? "" : "";
+							authorHandle = authObj.TryGetProperty("handle", out var h) ? h.GetString() ?? "user" : "user";
+						}
+
+						// Не комментируем посты своего же аккаунта!
+						if (authorDid == settings.Did) continue;
+
+						// Достаем текст и цепочку reply (root/parent)
+						string text = "";
+						string rootUri = postUri;
+						string rootCid = postCid;
+						DateTime createdAt = DateTime.UtcNow;
+
+						if (item.TryGetProperty("record", out var recObj))
+						{
+							text = recObj.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
+
+							if (recObj.TryGetProperty("createdAt", out var ca) && DateTime.TryParse(ca.GetString(), out var dt))
+							{
+								createdAt = dt.ToUniversalTime();
+							}
+
+							// Если найденный пост сам является ответом в ветке — сохраняем корневой пост
+							if (recObj.TryGetProperty("reply", out var repObj))
+							{
+								if (repObj.TryGetProperty("root", out var rootRef))
+								{
+									rootUri = rootRef.TryGetProperty("uri", out var ru) ? ru.GetString() ?? postUri : postUri;
+									rootCid = rootRef.TryGetProperty("cid", out var rc) ? rc.GetString() ?? postCid : postCid;
+								}
+							}
+						}
+
+						// 🚀 ГЕНЕРИРУЕМ ПРЯМУЮ ВЕБ-ССЫЛКУ НА ПОСТ:
+						// uri имеет вид at://did:plc:xxx/app.bsky.feed.post/3lb...
+						string rkey = postUri.Split('/').Last();
+						string permalink = $"https://bsky.app/profile/{authorHandle}/post/{rkey}";
+
+						var searchedPost = new BlueSkySearchedPostDto
+						{
+							Uri = postUri,
+							Cid = postCid,
+							RootUri = rootUri,
+							RootCid = rootCid,
+							AuthorDid = authorDid,
+							AuthorHandle = authorHandle,
+							Text = text,
+							WebPermalink = permalink,
+							CreatedAt = createdAt
+						};
+
+						result.Add(searchedPost);
+
+						// 📋 ПОДРОБНЫЙ ЛОГ ДЛЯ ТЕБЯ:
+						_logger.LogInformation("📌 [BlueSky Search] Найден пост от @{Author}: «{Snippet}»\n🔗 Ссылка: {Link}",
+							authorHandle,
+							text.Length > 60 ? text.Substring(0, 57) + "..." : text,
+							permalink);
+					}
+				}
+
+				_logger.LogInformation("✅ [BlueSky Search] Найдено подходящих постов: {Count} по тегу «{Query}»", result.Count, query);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "[BlueSky Search] Исключение при поиске постов по запросу «{Query}»", query);
+			}
+
+			return result;
+		}
 	}
 
 	#region Models
+
+	public class BlueSkySearchedPostDto
+	{
+		public string Uri { get; set; } = string.Empty; // at://did:.../app.bsky.feed.post/3lb...
+		public string Cid { get; set; } = string.Empty;
+		public string RootUri { get; set; } = string.Empty;
+		public string RootCid { get; set; } = string.Empty;
+		public string AuthorDid { get; set; } = string.Empty;
+		public string AuthorHandle { get; set; } = string.Empty;
+		public string Text { get; set; } = string.Empty;
+		public string WebPermalink { get; set; } = string.Empty; // https://bsky.app/profile/.../post/...
+		public DateTime CreatedAt { get; set; }
+	}
+
 	public class BlueSkyModel
 	{
 		public string AccessToken { get; set; }

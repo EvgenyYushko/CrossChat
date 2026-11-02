@@ -209,6 +209,14 @@ builder.Services.AddQuartz(q =>
 		.WithIdentity($"{nameof(InboxCleanupJob)}-Trigger")
 		// Запуск каждую ночь в 03:30 по расписанию:
 		.WithCronSchedule("0 30 3 * * ?"));
+
+	// 13. Авто-радар BlueSky: поиск постов по хештегам и умное комментирование (каждые 4 часа)
+	var bskyRadarKey = new JobKey(nameof(BlueSkyHashtagEngagementJob));
+	q.AddJob<BlueSkyHashtagEngagementJob>(opts => opts.WithIdentity(bskyRadarKey));
+	q.AddTrigger(opts => opts
+		.ForJob(bskyRadarKey)
+		.WithIdentity($"{nameof(BlueSkyHashtagEngagementJob)}-Trigger")
+		.WithSimpleSchedule(x => x.WithIntervalInHours(4).RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
