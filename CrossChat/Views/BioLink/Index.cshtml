@@ -704,9 +704,10 @@
             btn.disabled = true;
             btn.textContent = '⏳ Сохранение...';
 
-            // Собираем ссылки в JSON
+            // Собираем ссылки в JSON (сохраняя ID существующих кнопок)
             const links = [];
             document.querySelectorAll('.link-item-row').forEach(r => {
+                const linkId = parseInt(r.dataset.id) || 0; // 🚀 СЧИТЫВАЕМ ID КНОПКИ
                 const title = r.querySelector('.link-title-input').value.trim();
                 const url = r.querySelector('.link-url-input').value.trim();
                 const icon = r.querySelector('.link-icon-select').value;
@@ -714,6 +715,7 @@
 
                 if (title && url) {
                     links.push({
+                        id: linkId, // 🚀 ПЕРЕДАЕМ ID СЕРВЕРУ
                         title: title,
                         url: url,
                         iconType: icon,

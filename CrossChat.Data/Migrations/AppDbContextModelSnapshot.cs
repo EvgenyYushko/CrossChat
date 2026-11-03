@@ -86,8 +86,7 @@ namespace CrossChat.Data.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("CustomBackgroundValue")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");

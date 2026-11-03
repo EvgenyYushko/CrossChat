@@ -154,7 +154,7 @@ namespace CrossChat.Controllers
 				bioPage.CustomBackgroundValue = await ConvertFileToBase64CompressedAsync(bgImageFile, 1200); // 1200px для фона
 			}
 
-			// 4. Обновление списка ссылок из JSON
+			// 4. УМНОЕ ОБНОВЛЕНИЕ СПИСКА ССЫЛОК (БЕЗ УДАЛЕНИЯ И НАРУШЕНИЯ СВЯЗЕЙ С АНАЛИТИКОЙ!)
 			if (!string.IsNullOrWhiteSpace(linksJson))
 			{
 				try
@@ -162,25 +162,52 @@ namespace CrossChat.Controllers
 					var incomingLinks = JsonSerializer.Deserialize<List<BioLinkInputDto>>(linksJson, new JsonSerializerOptions
 					{
 						PropertyNameCaseInsensitive = true
-					});
+					}) ?? new List<BioLinkInputDto>();
 
-					if (incomingLinks != null)
+					var incomingIds = incomingLinks.Where(x => x.Id > 0).Select(x => x.Id).ToHashSet();
+
+					// А. Ссылки, которые пользователь реально удалил корзинкой 🗑️:
+					var linksToRemove = bioPage.Links.Where(l => !incomingIds.Contains(l.Id)).ToList();
+					if (linksToRemove.Any())
 					{
-						// Очищаем старые ссылки
-						_db.BioLinkItems.RemoveRange(bioPage.Links);
-						bioPage.Links.Clear();
+						var removeIds = linksToRemove.Select(l => l.Id).ToList();
 
-						int order = 0;
-						foreach (var item in incomingLinks)
+						// 🚀 ВАЖНО: Отвязываем удаляемые ссылки от статистики кликов (ставим null), исключая ошибку FK:
+						await _db.BioPageEvents
+							.Where(e => e.BioLinkItemId.HasValue && removeIds.Contains(e.BioLinkItemId.Value))
+							.ExecuteUpdateAsync(s => s.SetProperty(e => e.BioLinkItemId, (int?)null));
+
+						_db.BioLinkItems.RemoveRange(linksToRemove);
+					}
+
+					// Б. Обновляем существующие и добавляем новые:
+					int order = 0;
+					foreach (var item in incomingLinks)
+					{
+						if (string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.Url))
+							continue;
+
+						string cleanUrl = NormalizeUrl(item.Url.Trim());
+
+						// Если ссылка уже была — ОБНОВЛЯЕМ (сохраняя ID и счетчик кликов ClicksCount!):
+						var existingLink = item.Id > 0 ? bioPage.Links.FirstOrDefault(l => l.Id == item.Id) : null;
+						if (existingLink != null)
 						{
-							if (string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.Url))
-								continue;
-
+							existingLink.Title = item.Title.Trim();
+							existingLink.Url = cleanUrl;
+							existingLink.IconType = string.IsNullOrWhiteSpace(item.IconType) ? "custom" : item.IconType.ToLowerInvariant();
+							existingLink.IsHighlighted = item.IsHighlighted;
+							existingLink.IsActive = item.IsActive;
+							existingLink.SortOrder = order++;
+						}
+						// Если ссылка новая — добавляем:
+						else
+						{
 							bioPage.Links.Add(new BioLinkItem
 							{
 								BioPageId = bioPage.Id,
 								Title = item.Title.Trim(),
-								Url = NormalizeUrl(item.Url.Trim()),
+								Url = cleanUrl,
 								IconType = string.IsNullOrWhiteSpace(item.IconType) ? "custom" : item.IconType.ToLowerInvariant(),
 								IsHighlighted = item.IsHighlighted,
 								IsActive = item.IsActive,
@@ -191,7 +218,7 @@ namespace CrossChat.Controllers
 				}
 				catch (Exception ex)
 				{
-					_logger.LogError(ex, "[BioLink] Ошибка десериализации ссылок");
+					_logger.LogError(ex, "[BioLink] Ошибка умного обновления ссылок");
 				}
 			}
 
@@ -615,6 +642,7 @@ namespace CrossChat.Controllers
 
 	public class BioLinkInputDto
 	{
+		public int Id { get; set; } = 0; // 🚀 ПЕРЕДАЕМ ID ДЛЯ УМНОГО ОБНОВЛЕНИЯ
 		public string Title { get; set; } = string.Empty;
 		public string Url { get; set; } = string.Empty;
 		public string IconType { get; set; } = "custom";

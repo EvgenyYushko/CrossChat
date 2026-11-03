@@ -35,8 +35,8 @@ namespace CrossChat.Data.Entities
 		[MaxLength(50)]
 		public string ThemeType { get; set; } = "gradient-dark";
 
-		// CSS градиент или путь к загруженному фоновому фото
-		[MaxLength(500)]
+		// 🚀 БЕЗ ОГРАНИЧЕНИЯ ДЛИНЫ: может хранить большой Base64 фоновой картинки!
+		[Column(TypeName = "text")]
 		public string? CustomBackgroundValue { get; set; }
 
 		public bool IsActive { get; set; } = true;
