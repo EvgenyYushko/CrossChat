@@ -2,9 +2,24 @@
 @using CrossChat.Infrastructure.Constants
 @{
     Layout = null;
-    string bgCss = Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue)
-        ? $"background-image: url('{Model.CustomBackgroundValue}');"
-        : $"background: {Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)"};";
+
+    // 🚀 БЕЗОПАСНАЯ ОБРАБОТКА ФОНА (защита от двойного url(...)):
+    string rawBg = Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)";
+    string bgStyle;
+
+    if (Model.ThemeType == "custom-image")
+    {
+        string cleanImg = rawBg.Trim();
+        if (!cleanImg.StartsWith("url(", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanImg = $"url('{cleanImg}')";
+        }
+        bgStyle = $"background-image: {cleanImg};";
+    }
+    else
+    {
+        bgStyle = $"background: {rawBg};";
+    }
 
     string accentColor = string.IsNullOrWhiteSpace(Model.HighlightColor) ? "#38bdf8" : Model.HighlightColor;
 }
@@ -15,7 +30,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>@Model.Title — Официальные ссылки</title>
 
-    <!-- 🚀 ДИНАМИЧЕСКАЯ ФАВИКОНКА (АВАТАРКА ПРОФИЛЯ В ВКЛАДКЕ БРАУЗЕРА) -->
+    <!-- ДИНАМИЧЕСКАЯ ФАВИКОНКА (АВАТАРКА В ВКЛАДКЕ) -->
     @if (!string.IsNullOrEmpty(Model.AvatarUrl))
     {
         <link rel="icon" type="image/jpeg" href="@Model.AvatarUrl" />
@@ -37,19 +52,10 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* 🚀 СТАТИЧНЫЙ ФОНОВЫЙ СЛОЙ (РЕШАЕТ ПРОБЛЕМУ СДВИГА НА МОБИЛКАХ) */
-        .page-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            z-index: -1;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
-            @Html.Raw(bgCss)
+        html, body {
+            background-color: #0f172a;
+            overscroll-behavior-y: none;
+            -webkit-overflow-scrolling: touch;
         }
 
         body {
@@ -65,6 +71,25 @@
             position: relative;
         }
 
+        /* 🚀 ИСПРАВЛЕННЫЙ СЛОЙ ФОНА: z-index: 1 (ПОВЕРХ СИНЕГО ФОНА BODY!) */
+        .page-bg {
+            position: fixed;
+            top: -15vh;
+            left: -10vw;
+            width: 120vw;
+            height: 130vh;
+            height: 130dvh;
+            z-index: 1; /* <-- ВАЖНО: 1 вместо -1 */
+            pointer-events: none;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            transform: translate3d(0, 0, 0);
+            -webkit-transform: translate3d(0, 0, 0);
+            will-change: transform;
+        }
+
+        /* 🚀 КОНТЕНТ ПОВЕРХ ФОТОГРАФИИ: z-index: 2 */
         .bio-wrapper {
             width: 100%;
             max-width: 480px;
@@ -72,7 +97,7 @@
             flex-direction: column;
             align-items: center;
             position: relative;
-            z-index: 2;
+            z-index: 2; /* <-- ВАЖНО: поверх слоя фона */
             --highlight-color: @accentColor;
         }
 
@@ -113,7 +138,7 @@
             margin-bottom: 0.5rem;
             text-align: center;
             letter-spacing: -0.02em;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
         }
 
         .profile-bio {
@@ -123,7 +148,7 @@
             margin-bottom: 2rem;
             line-height: 1.45;
             max-width: 380px;
-            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
         }
 
         .links-container {
@@ -137,7 +162,7 @@
             width: 100%;
             padding: 16px 20px;
             border-radius: 18px;
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(15, 23, 42, 0.55); /* Чуть более контрастное стекло поверх фото */
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.25);
@@ -148,7 +173,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.4);
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
@@ -168,19 +193,18 @@
             width: 38px;
             height: 38px;
             border-radius: 10px;
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.15);
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         }
 
-        /* 🚀 ИСПОЛЬЗУЕМ КАСТОМНЫЙ ЦВЕТ ПОДСВЕТКИ */
         .link-card.highlighted {
-            background: rgba(255, 255, 255, 0.22);
+            background: rgba(15, 23, 42, 0.7);
             border-color: var(--highlight-color);
-            box-shadow: 0 0 20px var(--highlight-color);
+            box-shadow: 0 0 22px var(--highlight-color);
             animation: pulseGlow 2s infinite ease-in-out;
         }
 
@@ -202,22 +226,24 @@
             margin-top: auto;
             padding-top: 3rem;
             font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255, 255, 255, 0.6);
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 6px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
             transition: opacity 0.2s;
         }
 
             .footer-brand:hover {
-                opacity: 0.9;
+                opacity: 1;
             }
     </style>
 </head>
 <body>
 
-    <div class="page-bg"></div>
+    <!-- 🚀 ФОНОВЫЙ СЛОЙ С ПРЯМЫМ СТИЛЕМ (ТЕПЕРЬ ВИДЕН НА 100%) -->
+    <div class="page-bg" style="@Html.Raw(bgStyle)"></div>
 
     <div class="bio-wrapper">
         <div class="avatar-wrap">
