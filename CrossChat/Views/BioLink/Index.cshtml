@@ -271,23 +271,40 @@
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
         }
 
-            .preview-btn.highlighted {
-                background: rgba(255, 255, 255, 0.22);
-                border-color: #38bdf8;
-                box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
-                animation: pulseGlow 2s infinite;
+        .preview-btn.highlighted {
+            background: rgba(255, 255, 255, 0.25) !important;
+            position: relative;
+            overflow: hidden;
+            animation: previewAttention 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+            .preview-btn.highlighted::before {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -150%;
+                width: 60%;
+                height: 200%;
+                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+                transform: rotate(25deg);
+                animation: shineSweep 3.5s infinite ease-in-out;
+                pointer-events: none;
             }
 
-        @@keyframes pulseGlow {
-            0% {
-                transform: scale(1);
+        @@keyframes previewAttention {
+            0%, 100% {
+                transform: scale(1) rotate(0deg);
             }
 
-            50% {
-                transform: scale(1.02);
+            6% {
+                transform: scale(1.03) rotate(-1.5deg);
             }
 
-            100% {
+            12% {
+                transform: scale(1.03) rotate(1.5deg);
+            }
+
+            24% {
                 transform: scale(1);
             }
         }

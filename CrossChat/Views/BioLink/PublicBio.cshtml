@@ -215,24 +215,76 @@
             transform: scale(0.9);
         }
 
+        /* 🚀 СУПЕР-ПРИВЛЕЧЕНИЕ ВНИМАНИЯ ДЛЯ ГЛАВНОЙ КНОПКИ */
         .link-card.highlighted {
-            background: rgba(15, 23, 42, 0.7);
-            border-color: var(--highlight-color);
-            box-shadow: 0 0 22px var(--highlight-color);
-            animation: pulseGlow 2s infinite ease-in-out;
+            background: rgba(255, 255, 255, 0.18) !important;
+            border-color: var(--highlight-color) !important;
+            position: relative;
+            overflow: hidden; /* Чтобы луч света не вылетал за скругленные углы */
+            animation: heroAttention 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: transform, box-shadow;
         }
 
-        @@keyframes pulseGlow {
+            /* 1. БЕГУЩИЙ ГЛЯНЦЕВЫЙ ЛУЧ СВЕТА (SHINE EFFECT) */
+            .link-card.highlighted::before {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -150%;
+                width: 60%;
+                height: 200%;
+                background: linear-gradient( 90deg, transparent, rgba(255, 255, 255, 0.45), transparent );
+                transform: rotate(25deg);
+                animation: shineSweep 3.5s infinite ease-in-out;
+                pointer-events: none;
+                z-index: 1;
+            }
+
+        /* 2. ИМПУЛЬСНОЕ ПОКАЧИВАНИЕ И НЕОНОВОЕ ДЫХАНИЕ */
+        @@keyframes heroAttention {
             0% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 12px var(--highlight-color);
+            }
+            /* Фаза задорного толчка (Wobble) */
+            6% {
+                transform: scale(1.035) rotate(-1.5deg);
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4), 0 0 28px var(--highlight-color);
+            }
+
+            12% {
+                transform: scale(1.035) rotate(1.5deg);
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4), 0 0 28px var(--highlight-color);
+            }
+
+            18% {
+                transform: scale(1.025) rotate(-0.8deg);
+            }
+
+            24% {
+                transform: scale(1.01) rotate(0deg);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 20px var(--highlight-color);
+            }
+
+            32% {
                 transform: scale(1);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 12px var(--highlight-color);
             }
-
-            50% {
-                transform: scale(1.025);
-            }
-
+            /* Пауза спокойного свечения до следующего цикла */
             100% {
-                transform: scale(1);
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 12px var(--highlight-color);
+            }
+        }
+
+        /* Анимация луча света раз в 3.5 секунды */
+        @@keyframes shineSweep {
+            0%, 25% {
+                left: -150%;
+            }
+
+            60%, 100% {
+                left: 200%;
             }
         }
 
