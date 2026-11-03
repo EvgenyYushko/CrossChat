@@ -345,8 +345,8 @@ namespace CrossChat.Controllers
 
 			int sort = 0;
 
-			// 1. Telegram Канал (ЧИСТОЕ ИМЯ БЕЗ СМАЙЛИКА В ТЕКСТЕ)
-			var tg = profile.TelegramChannelSettingsList.FirstOrDefault(x => x.IsActive);
+			// 1. Telegram Канал
+			var tg = profile.TelegramChannelSettingsList.FirstOrDefault(x => x.ChannelId != 0);
 			if (tg != null)
 			{
 				string tgUrl = !string.IsNullOrEmpty(tg.ChannelUsername)
@@ -365,8 +365,8 @@ namespace CrossChat.Controllers
 			}
 
 			// 2. Instagram
-			var ig = profile.InstagramSettingsList.FirstOrDefault(x => x.IsActive);
-			if (ig != null && !string.IsNullOrEmpty(ig.Username))
+			var ig = profile.InstagramSettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.Username));
+			if (ig != null)
 			{
 				bioPage.Links.Add(new BioLinkItem
 				{
@@ -379,8 +379,8 @@ namespace CrossChat.Controllers
 			}
 
 			// 3. BlueSky
-			var bsky = profile.BlueSkySettingsList.FirstOrDefault(x => x.IsActive);
-			if (bsky != null && !string.IsNullOrEmpty(bsky.Handle))
+			var bsky = profile.BlueSkySettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.Handle));
+			if (bsky != null)
 			{
 				bioPage.Links.Add(new BioLinkItem
 				{
@@ -392,9 +392,9 @@ namespace CrossChat.Controllers
 				});
 			}
 
-			// 4. Threads
-			var th = profile.ThreadsSettingsList.FirstOrDefault(x => x.IsActive);
-			if (th != null && !string.IsNullOrEmpty(th.Username))
+			// 4. Threads (🚀 ТЕПЕРЬ ПОДТЯГИВАЕТСЯ ВСЕГДА ПРИ НАЛИЧИИ АККАУНТА!)
+			var th = profile.ThreadsSettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.Username));
+			if (th != null)
 			{
 				bioPage.Links.Add(new BioLinkItem
 				{
@@ -407,7 +407,7 @@ namespace CrossChat.Controllers
 			}
 
 			// 5. YouTube
-			var yt = profile.YouTubeSettingsList.FirstOrDefault(x => x.IsActive);
+			var yt = profile.YouTubeSettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.ChannelId));
 			if (yt != null)
 			{
 				string ytUrl = !string.IsNullOrEmpty(yt.CustomUrl)
@@ -425,8 +425,8 @@ namespace CrossChat.Controllers
 			}
 
 			// 6. X (Twitter)
-			var x = profile.XSettingsList.FirstOrDefault(x => x.IsActive);
-			if (x != null && !string.IsNullOrEmpty(x.ScreenName))
+			var x = profile.XSettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.ScreenName));
+			if (x != null)
 			{
 				bioPage.Links.Add(new BioLinkItem
 				{
@@ -439,8 +439,8 @@ namespace CrossChat.Controllers
 			}
 
 			// 7. Facebook
-			var fb = profile.FacebookSettingsList.FirstOrDefault(x => x.IsActive);
-			if (fb != null && !string.IsNullOrEmpty(fb.PageId))
+			var fb = profile.FacebookSettingsList.FirstOrDefault(x => !string.IsNullOrEmpty(x.PageId));
+			if (fb != null)
 			{
 				bioPage.Links.Add(new BioLinkItem
 				{
