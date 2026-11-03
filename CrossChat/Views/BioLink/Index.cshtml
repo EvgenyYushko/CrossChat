@@ -271,11 +271,14 @@
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
         }
 
+        /* 🚀 ЖИВАЯ ПУЛЬСАЦИЯ И СВЕЧЕНИЕ В МАКЕТЕ ТЕЛЕФОНА */
         .preview-btn.highlighted {
-            background: rgba(255, 255, 255, 0.25) !important;
+            background: rgba(255, 255, 255, 0.22) !important;
+            border: 2px solid var(--preview-glow-color, #38bdf8) !important;
             position: relative;
             overflow: hidden;
-            animation: previewAttention 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+            animation: previewPulseGlow 2.8s infinite ease-in-out !important;
+            will-change: transform, box-shadow;
         }
 
             .preview-btn.highlighted::before {
@@ -287,9 +290,41 @@
                 height: 200%;
                 background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
                 transform: rotate(25deg);
-                animation: shineSweep 3.5s infinite ease-in-out;
+                animation: shineSweep 2.8s infinite ease-in-out;
                 pointer-events: none;
             }
+
+        @@keyframes previewPulseGlow {
+            0% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 0 8px var(--preview-glow-color, #38bdf8);
+            }
+
+            38% {
+                transform: scale(1.035) rotate(0deg);
+                box-shadow: 0 0 20px var(--preview-glow-color, #38bdf8), 0 0 36px var(--preview-glow-color, #38bdf8);
+            }
+
+            44% {
+                transform: scale(1.035) rotate(-1.5deg);
+                box-shadow: 0 0 22px var(--preview-glow-color, #38bdf8), 0 0 40px var(--preview-glow-color, #38bdf8);
+            }
+
+            50% {
+                transform: scale(1.035) rotate(1.5deg);
+                box-shadow: 0 0 22px var(--preview-glow-color, #38bdf8), 0 0 40px var(--preview-glow-color, #38bdf8);
+            }
+
+            56% {
+                transform: scale(1.035) rotate(0deg);
+                box-shadow: 0 0 20px var(--preview-glow-color, #38bdf8), 0 0 36px var(--preview-glow-color, #38bdf8);
+            }
+
+            70%, 100% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 0 8px var(--preview-glow-color, #38bdf8);
+            }
+        }
 
         @@keyframes previewAttention {
             0%, 100% {
@@ -496,7 +531,12 @@
                 <div class="form-group" style="margin-top: 1rem;">
                     <label>Цвет неонового свечения (для главной ссылки):</label>
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <input type="color" name="highlightColor" id="highlightColorInput" value="@Model.HighlightColor"
+                        @{
+                            string safeColor = (!string.IsNullOrWhiteSpace(Model.HighlightColor) && Model.HighlightColor.StartsWith("#") && Model.HighlightColor.Length == 7)
+                            ? Model.HighlightColor
+                            : "#38bdf8";
+                        }
+                        <input type="color" name="highlightColor" id="highlightColorInput" value="@safeColor"
                                style="width: 50px; height: 42px; border: 1px solid var(--glass-border); border-radius: 10px; background: transparent; cursor: pointer; padding: 2px;"
                                onchange="updateLivePreview()">
                         <span style="font-size: 0.85rem; color: var(--text-secondary);">
@@ -582,7 +622,11 @@
             <div class="phone-frame">
                 <div class="phone-notch"></div>
                 <div class="phone-screen" id="previewScreen" style="background: @(Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue) ? $"url('{Model.CustomBackgroundValue}')" : Model.CustomBackgroundValue);">
-                    <img id="previewAvatarImg" src="@(Model.AvatarUrl ?? "/images/placeholder.jpg")" class="preview-avatar" alt="Avatar">
+                    <img id="previewAvatarImg"
+                         src="@(Model.AvatarUrl ?? "/images/placeholder.jpg")"
+                         class="preview-avatar"
+                         alt="Avatar"
+                         onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=@Uri.EscapeDataString(Model.Title ?? "User")&background=0085ff&color=fff';">
                     <h3 id="previewTitleText" class="preview-title">@Model.Title</h3>
                     <p id="previewBioText" class="preview-bio">@Model.Bio</p>
 
@@ -707,47 +751,60 @@
 
         // 4. ЖИВОЕ ОБНОВЛЕНИЕ ПРЕВЬЮ НА ЭКРАНЕ IPHONE
         function updateLivePreview() {
-             document.getElementById('previewTitleText').textContent = document.getElementById('titleInput').value || 'Имя профиля';
-             document.getElementById('previewBioText').textContent = document.getElementById('bioInput').value || '';
+            const previewContainer = document.getElementById('previewLinksContainer');
+            if (!previewContainer) return;
 
-             // Считываем выбранный пользователем цвет подсветки
-             const highlightColorInput = document.getElementById('highlightColorInput');
-             const highlightColor = highlightColorInput ? highlightColorInput.value : '#38bdf8';
+            // 🚀 1. СЧИТЫВАЕМ ЦВЕТ В САМОМ НАЧАЛЕ ДО ЛЮБОГО ИСПОЛЬЗОВАНИЯ:
+            const highlightColorInput = document.getElementById('highlightColorInput');
+            let highlightColor = '#38bdf8';
+            if (highlightColorInput && highlightColorInput.value && highlightColorInput.value.startsWith('#')) {
+                highlightColor = highlightColorInput.value;
+            }
 
-             const previewContainer = document.getElementById('previewLinksContainer');
-             previewContainer.innerHTML = '';
+            // 🚀 2. ПЕРЕДАЕМ ЦВЕТ В СТИЛИ МАКЕТА ТЕЛЕФОНА:
+            const previewScreen = document.getElementById('previewScreen');
+            if (previewScreen) {
+                previewScreen.style.setProperty('--preview-glow-color', highlightColor);
+            }
 
-             const rows = document.querySelectorAll('.link-item-row');
-             rows.forEach(r => {
-                 let title = r.querySelector('.link-title-input').value.trim();
-                 const icon = r.querySelector('.link-icon-select').value;
-                 const isHighlight = r.querySelector('.link-highlight-cb').checked;
+            // 3. Обновляем заголовок и био:
+            const titleInput = document.getElementById('titleInput');
+            const bioInput = document.getElementById('bioInput');
+            const previewTitle = document.getElementById('previewTitleText');
+            const previewBio = document.getElementById('previewBioText');
 
-                 if (!title) return;
+            if (previewTitle) previewTitle.textContent = (titleInput && titleInput.value.trim()) ? titleInput.value : 'Имя профиля';
+            if (previewBio) previewBio.textContent = (bioInput && bioInput.value.trim()) ? bioInput.value : '';
 
-                 // 🚀 АВТОМАТИЧЕСКАЯ ОЧИСТКА: убираем старые эмодзи в начале названия, если они были
-                 title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
+            // 4. Очищаем контейнер и наполняем кнопками:
+            previewContainer.innerHTML = '';
 
-                 const iconSvg = getNetworkBrandSvg(icon);
-                 const btn = document.createElement('div');
-                 btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+            const rows = document.querySelectorAll('.link-item-row');
+            rows.forEach(r => {
+                const titleInputEl = r.querySelector('.link-title-input');
+                const iconSelectEl = r.querySelector('.link-icon-select');
+                const highlightCbEl = r.querySelector('.link-highlight-cb');
 
-                 // Динамически применяем цвет свечения, если кнопка выделена
-                 if (isHighlight) {
-                     btn.style.borderColor = highlightColor;
-                     btn.style.boxShadow = `0 0 16px ${highlightColor}88`; // Добавляем прозрачность к тени
-                 } else {
-                     btn.style.borderColor = '';
-                     btn.style.boxShadow = '';
-                 }
+                let title = titleInputEl ? titleInputEl.value.trim() : '';
+                const icon = iconSelectEl ? iconSelectEl.value : 'custom';
+                const isHighlight = highlightCbEl ? highlightCbEl.checked : false;
 
-                 btn.innerHTML = `
-                     <div class="brand-icon-badge">${iconSvg}</div>
-                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
-                     <span style="opacity:0.4; font-size:0.9rem;">➔</span>
-                 `;
-                 previewContainer.appendChild(btn);
-             });
+                if (!title) return;
+
+                // Очищаем старые случайные эмодзи в начале названия
+                title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
+
+                const iconSvg = getNetworkBrandSvg(icon);
+                const btn = document.createElement('div');
+                btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+
+                btn.innerHTML = `
+                    <div class="brand-icon-badge">${iconSvg}</div>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
+                    <span style="opacity:0.4; font-size:0.9rem;">➔</span>
+                `;
+                previewContainer.appendChild(btn);
+            });
         }
 
         // 🚀 ГЕНЕРАТОР ОФИЦИАЛЬНЫХ БРЕНДОВЫХ SVG ИКОНОК

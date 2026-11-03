@@ -215,17 +215,17 @@
             transform: scale(0.9);
         }
 
-        /* 🚀 СУПЕР-ПРИВЛЕЧЕНИЕ ВНИМАНИЯ ДЛЯ ГЛАВНОЙ КНОПКИ */
+        /* 🚀 СОЧНЫЙ НЕОН + ВЫПЯЧИВАНИЕ + ИМПУЛЬС В ЦВЕТ РАМКИ */
         .link-card.highlighted {
-            background: rgba(255, 255, 255, 0.18) !important;
-            border-color: var(--highlight-color) !important;
+            background: rgba(15, 23, 42, 0.6) !important;
+            border: 2px solid var(--highlight-color, #38bdf8) !important;
             position: relative;
-            overflow: hidden; /* Чтобы луч света не вылетал за скругленные углы */
-            animation: heroAttention 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            animation: pulseGlowHero 2.8s infinite ease-in-out;
             will-change: transform, box-shadow;
         }
 
-            /* 1. БЕГУЩИЙ ГЛЯНЦЕВЫЙ ЛУЧ СВЕТА (SHINE EFFECT) */
+            /* Бегущий глянцевый блик света */
             .link-card.highlighted::before {
                 content: '';
                 position: absolute;
@@ -235,10 +235,58 @@
                 height: 200%;
                 background: linear-gradient( 90deg, transparent, rgba(255, 255, 255, 0.45), transparent );
                 transform: rotate(25deg);
-                animation: shineSweep 3.5s infinite ease-in-out;
+                animation: shineSweep 2.8s infinite ease-in-out;
                 pointer-events: none;
                 z-index: 1;
             }
+
+        /* 🚀 АНИМАЦИЯ: ПЛАВНОЕ ДЫХАНИЕ-ВЫПЯЧИВАНИЕ + ЯРКАЯ ВСПЫШКА НЕОНА В ЦВЕТ ВЫБРАННОЙ РАМКИ */
+        @@keyframes pulseGlowHero {
+            0% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 0 10px var(--highlight-color, #38bdf8), 0 4px 15px rgba(0, 0, 0, 0.3);
+            }
+            /* Фаза 1: Увеличение и нарастание яркого сочного свечения */
+            38% {
+                transform: scale(1.035) rotate(0deg);
+                box-shadow: 0 0 25px var(--highlight-color, #38bdf8), 0 0 48px var(--highlight-color, #38bdf8);
+            }
+            /* Фаза 2: Задорный микровстрях на пике увеличения */
+            44% {
+                transform: scale(1.035) rotate(-1.5deg);
+                box-shadow: 0 0 28px var(--highlight-color, #38bdf8), 0 0 52px var(--highlight-color, #38bdf8);
+            }
+
+            50% {
+                transform: scale(1.035) rotate(1.5deg);
+                box-shadow: 0 0 28px var(--highlight-color, #38bdf8), 0 0 52px var(--highlight-color, #38bdf8);
+            }
+
+            56% {
+                transform: scale(1.035) rotate(0deg);
+                box-shadow: 0 0 25px var(--highlight-color, #38bdf8), 0 0 48px var(--highlight-color, #38bdf8);
+            }
+            /* Фаза 3: Плавный возврат в спокойное состояние */
+            70% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 0 10px var(--highlight-color, #38bdf8), 0 4px 15px rgba(0, 0, 0, 0.3);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+                box-shadow: 0 0 10px var(--highlight-color, #38bdf8), 0 4px 15px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        @@keyframes shineSweep {
+            0%, 25% {
+                left: -150%;
+            }
+
+            65%, 100% {
+                left: 200%;
+            }
+        }
 
         /* 2. ИМПУЛЬСНОЕ ПОКАЧИВАНИЕ И НЕОНОВОЕ ДЫХАНИЕ */
         @@keyframes heroAttention {
