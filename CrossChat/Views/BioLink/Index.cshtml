@@ -728,10 +728,19 @@
                                     <input type="url" class="text-input link-url-input" value="@l.Url" placeholder="https://..." style="padding: 8px 12px; font-size: 0.88rem;" oninput="updateLivePreview()">
                                 </div>
                                 <div class="link-row-actions">
-                                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
-                                        <input type="checkbox" class="link-highlight-cb" checked="@l.IsHighlighted" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
-                                        ⭐ Свечение (Главная)
-                                    </label>
+                                    <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                                        <!-- СВЕЧЕНИЕ -->
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
+                                            <input type="checkbox" class="link-highlight-cb" checked="@l.IsHighlighted" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
+                                            ⭐ Свечение
+                                        </label>
+
+                                        <!-- 🚀 ГАЛОЧКА СКРЫТЬ ССЫЛКУ -->
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-secondary);">
+                                            <input type="checkbox" class="link-hidden-cb" checked="@(!l.IsActive)" onchange="updateLivePreview()" style="accent-color: #ef4444; width: 16px; height: 16px;">
+                                            🙈 Скрыть
+                                        </label>
+                                    </div>
 
                                     <!-- КНОПКИ ПЕРЕМЕЩЕНИЯ ДЛЯ СМАРТФОНОВ -->
                                     <div class="reorder-btns-mobile">
@@ -871,7 +880,7 @@
             row.setAttribute('draggable', 'true');
             row.dataset.id = "0";
             row.innerHTML = `
-                <div class="link-row-top">
+            <div class="link-row-top">
                     <span class="drag-handle" title="Перетащите мышкой">⠿</span>
                     <select class="text-input link-icon-select" style="width: 125px; padding: 8px 10px; font-size: 0.85rem;" onchange="updateLivePreview()">
                         <option value="telegram">✈️ Telegram</option>
@@ -889,10 +898,18 @@
                     <input type="url" class="text-input link-url-input" placeholder="https://..." style="padding: 8px 12px; font-size: 0.88rem;" oninput="updateLivePreview()">
                 </div>
                 <div class="link-row-actions">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
-                        <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
-                        ⭐ Свечение (Главная)
-                    </label>
+                    <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
+                            <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
+                            ⭐ Свечение
+                        </label>
+                        <!-- 🚀 Галочка скрыть для новых строк -->
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-secondary);">
+                            <input type="checkbox" class="link-hidden-cb" onchange="updateLivePreview()" style="accent-color: #ef4444; width: 16px; height: 16px;">
+                            🙈 Скрыть
+                        </label>
+                    </div>
+
                     <div class="reorder-btns-mobile">
                         <button type="button" class="reorder-btn" onclick="moveLinkRow(this, -1)" title="Поднять выше">⬆️</button>
                         <button type="button" class="reorder-btn" onclick="moveLinkRow(this, 1)" title="Опустить ниже">⬇️</button>
@@ -1006,12 +1023,18 @@
                 const titleInputEl = r.querySelector('.link-title-input');
                 const iconSelectEl = r.querySelector('.link-icon-select');
                 const highlightCbEl = r.querySelector('.link-highlight-cb');
+                const hiddenCbEl = r.querySelector('.link-hidden-cb'); // 🚀 Считываем галочку
 
                 let title = titleInputEl ? titleInputEl.value.trim() : '';
                 const icon = iconSelectEl ? iconSelectEl.value : 'custom';
                 const isHighlight = highlightCbEl ? highlightCbEl.checked : false;
+                const isHidden = hiddenCbEl ? hiddenCbEl.checked : false;
 
-                if (!title) return;
+                // 🚀 Приглушаем карточку в редакторе, если она скрыта:
+                r.style.opacity = isHidden ? '0.5' : '1';
+
+                // Если ссылка пустая ИЛИ скрыта — НЕ рисуем её на экране телефона!
+                if (!title || isHidden) return;
 
                 title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
 
@@ -1087,6 +1110,7 @@
                 const url = r.querySelector('.link-url-input').value.trim();
                 const icon = r.querySelector('.link-icon-select').value;
                 const isHighlight = r.querySelector('.link-highlight-cb').checked;
+                const isHidden = r.querySelector('.link-hidden-cb')?.checked ?? false; // 🚀
 
                 if (title && url) {
                     links.push({
@@ -1095,7 +1119,7 @@
                         url: url,
                         iconType: icon,
                         isHighlighted: isHighlight,
-                        isActive: true
+                        isActive: !isHidden // 🚀 Сохраняем: если скрыто, isActive = false!
                     });
                 }
             });
