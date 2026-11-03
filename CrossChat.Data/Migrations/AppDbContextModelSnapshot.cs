@@ -88,6 +88,11 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("CustomBackgroundValue")
                         .HasColumnType("text");
 
+                    b.Property<string>("HighlightColor")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 

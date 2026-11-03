@@ -49,5 +49,9 @@ namespace CrossChat.Data.Entities
 
 		// Список кнопок-ссылок
 		public virtual List<BioLinkItem> Links { get; set; } = new();
+
+		// Цвет неонового свечения для выделенной кнопки (напр. "#38bdf8" или "#10b981")
+		[MaxLength(20)]
+		public string HighlightColor { get; set; } = "#38bdf8";
 	}
 }

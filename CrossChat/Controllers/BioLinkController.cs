@@ -103,6 +103,7 @@ namespace CrossChat.Controllers
 			[FromForm] string? bio,
 			[FromForm] string themeType,
 			[FromForm] string? customBackgroundValue,
+			[FromForm] string highlightColor,
 			[FromForm] string linksJson,
 			IFormFile? bgImageFile,
 			IFormFile? avatarImageFile)
@@ -140,6 +141,7 @@ namespace CrossChat.Controllers
 			bioPage.Bio = bio?.Trim();
 			bioPage.ThemeType = themeType;
 			bioPage.CustomBackgroundValue = customBackgroundValue;
+			bioPage.HighlightColor = string.IsNullOrWhiteSpace(highlightColor) ? "#38bdf8" : highlightColor.Trim(); // <-- СОХРАНЯЕМ ЦВЕТ
 			bioPage.UpdatedAt = DateTime.UtcNow;
 
 			// 2.Загрузка аватарки(как обычно, сразу в Base64 в базу данных!)

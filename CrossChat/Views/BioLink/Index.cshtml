@@ -427,6 +427,19 @@
                     </div>
                 </div>
 
+                <!-- 🚀 ВЫБОР ЦВЕТА СВЕЧЕНИЯ ДЛЯ ВАЖНОЙ КНОПКИ -->
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Цвет неонового свечения (для главной ссылки):</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="color" name="highlightColor" id="highlightColorInput" value="@Model.HighlightColor"
+                               style="width: 50px; height: 42px; border: 1px solid var(--glass-border); border-radius: 10px; background: transparent; cursor: pointer; padding: 2px;"
+                               onchange="updateLivePreview()">
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">
+                            Выберите цвет рамки и свечения для кнопки со звёздочкой ⭐
+                        </span>
+                    </div>
+                </div>
+
                 <!-- Поле загрузки файла фона (если выбран custom-image) -->
                 <div class="form-group" id="bgUploadBox" style="display: @(Model.ThemeType == "custom-image" ? "block" : "none");">
                     <label>Загрузить изображение для фона:</label>
@@ -568,6 +581,7 @@
             const container = document.getElementById('linksListContainer');
             const row = document.createElement('div');
             row.className = 'link-item-row';
+            row.dataset.id = "0";
             row.innerHTML = `
                 <div class="link-row-top">
                     <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
@@ -604,33 +618,47 @@
 
         // 4. ЖИВОЕ ОБНОВЛЕНИЕ ПРЕВЬЮ НА ЭКРАНЕ IPHONE
         function updateLivePreview() {
-            document.getElementById('previewTitleText').textContent = document.getElementById('titleInput').value || 'Имя профиля';
-            document.getElementById('previewBioText').textContent = document.getElementById('bioInput').value || '';
+             document.getElementById('previewTitleText').textContent = document.getElementById('titleInput').value || 'Имя профиля';
+             document.getElementById('previewBioText').textContent = document.getElementById('bioInput').value || '';
 
-            const previewContainer = document.getElementById('previewLinksContainer');
-            previewContainer.innerHTML = '';
+             // Считываем выбранный пользователем цвет подсветки
+             const highlightColorInput = document.getElementById('highlightColorInput');
+             const highlightColor = highlightColorInput ? highlightColorInput.value : '#38bdf8';
 
-            const rows = document.querySelectorAll('.link-item-row');
-            rows.forEach(r => {
-                let title = r.querySelector('.link-title-input').value.trim();
-                const icon = r.querySelector('.link-icon-select').value;
-                const isHighlight = r.querySelector('.link-highlight-cb').checked;
+             const previewContainer = document.getElementById('previewLinksContainer');
+             previewContainer.innerHTML = '';
 
-                if (!title) return;
+             const rows = document.querySelectorAll('.link-item-row');
+             rows.forEach(r => {
+                 let title = r.querySelector('.link-title-input').value.trim();
+                 const icon = r.querySelector('.link-icon-select').value;
+                 const isHighlight = r.querySelector('.link-highlight-cb').checked;
 
-                // 🚀 АВТОМАТИЧЕСКАЯ ОЧИСТКА: убираем старые эмодзи в начале названия, если они были
-                title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
+                 if (!title) return;
 
-                const iconSvg = getNetworkBrandSvg(icon);
-                const btn = document.createElement('div');
-                btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
-                btn.innerHTML = `
-                    <div class="brand-icon-badge">${iconSvg}</div>
-                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
-                    <span style="opacity:0.4; font-size:0.9rem;">➔</span>
-                `;
-                previewContainer.appendChild(btn);
-            });
+                 // 🚀 АВТОМАТИЧЕСКАЯ ОЧИСТКА: убираем старые эмодзи в начале названия, если они были
+                 title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
+
+                 const iconSvg = getNetworkBrandSvg(icon);
+                 const btn = document.createElement('div');
+                 btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+
+                 // Динамически применяем цвет свечения, если кнопка выделена
+                 if (isHighlight) {
+                     btn.style.borderColor = highlightColor;
+                     btn.style.boxShadow = `0 0 16px ${highlightColor}88`; // Добавляем прозрачность к тени
+                 } else {
+                     btn.style.borderColor = '';
+                     btn.style.boxShadow = '';
+                 }
+
+                 btn.innerHTML = `
+                     <div class="brand-icon-badge">${iconSvg}</div>
+                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
+                     <span style="opacity:0.4; font-size:0.9rem;">➔</span>
+                 `;
+                 previewContainer.appendChild(btn);
+             });
         }
 
         // 🚀 ГЕНЕРАТОР ОФИЦИАЛЬНЫХ БРЕНДОВЫХ SVG ИКОНОК
@@ -697,17 +725,17 @@
             });
         }
 
-        // 5. СОХРАНЕНИЕ ВСЕЙ СТРАНИЦЫ ЧЕРЕЗ AJAX
+        // 5. СОХРАНЕНИЕ ВСЕЙ СТРАНИЦЫ ЧЕРЕЗ AJAX (ПЕРЕДАЧА ЦВЕТА И ID ССЫЛОК)
         async function saveBioPage() {
             const form = document.getElementById('bioForm');
             const btn = document.getElementById('btnSaveBio');
             btn.disabled = true;
             btn.textContent = '⏳ Сохранение...';
 
-            // Собираем ссылки в JSON (сохраняя ID существующих кнопок)
+            // Собираем ссылки в JSON (считывая ID существующих кнопок)
             const links = [];
             document.querySelectorAll('.link-item-row').forEach(r => {
-                const linkId = parseInt(r.dataset.id) || 0; // 🚀 СЧИТЫВАЕМ ID КНОПКИ
+                const linkId = parseInt(r.dataset.id) || 0;
                 const title = r.querySelector('.link-title-input').value.trim();
                 const url = r.querySelector('.link-url-input').value.trim();
                 const icon = r.querySelector('.link-icon-select').value;
@@ -715,7 +743,7 @@
 
                 if (title && url) {
                     links.push({
-                        id: linkId, // 🚀 ПЕРЕДАЕМ ID СЕРВЕРУ
+                        id: linkId,
                         title: title,
                         url: url,
                         iconType: icon,

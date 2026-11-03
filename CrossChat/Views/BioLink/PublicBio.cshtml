@@ -1,9 +1,12 @@
 @model CrossChat.Data.Entities.BioPage
+@using CrossChat.Infrastructure.Constants
 @{
     Layout = null;
-    string bgStyle = Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue)
-        ? $"background: url('{Model.CustomBackgroundValue}') no-repeat center center / cover fixed;"
-        : $"background: {Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%) fixed"};";
+    string bgCss = Model.ThemeType == "custom-image" && !string.IsNullOrEmpty(Model.CustomBackgroundValue)
+        ? $"background-image: url('{Model.CustomBackgroundValue}');"
+        : $"background: {Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)"};";
+
+    string accentColor = string.IsNullOrWhiteSpace(Model.HighlightColor) ? "#38bdf8" : Model.HighlightColor;
 }
 <!DOCTYPE html>
 <html lang="ru">
@@ -12,7 +15,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>@Model.Title — Официальные ссылки</title>
 
-    <!-- Meta OpenGraph для красивого превью при отправке ссылки в мессенджерах -->
+    <!-- 🚀 ДИНАМИЧЕСКАЯ ФАВИКОНКА (АВАТАРКА ПРОФИЛЯ В ВКЛАДКЕ БРАУЗЕРА) -->
+    @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+    {
+        <link rel="icon" type="image/jpeg" href="@Model.AvatarUrl" />
+        <link rel="apple-touch-icon" href="@Model.AvatarUrl" />
+    }
+
     <meta property="og:title" content="@Model.Title" />
     <meta property="og:description" content="@(Model.Bio ?? "Официальные контакты и социальные сети")" />
     @if (!string.IsNullOrEmpty(Model.AvatarUrl))
@@ -28,6 +37,21 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* 🚀 СТАТИЧНЫЙ ФОНОВЫЙ СЛОЙ (РЕШАЕТ ПРОБЛЕМУ СДВИГА НА МОБИЛКАХ) */
+        .page-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            z-index: -1;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            @Html.Raw(bgCss)
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             min-height: 100vh;
@@ -38,7 +62,7 @@
             align-items: center;
             justify-content: flex-start;
             padding: 3rem 1.25rem 2rem;
-            @Html.Raw(bgStyle)
+            position: relative;
         }
 
         .bio-wrapper {
@@ -49,9 +73,9 @@
             align-items: center;
             position: relative;
             z-index: 2;
+            --highlight-color: @accentColor;
         }
 
-        /* АВАТАРКА */
         .avatar-wrap {
             position: relative;
             margin-bottom: 1.25rem;
@@ -83,7 +107,6 @@
             border: 2px solid #0f172a;
         }
 
-        /* ИМЯ И СТАТУС */
         .profile-title {
             font-size: 1.5rem;
             font-weight: 800;
@@ -103,7 +126,6 @@
             text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         }
 
-        /* КНОПКИ */
         .links-container {
             width: 100%;
             display: flex;
@@ -142,20 +164,27 @@
             gap: 14px;
         }
 
-        .link-icon {
-            font-size: 1.4rem;
-            line-height: 1;
+        .brand-icon-badge {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
         }
 
-        /* ПУЛЬСАЦИЯ ГЛАВНОЙ ССЫЛКИ (TELEGRAM И Т.Д.) */
+        /* 🚀 ИСПОЛЬЗУЕМ КАСТОМНЫЙ ЦВЕТ ПОДСВЕТКИ */
         .link-card.highlighted {
             background: rgba(255, 255, 255, 0.22);
-            border-color: #38bdf8;
-            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
-            animation: pulseAttention 2s infinite ease-in-out;
+            border-color: var(--highlight-color);
+            box-shadow: 0 0 20px var(--highlight-color);
+            animation: pulseGlow 2s infinite ease-in-out;
         }
 
-        @@keyframes pulseAttention {
+        @@keyframes pulseGlow {
             0% {
                 transform: scale(1);
             }
@@ -184,42 +213,27 @@
             .footer-brand:hover {
                 opacity: 0.9;
             }
-
-        .brand-icon-badge {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
-        }
     </style>
 </head>
 <body>
 
-    <div class="bio-wrapper">
+    <div class="page-bg"></div>
 
-        <!-- АВАТАРКА -->
+    <div class="bio-wrapper">
         <div class="avatar-wrap">
             <img src="@(Model.AvatarUrl ?? "/images/placeholder.jpg")" class="avatar-img" alt="Avatar">
             <div class="verified-badge">✓</div>
         </div>
 
-        <!-- ИМЯ И БИО -->
         <h1 class="profile-title">@Model.Title</h1>
         @if (!string.IsNullOrWhiteSpace(Model.Bio))
         {
             <p class="profile-bio">@Model.Bio</p>
         }
 
-        <!-- СПИСОК ССЫЛОК -->
         <div class="links-container">
             @foreach (var link in Model.Links.Where(l => l.IsActive).OrderBy(l => l.SortOrder))
             {
-                // Очищаем старые эмодзи из заголовка, если они случайно сохранились в базе:
                 string cleanTitle = System.Text.RegularExpressions.Regex.Replace(link.Title, @"^[\uD83C-\uDBFF\uDC00-\uDFFF\s]+", "").Trim();
 
                 <a href="@link.Url"
@@ -237,14 +251,10 @@
                                     break;
                                 case "instagram":
                                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <defs>
-                                            <linearGradient id="instaGradLive" x1="0%" y1="100%" x2="100%" y2="0%">
-                                                <stop offset="0%" stop-color="#f09433" /><stop offset="50%" stop-color="#dc2743" /><stop offset="100%" stop-color="#bc1888" />
-                                            </linearGradient>
-                                        </defs>
-                                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="url(#instaGradLive)"></rect>
-                                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke="url(#instaGradLive)"></path>
-                                        <circle cx="17.5" cy="6.5" r="1.2" fill="url(#instaGradLive)"></circle>
+                                        <defs><linearGradient id="instaGradPub" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f09433" /><stop offset="50%" stop-color="#dc2743" /><stop offset="100%" stop-color="#bc1888" /></linearGradient></defs>
+                                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="url(#instaGradPub)"></rect>
+                                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke="url(#instaGradPub)"></path>
+                                        <circle cx="17.5" cy="6.5" r="1.2" fill="url(#instaGradPub)"></circle>
                                     </svg>
                                     break;
                                 case "youtube":
@@ -260,12 +270,10 @@
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff"><path d="M18.244 2.25h3.308l-7.227 7.746 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.286L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
                                     break;
                                 case "facebook":
-                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#1877F2">
-                                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                                        </svg>
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
                                     break;
                                 default:
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5,5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"></path></svg>
                                     break;
                             }
                         </div>
@@ -276,20 +284,16 @@
             }
         </div>
 
-        <!-- ФУТЕР БРЕНДА -->
         <a href="@AppConstants.APP_URL" class="footer-brand" target="_blank">
             <span>⚡ Сделано на платформе <strong>CrossChat</strong></span>
         </a>
-
     </div>
 
-    <!-- ТРЕКИНГ КЛИКОВ (БЕЗ ЗАДЕРЖКИ ПЕРЕХОДА) -->
     <script>
         function trackLinkClick(linkId) {
             try {
-                // keepalive гарантирует доставку запроса, даже если вкладка сразу перешла по ссылке
                 fetch('/biolink/click/' + linkId, { method: 'POST', keepalive: true }).catch(() => {});
-            } catch(e) {}
+            } catch(e){}
         }
     </script>
 </body>
