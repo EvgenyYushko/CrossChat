@@ -743,7 +743,7 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Поиск самых свежих постов в BlueSky по хештегу или фразе с подробным логированием
+		/// Поиск свежих ТОП-постов в BlueSky (sort=top за последние 48 часов)
 		/// </summary>
 		public async Task<List<BlueSkySearchedPostDto>> SearchPostsByQueryAsync(string query, int limit, BlueSkyModel settings)
 		{
@@ -751,15 +751,28 @@ namespace CrossChat.Integrations.Services
 			if (string.IsNullOrWhiteSpace(query)) return result;
 
 			var pdsUrl = settings.PdsUrl?.TrimEnd('/');
-			// Запрашиваем свежие посты (sort=latest) через официальный ATProto XRPC
-			string endpoint = $"{pdsUrl}/xrpc/app.bsky.feed.searchPosts?q={Uri.EscapeDataString(query.Trim())}&sort=latest&limit={Math.Clamp(limit, 1, 25)}";
+
+			// 🚀 ВРЕМЕННОЕ ОКНО: запрашиваем только посты за последние 48 часов
+			var sinceThreshold = DateTime.UtcNow.AddHours(-48);
+			string sinceUtc = sinceThreshold.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
+			// 🚀 СОРТИРОВКА ПО ТОПУ ВОИНОВ (sort=top вместо sort=latest):
+			string endpoint = $"{pdsUrl}/xrpc/app.bsky.feed.searchPosts?q={Uri.EscapeDataString(query.Trim())}&sort=top&since={Uri.EscapeDataString(sinceUtc)}&limit={Math.Clamp(limit, 5, 25)}";
 
 			try
 			{
-				_logger.LogInformation("🔍 [BlueSky Search] Поиск постов по запросу: «{Query}»...", query);
+				_logger.LogInformation("🔍 [BlueSky Search] Поиск ТОП-постов за 48ч по запросу: «{Query}»...", query);
 
 				var response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
 				var json = await response.Content.ReadAsStringAsync();
+
+				// Страховка: если сервер PDS капризничает на параметр since — повторяем с чистым sort=top
+				if (!response.IsSuccessStatusCode && json.Contains("since"))
+				{
+					endpoint = $"{pdsUrl}/xrpc/app.bsky.feed.searchPosts?q={Uri.EscapeDataString(query.Trim())}&sort=top&limit={Math.Clamp(limit, 5, 25)}";
+					response = await SendWithDPoPAsync(HttpMethod.Get, endpoint, settings, null);
+					json = await response.Content.ReadAsStringAsync();
+				}
 
 				if (!response.IsSuccessStatusCode)
 				{
@@ -786,10 +799,13 @@ namespace CrossChat.Integrations.Services
 							authorHandle = authObj.TryGetProperty("handle", out var h) ? h.GetString() ?? "user" : "user";
 						}
 
-						// Не комментируем посты своего же аккаунта!
 						if (authorDid == settings.Did) continue;
 
-						// Достаем текст и цепочку reply (root/parent)
+						// 🚀 СЧИТЫВАЕМ СЧЁТЧИКИ ПОПУЛЯРНОСТИ ИЗ ОТВЕТА API:
+						int likes = item.TryGetProperty("likeCount", out var lc) ? lc.GetInt32() : 0;
+						int reposts = item.TryGetProperty("repostCount", out var rc) ? rc.GetInt32() : 0;
+						int replies = item.TryGetProperty("replyCount", out var rpc) ? rpc.GetInt32() : 0;
+
 						string text = "";
 						string rootUri = postUri;
 						string rootCid = postCid;
@@ -804,19 +820,19 @@ namespace CrossChat.Integrations.Services
 								createdAt = dt.ToUniversalTime();
 							}
 
-							// Если найденный пост сам является ответом в ветке — сохраняем корневой пост
 							if (recObj.TryGetProperty("reply", out var repObj))
 							{
 								if (repObj.TryGetProperty("root", out var rootRef))
 								{
 									rootUri = rootRef.TryGetProperty("uri", out var ru) ? ru.GetString() ?? postUri : postUri;
-									rootCid = rootRef.TryGetProperty("cid", out var rc) ? rc.GetString() ?? postCid : postCid;
+									rootCid = rootRef.TryGetProperty("cid", out var rc2) ? rc2.GetString() ?? postCid : postCid;
 								}
 							}
 						}
 
-						// 🚀 ГЕНЕРИРУЕМ ПРЯМУЮ ВЕБ-ССЫЛКУ НА ПОСТ:
-						// uri имеет вид at://did:plc:xxx/app.bsky.feed.post/3lb...
+						// Страховка: не берем посты старше 48 часов
+						if (createdAt < sinceThreshold) continue;
+
 						string rkey = postUri.Split('/').Last();
 						string permalink = $"https://bsky.app/profile/{authorHandle}/post/{rkey}";
 
@@ -830,20 +846,26 @@ namespace CrossChat.Integrations.Services
 							AuthorHandle = authorHandle,
 							Text = text,
 							WebPermalink = permalink,
-							CreatedAt = createdAt
+							CreatedAt = createdAt,
+							LikeCount = likes,
+							RepostCount = reposts,
+							ReplyCount = replies
 						};
 
 						result.Add(searchedPost);
 
-						// 📋 ПОДРОБНЫЙ ЛОГ ДЛЯ ТЕБЯ:
-						_logger.LogInformation("📌 [BlueSky Search] Найден пост от @{Author}: «{Snippet}»\n🔗 Ссылка: {Link}",
+						_logger.LogInformation("📌 [BlueSky Search] Найден ТОП-пост от @{Author} (❤️ {Likes}, 🔁 {Reposts}): «{Snippet}»\n🔗 Ссылка: {Link}",
 							authorHandle,
-							text.Length > 60 ? text.Substring(0, 57) + "..." : text,
+							likes,
+							reposts,
+							text.Length > 50 ? text.Substring(0, 47) + "..." : text,
 							permalink);
 					}
 				}
 
-				_logger.LogInformation("✅ [BlueSky Search] Найдено подходящих постов: {Count} по тегу «{Query}»", result.Count, query);
+				// Сортируем локально по убыванию лайков
+				result = result.OrderByDescending(p => p.LikeCount).ToList();
+				_logger.LogInformation("✅ [BlueSky Search] Отобрано {Count} свежих популярных постов по тегу «{Query}»", result.Count, query);
 			}
 			catch (Exception ex)
 			{
@@ -917,6 +939,11 @@ namespace CrossChat.Integrations.Services
 		public string Text { get; set; } = string.Empty;
 		public string WebPermalink { get; set; } = string.Empty; // https://bsky.app/profile/.../post/...
 		public DateTime CreatedAt { get; set; }
+
+		// 🚀 СЧЁТЧИКИ ПОПУЛЯРНОСТИ (ДЛЯ ОТБОРА ТОП-ПОСТОВ):
+		public int LikeCount { get; set; } = 0;
+		public int RepostCount { get; set; } = 0;
+		public int ReplyCount { get; set; } = 0;
 	}
 
 	public class BlueSkyModel

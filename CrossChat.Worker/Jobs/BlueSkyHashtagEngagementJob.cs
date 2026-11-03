@@ -132,8 +132,8 @@ namespace CrossChat.Worker.Jobs
 						continue;
 					}
 
-					// Берем от 1 до 2 постов за проход (или до 3-4, если нужно)
-					var postsToEngage = freshPosts.Take(2).ToList();
+					// 🚀 БЕРЕМ ТОП-2 САМЫХ ПОПУЛЯРНЫХ СВЕЖИХ ПОСТА:
+					var postsToEngage = freshPosts.OrderByDescending(p => p.LikeCount).Take(2).ToList();
 					int commentedSuccess = 0;
 
 					for (int i = 0; i < postsToEngage.Count; i++)
@@ -142,10 +142,12 @@ namespace CrossChat.Worker.Jobs
 
 						try
 						{
-							_logger.LogInformation("🎯 [BlueSky Radar] Обработка поста {Index}/{Total} от @{Author}:\n💬 Текст: «{Text}»\n🔗 Ссылка: {Link}",
+							_logger.LogInformation("🎯 [BlueSky Radar] Комментируем ТОП-пост {Index}/{Total} от @{Author} (❤️ {Likes} лайков, 🔁 {Reposts} репостов):\n💬 Текст: «{Text}»\n🔗 Ссылка: {Link}",
 								i + 1,
 								postsToEngage.Count,
 								targetPost.AuthorHandle,
+								targetPost.LikeCount,
+								targetPost.RepostCount,
 								targetPost.Text.Length > 50 ? targetPost.Text.Substring(0, 47) + "..." : targetPost.Text,
 								targetPost.WebPermalink);
 
@@ -181,7 +183,7 @@ namespace CrossChat.Worker.Jobs
 								commentedSuccess++;
 								usedUris.Add(targetPost.Uri);
 
-								await _console.Log($"✅ Оставили комментарий под постом @{targetPost.AuthorHandle}: «{commentText}»\n🔗 {targetPost.WebPermalink}", bot.UserId, bot.Id);
+								await _console.Log($"✅ Оставили комментарий под ТОП-постом @{targetPost.AuthorHandle} (❤️ {targetPost.LikeCount} лайков): «{commentText}»\n🔗 {targetPost.WebPermalink}", bot.UserId, bot.Id);
 							}
 							else
 							{
