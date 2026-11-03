@@ -300,6 +300,53 @@
                 display: none; /* На мобилке скрываем живой макет для компактности */
             }
         }
+
+        /* 🚀 СТИЛИ ПЕРЕНОСА ССЫЛОК */
+        .link-item-row {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: default;
+        }
+
+            .link-item-row.dragging {
+                opacity: 0.4;
+                border: 2px dashed var(--accent-color);
+            }
+
+        .drag-handle {
+            cursor: grab;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            padding: 0 4px;
+            user-select: none;
+            touch-action: none;
+        }
+
+            .drag-handle:active {
+                cursor: grabbing;
+            }
+
+        .reorder-btns-mobile {
+            display: none;
+            gap: 4px;
+        }
+
+        /* На мобилках показываем стрелочки для мгновенного перемещения в 1 тап */
+        @@media (max-width: 900px) {
+            .reorder-btns-mobile {
+                display: flex;
+            }
+
+            .drag-handle {
+                display: none; /* На тач-экранах скрываем десктопную ручку */
+            }
+        }
     </style>
 }
 
@@ -458,9 +505,12 @@
                     <div class="links-list" id="linksListContainer">
                         @foreach (var l in Model.Links.OrderBy(x => x.SortOrder))
                         {
-                            <div class="link-item-row" data-id="@l.Id">
-                                <div class="link-row-top">
-                                    <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
+                            <div class="link-item-row" draggable="true" data-id="@l.Id">
+                                <div class="link-row-top" style="display: flex; align-items: center; gap: 8px;">
+                                    <!-- 🚀 РУЧКА ПЕРЕТАСКИВАНИЯ (GRIP) -->
+                                    <span class="drag-handle" title="Перетащите мышкой">⠿</span>
+
+                                    <select class="text-input link-icon-select" style="width: 110px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
                                         <option value="telegram" selected="@(l.IconType == "telegram")">✈️ Telegram</option>
                                         <option value="instagram" selected="@(l.IconType == "instagram")">📸 Instagram</option>
                                         <option value="youtube" selected="@(l.IconType == "youtube")">🎬 YouTube</option>
@@ -470,7 +520,7 @@
                                         <option value="facebook" selected="@(l.IconType == "facebook")">📘 Facebook</option>
                                         <option value="custom" selected="@(l.IconType == "custom")">🔗 Ссылка</option>
                                     </select>
-                                    <input type="text" class="text-input link-title-input" value="@l.Title" placeholder="Название кнопки (напр. Мой Telegram)" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
+                                    <input type="text" class="text-input link-title-input" value="@l.Title" placeholder="Название кнопки" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
                                 </div>
                                 <div style="display: flex; gap: 8px;">
                                     <input type="url" class="text-input link-url-input" value="@l.Url" placeholder="https://..." style="flex: 1; padding: 6px 10px; font-size: 0.85rem;" oninput="updateLivePreview()">
@@ -478,8 +528,15 @@
                                 <div class="link-row-actions">
                                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.78rem;">
                                         <input type="checkbox" class="link-highlight-cb" checked="@l.IsHighlighted" onchange="updateLivePreview()" style="accent-color: #38bdf8;">
-                                        ⭐ Свечение (Главная ссылка)
+                                        ⭐ Свечение (Главная)
                                     </label>
+
+                                    <!-- 🚀 КНОПКИ СТРЕЛОЧЕК ДЛЯ МОБИЛКЕ -->
+                                    <div class="reorder-btns-mobile">
+                                        <button type="button" onclick="moveLinkRow(this, -1)" style="background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">⬆️</button>
+                                        <button type="button" onclick="moveLinkRow(this, 1)" style="background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">⬇️</button>
+                                    </div>
+
                                     <div style="display: flex; gap: 8px; align-items: center;">
                                         <span style="color: var(--text-secondary); font-size: 0.75rem;">Кликов: <strong>@l.ClicksCount</strong></span>
                                         <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; line-height: 1;">🗑️</button>
@@ -578,38 +635,52 @@
 
         // 3. ДОБАВЛЕНИЕ НОВОЙ СТРОКИ ССЫЛКИ
         function addNewLinkRow() {
-            const container = document.getElementById('linksListContainer');
-            const row = document.createElement('div');
-            row.className = 'link-item-row';
-            row.dataset.id = "0";
-            row.innerHTML = `
-                <div class="link-row-top">
-                    <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
-                        <option value="telegram">✈️ Telegram</option>
-                        <option value="instagram">📸 Instagram</option>
-                        <option value="youtube">🎬 YouTube</option>
-                        <option value="bluesky">🦋 BlueSky</option>
-                        <option value="threads">🧵 Threads</option>
-                        <option value="x">✖️ X</option>
-                        <option value="facebook">📘 Facebook</option>
-                        <option value="custom" selected>🔗 Ссылка</option>
-                    </select>
-                    <input type="text" class="text-input link-title-input" placeholder="Название кнопки" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <input type="url" class="text-input link-url-input" placeholder="https://..." style="flex: 1; padding: 6px 10px; font-size: 0.85rem;" oninput="updateLivePreview()">
-                </div>
-                <div class="link-row-actions">
-                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.78rem;">
-                        <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8;">
-                        ⭐ Свечение (Главная ссылка)
-                    </label>
-                    <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; line-height: 1;">🗑️</button>
-                </div>
-            `;
-            container.appendChild(row);
-            updateLivePreview();
-        }
+             const container = document.getElementById('linksListContainer');
+             const row = document.createElement('div');
+             row.className = 'link-item-row';
+             row.setAttribute('draggable', 'true'); // 🚀 Включаем поддержку Drag & Drop для новой строки
+             row.dataset.id = "0";
+             row.innerHTML = `
+                 <div class="link-row-top" style="display: flex; align-items: center; gap: 8px;">
+                     <!-- 🚀 Ручка перетаскивания -->
+                     <span class="drag-handle" title="Перетащите мышкой">⠿</span>
+
+                     <select class="text-input link-icon-select" style="width: 120px; padding: 6px 8px; font-size: 0.82rem;" onchange="updateLivePreview()">
+                         <option value="telegram">✈️ Telegram</option>
+                         <option value="instagram">📸 Instagram</option>
+                         <option value="youtube">🎬 YouTube</option>
+                         <option value="bluesky">🦋 BlueSky</option>
+                         <option value="threads">🧵 Threads</option>
+                         <option value="x">✖️ X</option>
+                         <option value="facebook">📘 Facebook</option>
+                         <option value="custom" selected>🔗 Ссылка</option>
+                     </select>
+                     <input type="text" class="text-input link-title-input" placeholder="Название кнопки" style="flex: 1; padding: 6px 10px; font-weight: 700;" oninput="updateLivePreview()">
+                 </div>
+                 <div style="display: flex; gap: 8px;">
+                     <input type="url" class="text-input link-url-input" placeholder="https://..." style="flex: 1; padding: 6px 10px; font-size: 0.85rem;" oninput="updateLivePreview()">
+                 </div>
+                 <div class="link-row-actions">
+                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.78rem;">
+                         <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8;">
+                         ⭐ Свечение (Главная ссылка)
+                     </label>
+
+                     <!-- 🚀 Кнопки стрелочек для мобильных устройств -->
+                     <div class="reorder-btns-mobile">
+                         <button type="button" onclick="moveLinkRow(this, -1)" style="background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">⬆️</button>
+                         <button type="button" onclick="moveLinkRow(this, 1)" style="background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">⬇️</button>
+                     </div>
+
+                     <div style="display: flex; gap: 8px; align-items: center;">
+                         <span style="color: var(--text-secondary); font-size: 0.75rem;">Кликов: <strong>0</strong></span>
+                         <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; line-height: 1;">🗑️</button>
+                     </div>
+                 </div>
+             `;
+             container.appendChild(row);
+             updateLivePreview();
+         }
 
         function removeLinkRow(btn) {
             btn.closest('.link-item-row').remove();
@@ -776,6 +847,83 @@
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить изменения';
             }
+        }
+
+        // ==========================================================
+        // 🚀 ЛОГИКА ПЕРЕМЕЩЕНИЯ ССЫЛОК (DRAG & DROP + КНОПКИ СТРЕЛОЧЕК)
+        // ==========================================================
+        let draggedRow = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateLivePreview();
+            initDragAndDrop();
+        });
+
+        function initDragAndDrop() {
+            const container = document.getElementById('linksListContainer');
+            if (!container) return;
+
+            container.addEventListener('dragstart', (e) => {
+                const row = e.target.closest('.link-item-row');
+                if (!row) return;
+                draggedRow = row;
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(() => row.classList.add('dragging'), 0);
+            });
+
+            container.addEventListener('dragend', (e) => {
+                const row = e.target.closest('.link-item-row');
+                if (row) row.classList.remove('dragging');
+                draggedRow = null;
+                updateLivePreview(); // Перерисовываем живое превью в новом порядке
+            });
+
+            container.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const container = document.getElementById('linksListContainer');
+                const afterElement = getDragAfterElement(container, e.clientY);
+                if (draggedRow) {
+                    if (afterElement == null) {
+                        container.appendChild(draggedRow);
+                    } else {
+                        container.insertBefore(draggedRow, afterElement);
+                    }
+                }
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.link-item-row:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Моментальное перемещение стрелочками (для мобильных телефонов)
+        function moveLinkRow(btn, direction) {
+            const row = btn.closest('.link-item-row');
+            if (!row) return;
+
+            if (direction === -1) {
+                const prev = row.previousElementSibling;
+                if (prev) {
+                    row.parentNode.insertBefore(row, prev);
+                }
+            } else if (direction === 1) {
+                const next = row.nextElementSibling;
+                if (next) {
+                    row.parentNode.insertBefore(next, row);
+                }
+            }
+            updateLivePreview(); // Обновляем превью
         }
     </script>
 }
