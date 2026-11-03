@@ -70,6 +70,7 @@ namespace CrossChat.Worker.Jobs
 				.Where(p => p.NetworkStates.Any(ns => ns.Status != (int)SocialStatus.None) &&
 							p.NetworkStates.Where(ns => ns.Status != (int)SocialStatus.None)
 										   .All(ns => ns.Status == (int)SocialStatus.Published))
+				.OrderBy(p => p.ShowDate) // <-- добавит строгий порядок и уберет предупреждение EF Core
 				.Take(30) // Удаляем порциями по 30 постов за проход
 				.ToListAsync();
 

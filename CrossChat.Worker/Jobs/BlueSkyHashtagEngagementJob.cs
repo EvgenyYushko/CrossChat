@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -74,43 +75,7 @@ namespace CrossChat.Worker.Jobs
 
 					if (!tags.Any()) continue;
 
-					// =========================================================================
-					// 🚀 АЛГОРИТМ ROUND-ROBIN: ОБХОД ТЕГОВ СТРОГО ПО КРУГУ ЧЕРЕЗ REDIS
-					// =========================================================================
-					var redisTagKey = $"bsky:radar:tag_idx:{bot.Id}";
-					long nextIndex = 0;
-
-					var storedIndex = await _redis.StringGetAsync(redisTagKey);
-					if (storedIndex.HasValue && long.TryParse(storedIndex, out long lastIdx))
-					{
-						// Переходим к следующему элементу по модулю длины списка (зацикливание по кругу)
-						nextIndex = (lastIdx + 1) % tags.Count;
-					}
-					else
-					{
-						nextIndex = 0; // Первый запуск — начинаем с 0
-					}
-
-					// Запоминаем текущий шаг очереди в Redis на 60 дней
-					await _redis.StringSetAsync(redisTagKey, nextIndex, TimeSpan.FromDays(60));
-
-					string selectedTag = tags[(int)nextIndex];
-
-					// Наглядный лог для тебя с номером шага очереди:
-					_logger.LogInformation("🎯 [BlueSky Radar] Очередь тегов: шаг {Step}/{Total} для @{Handle}. Тег: «{Tag}»",
-						nextIndex + 1, tags.Count, bot.Handle, selectedTag);
-
-					await _console.Log($"🔍 [Радар] Шаг {nextIndex + 1}/{tags.Count} по кругу: поиск постов по тегу «{selectedTag}»...", bot.UserId, bot.Id);
-
-					// 2. Ищем 5 самых свежих постов по тегу
-					var searchedPosts = await _bskyService.SearchPostsByQueryAsync(selectedTag, 5, botModel);
-					if (!searchedPosts.Any())
-					{
-						await _console.Log($"[Радар] По тегу «{selectedTag}» свежих постов пока не найдено.", bot.UserId, bot.Id);
-						continue;
-					}
-
-					// 3. Загружаем список уже прокомментированных URI постов
+					// 2. Загружаем список уже прокомментированных URI постов (до поиска)
 					var usedUris = new HashSet<string>();
 					try
 					{
@@ -121,18 +86,68 @@ namespace CrossChat.Worker.Jobs
 					}
 					catch { usedUris = new HashSet<string>(); }
 
-					// Фильтруем: берем посты, которые мы еще НЕ комментировали
-					var freshPosts = searchedPosts
-						.Where(p => !usedUris.Contains(p.Uri))
-						.ToList();
+					// 3. Достаем текущую позицию очереди из Redis
+					var redisTagKey = $"bsky:radar:tag_idx:{bot.Id}";
+					long currentIndex = 0;
+
+					var storedIndex = await _redis.StringGetAsync(redisTagKey);
+					if (storedIndex.HasValue && long.TryParse(storedIndex, out long lastIdx))
+					{
+						currentIndex = (lastIdx + 1) % tags.Count;
+					}
+
+					List<BlueSkySearchedPostDto> freshPosts = new();
+					string selectedTag = "";
+					int attempts = 0;
+					// Лимит попыток за один запуск (чтобы не спамить API в пустую, если все 91 тег пустые)
+					int maxSearchAttempts = Math.Min(tags.Count, 25);
+
+					// =========================================================================
+					// 🚀 СКВОЗНОЙ ПОИСК: ПЕРЕБИРАЕМ ТЕГИ ПО КРУГУ, ПОКА НЕ НАЙДЕМ ЖИВЫЕ ПОСТЫ
+					// =========================================================================
+					while (attempts < maxSearchAttempts)
+					{
+						selectedTag = tags[(int)currentIndex];
+						attempts++;
+
+						_logger.LogInformation("🎯 [BlueSky Radar] Очередь тегов: шаг {Step}/{Total} для @{Handle}. Тег: «{Tag}» (попытка {Att}/{Max})",
+							currentIndex + 1, tags.Count, bot.Handle, selectedTag, attempts, maxSearchAttempts);
+
+						await _console.Log($"🔍 [Радар] Шаг {currentIndex + 1}/{tags.Count}: поиск по тегу «{selectedTag}»...", bot.UserId, bot.Id);
+
+						// Ищем посты по тегу (с нашим фильтром свежего топа за 48ч)
+						var searchedPosts = await _bskyService.SearchPostsByQueryAsync(selectedTag, 5, botModel);
+
+						// Отбираем посты, которые мы еще НЕ комментировали
+						freshPosts = searchedPosts
+							.Where(p => !usedUris.Contains(p.Uri))
+							.ToList();
+
+						if (freshPosts.Any())
+						{
+							// ✅ НАШЛИ ЖИВЫЕ ПОСТЫ! Запоминаем текущий индекс в Redis и выходим из поиска
+							await _redis.StringSetAsync(redisTagKey, currentIndex, TimeSpan.FromDays(60));
+							break;
+						}
+
+						// ⚠️ Постов нет: сдвигаем очередь на следующий тег и пробуем снова!
+						_logger.LogInformation("⏩ [BlueSky Radar] По тегу «{Tag}» нет свежих постов. Сразу переходим к следующему...", selectedTag);
+						await _console.Log($"[Радар] По тегу «{selectedTag}» свежих постов нет. Проверяем следующий тег...", bot.UserId, bot.Id);
+
+						currentIndex = (currentIndex + 1) % tags.Count;
+						await _redis.StringSetAsync(redisTagKey, currentIndex, TimeSpan.FromDays(60));
+
+						// Небольшая микро-пауза 500 мс между поисковыми запросами к API
+						await Task.Delay(500);
+					}
 
 					if (!freshPosts.Any())
 					{
-						await _console.Log($"[Радар] Все найденные посты по тегу «{selectedTag}» уже были прокомментированы ранее.", bot.UserId, bot.Id);
+						await _console.Log($"[Радар] Проверено {attempts} тегов, но свежих постов для комментирования пока не найдено.", bot.UserId, bot.Id);
 						continue;
 					}
 
-					// 🚀 БЕРЕМ ТОП-2 САМЫХ ПОПУЛЯРНЫХ СВЕЖИХ ПОСТА:
+					// 4. БЕРЕМ ТОП-2 САМЫХ ПОПУЛЯРНЫХ СВЕЖИХ ПОСТА ДЛЯ КОММЕНТИРОВАНИЯ:
 					var postsToEngage = freshPosts.OrderByDescending(p => p.LikeCount).Take(2).ToList();
 					int commentedSuccess = 0;
 
