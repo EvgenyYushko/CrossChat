@@ -37,8 +37,13 @@
         <link rel="apple-touch-icon" href="@Model.AvatarUrl" />
     }
 
+    <!-- 🚀 ПОЛНЫЙ НАБОР OPEN GRAPH ТЕГОВ ДЛЯ META / INSTAGRAM -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@AppConstants.APP_URL/@Model.Slug" />
     <meta property="og:title" content="@Model.Title" />
     <meta property="og:description" content="@(Model.Bio ?? "Официальные контакты и социальные сети")" />
+    <meta property="og:site_name" content="CrossChat" />
+
     @if (!string.IsNullOrEmpty(Model.AvatarUrl) && Model.AvatarUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
     {
         <meta property="og:image" content="@Model.AvatarUrl" />
