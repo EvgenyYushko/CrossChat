@@ -39,9 +39,13 @@
 
     <meta property="og:title" content="@Model.Title" />
     <meta property="og:description" content="@(Model.Bio ?? "Официальные контакты и социальные сети")" />
-    @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+    @if (!string.IsNullOrEmpty(Model.AvatarUrl) && Model.AvatarUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
     {
         <meta property="og:image" content="@Model.AvatarUrl" />
+    }
+    else
+    {
+        <meta property="og:image" content="@AppConstants.APP_URL/images/bluesky-logo.png" />
     }
 
     <style>
