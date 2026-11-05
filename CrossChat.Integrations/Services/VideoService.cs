@@ -590,7 +590,7 @@ namespace CrossChat.Integrations.Services
 							   $"-c:v libx264 -crf 25 -preset ultrafast -threads 1 " +
 							   $"-movflags +faststart \"{outputPath}\"";
 
-			logger?.LogInformation("[VideoService] Старт ультра-оптимизации фона BioLink (480p, 6 сек)...");
+			logger?.LogInformation("[VideoService] Старт ультра-оптимизации фона BioLink (720p, 6 сек)...");
 
 			try
 			{

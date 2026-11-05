@@ -35,11 +35,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>@Model.Title — Официальные ссылки</title>
 
-    <!-- ДИНАМИЧЕСКАЯ ФАВИКОНКА (АВАТАРКА В ВКЛАДКЕ) -->
+    <!-- 🚀 ДИНАМИЧЕСКАЯ ИДЕАЛЬНО КРУГЛАЯ ФАВИКОНКА (АВАТАРКА ВО ВКЛАДКЕ) -->
     @if (!string.IsNullOrEmpty(Model.AvatarUrl))
     {
-        <link rel="icon" type="image/jpeg" href="@Model.AvatarUrl" />
+        <link id="dynamicFavicon" rel="icon" type="image/png" href="@Model.AvatarUrl" />
         <link rel="apple-touch-icon" href="@Model.AvatarUrl" />
+        <script>
+            (function() {
+                const avatarSrc = '@Html.Raw(Model.AvatarUrl)';
+                if (!avatarSrc) return;
+
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    try {
+                        const size = 64; // Оптимальный четкий размер для Retina-вкладок
+                        const canvas = document.createElement('canvas');
+                        canvas.width = size;
+                        canvas.height = size;
+                        const ctx = canvas.getContext('2d');
+
+                        // 1. Создаем круглую маску с прозрачными углами
+                        ctx.beginPath();
+                        ctx.arc(size / 2, size / 2, (size / 2) - 2, 0, Math.PI * 2);
+                        ctx.closePath();
+                        ctx.clip();
+
+                        // 2. Впечатываем аватарку в круг
+                        ctx.drawImage(img, 0, 0, size, size);
+
+                        // 3. Аккуратная тонкая белая обводка (чтобы фото стильно смотрелось и на темной, и на светлой теме)
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                        ctx.stroke();
+
+                        // 4. Мгновенно подменяем квадратную фавиконку на круглую прозрачную
+                        const link = document.getElementById('dynamicFavicon') || document.querySelector("link[rel*='icon']");
+                        if (link) {
+                            link.type = 'image/png';
+                            link.href = canvas.toDataURL('image/png');
+                        }
+                    } catch (e) {
+                        // Если аватарка с внешнего домена без CORS — останется обычная
+                    }
+                };
+                img.src = avatarSrc;
+            })();
+        </script>
     }
 
     <!-- 🚀 ПОЛНЫЙ НАБОР OPEN GRAPH ТЕГОВ ДЛЯ META / INSTAGRAM -->
