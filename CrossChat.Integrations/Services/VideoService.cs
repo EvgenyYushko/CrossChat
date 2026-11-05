@@ -349,7 +349,7 @@ namespace CrossChat.Integrations.Services
 		public static async Task<string> CompressVideoForDirectAsync(
 			string inputPath,
 			ILogger? logger = null,
-			Func<int, string, Task>? onProgress = null) // <-- ДЕЛЕГАТ ДЛЯ SIGNALR ПРОГРЕССА
+			Func<int, string, Task>? onProgress = null)
 		{
 			if (!File.Exists(inputPath)) return inputPath;
 
@@ -367,35 +367,30 @@ namespace CrossChat.Integrations.Services
 
 			try
 			{
-				logger?.LogInformation("🎬 [FFmpeg] Старт сжатия видео {Size:F1} МБ с живым прогрессом...", fileInfo.Length / (1024.0 * 1024.0));
+				logger?.LogInformation("🎬 [FFmpeg] Старт сжатия видео {Size:F1} МБ для Direct...", fileInfo.Length / (1024.0 * 1024.0));
 				if (onProgress != null) await onProgress(5, "Сжатие видео: 5%");
 
 				double totalVideoSeconds = 0;
 				int lastReportedPercent = 5;
 				var lastReportTime = DateTime.UtcNow;
 
-				// -nostdin : запрещаем FFmpeg опрашивать консоль ввода
-				// -threads 1 : защищает контейнер Render от перегрузки по RAM/CPU
-				// -r 24 : снижаем частоту до кинематографичных 24 FPS (ускоряет сжатие в 2.5 раза!)
-				// -preset ultrafast : самый быстрый алгоритм кодирования x264 (в 5 раз быстрее fast)
-				string arguments = $"-y -nostdin -i \"{inputPath}\" -t 10 -an " +
-								   $"-vf \"scale='min(720,iw)':-2\" -r 24 " +
-								   $"-c:v libx264 -crf 28 -preset ultrafast -threads 1 " +
-								   $"-movflags +faststart \"{outputPath}\"";
+				var arguments = $"-y -nostdin -i \"{inputPath}\" -threads 1 -vf \"scale='min(720,iw)':-2\" " +
+								$"-c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p " +
+								$"-c:a aac -b:a 128k -ar 44100 -movflags +faststart " +
+								$"-progress pipe:1 \"{outputPath}\"";
 
 				var startInfo = new ProcessStartInfo
 				{
 					FileName = "ffmpeg",
 					Arguments = arguments,
-					RedirectStandardOutput = true, // Читаем прогресс
-					RedirectStandardError = true,  // Читаем длительность видео
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
 					UseShellExecute = false,
 					CreateNoWindow = true
 				};
 
 				using var process = new Process { StartInfo = startInfo };
 
-				// 1. Извлекаем общую длительность видео из потока stderr
 				process.ErrorDataReceived += (s, e) =>
 				{
 					if (string.IsNullOrEmpty(e.Data) || totalVideoSeconds > 0) return;
@@ -409,7 +404,6 @@ namespace CrossChat.Integrations.Services
 					}
 				};
 
-				// 2. Читаем текущее время обработки из stdout и считаем процент
 				process.OutputDataReceived += async (s, e) =>
 				{
 					if (string.IsNullOrEmpty(e.Data) || totalVideoSeconds <= 0) return;
@@ -421,7 +415,6 @@ namespace CrossChat.Integrations.Services
 						{
 							int percent = Math.Clamp((int)((currentTs.TotalSeconds / totalVideoSeconds) * 100), 5, 92);
 
-							// Пушим в браузер каждые 3-4% (чтобы не спамить сокет)
 							if (percent >= lastReportedPercent + 3 && (DateTime.UtcNow - lastReportTime).TotalMilliseconds >= 600)
 							{
 								lastReportedPercent = percent;
@@ -452,7 +445,7 @@ namespace CrossChat.Integrations.Services
 			}
 			catch (Exception ex)
 			{
-				logger?.LogError(ex, "Ошибка сжатия видео");
+				logger?.LogError(ex, "Ошибка сжатия видео для Direct");
 			}
 			finally
 			{
@@ -578,7 +571,7 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Ультра-быстрое сжатие короткого видео для живого фона страницы-переходника (без звука, 720p, до 800-900 КБ)
+		/// Ультра-быстрое сжатие короткого видео для живого фона страницы-переходника (без звука, 720p, 24fps, до 800 КБ)
 		/// </summary>
 		public static async Task<string> CompressVideoForBioBackgroundAsync(string inputPath, ILogger? logger = null)
 		{
@@ -586,14 +579,18 @@ namespace CrossChat.Integrations.Services
 
 			string outputPath = Path.Combine(Path.GetTempPath(), $"bio_bg_{Guid.NewGuid():N}.mp4");
 
-			// -an: полностью вырезаем звук (экономия веса)
-			// -t 10: берем первые 10 секунд (фон для bio дольше не нужен)
-			// scale='min(720,iw)':-2: аккуратное масштабирование под 720p без искажений (четные числа для h264)
-			// -crf 28 -preset fast: сильное сжатие без видимых потерь
-			// -movflags +faststart: мгновенный старт видео в браузере без буферизации
-			string arguments = $"-y -i \"{inputPath}\" -t 10 -an -vf \"scale='min(720,iw)':-2\" -c:v libx264 -crf 28 -preset fast -movflags +faststart \"{outputPath}\"";
+			// -nostdin : запрет чтения консоли (предотвращает блокировку в Docker)
+			// -t 10 : берем первые 10 секунд
+			// -an : вырезаем звук для экономии веса
+			// -r 24 : 24 кадра в секунду вместо тяжелых 60 fps
+			// -preset ultrafast : кодирование за 2-3 секунды
+			// -threads 1 : не перегружает процессор Render, пропуская Health Check
+			string arguments = $"-y -nostdin -i \"{inputPath}\" -t 10 -an " +
+							   $"-vf \"scale='min(720,iw)':-2\" -r 24 " +
+							   $"-c:v libx264 -crf 28 -preset ultrafast -threads 1 " +
+							   $"-movflags +faststart \"{outputPath}\"";
 
-			logger?.LogInformation("[VideoService] Старт сжатия видео для живого фона BioLink...");
+			logger?.LogInformation("[VideoService] Старт ультра-быстрого сжатия видео для фона BioLink...");
 
 			try
 			{
@@ -610,13 +607,11 @@ namespace CrossChat.Integrations.Services
 				using var process = new Process { StartInfo = startInfo };
 				process.Start();
 
-				// 🚀 ВАЖНО: Начинаем асинхронно вычитывать буферы ДО вызова WaitForExitAsync,
-				// чтобы буфер ОС не переполнился и не вызвал зависание (deadlock)!
 				var errorTask = process.StandardError.ReadToEndAsync();
 				var outputTask = process.StandardOutput.ReadToEndAsync();
 
-				// Задаем лимит по времени (например, максимум 45 секунд), чтобы скрипт никогда не завис вечно
-				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+				// 25 секунд таймаута с запасом (ultrafast выполняется за 3-5 сек)
+				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
 
 				try
 				{
@@ -625,7 +620,7 @@ namespace CrossChat.Integrations.Services
 				catch (OperationCanceledException)
 				{
 					try { process.Kill(entireProcessTree: true); } catch { }
-					logger?.LogError("[VideoService] Таймаут сжатия видео через FFmpeg (превышено 45 сек).");
+					logger?.LogError("[VideoService] Таймаут сжатия видео фона через FFmpeg.");
 					return inputPath;
 				}
 
@@ -634,16 +629,16 @@ namespace CrossChat.Integrations.Services
 				if (process.ExitCode == 0 && File.Exists(outputPath))
 				{
 					long sizeBytes = new FileInfo(outputPath).Length;
-					logger?.LogInformation("✅ [VideoService] Живой видеофон успешно оптимизирован! Вес: {Size} байт (~{Kb:F0} КБ)", sizeBytes, sizeBytes / 1024.0);
+					logger?.LogInformation("✅ [VideoService] Живой видеофон успешно сжат за считанные секунды! Вес: {Size} байт (~{Kb:F0} КБ)", sizeBytes, sizeBytes / 1024.0);
 					return outputPath;
 				}
 
-				logger?.LogWarning("[VideoService] Сбой оптимизации видео через FFmpeg (ExitCode {Code}): {Err}. Используем оригинал.", process.ExitCode, errorOutput);
+				logger?.LogWarning("[VideoService] Сбой FFmpeg (ExitCode {Code}): {Err}. Используем оригинал.", process.ExitCode, errorOutput);
 				return inputPath;
 			}
 			catch (Exception ex)
 			{
-				logger?.LogError(ex, "[VideoService] Исключение при сжатии видео фона через FFmpeg");
+				logger?.LogError(ex, "[VideoService] Ошибка при сжатии видео для BioLink");
 				return inputPath;
 			}
 			finally
