@@ -201,6 +201,7 @@ namespace CrossChat.Controllers
 							existingLink.IsHighlighted = item.IsHighlighted;
 							existingLink.IsActive = item.IsActive;
 							existingLink.IsIconOnly = item.IsIconOnly;
+							existingLink.ImageUrl = item.ImageUrl;
 							existingLink.SortOrder = order++;
 						}
 						// Если ссылка новая — добавляем:
@@ -215,6 +216,7 @@ namespace CrossChat.Controllers
 								IsHighlighted = item.IsHighlighted,
 								IsActive = item.IsActive,
 								IsIconOnly = item.IsIconOnly,
+								ImageUrl = item.ImageUrl,
 								SortOrder = order++
 							});
 						}
@@ -653,5 +655,6 @@ namespace CrossChat.Controllers
 		public bool IsHighlighted { get; set; } = false;
 		public bool IsActive { get; set; } = true;
 		public bool IsIconOnly { get; set; } = false; // 🚀 НОВЫЙ ФЛАГ
+		public string? ImageUrl { get; set; } // 🚀 НОВОЕ ПОЛЕ БАННЕРА
 	}
 }

@@ -226,12 +226,23 @@
 
         /* 🚀 СОЧНЫЙ НЕОН + ВЫПЯЧИВАНИЕ + ИМПУЛЬС В ЦВЕТ РАМКИ */
         .link-card.highlighted {
-            background: rgba(15, 23, 42, 0.6) !important;
+            background-color: rgba(15, 23, 42, 0.65); /* 🚀 СТАЛО: только цвет, картинку НЕ стирает! */
             border: 2px solid var(--highlight-color, #38bdf8) !important;
             position: relative;
             overflow: hidden;
             animation: pulseGlowHero 2.8s infinite ease-in-out;
             will-change: transform, box-shadow;
+        }
+
+        /* Если прикреплен баннер — убираем фоновый цвет, отдавая всё место фотографии */
+        .link-card.has-banner {
+            min-height: 155px;
+            aspect-ratio: 16 / 9;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            align-items: flex-end;
+            padding: 16px 20px;
         }
 
             /* Бегущий глянцевый блик света */
@@ -400,22 +411,48 @@
             transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-            /* УВЕЛИЧИЛИ ИКОНКИ В 1.5 РАЗА (с 26px до 40px на весь размер прежней рамки) */
-            .social-dock-btn svg {
-                width: 40px !important;
-                height: 40px !important;
-                filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5)); /* Сочная тень для объёма */
-                transition: transform 0.2s ease;
+        /* УВЕЛИЧИЛИ ИКОНКИ В 1.5 РАЗА (с 26px до 40px на весь размер прежней рамки) */
+        .social-dock-btn svg {
+            width: 40px !important;
+            height: 40px !important;
+            filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5)); /* Сочная тень для объёма */
+            transition: transform 0.2s ease;
+        }
+
+        .social-dock-btn:hover svg {
+            transform: translateY(-3px) scale(1.12);
+            filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+        }
+
+        .social-dock-btn:active svg {
+            transform: scale(0.92);
+        }
+
+        /* 🚀 СТИЛЬ ВЫСОКОЙ КАРТОЧКИ-БАННЕРА С ФОТОГРАФИЕЙ */
+        .link-card.has-banner {
+            min-height: 150px;
+            aspect-ratio: 16 / 9;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            align-items: flex-end; /* Текст и значок прижимаются к низу фото */
+            padding: 16px 18px;
+        }
+
+            .link-card.has-banner .link-content-left {
+                z-index: 2;
+                text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85); /* Защита читаемости текста */
             }
 
-            .social-dock-btn:hover svg {
-                transform: translateY(-3px) scale(1.12);
-                filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+            .link-card.has-banner span {
+                text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
             }
 
-            .social-dock-btn:active svg {
-                transform: scale(0.92);
+        @@media (max-width: 480px) {
+            .link-card.has-banner {
+                min-height: 135px;
             }
+        }
     </style>
 </head>
 <body>
@@ -440,20 +477,27 @@
             @foreach (var link in Model.Links.Where(l => l.IsActive && !l.IsIconOnly).OrderBy(l => l.SortOrder))
             {
                 string cleanTitle = System.Text.RegularExpressions.Regex.Replace(link.Title, @"^[\uD83C-\uDBFF\uDC00-\uDFFF\s]+", "").Trim();
+                bool hasBanner = !string.IsNullOrEmpty(link.ImageUrl);
+
+                // Если есть баннер — делаем двойной градиент затемнения снизу, чтобы текст читался на 100%:
+                string bannerStyle = hasBanner
+                ? $"background-image: linear-gradient(180deg, rgba(15, 23, 42, 0.1) 0%, rgba(15, 23, 42, 0.85) 100%), url('{link.ImageUrl}') !important;"
+                : "";
 
                 <a href="@link.Url"
                    target="_blank"
                    rel="noopener noreferrer"
-                   class="link-card @(link.IsHighlighted ? "highlighted" : "")"
+                   class="link-card @(hasBanner ? "has-banner" : "") @(link.IsHighlighted ? "highlighted" : "")"
+                   style="@bannerStyle"
                    onclick="trackLinkClick(@link.Id)">
 
                     <div class="link-content-left">
                         <div class="brand-icon-badge">
                             @RenderBrandSvg(link.IconType)
                         </div>
-                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@cleanTitle</span>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:800;">@cleanTitle</span>
                     </div>
-                    <span style="opacity: 0.5; font-size: 1.1rem; flex-shrink: 0;">➔</span>
+                    <span style="opacity: 0.8; font-size: 1.2rem; flex-shrink: 0; z-index:2;">➔</span>
                 </a>
             }
         </div>

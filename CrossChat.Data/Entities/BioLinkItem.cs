@@ -40,5 +40,9 @@ namespace CrossChat.Data.Entities
 
 		// 🚀 ОТОБРАЖАТЬ В НИЖНЕМ РЯДУ ИКОНОК (без широкой полоски с текстом)
 		public bool IsIconOnly { get; set; } = false;
+
+		// 🚀 ФОТО-БАННЕР ДЛЯ ШИРОКОЙ КАРТОЧКИ (Base64 или URL)
+		[Column(TypeName = "text")]
+		public string? ImageUrl { get; set; }
 	}
 }

@@ -431,12 +431,22 @@
         }
 
         .preview-btn.highlighted {
-            background: rgba(255, 255, 255, 0.22) !important;
+            background-color: rgba(255, 255, 255, 0.22); /* 🚀 Только цвет! */
             border: 2px solid var(--preview-glow-color, #38bdf8) !important;
             position: relative;
             overflow: hidden;
             animation: previewPulseGlow 2.8s infinite ease-in-out !important;
             will-change: transform, box-shadow;
+        }
+
+        .preview-btn.has-banner {
+            min-height: 130px;
+            aspect-ratio: 16 / 9;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            align-items: flex-end;
+            padding: 12px 14px;
         }
 
             .preview-btn.highlighted::before {
@@ -565,13 +575,48 @@
             flex-shrink: 0;
         }
 
-            /* Увеличили размер иконок в макете телефона с 22px до 34px */
-            .preview-dock-btn .brand-icon-svg,
-            .preview-dock-btn svg {
-                width: 34px !important;
-                height: 34px !important;
-                filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+        /* Увеличили размер иконок в макете телефона с 22px до 34px */
+        .preview-dock-btn .brand-icon-svg,
+        .preview-dock-btn svg {
+            width: 34px !important;
+            height: 34px !important;
+            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+        }
+
+        /* Баннер в макете телефона */
+        .preview-btn.has-banner {
+            min-height: 120px;
+            aspect-ratio: 16 / 9;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            align-items: flex-end;
+            padding: 12px 14px;
+        }
+
+            .preview-btn.has-banner span {
+                text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
             }
+
+        /* Кнопка загрузки баннера в строке ссылки */
+        .btn-banner-upload {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-banner-upload:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text-main);
+        }
     </style>
 }
 
@@ -740,7 +785,7 @@
                     <div class="links-list" id="linksListContainer">
                         @foreach (var l in Model.Links.OrderBy(x => x.SortOrder))
                         {
-                            <div class="link-item-row" draggable="true" data-id="@l.Id">
+                            <div class="link-item-row" draggable="true" data-id="@l.Id" data-image-url="@l.ImageUrl">
                                 <div class="link-row-top">
                                     <span class="drag-handle" title="Перетащите мышкой">⠿</span>
                                     <select class="text-input link-icon-select" style="width: 125px; padding: 8px 10px; font-size: 0.85rem;" onchange="updateLivePreview()">
@@ -758,34 +803,38 @@
                                 <div>
                                     <input type="url" class="text-input link-url-input" value="@l.Url" placeholder="https://..." style="padding: 8px 12px; font-size: 0.88rem;" oninput="updateLivePreview()">
                                 </div>
+
+                                <!-- 🚀 ПРЕВЬЮ БАННЕРА (ЕСЛИ ЕСТЬ) -->
+                                <div class="banner-preview-box" style="display: @(!string.IsNullOrEmpty(l.ImageUrl) ? "flex" : "none"); align-items:center; justify-content:space-between; background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:8px; border:1px solid var(--glass-border);">
+                                    <span style="font-size:0.75rem; color:#10b981;">🖼️ Фото-баннер прикреплен</span>
+                                    <button type="button" onclick="removeLinkBanner(this)" style="background:none; border:none; color:#ef4444; font-size:0.75rem; cursor:pointer; font-weight:bold;">✕ Удалить фото</button>
+                                </div>
+
                                 <div class="link-row-actions">
-                                    <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
-                                        <!-- СВЕЧЕНИЕ -->
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
+                                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-main);">
                                             <input type="checkbox" class="link-highlight-cb" checked="@l.IsHighlighted" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
                                             ⭐ Свечение
                                         </label>
 
-                                        <!-- 🚀 НОВАЯ ГАЛОЧКА: В РЯД ИКОНОК СНИЗУ -->
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: #a855f7;">
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: #a855f7;">
                                             <input type="checkbox" class="link-icon-only-cb" checked="@l.IsIconOnly" onchange="updateLivePreview()" style="accent-color: #a855f7; width: 16px; height: 16px;">
                                             📱 В ряд иконок
                                         </label>
 
-                                        <!-- 🚀 ГАЛОЧКА СКРЫТЬ ССЫЛКУ -->
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-secondary);">
-                                            <input type="checkbox" class="link-hidden-cb" checked="@(!l.IsActive)" onchange="updateLivePreview()" style="accent-color: #ef4444; width: 16px; height: 16px;">
-                                            🙈 Скрыть
+                                        <!-- 🚀 КНОПКА ВЫБОРА БАННЕРА -->
+                                        <label class="btn-banner-upload">
+                                            <span>🖼️ Фото</span>
+                                            <input type="file" accept="image/*" style="display:none;" onchange="uploadLinkBanner(this)">
                                         </label>
                                     </div>
 
-                                    <!-- КНОПКИ ПЕРЕМЕЩЕНИЯ ДЛЯ СМАРТФОНОВ -->
                                     <div class="reorder-btns-mobile">
                                         <button type="button" class="reorder-btn" onclick="moveLinkRow(this, -1)" title="Поднять выше">⬆️</button>
                                         <button type="button" class="reorder-btn" onclick="moveLinkRow(this, 1)" title="Опустить ниже">⬇️</button>
                                     </div>
 
-                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                    <div style="display: flex; gap: 8px; align-items: center;">
                                         <span style="color: var(--text-secondary); font-size: 0.75rem;">Кликов: <strong>@l.ClicksCount</strong></span>
                                         <button type="button" onclick="removeLinkRow(this)" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; line-height: 1;">🗑️</button>
                                     </div>
@@ -1093,14 +1142,26 @@
                     iconBtn.innerHTML = iconSvg;
                     previewDock.appendChild(iconBtn);
                 }
-                // ИНАЧЕ: рисуем большую полноценную кнопку
+                // ИНАЧЕ: рисуем большую кнопку (или фото-баннер)
                 else {
+                    // Считываем картинку из любого доступного места:
+                    const imageUrl = r.dataset.imageUrl || r.getAttribute('data-image-url') || '';
+                    const hasBanner = Boolean(imageUrl && imageUrl.trim().length > 10);
+
                     const btn = document.createElement('div');
-                    btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+                    btn.className = `preview-btn ${hasBanner ? 'has-banner' : ''} ${isHighlight ? 'highlighted' : ''}`;
+
+                    if (hasBanner) {
+                        // 🚀 ПРИНУДИТЕЛЬНО ВЫСТАВЛЯЕМ ФОТО С !important:
+                        btn.style.setProperty('background-image', `linear-gradient(180deg, rgba(15, 23, 42, 0.1) 0%, rgba(15, 23, 42, 0.85) 100%), url('${imageUrl}')`, 'important');
+                    } else {
+                        btn.style.backgroundImage = '';
+                    }
+
                     btn.innerHTML = `
                         <div class="brand-icon-badge">${iconSvg}</div>
-                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
-                        <span style="opacity:0.4; font-size:0.9rem;">➔</span>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left; font-weight:800;">${escapeHtml(title)}</span>
+                        <span style="opacity:0.8; font-size:1.1rem; flex-shrink:0;">➔</span>
                     `;
                     previewContainer.appendChild(btn);
                 }
@@ -1183,7 +1244,8 @@
                         iconType: icon,
                         isHighlighted: isHighlight,
                         isActive: !isHidden, // 🚀 Сохраняем: если скрыто, isActive = false!
-                        isIconOnly: isIconOnly // 🚀 СОХРАНЯЕМ ФЛАГ
+                        isIconOnly: isIconOnly, // 🚀 СОХРАНЯЕМ ФЛАГ
+                        imageUrl: r.dataset.imageUrl || null
                     });
                 }
             });
@@ -1211,6 +1273,61 @@
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить изменения';
             }
+        }
+
+        // 🚀 СЖАТИЕ И ПРИКРЕПЛЕНИЕ БАННЕРА К ССЫЛКЕ
+        function uploadLinkBanner(fileInput) {
+            if (!fileInput.files || !fileInput.files[0]) return;
+            const file = fileInput.files[0];
+            const row = fileInput.closest('.link-item-row');
+            const previewBox = row.querySelector('.banner-preview-box');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const maxDim = 800;
+                    let w = img.width;
+                    let h = img.height;
+
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
+                    }
+
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+                    // 🚀 ЗАПИСЫВАЕМ В ОБА МЕСТА ДЛЯ 100% НАДЕЖНОСТИ:
+                    row.dataset.imageUrl = compressedBase64;
+                    row.setAttribute('data-image-url', compressedBase64);
+
+                    if (previewBox) previewBox.style.display = 'flex';
+                    updateLivePreview();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeLinkBanner(btn) {
+            const row = btn.closest('.link-item-row');
+            row.dataset.imageUrl = '';
+            row.removeAttribute('data-image-url');
+            row.querySelector('.banner-preview-box').style.display = 'none';
+            updateLivePreview();
+        }
+
+        function removeLinkBanner(btn) {
+            const row = btn.closest('.link-item-row');
+            row.dataset.imageUrl = '';
+            row.querySelector('.banner-preview-box').style.display = 'none';
+            updateLivePreview();
         }
     </script>
 }
