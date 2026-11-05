@@ -571,7 +571,7 @@ namespace CrossChat.Integrations.Services
 		}
 
 		/// <summary>
-		/// Ультра-быстрое сжатие короткого видео для живого фона страницы-переходника (без звука, 720p, 24fps, до 800 КБ)
+		/// Ультра-быстрое сжатие короткого видео для живого фона страницы-переходника (без звука, 480p, 20fps, 6 сек)
 		/// </summary>
 		public static async Task<string> CompressVideoForBioBackgroundAsync(string inputPath, ILogger? logger = null)
 		{
@@ -579,18 +579,19 @@ namespace CrossChat.Integrations.Services
 
 			string outputPath = Path.Combine(Path.GetTempPath(), $"bio_bg_{Guid.NewGuid():N}.mp4");
 
-			// -nostdin : запрет чтения консоли (предотвращает блокировку в Docker)
-			// -t 10 : берем первые 10 секунд
-			// -an : вырезаем звук для экономии веса
-			// -r 24 : 24 кадра в секунду вместо тяжелых 60 fps
-			// -preset ultrafast : кодирование за 2-3 секунды
-			// -threads 1 : не перегружает процессор Render, пропуская Health Check
-			string arguments = $"-y -nostdin -i \"{inputPath}\" -t 10 -an " +
-							   $"-vf \"scale='min(720,iw)':-2\" -r 24 " +
-							   $"-c:v libx264 -crf 28 -preset ultrafast -threads 1 " +
+			// 🚀 СУПЕР-ОПТИМИЗАЦИЯ ДЛЯ СЛАБОГО CPU RENDER:
+			// 1. -ss 0 -t 6 ДО -i : мгновенно отсекает файл, FFmpeg даже не читает гигабайты хвоста!
+			// 2. -an : без звука
+			// 3. scale='min(480,iw)':-2 : 480p вместо 720p (в 2.5 раза меньше нагрузка на процессор)
+			// 4. -r 20 : 20 кадров/сек (плавный живой фон, в 3 раза легче исходных 60fps)
+			// 5. -crf 30 : отличный баланс качества и микро-размера (~400 КБ)
+			// 6. -preset ultrafast -threads 1 : минимальное время кодирования без удушения веб-сервера
+			string arguments = $"-y -nostdin -ss 0 -t 6 -i \"{inputPath}\" -an " +
+							   $"-vf \"scale='min(480,iw)':-2\" -r 20 " +
+							   $"-c:v libx264 -crf 30 -preset ultrafast -threads 1 " +
 							   $"-movflags +faststart \"{outputPath}\"";
 
-			logger?.LogInformation("[VideoService] Старт ультра-быстрого сжатия видео для фона BioLink...");
+			logger?.LogInformation("[VideoService] Старт ультра-оптимизации фона BioLink (480p, 6 сек)...");
 
 			try
 			{
@@ -610,8 +611,8 @@ namespace CrossChat.Integrations.Services
 				var errorTask = process.StandardError.ReadToEndAsync();
 				var outputTask = process.StandardOutput.ReadToEndAsync();
 
-				// 25 секунд таймаута с запасом (ultrafast выполняется за 3-5 сек)
-				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+				// 🚀 СТАВИМ ТАЙМАУТ 75 СЕКУНД (вместо 25): процесс успеет с огромным запасом!
+				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(75));
 
 				try
 				{
@@ -620,7 +621,7 @@ namespace CrossChat.Integrations.Services
 				catch (OperationCanceledException)
 				{
 					try { process.Kill(entireProcessTree: true); } catch { }
-					logger?.LogError("[VideoService] Таймаут сжатия видео фона через FFmpeg.");
+					logger?.LogError("[VideoService] Таймаут сжатия видео через FFmpeg (превышено 75 сек).");
 					return inputPath;
 				}
 
@@ -629,7 +630,7 @@ namespace CrossChat.Integrations.Services
 				if (process.ExitCode == 0 && File.Exists(outputPath))
 				{
 					long sizeBytes = new FileInfo(outputPath).Length;
-					logger?.LogInformation("✅ [VideoService] Живой видеофон успешно сжат за считанные секунды! Вес: {Size} байт (~{Kb:F0} КБ)", sizeBytes, sizeBytes / 1024.0);
+					logger?.LogInformation("✅ [VideoService] Живой видеофон успешно оптимизирован! Вес: {Size} байт (~{Kb:F0} КБ)", sizeBytes, sizeBytes / 1024.0);
 					return outputPath;
 				}
 
