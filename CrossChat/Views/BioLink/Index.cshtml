@@ -665,43 +665,38 @@
         }
 
         /* 🚀 СВЕЧЕНИЕ ЯРЛЫКА В ПРЕВЬЮ МАКЕТА ТЕЛЕФОНА */
+        /* 🚀 ПУЛЬСАЦИЯ И ПОКАЧИВАНИЕ ЯРЛЫКА В ПРЕВЬЮ */
         .preview-dock-btn.highlighted {
-            animation: previewIconPulseGlow 2.8s infinite ease-in-out !important;
-            will-change: transform, filter;
+            animation: previewIconBounceWobble 2.8s infinite ease-in-out !important;
+            will-change: transform;
             z-index: 2;
         }
 
-        @@keyframes previewIconPulseGlow {
+        @@keyframes previewIconBounceWobble {
             0%
 
         {
-            transform: scale(1);
-            filter: drop-shadow(0 0 3px var(--preview-glow-color, #38bdf8));
+            transform: scale(1) rotate(0deg);
         }
 
         38% {
-            transform: scale(1.18);
-            filter: drop-shadow(0 0 10px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 18px var(--preview-glow-color, #38bdf8));
+            transform: scale(1.2) rotate(0deg);
         }
 
         44% {
-            transform: scale(1.18) rotate(-4deg);
-            filter: drop-shadow(0 0 12px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 20px var(--preview-glow-color, #38bdf8));
+            transform: scale(1.2) rotate(-6deg);
         }
 
         50% {
-            transform: scale(1.18) rotate(4deg);
-            filter: drop-shadow(0 0 12px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 20px var(--preview-glow-color, #38bdf8));
+            transform: scale(1.2) rotate(6deg);
         }
 
         56% {
-            transform: scale(1.18) rotate(0deg);
-            filter: drop-shadow(0 0 10px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 18px var(--preview-glow-color, #38bdf8));
+            transform: scale(1.2) rotate(0deg);
         }
 
         70%, 100% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 3px var(--preview-glow-color, #38bdf8));
+            transform: scale(1) rotate(0deg);
         }
 
         }

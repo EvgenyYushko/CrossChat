@@ -424,44 +424,38 @@
             }
 
             /* 🚀 НЕОНОВЫЙ ОРЕОЛ И ДЫХАНИЕ ДЛЯ ВЫДЕЛЕННОЙ ИКОНКИ */
-        .social-dock-btn.highlighted {
-            animation: iconPulseGlow 2.8s infinite ease-in-out;
-            will-change: transform, filter;
-            z-index: 2;
-        }
+            /* 🚀 ЖИВАЯ ПУЛЬСАЦИЯ И ПОКАЧИВАНИЕ ЯРЛЫКА (БЕЗ НЕОНОВОГО РАЗМЫТИЯ) */
+            .social-dock-btn.highlighted {
+                animation: iconBounceWobble 2.8s infinite ease-in-out;
+                will-change: transform;
+                z-index: 2;
+            }
 
-        /* Синхронная анимация: увеличение + вспышка неона + задорный микровстрях */
-        @@keyframes iconPulseGlow {
+        @@keyframes iconBounceWobble {
             0%
 
         {
-            transform: scale(1);
-            filter: drop-shadow(0 0 4px var(--highlight-color, #38bdf8));
+            transform: scale(1) rotate(0deg);
         }
-
+        /* Фаза 1: Увеличение-выпячивание */
         38% {
-            transform: scale(1.18);
-            filter: drop-shadow(0 0 12px var(--highlight-color, #38bdf8)) drop-shadow(0 0 22px var(--highlight-color, #38bdf8));
+            transform: scale(1.2) rotate(0deg);
         }
-
+        /* Фаза 2: Задорный толчок-покачивание влево/вправо */
         44% {
-            transform: scale(1.18) rotate(-4deg);
-            filter: drop-shadow(0 0 15px var(--highlight-color, #38bdf8)) drop-shadow(0 0 26px var(--highlight-color, #38bdf8));
+            transform: scale(1.2) rotate(-6deg);
         }
 
         50% {
-            transform: scale(1.18) rotate(4deg);
-            filter: drop-shadow(0 0 15px var(--highlight-color, #38bdf8)) drop-shadow(0 0 26px var(--highlight-color, #38bdf8));
+            transform: scale(1.2) rotate(6deg);
         }
 
         56% {
-            transform: scale(1.18) rotate(0deg);
-            filter: drop-shadow(0 0 12px var(--highlight-color, #38bdf8)) drop-shadow(0 0 22px var(--highlight-color, #38bdf8));
+            transform: scale(1.2) rotate(0deg);
         }
-
+        /* Фаза 3: Плавное возвращение на место */
         70%, 100% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 4px var(--highlight-color, #38bdf8));
+            transform: scale(1) rotate(0deg);
         }
 
         }
