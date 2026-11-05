@@ -573,5 +573,84 @@ namespace CrossChat.Integrations.Services
 				return null;
 			}
 		}
+
+		/// <summary>
+		/// Ультра-быстрое сжатие короткого видео для живого фона страницы-переходника (без звука, 720p, до 800-900 КБ)
+		/// </summary>
+		public static async Task<string> CompressVideoForBioBackgroundAsync(string inputPath, ILogger? logger = null)
+		{
+			if (!File.Exists(inputPath)) return inputPath;
+
+			string outputPath = Path.Combine(Path.GetTempPath(), $"bio_bg_{Guid.NewGuid():N}.mp4");
+
+			// -an: полностью вырезаем звук (экономия веса)
+			// -t 10: берем первые 10 секунд (фон для bio дольше не нужен)
+			// scale='min(720,iw)':-2: аккуратное масштабирование под 720p без искажений (четные числа для h264)
+			// -crf 28 -preset fast: сильное сжатие без видимых потерь
+			// -movflags +faststart: мгновенный старт видео в браузере без буферизации
+			string arguments = $"-y -i \"{inputPath}\" -t 10 -an -vf \"scale='min(720,iw)':-2\" -c:v libx264 -crf 28 -preset fast -movflags +faststart \"{outputPath}\"";
+
+			logger?.LogInformation("[VideoService] Старт сжатия видео для живого фона BioLink...");
+
+			try
+			{
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = arguments,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				// 🚀 ВАЖНО: Начинаем асинхронно вычитывать буферы ДО вызова WaitForExitAsync,
+				// чтобы буфер ОС не переполнился и не вызвал зависание (deadlock)!
+				var errorTask = process.StandardError.ReadToEndAsync();
+				var outputTask = process.StandardOutput.ReadToEndAsync();
+
+				// Задаем лимит по времени (например, максимум 45 секунд), чтобы скрипт никогда не завис вечно
+				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+
+				try
+				{
+					await process.WaitForExitAsync(cts.Token);
+				}
+				catch (OperationCanceledException)
+				{
+					try { process.Kill(entireProcessTree: true); } catch { }
+					logger?.LogError("[VideoService] Таймаут сжатия видео через FFmpeg (превышено 45 сек).");
+					return inputPath;
+				}
+
+				string errorOutput = await errorTask;
+
+				if (process.ExitCode == 0 && File.Exists(outputPath))
+				{
+					long sizeBytes = new FileInfo(outputPath).Length;
+					logger?.LogInformation("✅ [VideoService] Живой видеофон успешно оптимизирован! Вес: {Size} байт (~{Kb:F0} КБ)", sizeBytes, sizeBytes / 1024.0);
+					return outputPath;
+				}
+
+				logger?.LogWarning("[VideoService] Сбой оптимизации видео через FFmpeg (ExitCode {Code}): {Err}. Используем оригинал.", process.ExitCode, errorOutput);
+				return inputPath;
+			}
+			catch (Exception ex)
+			{
+				logger?.LogError(ex, "[VideoService] Исключение при сжатии видео фона через FFmpeg");
+				return inputPath;
+			}
+			finally
+			{
+				// Если что-то пошло не так и файл создался битым — удаляем временный
+				if (!File.Exists(outputPath) && File.Exists(outputPath))
+				{
+					try { File.Delete(outputPath); } catch { }
+				}
+			}
+		}
 	}
 }

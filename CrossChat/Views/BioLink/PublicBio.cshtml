@@ -3,22 +3,27 @@
 @{
     Layout = null;
 
-    // 🚀 БЕЗОПАСНАЯ ОБРАБОТКА ФОНА (защита от двойного url(...)):
-    string rawBg = Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)";
-    string bgStyle;
+    bool isVideoBg = Model.ThemeType == "custom-video" ||
+                     (!string.IsNullOrEmpty(Model.CustomBackgroundValue) && Model.CustomBackgroundValue.StartsWith("data:video", StringComparison.OrdinalIgnoreCase));
 
-    if (Model.ThemeType == "custom-image")
+    string rawBg = Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)";
+    string bgStyle = "";
+
+    if (!isVideoBg)
     {
-        string cleanImg = rawBg.Trim();
-        if (!cleanImg.StartsWith("url(", StringComparison.OrdinalIgnoreCase))
+        if (Model.ThemeType == "custom-image")
         {
-            cleanImg = $"url('{cleanImg}')";
+            string cleanImg = rawBg.Trim();
+            if (!cleanImg.StartsWith("url(", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanImg = $"url('{cleanImg}')";
+            }
+            bgStyle = $"background-image: {cleanImg};";
         }
-        bgStyle = $"background-image: {cleanImg};";
-    }
-    else
-    {
-        bgStyle = $"background: {rawBg};";
+        else
+        {
+            bgStyle = $"background: {rawBg};";
+        }
     }
 
     string accentColor = string.IsNullOrWhiteSpace(Model.HighlightColor) ? "#38bdf8" : Model.HighlightColor;
@@ -453,12 +458,53 @@
                 min-height: 135px;
             }
         }
+
+        /* 🚀 АППАРАТНЫЙ ЖИВОЙ ВИДЕОФОН */
+        .page-bg-video {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            min-width: 100%;
+            min-height: 100%;
+            transform: translate(-50%, -50%);
+            -webkit-transform: translate(-50%, -50%);
+            object-fit: cover; /* Растягивает видео на весь экран с сохранением пропорций */
+            z-index: 1;
+            pointer-events: none;
+            background-color: #0f172a;
+        }
+
+        /* Полупрозрачное затемнение поверх видео, чтобы кнопки и текст сияли контрастно */
+        .video-dim-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 1;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
-    <!-- 🚀 ФОНОВЫЙ СЛОЙ С ПРЯМЫМ СТИЛЕМ (ТЕПЕРЬ ВИДЕН НА 100%) -->
-    <div class="page-bg" style="@Html.Raw(bgStyle)"></div>
+    <!-- 🚀 УМНЫЙ ЖИВОЙ ФОН: ВИДЕО ИЛИ ФОТО/GIF -->
+    @if (isVideoBg)
+    {
+        <video class="page-bg-video" autoplay muted loop playsinline preload="auto">
+            <source src="@Model.CustomBackgroundValue" type="video/mp4" />
+        </video>
+        <div class="video-dim-overlay"></div>
+    }
+    else
+    {
+        <div class="page-bg" style="@Html.Raw(bgStyle)"></div>
+    }
 
     <div class="bio-wrapper">
         <div class="avatar-wrap">

@@ -5,6 +5,7 @@ using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Helpers;
 using CrossChat.Infrastructure.Constants;
+using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -147,13 +148,16 @@ namespace CrossChat.Controllers
 			// 2.Загрузка аватарки(как обычно, сразу в Base64 в базу данных!)
 			if (avatarImageFile != null && avatarImageFile.Length > 0)
 			{
-				bioPage.AvatarUrl = await ConvertFileToBase64CompressedAsync(avatarImageFile, 400); // 400px для аватарки за глаза
+				var (mediaBase64, detectedTheme) = await ProcessCustomBackgroundFileAsync(avatarImageFile);
+				bioPage.AvatarUrl = mediaBase64; // 400px для аватарки за глаза
 			}
 
-			// 3. Загрузка файла своего фона (в Base64)
-			if (themeType == "custom-image" && bgImageFile != null && bgImageFile.Length > 0)
+			// 3. Загрузка файла своего фона (Фото, GIF или ультра-легкое Видео)
+			if ((themeType == "custom-image" || themeType == "custom-video") && bgImageFile != null && bgImageFile.Length > 0)
 			{
-				bioPage.CustomBackgroundValue = await ConvertFileToBase64CompressedAsync(bgImageFile, 1200); // 1200px для фона
+				var (mediaBase64, detectedTheme) = await ProcessCustomBackgroundFileAsync(bgImageFile);
+				bioPage.CustomBackgroundValue = mediaBase64;
+				bioPage.ThemeType = detectedTheme; // Автоматически выставит custom-video или custom-image!
 			}
 
 			// 4. УМНОЕ ОБНОВЛЕНИЕ СПИСКА ССЫЛОК (БЕЗ УДАЛЕНИЯ И НАРУШЕНИЯ СВЯЗЕЙ С АНАЛИТИКОЙ!)
@@ -587,36 +591,79 @@ namespace CrossChat.Controllers
 		}
 
 		/// <summary>
-		/// Преобразует загруженный файл в чистый легкий Base64 без сохранения на диск (как обычно во всем проекте)
+		/// Универсальный конвертер для живого фона: поддерживает Фото (JPEG), GIF-анимацию и сжатое Видео (MP4)
 		/// </summary>
-		private static async Task<string> ConvertFileToBase64CompressedAsync(IFormFile file, int maxDimension)
+		private async Task<(string Base64Data, string ThemeType)> ProcessCustomBackgroundFileAsync(IFormFile file)
 		{
+			string ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+			bool isVideo = file.ContentType.StartsWith("video/") || ext == ".mp4" || ext == ".mov" || ext == ".webm";
+			bool isGif = file.ContentType == "image/gif" || ext == ".gif";
+
+			// ===================================================================
+			// 1. ЕСЛИ ЭТО ВИДЕО (MP4 / MOV / WEBM)
+			// ===================================================================
+			if (isVideo)
+			{
+				string tempInput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{ext}");
+				try
+				{
+					using (var fs = new FileStream(tempInput, FileMode.Create))
+					{
+						await file.CopyToAsync(fs);
+					}
+
+					// Сжимаем через наш метод FFmpeg до 600-900 КБ
+					string compressedPath = await VideoService.CompressVideoForBioBackgroundAsync(tempInput, _logger);
+					byte[] videoBytes = await System.IO.File.ReadAllBytesAsync(compressedPath);
+
+					try { if (System.IO.File.Exists(compressedPath)) System.IO.File.Delete(compressedPath); } catch { }
+
+					string base64Video = $"data:video/mp4;base64,{Convert.ToBase64String(videoBytes)}";
+					return (base64Video, "custom-video");
+				}
+				finally
+				{
+					try { if (System.IO.File.Exists(tempInput)) System.IO.File.Delete(tempInput); } catch { }
+				}
+			}
+
+			// ===================================================================
+			// 2. ЕСЛИ ЭТО GIF-АНИМАЦИЯ (НЕ ПЕРЕСОХРАНЯЕМ В JPEG!)
+			// ===================================================================
 			using var inMs = new MemoryStream();
 			await file.CopyToAsync(inMs);
 			var rawBytes = inMs.ToArray();
 
+			if (isGif)
+			{
+				_logger.LogInformation("🎬 [BioLink] Сохранена живая GIF-анимация ({Size} байт)", rawBytes.Length);
+				return ($"data:image/gif;base64,{Convert.ToBase64String(rawBytes)}", "custom-image");
+			}
+
+			// ===================================================================
+			// 3. ЕСЛИ ЭТО ОБЫЧНОЕ ФОТО (Сжимаем в JPEG как обычно)
+			// ===================================================================
 			try
 			{
-				// Оптимизируем размер через ImageSharp, чтобы не раздувать базу данных
 				using var image = SixLabors.ImageSharp.Image.Load(rawBytes);
 
-				if (image.Width > maxDimension || image.Height > maxDimension)
+				int maxDim = 1200;
+				if (image.Width > maxDim || image.Height > maxDim)
 				{
 					image.Mutate(x => x.Resize(new SixLabors.ImageSharp.Processing.ResizeOptions
 					{
 						Mode = SixLabors.ImageSharp.Processing.ResizeMode.Max,
-						Size = new SixLabors.ImageSharp.Size(maxDimension, maxDimension)
+						Size = new SixLabors.ImageSharp.Size(maxDim, maxDim)
 					}));
 				}
 
 				using var outMs = new MemoryStream();
 				image.SaveAsJpeg(outMs, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 85 });
-				return $"data:image/jpeg;base64,{Convert.ToBase64String(outMs.ToArray())}";
+				return ($"data:image/jpeg;base64,{Convert.ToBase64String(outMs.ToArray())}", "custom-image");
 			}
 			catch
 			{
-				// Фоллбек, если это не картинка
-				return $"data:{file.ContentType};base64,{Convert.ToBase64String(rawBytes)}";
+				return ($"data:{file.ContentType};base64,{Convert.ToBase64String(rawBytes)}", "custom-image");
 			}
 		}
 
