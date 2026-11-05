@@ -37,5 +37,8 @@ namespace CrossChat.Data.Entities
 		public long ClicksCount { get; set; } = 0;
 
 		public bool IsActive { get; set; } = true;
+
+		// 🚀 ОТОБРАЖАТЬ В НИЖНЕМ РЯДУ ИКОНОК (без широкой полоски с текстом)
+		public bool IsIconOnly { get; set; } = false;
 	}
 }

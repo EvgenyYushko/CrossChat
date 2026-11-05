@@ -200,6 +200,7 @@ namespace CrossChat.Controllers
 							existingLink.IconType = string.IsNullOrWhiteSpace(item.IconType) ? "custom" : item.IconType.ToLowerInvariant();
 							existingLink.IsHighlighted = item.IsHighlighted;
 							existingLink.IsActive = item.IsActive;
+							existingLink.IsIconOnly = item.IsIconOnly;
 							existingLink.SortOrder = order++;
 						}
 						// Если ссылка новая — добавляем:
@@ -213,6 +214,7 @@ namespace CrossChat.Controllers
 								IconType = string.IsNullOrWhiteSpace(item.IconType) ? "custom" : item.IconType.ToLowerInvariant(),
 								IsHighlighted = item.IsHighlighted,
 								IsActive = item.IsActive,
+								IsIconOnly = item.IsIconOnly,
 								SortOrder = order++
 							});
 						}
@@ -644,11 +646,12 @@ namespace CrossChat.Controllers
 
 	public class BioLinkInputDto
 	{
-		public int Id { get; set; } = 0; // 🚀 ПЕРЕДАЕМ ID ДЛЯ УМНОГО ОБНОВЛЕНИЯ
+		public int Id { get; set; } = 0;
 		public string Title { get; set; } = string.Empty;
 		public string Url { get; set; } = string.Empty;
 		public string IconType { get; set; } = "custom";
 		public bool IsHighlighted { get; set; } = false;
 		public bool IsActive { get; set; } = true;
+		public bool IsIconOnly { get; set; } = false; // 🚀 НОВЫЙ ФЛАГ
 	}
 }

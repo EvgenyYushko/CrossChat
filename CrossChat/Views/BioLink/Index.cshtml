@@ -541,6 +541,37 @@
                 height: 580px;
             }
         }
+
+        /* 🚀 СТИЛЬ НИЖНЕГО РЯДА ИКОНОК В МАКЕТЕ IPHONE */
+        .preview-icons-dock {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+            width: 100%;
+        }
+
+        .preview-dock-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+        }
+
+            .preview-dock-btn svg {
+                width: 22px !important;
+                height: 22px !important;
+            }
     </style>
 }
 
@@ -735,6 +766,12 @@
                                             ⭐ Свечение
                                         </label>
 
+                                        <!-- 🚀 НОВАЯ ГАЛОЧКА: В РЯД ИКОНОК СНИЗУ -->
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: #a855f7;">
+                                            <input type="checkbox" class="link-icon-only-cb" checked="@l.IsIconOnly" onchange="updateLivePreview()" style="accent-color: #a855f7; width: 16px; height: 16px;">
+                                            📱 В ряд иконок
+                                        </label>
+
                                         <!-- 🚀 ГАЛОЧКА СКРЫТЬ ССЫЛКУ -->
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-secondary);">
                                             <input type="checkbox" class="link-hidden-cb" checked="@(!l.IsActive)" onchange="updateLivePreview()" style="accent-color: #ef4444; width: 16px; height: 16px;">
@@ -787,6 +824,9 @@
                     <div id="previewLinksContainer" class="preview-links">
                         <!-- Живые кнопки генерируются через JS -->
                     </div>
+
+                    <!-- 🚀 КОНТЕЙНЕР ДЛЯ РЯДА ИКОНОК ВНИЗУ -->
+                    <div id="previewIconsDock" class="preview-icons-dock"></div>
 
                     <div style="margin-top: auto; padding-top: 2rem; font-size: 0.65rem; opacity: 0.5;">
                         ⚡ Powered by CrossChat
@@ -903,6 +943,10 @@
                             <input type="checkbox" class="link-highlight-cb" onchange="updateLivePreview()" style="accent-color: #38bdf8; width: 16px; height: 16px;">
                             ⭐ Свечение
                         </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: #a855f7;">
+                            <input type="checkbox" class="link-icon-only-cb" onchange="updateLivePreview()" style="accent-color: #a855f7; width: 16px; height: 16px;">
+                            📱 В ряд иконок
+                        </label>
                         <!-- 🚀 Галочка скрыть для новых строк -->
                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; text-transform: none; font-size: 0.8rem; color: var(--text-secondary);">
                             <input type="checkbox" class="link-hidden-cb" onchange="updateLivePreview()" style="accent-color: #ef4444; width: 16px; height: 16px;">
@@ -995,7 +1039,8 @@
         // 5. ЖИВОЕ ОБНОВЛЕНИЕ ПРЕВЬЮ
         function updateLivePreview() {
             const previewContainer = document.getElementById('previewLinksContainer');
-            if (!previewContainer) return;
+            const previewDock = document.getElementById('previewIconsDock');
+            if (!previewContainer || !previewDock) return;
 
             const highlightColorInput = document.getElementById('highlightColorInput');
             let highlightColor = '#38bdf8';
@@ -1016,37 +1061,49 @@
             if (previewTitle) previewTitle.textContent = (titleInput && titleInput.value.trim()) ? titleInput.value : 'Имя профиля';
             if (previewBio) previewBio.textContent = (bioInput && bioInput.value.trim()) ? bioInput.value : '';
 
+            // Очищаем оба контейнера
             previewContainer.innerHTML = '';
+            previewDock.innerHTML = '';
 
             const rows = document.querySelectorAll('.link-item-row');
             rows.forEach(r => {
                 const titleInputEl = r.querySelector('.link-title-input');
                 const iconSelectEl = r.querySelector('.link-icon-select');
                 const highlightCbEl = r.querySelector('.link-highlight-cb');
-                const hiddenCbEl = r.querySelector('.link-hidden-cb'); // 🚀 Считываем галочку
+                const hiddenCbEl = r.querySelector('.link-hidden-cb');
+                const iconOnlyCbEl = r.querySelector('.link-icon-only-cb'); // 🚀
 
                 let title = titleInputEl ? titleInputEl.value.trim() : '';
                 const icon = iconSelectEl ? iconSelectEl.value : 'custom';
                 const isHighlight = highlightCbEl ? highlightCbEl.checked : false;
                 const isHidden = hiddenCbEl ? hiddenCbEl.checked : false;
+                const isIconOnly = iconOnlyCbEl ? iconOnlyCbEl.checked : false;
 
-                // 🚀 Приглушаем карточку в редакторе, если она скрыта:
                 r.style.opacity = isHidden ? '0.5' : '1';
-
-                // Если ссылка пустая ИЛИ скрыта — НЕ рисуем её на экране телефона!
                 if (!title || isHidden) return;
 
                 title = title.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '');
-
                 const iconSvg = getNetworkBrandSvg(icon);
-                const btn = document.createElement('div');
-                btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
-                btn.innerHTML = `
-                    <div class="brand-icon-badge">${iconSvg}</div>
-                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
-                    <span style="opacity:0.4; font-size:0.9rem;">➔</span>
-                `;
-                previewContainer.appendChild(btn);
+
+                // 🚀 ЕСЛИ СТОИТ "В РЯД ИКОНОК": отправляем в компактный нижний ряд!
+                if (isIconOnly) {
+                    const iconBtn = document.createElement('div');
+                    iconBtn.className = 'preview-dock-btn';
+                    iconBtn.title = title;
+                    iconBtn.innerHTML = iconSvg;
+                    previewDock.appendChild(iconBtn);
+                }
+                // ИНАЧЕ: рисуем большую полноценную кнопку
+                else {
+                    const btn = document.createElement('div');
+                    btn.className = `preview-btn ${isHighlight ? 'highlighted' : ''}`;
+                    btn.innerHTML = `
+                        <div class="brand-icon-badge">${iconSvg}</div>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left;">${escapeHtml(title)}</span>
+                        <span style="opacity:0.4; font-size:0.9rem;">➔</span>
+                    `;
+                    previewContainer.appendChild(btn);
+                }
             });
         }
 
@@ -1116,6 +1173,7 @@
                 const icon = r.querySelector('.link-icon-select').value;
                 const isHighlight = r.querySelector('.link-highlight-cb').checked;
                 const isHidden = r.querySelector('.link-hidden-cb')?.checked ?? false; // 🚀
+                const isIconOnly = r.querySelector('.link-icon-only-cb')?.checked ?? false; // 🚀
 
                 if (title && url) {
                     links.push({
@@ -1124,7 +1182,8 @@
                         url: url,
                         iconType: icon,
                         isHighlighted: isHighlight,
-                        isActive: !isHidden // 🚀 Сохраняем: если скрыто, isActive = false!
+                        isActive: !isHidden, // 🚀 Сохраняем: если скрыто, isActive = false!
+                        isIconOnly: isIconOnly // 🚀 СОХРАНЯЕМ ФЛАГ
                     });
                 }
             });

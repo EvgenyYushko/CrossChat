@@ -47,6 +47,9 @@ namespace CrossChat.Data.Migrations
                     b.Property<bool>("IsHighlighted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsIconOnly")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
