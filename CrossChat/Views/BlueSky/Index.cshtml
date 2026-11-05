@@ -573,6 +573,14 @@
                         <span class="status-badge status-paused">⚠️ Отключен</span>
                     }
                 </div>
+                <!-- 🚀 КНОПКА БЕСШОВНОГО ОБНОВЛЕНИЯ СЕССИИ (RE-LOGIN) БЕЗ ПОТЕРИ ПОСТОВ -->
+                <form action="/bluesky/connect" method="post" style="margin-top: 12px;">
+                    <input type="hidden" name="handle" value="@Model.Handle" />
+                    <input type="hidden" name="botId" value="@Model.Id" />
+                    <button type="submit" class="btn" style="background: rgba(0, 133, 255, 0.15); border: 1px solid #0085ff; color: #38bdf8; padding: 8px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; display: inline-flex; width: auto;">
+                        🔄 Обновить сессию (Re-login)
+                    </button>
+                </form>
             </div>
 
             <!-- ТРИ КНОПКИ ДЕЙСТВИЯ -->

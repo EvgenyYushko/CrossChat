@@ -100,10 +100,10 @@ namespace CrossChat.Controllers
 		}
 
 		// ==========================================================
-		// 3. ПОДКЛЮЧЕНИЕ (OAUTH PKCE)
+		// 3. ПОДКЛЮЧЕНИЕ / ПЕРЕПОДКЛЮЧЕНИЕ (OAUTH PKCE)
 		// ==========================================================
 		[HttpPost("connect")]
-		public async Task<IActionResult> Connect(string handle)
+		public async Task<IActionResult> Connect(string handle, int? botId = null) // <-- 🚀 ПРИНИМАЕМ botId
 		{
 			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 			if (string.IsNullOrEmpty(userId)) return Unauthorized();
@@ -130,7 +130,7 @@ namespace CrossChat.Controllers
 				var codeChallenge = GenerateCodeChallenge(codeVerifier);
 				var state = Guid.NewGuid().ToString("N");
 
-				// Сохраняем параметры авторизации и ID профиля в Redis на 15 минут
+				// Сохраняем параметры авторизации в Redis на 15 минут
 				var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) };
 				await _cache.SetStringAsync($"bsky_userId:{state}", userId, cacheOptions);
 				await _cache.SetStringAsync($"bsky_verifier:{state}", codeVerifier, cacheOptions);
@@ -138,7 +138,12 @@ namespace CrossChat.Controllers
 				await _cache.SetStringAsync($"bsky_did:{state}", did, cacheOptions);
 				await _cache.SetStringAsync($"bsky_pds:{state}", pdsUrl, cacheOptions);
 
-				// Безопасно сохраняем профиль:
+				// 🚀 СОХРАНЯЕМ СУЩЕСТВУЮЩИЙ BOT ID ДЛЯ ПЕРЕПОДКЛЮЧЕНИЯ:
+				if (botId.HasValue && botId.Value > 0)
+				{
+					await _cache.SetStringAsync($"bsky_botId:{state}", botId.Value.ToString(), cacheOptions);
+				}
+
 				int currentProfileId = await GetActiveProfileIdSafeAsync(_db, int.Parse(userId));
 				await _cache.SetStringAsync($"bsky_profileId:{state}", currentProfileId.ToString(), cacheOptions);
 
@@ -178,6 +183,9 @@ namespace CrossChat.Controllers
 			var did = await _cache.GetStringAsync($"bsky_did:{state}");
 			var pds = await _cache.GetStringAsync($"bsky_pds:{state}");
 			var profileIdStr = await _cache.GetStringAsync($"bsky_profileId:{state}");
+			// 🚀 СЧИТЫВАЕМ БЫЛ ЛИ ЭТО RE-LOGIN:
+			var botIdStr = await _cache.GetStringAsync($"bsky_botId:{state}");
+			int? existingBotId = int.TryParse(botIdStr, out var bId) ? bId : null;
 
 			if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(internalUserIdStr))
 			{
@@ -293,9 +301,10 @@ namespace CrossChat.Controllers
 					pds!,
 					expireDate,
 					avatarUrl,
-					profileId);
+					profileId,
+					existingBotId);
 
-				return RedirectToAction("Index", new { botId = settings.Id });
+				return RedirectToAction("Index", new { botId = settings.Id, reconnected = "true" });
 			}
 			catch (Exception ex)
 			{
@@ -314,10 +323,29 @@ namespace CrossChat.Controllers
 			string pds,
 			DateTime expireDate,
 			string? profilePicUrl,
-			int? profileId = null)
+			int? profileId = null,
+			int? existingBotId = null) // <-- 🚀 ПАРАМЕТР ПЕРЕПОДКЛЮЧЕНИЯ
 		{
-			var settings = await _db.BlueSkySettings
-				.FirstOrDefaultAsync(s => s.UserId == userId && s.Did == did);
+			BlueSkySettings? settings = null;
+
+			// 1. ЕСЛИ ЭТО RE-LOGIN: ищем строго существующую запись по ID, чтобы сохранить BotId и посты!
+			if (existingBotId.HasValue && existingBotId.Value > 0)
+			{
+				settings = await _db.BlueSkySettings
+					.FirstOrDefaultAsync(s => s.Id == existingBotId.Value && s.UserId == userId);
+
+				if (settings != null)
+				{
+					_logger.LogInformation("🔄 [BlueSky] Выполняется переподключение существующего бота Id: {BotId}", settings.Id);
+				}
+			}
+
+			// 2. Иначе ищем по связке UserId + Did
+			if (settings == null)
+			{
+				settings = await _db.BlueSkySettings
+					.FirstOrDefaultAsync(s => s.UserId == userId && s.Did == did);
+			}
 
 			bool isNew = false;
 			if (settings == null)
@@ -342,13 +370,14 @@ namespace CrossChat.Controllers
 				base64Avatar = await DownloadImageAsBase64ForHtml(profilePicUrl);
 			}
 
+			// 🚀 ПЕРЕЗАПИСЫВАЕМ ТОКЕНЫ И КЛЮЧИ (А ID ОСТАЁТСЯ ПРЕЖНИМ!):
 			settings.AccessToken = access;
 			settings.RefreshToken = refresh;
 			settings.TokenExpiresAt = expireDate;
 			settings.Handle = handle;
 			settings.PdsUrl = pds;
 			settings.PrivateKeyJson = privateKey;
-			settings.IsActive = false;
+			settings.IsActive = true; // Сразу включаем бота обратно
 
 			if (base64Avatar != null)
 			{
@@ -359,7 +388,7 @@ namespace CrossChat.Controllers
 
 			_logger.LogInformation(isNew
 				? $"[BlueSky] Добавлен новый аккаунт @{handle}"
-				: $"[BlueSky] Обновлен токен для @{handle}");
+				: $"[BlueSky] ✅ Токены и сессия успешно обновлены для @{handle}! (BotId сохранен: {settings.Id})");
 
 			return settings;
 		}
