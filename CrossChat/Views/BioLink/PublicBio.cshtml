@@ -378,34 +378,24 @@
             opacity: 1;
         }
 
-        /* 🚀 ГОРИЗОНТАЛЬНЫЙ РЯД СОЦИАЛЬНЫХ ИКОНОК (DOCK) */
+        /* 🚀 ГОРИЗОНТАЛЬНЫЙ РЯД СОЦИАЛЬНЫХ ИКОНОК (ПЛОТНЫЙ И ВМЕСТИТЕЛЬНЫЙ) */
         .social-icons-dock {
             display: flex;
             align-items: center;
             justify-content: center;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: clamp(8px, 2.5vw, 12px); /* Эластичный отступ: сжимается при нехватке места */
             margin-top: 1.5rem;
             width: 100%;
-        }
-
-        /* 🚀 СВОБОДНЫЕ КРУПНЫЕ ИКОНКИ БЕЗ СЕРЫХ РАМОК В 1.5 РАЗА БОЛЬШЕ */
-        .social-icons-dock {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 16px; /* Добавили воздуха между крупными иконками */
-            margin-top: 1.75rem;
-            width: 100%;
+            padding: 0 4px; /* Максимально прижимаем к краям контента */
         }
 
         .social-dock-btn {
-            width: 44px;
-            height: 44px;
-            background: none !important; /* 🚀 УБРАЛИ СЕРЫЙ ФОН */
-            border: none !important; /* 🚀 УБРАЛИ РАМКУ */
-            box-shadow: none !important; /* 🚀 УБРАЛИ КОРОБКУ */
+            width: 38px; /* Было 44px — стало аккуратнее и вместительнее */
+            height: 38px;
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
             display: inline-flex;
@@ -416,22 +406,22 @@
             transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* УВЕЛИЧИЛИ ИКОНКИ В 1.5 РАЗА (с 26px до 40px на весь размер прежней рамки) */
-        .social-dock-btn svg {
-            width: 40px !important;
-            height: 40px !important;
-            filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5)); /* Сочная тень для объёма */
-            transition: transform 0.2s ease;
-        }
+            /* Крупный сочный логотип 34px */
+            .social-dock-btn svg {
+                width: 34px !important; /* Было 40px */
+                height: 34px !important;
+                filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+                transition: transform 0.2s ease;
+            }
 
-        .social-dock-btn:hover svg {
-            transform: translateY(-3px) scale(1.12);
-            filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
-        }
+            .social-dock-btn:hover svg {
+                transform: translateY(-2px) scale(1.1);
+                filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.6));
+            }
 
-        .social-dock-btn:active svg {
-            transform: scale(0.92);
-        }
+            .social-dock-btn:active svg {
+                transform: scale(0.92);
+            }
 
         /* 🚀 СТИЛЬ ВЫСОКОЙ КАРТОЧКИ-БАННЕРА С ФОТОГРАФИЕЙ */
         .link-card.has-banner {

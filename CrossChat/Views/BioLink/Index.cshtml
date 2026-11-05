@@ -555,20 +555,21 @@
                 height: 580px;
             }
         }
-        /* 🚀 ИКОНКИ БЕЗ РАМОК В МАКЕТЕ ТЕЛЕФОНА (В 1.5 РАЗА КРУПНЕЕ) */
+        /* 🚀 ИКОНКИ В МАКЕТЕ ТЕЛЕФОНА (УМЕЩАЮТСЯ В ОДНУ ЛИНИЮ) */
         .preview-icons-dock {
             display: flex;
             align-items: center;
             justify-content: center;
             flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 16px;
+            gap: 7px; /* Было 12px — убрали лишние дыры */
+            margin-top: 14px;
             width: 100%;
+            padding: 0 2px;
         }
 
         .preview-dock-btn {
-            width: 36px;
-            height: 36px;
+            width: 32px; /* Было 36px */
+            height: 32px;
             background: none !important;
             border: none !important;
             box-shadow: none !important;
@@ -579,13 +580,12 @@
             flex-shrink: 0;
         }
 
-        /* Увеличили размер иконок в макете телефона с 22px до 34px */
-        .preview-dock-btn .brand-icon-svg,
-        .preview-dock-btn svg {
-            width: 34px !important;
-            height: 34px !important;
-            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
-        }
+            .preview-dock-btn .brand-icon-svg,
+            .preview-dock-btn svg {
+                width: 28px !important; /* Было 34px */
+                height: 28px !important;
+                filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
+            }
 
         /* Баннер в макете телефона */
         .preview-btn.has-banner {
