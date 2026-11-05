@@ -621,6 +621,48 @@
             background: rgba(255, 255, 255, 0.12);
             color: var(--text-main);
         }
+
+        /* 🚀 ПОЛНОЭКРАННАЯ БЛОКИРОВКА НА ВРЕМЯ СОХРАНЕНИЯ */
+        .save-overlay-lock {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 999999;
+            display: none; /* скрыт по умолчанию */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            user-select: none;
+            cursor: wait;
+        }
+
+        .save-spinner {
+            width: 54px;
+            height: 54px;
+            border: 4px solid rgba(255, 255, 255, 0.15);
+            border-top: 4px solid #38bdf8;
+            border-radius: 50%;
+            animation: spinOverlay 0.8s linear infinite;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+        }
+
+        @@keyframes spinOverlay {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 }
 
@@ -900,7 +942,16 @@
 
     </div>
 </div>
-
+<!-- 🚀 ЭКРАН БЛОКИРОВКИ ПРИ СОХРАНЕНИИ -->
+<div id="saveScreenLock" class="save-overlay-lock">
+    <div class="save-spinner"></div>
+    <h3 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 8px; color: #ffffff;">
+        Сохранение страницы...
+    </h3>
+    <p style="font-size: 0.9rem; color: rgba(255, 255, 255, 0.7); text-align: center; max-width: 340px; line-height: 1.4;">
+        Оптимизируем видеофон и обновляем ссылки. Пожалуйста, не закрывайте вкладку.
+    </p>
+</div>
 @section Scripts {
     <script>
         let currentBgValue = "@(Model.CustomBackgroundValue ?? "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)")";
@@ -1285,12 +1336,18 @@
             });
         }
 
-        // 6. СОХРАНЕНИЕ СТРАНИЦЫ
+        // 6. СОХРАНЕНИЕ СТРАНИЦЫ С БЛОКИРОВКОЙ ЭКРАНА
         async function saveBioPage() {
             const form = document.getElementById('bioForm');
+            const overlay = document.getElementById('saveScreenLock');
             const btn = document.getElementById('btnSaveBio');
-            btn.disabled = true;
-            btn.textContent = '⏳ Сохранение...';
+
+            // 1. Показываем полноэкранный блокиратор
+            if (overlay) overlay.style.display = 'flex';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Сохранение...';
+            }
 
             const links = [];
             document.querySelectorAll('.link-item-row').forEach(r => {
@@ -1299,8 +1356,8 @@
                 const url = r.querySelector('.link-url-input').value.trim();
                 const icon = r.querySelector('.link-icon-select').value;
                 const isHighlight = r.querySelector('.link-highlight-cb').checked;
-                const isHidden = r.querySelector('.link-hidden-cb')?.checked ?? false; // 🚀
-                const isIconOnly = r.querySelector('.link-icon-only-cb')?.checked ?? false; // 🚀
+                const isHidden = r.querySelector('.link-hidden-cb')?.checked ?? false;
+                const isIconOnly = r.querySelector('.link-icon-only-cb')?.checked ?? false;
 
                 if (title && url) {
                     links.push({
@@ -1309,15 +1366,14 @@
                         url: url,
                         iconType: icon,
                         isHighlighted: isHighlight,
-                        isActive: !isHidden, // 🚀 Сохраняем: если скрыто, isActive = false!
-                        isIconOnly: isIconOnly, // 🚀 СОХРАНЯЕМ ФЛАГ
+                        isActive: !isHidden,
+                        isIconOnly: isIconOnly,
                         imageUrl: r.dataset.imageUrl || null
                     });
                 }
             });
 
             document.getElementById('linksJsonHidden').value = JSON.stringify(links);
-
             const formData = new FormData(form);
 
             try {
@@ -1327,17 +1383,24 @@
                 });
 
                 if (res.ok) {
-                    alert('✅ Страница-переходник успешно сохранена!');
+                    // Перезагружаем страницу, оверлей не скрываем, чтобы не было мерцания перед reload
                     location.reload();
                 } else {
                     const err = await res.text();
-                    alert('Ошибка: ' + err);
+                    alert('Ошибка при сохранении: ' + err);
+                    if (overlay) overlay.style.display = 'none';
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = '💾 Сохранить изменения';
+                    }
                 }
             } catch {
-                alert('Сетевая ошибка при сохранении');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '💾 Сохранить изменения';
+                alert('Сетевая ошибка при отправке данных на сервер.');
+                if (overlay) overlay.style.display = 'none';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '💾 Сохранить изменения';
+                }
             }
         }
 
@@ -1395,5 +1458,6 @@
             row.querySelector('.banner-preview-box').style.display = 'none';
             updateLivePreview();
         }
+
     </script>
 }
