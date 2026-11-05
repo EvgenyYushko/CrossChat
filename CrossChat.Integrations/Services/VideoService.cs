@@ -579,16 +579,15 @@ namespace CrossChat.Integrations.Services
 
 			string outputPath = Path.Combine(Path.GetTempPath(), $"bio_bg_{Guid.NewGuid():N}.mp4");
 
-			// 🚀 СУПЕР-ОПТИМИЗАЦИЯ ДЛЯ СЛАБОГО CPU RENDER:
-			// 1. -ss 0 -t 6 ДО -i : мгновенно отсекает файл, FFmpeg даже не читает гигабайты хвоста!
-			// 2. -an : без звука
-			// 3. scale='min(480,iw)':-2 : 480p вместо 720p (в 2.5 раза меньше нагрузка на процессор)
-			// 4. -r 20 : 20 кадров/сек (плавный живой фон, в 3 раза легче исходных 60fps)
-			// 5. -crf 30 : отличный баланс качества и микро-размера (~400 КБ)
-			// 6. -preset ultrafast -threads 1 : минимальное время кодирования без удушения веб-сервера
+			// 🚀 ЗОЛОТОЙ БАЛАНС: 720p ЧЕТКОСТЬ + ЧИСТАЯ КАРТИНКА БЕЗ ПИКСЕЛЕЙ (CRF 25)
+			// -ss 0 -t 6 ДО -i : мгновенно отсекает хвост (только 6 секунд)
+			// -vf "scale='min(720,iw)':-2" : честные 720p для Retina-экранов
+			// -r 24 : эталонная кино-плавность 24 кадра/сек
+			// -c:v libx264 -crf 25 : убираем квадраты и макроблоки (чистая сочная картинка)
+			// -preset ultrafast -threads 1 : быстрый рендер без перегрузки процессора
 			string arguments = $"-y -nostdin -ss 0 -t 6 -i \"{inputPath}\" -an " +
-							   $"-vf \"scale='min(480,iw)':-2\" -r 20 " +
-							   $"-c:v libx264 -crf 30 -preset ultrafast -threads 1 " +
+							   $"-vf \"scale='min(720,iw)':-2\" -r 24 " +
+							   $"-c:v libx264 -crf 25 -preset ultrafast -threads 1 " +
 							   $"-movflags +faststart \"{outputPath}\"";
 
 			logger?.LogInformation("[VideoService] Старт ультра-оптимизации фона BioLink (480p, 6 сек)...");
