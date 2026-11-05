@@ -232,6 +232,9 @@ namespace CrossChat.Controllers
 				}
 			}
 
+			// 🚀 АВТОМАТИЧЕСКАЯ УБОРКА ПРИЗРАЧНЫХ СТРАНИЦ ПРИ КАЖДОМ СОХРАНЕНИИ
+			await CleanupGhostBioPagesAsync(userId, bioPage.Id, bioPage.ProfileId);
+
 			await _db.SaveChangesAsync();
 			_logger.LogInformation("✅ [BioLink] Страница {Slug} успешно сохранена для профиля {ProfileId}", bioPage.Slug, bioPage.ProfileId);
 
@@ -591,6 +594,60 @@ namespace CrossChat.Controllers
 		}
 
 		/// <summary>
+		/// 🧹 Автоматическая очистка: удаляет осиротевшие страницы, бережно сохраняя все живые профили пользователя
+		/// </summary>
+		private async Task CleanupGhostBioPagesAsync(int userId, int currentBioPageId, int currentProfileId)
+		{
+			try
+			{
+				// 1. Получаем список ID всех реально существующих профилей этого пользователя (Lana, CrossChat и т.д.)
+				var activeProfileIds = await _db.Profile
+					.Where(p => p.UserId == userId)
+					.Select(p => p.Id)
+					.ToListAsync();
+
+				// 2. Ищем призрачные страницы, которые подлежат удалению:
+				var ghostPageIds = await _db.BioPages
+					.Where(b =>
+						// а) Профиль вообще был удален из базы данных
+						!_db.Profile.Any(p => p.Id == b.ProfileId)
+						// б) Либо страница принадлежала этому пользователю, но её профиль удалили
+						|| (b.Profile.UserId == userId && !activeProfileIds.Contains(b.ProfileId))
+						// в) Либо это старый дубликат внутри текущего профиля (Id != currentBioPageId)
+						|| (b.ProfileId == currentProfileId && b.Id != currentBioPageId)
+					)
+					.Select(b => b.Id)
+					.ToListAsync();
+
+				if (!ghostPageIds.Any()) return;
+
+				_logger.LogInformation("🧹 [BioLink Cleanup] Найдено {Count} призрачных страниц. Удаление...", ghostPageIds.Count);
+
+				// 🚀 КАСКАДНОЕ БЕЗОПАСНОЕ УДАЛЕНИЕ В EF CORE (.NET 9):
+				// 1. Удаляем статистику кликов и просмотров
+				await _db.BioPageEvents
+					.Where(e => ghostPageIds.Contains(e.BioPageId))
+					.ExecuteDeleteAsync();
+
+				// 2. Удаляем привязанные кнопки-ссылки
+				await _db.BioLinkItems
+					.Where(l => ghostPageIds.Contains(l.BioPageId))
+					.ExecuteDeleteAsync();
+
+				// 3. Удаляем сами мертвые страницы BioPages (освобождая старые слоги в БД!)
+				await _db.BioPages
+					.Where(b => ghostPageIds.Contains(b.Id))
+					.ExecuteDeleteAsync();
+
+				_logger.LogInformation("✅ [BioLink Cleanup] Мертвые ссылки успешно удалены, живые профили в безопасности!");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [BioLink Cleanup] Ошибка при автоочистке призрачных страниц");
+			}
+		}
+
+		/// <summary>
 		/// Универсальный конвертер для живого фона: поддерживает Фото (JPEG), GIF-анимацию и сжатое Видео (MP4)
 		/// </summary>
 		private async Task<(string Base64Data, string ThemeType)> ProcessCustomBackgroundFileAsync(IFormFile file)
@@ -666,6 +723,8 @@ namespace CrossChat.Controllers
 				return ($"data:{file.ContentType};base64,{Convert.ToBase64String(rawBytes)}", "custom-image");
 			}
 		}
+
+
 
 		private static string Slugify(string text)
 		{
