@@ -373,37 +373,49 @@
             width: 100%;
         }
 
-        .social-dock-btn {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.22);
+        /* 🚀 СВОБОДНЫЕ КРУПНЫЕ ИКОНКИ БЕЗ СЕРЫХ РАМОК В 1.5 РАЗА БОЛЬШЕ */
+        .social-icons-dock {
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-wrap: wrap;
+            gap: 16px; /* Добавили воздуха между крупными иконками */
+            margin-top: 1.75rem;
+            width: 100%;
+        }
+
+        .social-dock-btn {
+            width: 44px;
+            height: 44px;
+            background: none !important; /* 🚀 УБРАЛИ СЕРЫЙ ФОН */
+            border: none !important; /* 🚀 УБРАЛИ РАМКУ */
+            box-shadow: none !important; /* 🚀 УБРАЛИ КОРОБКУ */
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             text-decoration: none;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            flex-shrink: 0;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .social-dock-btn:hover {
-            transform: translateY(-3px) scale(1.08);
-            border-color: rgba(255, 255, 255, 0.45);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
-        }
+            /* УВЕЛИЧИЛИ ИКОНКИ В 1.5 РАЗА (с 26px до 40px на весь размер прежней рамки) */
+            .social-dock-btn svg {
+                width: 40px !important;
+                height: 40px !important;
+                filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5)); /* Сочная тень для объёма */
+                transition: transform 0.2s ease;
+            }
 
-        .social-dock-btn:active {
-            transform: scale(0.92);
-        }
+            .social-dock-btn:hover svg {
+                transform: translateY(-3px) scale(1.12);
+                filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+            }
 
-        .social-dock-btn svg {
-            width: 26px !important;
-            height: 26px !important;
-            filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.4));
-        }
+            .social-dock-btn:active svg {
+                transform: scale(0.92);
+            }
     </style>
 </head>
 <body>
