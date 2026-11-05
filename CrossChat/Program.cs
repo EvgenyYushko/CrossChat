@@ -216,7 +216,7 @@ builder.Services.AddQuartz(q =>
 	q.AddTrigger(opts => opts
 		.ForJob(bskyRadarKey)
 		.WithIdentity($"{nameof(BlueSkyHashtagEngagementJob)}-Trigger")
-		.WithSimpleSchedule(x => x.WithIntervalInHours(2).RepeatForever()));
+		.WithSimpleSchedule(x => x.WithIntervalInHours(1).RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

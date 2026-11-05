@@ -580,12 +580,12 @@
             flex-shrink: 0;
         }
 
-            .preview-dock-btn .brand-icon-svg,
-            .preview-dock-btn svg {
-                width: 28px !important; /* Было 34px */
-                height: 28px !important;
-                filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
-            }
+        .preview-dock-btn .brand-icon-svg,
+        .preview-dock-btn svg {
+            width: 28px !important; /* Было 34px */
+            height: 28px !important;
+            filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
+        }
 
         /* Баннер в макете телефона */
         .preview-btn.has-banner {
@@ -662,6 +662,48 @@
             100% {
                 transform: rotate(360deg);
             }
+        }
+
+        /* 🚀 СВЕЧЕНИЕ ЯРЛЫКА В ПРЕВЬЮ МАКЕТА ТЕЛЕФОНА */
+        .preview-dock-btn.highlighted {
+            animation: previewIconPulseGlow 2.8s infinite ease-in-out !important;
+            will-change: transform, filter;
+            z-index: 2;
+        }
+
+        @@keyframes previewIconPulseGlow {
+            0%
+
+        {
+            transform: scale(1);
+            filter: drop-shadow(0 0 3px var(--preview-glow-color, #38bdf8));
+        }
+
+        38% {
+            transform: scale(1.18);
+            filter: drop-shadow(0 0 10px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 18px var(--preview-glow-color, #38bdf8));
+        }
+
+        44% {
+            transform: scale(1.18) rotate(-4deg);
+            filter: drop-shadow(0 0 12px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 20px var(--preview-glow-color, #38bdf8));
+        }
+
+        50% {
+            transform: scale(1.18) rotate(4deg);
+            filter: drop-shadow(0 0 12px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 20px var(--preview-glow-color, #38bdf8));
+        }
+
+        56% {
+            transform: scale(1.18) rotate(0deg);
+            filter: drop-shadow(0 0 10px var(--preview-glow-color, #38bdf8)) drop-shadow(0 0 18px var(--preview-glow-color, #38bdf8));
+        }
+
+        70%, 100% {
+            transform: scale(1);
+            filter: drop-shadow(0 0 3px var(--preview-glow-color, #38bdf8));
+        }
+
         }
     </style>
 }
@@ -1250,7 +1292,8 @@
                 // 🚀 ЕСЛИ СТОИТ "В РЯД ИКОНОК": отправляем в компактный нижний ряд!
                 if (isIconOnly) {
                     const iconBtn = document.createElement('div');
-                    iconBtn.className = 'preview-dock-btn';
+                    // 🚀 Добавляем класс highlighted, если включено свечение
+                    iconBtn.className = `preview-dock-btn ${isHighlight ? 'highlighted' : ''}`;
                     iconBtn.title = title;
                     iconBtn.innerHTML = iconSvg;
                     previewDock.appendChild(iconBtn);
@@ -1454,6 +1497,7 @@
             row.querySelector('.banner-preview-box').style.display = 'none';
             updateLivePreview();
         }
+
 
     </script>
 }
