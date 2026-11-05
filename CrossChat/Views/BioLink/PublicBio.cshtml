@@ -486,6 +486,36 @@
             }
         }
 
+        /* 🚀 КРУПНАЯ ВЫРАЗИТЕЛЬНАЯ ИКОНКА БРЕНДА НА ФОТО-БАННЕРЕ */
+        .link-card.has-banner .brand-icon-badge {
+            width: 52px; /* Было 36px — увеличили в 1.5-1.7 раза */
+            height: 52px;
+            flex-shrink: 0;
+        }
+
+            .link-card.has-banner .brand-icon-badge svg {
+                width: 48px !important; /* Было 32px — логотип крупный и сразу бросается в глаза */
+                height: 48px !important;
+                /* Двойная плотная тень: иконка никогда не сольётся с пёстрым фоном */
+                filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.85)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.9));
+            }
+
+        /* Выравнивание: прижимаем весь блок вниз карточки, а текст центрируем по иконке */
+        .link-card.has-banner .link-content-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            z-index: 2;
+            max-width: 85%;
+        }
+
+            .link-card.has-banner .link-content-left span {
+                font-size: 1.1rem;
+                font-weight: 800;
+                line-height: 1.3;
+                text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 1);
+            }
+
         /* 🚀 АППАРАТНЫЙ ЖИВОЙ ВИДЕОФОН */
         .page-bg-video {
             position: fixed;

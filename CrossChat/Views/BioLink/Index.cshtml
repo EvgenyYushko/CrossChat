@@ -443,8 +443,9 @@
             will-change: transform, box-shadow;
         }
 
+        /* 🚀 Баннер в макете телефона (чистый объединенный стиль) */
         .preview-btn.has-banner {
-            min-height: 130px;
+            min-height: 120px;
             aspect-ratio: 16 / 9;
             background-size: cover !important;
             background-position: center !important;
@@ -453,18 +454,40 @@
             padding: 12px 14px;
         }
 
-            .preview-btn.highlighted::before {
-                content: '';
-                position: absolute;
-                top: -50%;
-                left: -150%;
-                width: 60%;
-                height: 200%;
-                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-                transform: rotate(25deg);
-                animation: shineSweep 2.8s infinite ease-in-out;
-                pointer-events: none;
+            /* Крупная иконка для баннера */
+            .preview-btn.has-banner .brand-icon-badge {
+                width: 44px;
+                height: 44px;
+                flex-shrink: 0;
             }
+
+                .preview-btn.has-banner .brand-icon-badge svg,
+                .preview-btn.has-banner .brand-icon-svg {
+                    width: 40px !important;
+                    height: 40px !important;
+                    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.9));
+                }
+
+            /* Текст поверх фотографии */
+            .preview-btn.has-banner span {
+                font-size: 0.9rem;
+                font-weight: 800;
+                text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+            }
+
+        /* Бегущий глянцевый блик для выделенной ссылки */
+        .preview-btn.highlighted::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -150%;
+            width: 60%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transform: rotate(25deg);
+            animation: shineSweep 2.8s infinite ease-in-out;
+            pointer-events: none;
+        }
 
         @@keyframes previewPulseGlow {
             0% {
@@ -587,20 +610,7 @@
             filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
         }
 
-        /* Баннер в макете телефона */
-        .preview-btn.has-banner {
-            min-height: 120px;
-            aspect-ratio: 16 / 9;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
-            align-items: flex-end;
-            padding: 12px 14px;
-        }
-
-            .preview-btn.has-banner span {
-                text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
-            }
+        
 
         /* Кнопка загрузки баннера в строке ссылки */
         .btn-banner-upload {
