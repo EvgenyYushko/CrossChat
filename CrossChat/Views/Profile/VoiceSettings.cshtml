@@ -1,0 +1,512 @@
+@model CrossChat.Data.Entities.ProfileVoiceSetting
+@using CrossChat.Integrations.Models
+@{
+    ViewData["Title"] = "Настройка AI-Голоса профиля";
+    var profile = ViewBag.Profile as CrossChat.Data.Entities.Profile;
+}
+
+@section Styles {
+    <style>
+        .voice-container {
+            max-width: 900px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .voice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .voice-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .card-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 12px;
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+            .form-group label {
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+        .text-input, select.text-input, textarea.text-input {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.92rem;
+            outline: none;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+            .text-input:focus, select.text-input:focus, textarea.text-input:focus {
+                border-color: #a855f7;
+                box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25);
+            }
+
+        .btn-gradient {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 18px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.35);
+        }
+
+            .btn-gradient:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(168, 85, 247, 0.45);
+            }
+
+        /* ПЕСОЧНИЦА */
+        .sandbox-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .sandbox-tab-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .sandbox-tab-btn.active {
+                background: #a855f7;
+                color: #fff;
+            }
+
+        .audio-player-box {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 12px;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+            .audio-player-box audio {
+                width: 100%;
+                height: 38px;
+            }
+
+        /* КНОПКА ЗАПИСИ С МИКРОФОНА */
+        .mic-rec-btn {
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.15);
+            border: 2px solid #ef4444;
+            color: #ef4444;
+            font-size: 1.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 1.5rem auto 0.5rem;
+            transition: all 0.2s;
+        }
+
+            .mic-rec-btn:hover {
+                transform: scale(1.08);
+                background: rgba(239, 68, 68, 0.25);
+            }
+
+            .mic-rec-btn.recording {
+                background: #ef4444;
+                color: #fff;
+                animation: pulseRec 1s infinite alternate;
+            }
+
+        @@keyframes pulseRec {
+            from {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            to {
+                box-shadow: 0 0 0 16px rgba(239, 68, 68, 0);
+            }
+        }
+
+        @@media (max-width: 800px) {
+            .voice-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <div style="display:flex; align-items:center; gap:8px;">
+        <a href="/profile?profileId=@profile?.Id" style="color:var(--text-secondary); text-decoration:none; font-size:0.88rem; font-weight:600;">
+            ← В профиль
+        </a>
+    </div>
+}
+
+<div class="voice-container">
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="margin: 0; font-size: 1.4rem; font-weight: 800; color: var(--text-main);">
+            🎙️ Персональный AI-Голос: @profile?.Name
+        </h2>
+        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+            Настройте характерную речь вашего персонажа и протестируйте живое звучание в песочнице
+        </div>
+    </div>
+
+    <div class="voice-grid">
+
+        <!-- ========================================================== -->
+        <!-- 1. КОЛОНКА НАСТРОЕК (ПРОМПТ + ПАРАМЕТРЫ)                   -->
+        <!-- ========================================================== -->
+        <div class="voice-card">
+            <div class="card-header-row">
+                <h3 class="card-title">⚙️ Параметры звучания</h3>
+                <span style="font-size:0.75rem; color:#10b981; font-weight:700;">● Активен</span>
+            </div>
+
+            <!-- ПРОВАЙДЕР -->
+            <div class="form-group">
+                <label>Голосовой движок (Провайдер):</label>
+                <select id="providerSelect" class="text-input" onchange="onProviderChanged(this.value)">
+                    <option value="Gemini" selected="@(Model.Provider == "Gemini")">✨ Google Gemini Flash-TTS</option>
+                    <option value="ElevenLabs" disabled>👑 ElevenLabs (Скоро)</option>
+                </select>
+            </div>
+
+            <!-- ГОЛОС И СТИЛЬ -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                    <label>Тембр (Голос):</label>
+                    <select id="voiceNameSelect" class="text-input">
+                        @foreach (var v in VoiceConstants.GeminiVoices)
+                        {
+                            <option value="@v" selected="@(Model.VoiceName == v)">@v</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Эмоциональный стиль:</label>
+                    <select id="styleSelect" class="text-input">
+                        @foreach (var s in VoiceConstants.Styles)
+                        {
+                            <option value="@s" selected="@(Model.Style == s)">@s</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- ТЕМП И АКЦЕНТ -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                    <label>Темп речи:</label>
+                    <select id="paceSelect" class="text-input">
+                        @foreach (var p in VoiceConstants.PaceMap.Keys)
+                        {
+                            <option value="@p" selected="@(Model.Pace == p)">@p</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Акцент:</label>
+                    <select id="accentSelect" class="text-input">
+                        @foreach (var a in VoiceConstants.Accents)
+                        {
+                            <option value="@a" selected="@(Model.Accent == a)">@a</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- РЕЖИССЕРСКАЯ СЦЕНА -->
+            <div class="form-group">
+                <label>Сцена / Роль для ИИ (Director's Note):</label>
+                <textarea id="sceneInput" rows="2" class="text-input" placeholder="Нежная девушка, говорит мягко и доверительно">@Model.Scene</textarea>
+                <span style="font-size:0.75rem; color:var(--text-secondary);">Опишите образ, настроение и манеру подачи</span>
+            </div>
+
+            <button type="button" class="btn-gradient" onclick="saveVoiceSettings()">
+                💾 Сохранить настройки голоса
+            </button>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- 2. КОЛОНКА: ИНТЕРАКТИВНАЯ ПЕСОЧНИЦА (SANDBOX)             -->
+        <!-- ========================================================== -->
+        <div class="voice-card">
+            <div class="card-header-row">
+                <h3 class="card-title">🧪 Тестовая песочница</h3>
+                <span style="font-size:0.75rem; color:#a855f7; font-weight:700;">Live Preview</span>
+            </div>
+
+            <!-- ВКЛАДКИ РЕЖИМОВ -->
+            <div class="sandbox-tabs">
+                <button type="button" class="sandbox-tab-btn active" id="tabTextBtn" onclick="switchSandboxTab('text')">
+                    ✍️ Текст ➔ Голос
+                </button>
+                <button type="button" class="sandbox-tab-btn" id="tabMicBtn" onclick="switchSandboxTab('mic')">
+                    🎙️ Микрофон ➔ Голос
+                </button>
+            </div>
+
+            <!-- ВАРИАНТ 1: ТЕКСТ ➔ ОЗВУЧКА -->
+            <div id="sandboxTextMode" style="display:flex; flex-direction:column; gap:12px;">
+                <div class="form-group">
+                    <label>Текст для проверки звучания:</label>
+                    <textarea id="testTextInput" rows="3" class="text-input" placeholder="Привет! Как твои дела? Очень рада тебя слышать.">Привет! Как твои дела? Очень рада тебя слышать.</textarea>
+                </div>
+
+                <button type="button" class="btn-gradient" id="btnSynthesize" style="background:#6366f1;" onclick="runTextSynthesis()">
+                    ▶ Озвучить текущим голосом
+                </button>
+            </div>
+
+            <!-- ВАРИАНТ 2: МИКРОФОН ➔ ПЕРЕОЗВУЧКА -->
+            <div id="sandboxMicMode" style="display:none; flex-direction:column; gap:12px; text-align:center;">
+                <p style="font-size:0.85rem; color:var(--text-secondary); margin:0;">
+                    Нажмите на микрофон, наговорите любую фразу. ИИ расшифрует её и сразу переозвучит вашим настроенным персонажем!
+                </p>
+
+                <button type="button" class="mic-rec-btn" id="btnMicRec" onclick="toggleMicRecording()">
+                    🎙️
+                </button>
+                <div id="micStatusText" style="font-size:0.8rem; font-weight:700; color:var(--text-secondary);">
+                    Нажмите для записи
+                </div>
+
+                <div id="recognizedResultBox" style="display:none; text-align:left; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:10px; padding:10px; font-size:0.85rem;">
+                    <div style="font-size:0.75rem; color:#38bdf8; font-weight:700;">Распознано:</div>
+                    <div id="recognizedTextSpan" style="color:var(--text-main); margin-top:2px;"></div>
+                </div>
+            </div>
+
+            <!-- ПЛЕЕР ВОСПРОИЗВЕДЕНИЯ -->
+            <div class="audio-player-box" id="audioPlayerBox">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; font-weight:700; color:#a855f7;">
+                    <span>🎧 Сгенерированный аудиофайл:</span>
+                    <span id="audioSizeBadge" style="opacity:0.7;">WAV</span>
+                </div>
+                <audio id="sandboxAudio" controls></audio>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const settingId = @Model.Id;
+
+        function switchSandboxTab(mode) {
+            document.getElementById('tabTextBtn').classList.toggle('active', mode === 'text');
+            document.getElementById('tabMicBtn').classList.toggle('active', mode === 'mic');
+            document.getElementById('sandboxTextMode').style.display = (mode === 'text') ? 'flex' : 'none';
+            document.getElementById('sandboxMicMode').style.display = (mode === 'mic') ? 'flex' : 'none';
+        }
+
+        // 1. СОХРАНЕНИЕ НАСТРОЕК
+        async function saveVoiceSettings() {
+            const payload = {
+                id: settingId,
+                provider: document.getElementById('providerSelect').value,
+                voiceName: document.getElementById('voiceNameSelect').value,
+                style: document.getElementById('styleSelect').value,
+                pace: document.getElementById('paceSelect').value,
+                accent: document.getElementById('accentSelect').value,
+                scene: document.getElementById('sceneInput').value.trim(),
+                isActive: true
+            };
+
+            try {
+                const res = await fetch('/profile/voice/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    alert('✅ Настройки голоса успешно сохранены!');
+                } else {
+                    alert('Ошибка при сохранении настроек.');
+                }
+            } catch {
+                alert('Сетевая ошибка при сохранении.');
+            }
+        }
+
+        // 2. ТЕСТ: ОЗВУЧКА ТЕКСТА
+        async function runTextSynthesis() {
+            const text = document.getElementById('testTextInput').value.trim();
+            if (!text) return alert('Введите текст!');
+
+            const btn = document.getElementById('btnSynthesize');
+            btn.disabled = true;
+            btn.textContent = '⏳ Генерируем голос...';
+
+            const payload = {
+                settingId: settingId,
+                text: text,
+                provider: document.getElementById('providerSelect').value,
+                voiceName: document.getElementById('voiceNameSelect').value,
+                style: document.getElementById('styleSelect').value,
+                pace: document.getElementById('paceSelect').value,
+                accent: document.getElementById('accentSelect').value,
+                scene: document.getElementById('sceneInput').value.trim()
+            };
+
+            try {
+                const res = await fetch('/profile/voice/test-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const audioUrl = URL.createObjectURL(blob);
+                    playSandboxAudio(audioUrl);
+                } else {
+                    const err = await res.text();
+                    alert('Ошибка генерации: ' + err);
+                }
+            } catch {
+                alert('Сетевая ошибка.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '▶ Озвучить текущим голосом';
+            }
+        }
+
+        // 3. ТЕСТ: ЗАПИСЬ С МИКРОФОНА
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+
+        async function toggleMicRecording() {
+            const btn = document.getElementById('btnMicRec');
+            const status = document.getElementById('micStatusText');
+
+            if (!isRecording) {
+                // СТАРТ ЗАПИСИ
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                    mediaRecorder.start();
+
+                    isRecording = true;
+                    btn.classList.add('recording');
+                    status.textContent = '🔴 Идёт запись... Нажмите ещё раз для остановки';
+                } catch {
+                    alert('Не удалось получить доступ к микрофону.');
+                }
+            } else {
+                // СТОП ЗАПИСИ И ОТПРАВКА НА СЕРВЕР
+                isRecording = false;
+                btn.classList.remove('recording');
+                status.textContent = '⏳ Обработка и трансформация голоса...';
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const file = new File([audioBlob], 'mic_test.webm', { type: 'audio/webm' });
+
+                    const formData = new FormData();
+                    formData.append('audioFile', file);
+                    formData.append('settingId', settingId);
+
+                    try {
+                        const res = await fetch('/profile/voice/test-mic', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const data = await res.json();
+                        if (res.ok && data.success) {
+                            status.textContent = '✅ Готово!';
+                            document.getElementById('recognizedResultBox').style.display = 'block';
+                            document.getElementById('recognizedTextSpan').textContent = data.recognizedText;
+                            playSandboxAudio(data.audioBase64);
+                        } else {
+                            status.textContent = 'Ошибка обработки';
+                            alert(data.error || 'Не удалось обработать аудио.');
+                        }
+                    } catch {
+                        status.textContent = 'Сбой сети';
+                    }
+                };
+
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(t => t.stop());
+            }
+        }
+
+        function playSandboxAudio(srcUrl) {
+            const box = document.getElementById('audioPlayerBox');
+            const audio = document.getElementById('sandboxAudio');
+            if (box && audio) {
+                box.style.display = 'flex';
+                audio.src = srcUrl;
+                audio.play().catch(() => {});
+            }
+        }
+    </script>
+}

@@ -4,7 +4,7 @@ namespace CrossChat.Data.Entities
 {
 	public class Profile
 	{
-		[DatabaseGenerated(DatabaseGeneratedOption.Identity)] 
+		[DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 		public int Id { get; set; }
 		public int UserId { get; set; } // Владелец
 		public User User { get; set; } = null!;
@@ -22,5 +22,8 @@ namespace CrossChat.Data.Entities
 		public List<TelegramChannelSettings> TelegramChannelSettingsList { get; set; } = new();
 		public List<BlueSkySettings> BlueSkySettingsList { get; set; } = new();
 		public List<YouTubeSettings> YouTubeSettingsList { get; set; } = new();
+
+		// Настройки персонального ИИ-голоса профиля
+		public virtual ProfileVoiceSetting? VoiceSetting { get; set; }
 	}
 }

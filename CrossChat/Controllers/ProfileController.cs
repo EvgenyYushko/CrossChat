@@ -22,10 +22,19 @@ namespace CrossChat.Controllers
 		private readonly AppDbContext _db;
 		private readonly ILogger<ProfileController> _logger;
 
-		public ProfileController(AppDbContext db, ILogger<ProfileController> logger)
+		private readonly CrossChat.Services.IVoiceService _voiceService;
+		private readonly CrossChat.Integrations.Interfaces.IAiService _aiService;
+
+		public ProfileController(
+			AppDbContext db,
+			ILogger<ProfileController> logger,
+			CrossChat.Services.IVoiceService voiceService,
+			CrossChat.Integrations.Interfaces.IAiService aiService)
 		{
 			_db = db;
 			_logger = logger;
+			_voiceService = voiceService;
+			_aiService = aiService;
 		}
 
 		// Страница профиля
@@ -74,7 +83,7 @@ namespace CrossChat.Controllers
 
 		[HttpPost("create")]
 		[Authorize]
-		public async Task<IActionResult> Create([FromForm]string name, IFormFile? avatarFile)
+		public async Task<IActionResult> Create([FromForm] string name, IFormFile? avatarFile)
 		{
 			_logger.LogInformation($"[CreateProfile] Получено имя: '{name}', Размер файла: {avatarFile?.Length ?? 0}");
 
@@ -185,6 +194,214 @@ namespace CrossChat.Controllers
 			// Формируем формат Data URI
 			var base64String = Convert.ToBase64String(bytes);
 			return $"data:{file.ContentType};base64,{base64String}";
+		}
+
+		// ==========================================================
+		// 1. СТРАНИЦА НАСТРОЕК ГОЛОСА И ПЕСОЧНИЦЫ (/profile/voice)
+		// ==========================================================
+		[HttpGet("voice")]
+		public async Task<IActionResult> VoiceSettings([FromQuery] int profileId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var profile = await _db.Profile
+				.Include(p => p.VoiceSetting)
+				.FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);
+
+			if (profile == null) return NotFound("Профиль не найден");
+
+			// Если настроек голоса ещё нет — создаем дефолтные для этого профиля
+			if (profile.VoiceSetting == null)
+			{
+				profile.VoiceSetting = new ProfileVoiceSetting
+				{
+					ProfileId = profile.Id,
+					Provider = "Gemini",
+					VoiceName = "Aoede",
+					Style = "Whisper",
+					Pace = "Natural",
+					Accent = "American (Gen)",
+					Scene = "Нежная девушка, говорит мягко и доверительно",
+					IsActive = true
+				};
+
+				_db.ProfileVoiceSettings.Add(profile.VoiceSetting);
+				await _db.SaveChangesAsync();
+			}
+
+			ViewBag.Profile = profile;
+			return View("VoiceSettings", profile.VoiceSetting);
+		}
+
+		// ==========================================================
+		// 2. СОХРАНЕНИЕ НАСТРОЕК ГОЛОСА
+		// ==========================================================
+		[HttpPost("voice/save")]
+		public async Task<IActionResult> SaveVoiceSettings([FromBody] ProfileVoiceSetting dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var setting = await _db.ProfileVoiceSettings
+				.Include(s => s.Profile)
+				.FirstOrDefaultAsync(s => s.Id == dto.Id && s.Profile.UserId == userId);
+
+			if (setting == null) return NotFound();
+
+			setting.Provider = dto.Provider ?? "Gemini";
+			setting.VoiceName = dto.VoiceName ?? "Aoede";
+			setting.Style = dto.Style ?? "Whisper";
+			setting.Pace = dto.Pace ?? "Natural";
+			setting.Accent = dto.Accent ?? "American (Gen)";
+			setting.Scene = dto.Scene ?? "";
+			setting.SampleContext = dto.SampleContext;
+			setting.IsActive = dto.IsActive;
+
+			await _db.SaveChangesAsync();
+			return Ok(new { success = true });
+		}
+
+		// ==========================================================
+		// 3. ТЕСТ 1: ОЗВУЧКА ТЕКСТА
+		// ==========================================================
+		[HttpPost("voice/test-text")]
+		public async Task<IActionResult> TestVoiceText([FromBody] TestVoiceTextDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto.Text))
+				return BadRequest("Введите текст для озвучки");
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var setting = await _db.ProfileVoiceSettings
+				.Include(s => s.Profile)
+				.FirstOrDefaultAsync(s => s.Id == dto.SettingId && s.Profile.UserId == userId);
+
+			if (setting == null) return NotFound();
+
+			// Создаем временную копию настроек с полями из формы (чтобы тестировать до сохранения!)
+			var testSetting = new ProfileVoiceSetting
+			{
+				Provider = dto.Provider ?? setting.Provider,
+				VoiceName = dto.VoiceName ?? setting.VoiceName,
+				Style = dto.Style ?? setting.Style,
+				Pace = dto.Pace ?? setting.Pace,
+				Accent = dto.Accent ?? setting.Accent,
+				Scene = dto.Scene ?? setting.Scene,
+				SampleContext = dto.SampleContext ?? setting.SampleContext
+			};
+
+			try
+			{
+				byte[] rawAudio = await _voiceService.GenerateVoiceAudioAsync(dto.Text.Trim(), testSetting, setting.Profile?.Name);
+
+				// Упаковываем сырой PCM звук в валидный WAV с заголовком (браузер воспроизведет мгновенно!)
+				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
+
+				return File(wavAudio, "audio/wav");
+			}
+			catch (Exception ex)
+			{
+				return BadRequest("Ошибка озвучки: " + ex.Message);
+			}
+		}
+
+		// ==========================================================
+		// 4. ТЕСТ 2: МИКРОФОН ➔ РАСПОЗНАВАНИЕ ➔ ГОЛОС ПРОФИЛЯ
+		// ==========================================================
+		[HttpPost("voice/test-mic")]
+		public async Task<IActionResult> TestVoiceMic(IFormFile audioFile, [FromForm] int settingId)
+		{
+			if (audioFile == null || audioFile.Length == 0)
+				return BadRequest("Аудиофайл с микрофона не получен");
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var setting = await _db.ProfileVoiceSettings
+				.Include(s => s.Profile)
+				.FirstOrDefaultAsync(s => s.Id == settingId && s.Profile.UserId == userId);
+
+			if (setting == null) return NotFound();
+
+			try
+			{
+				// 1. Превращаем аудио в Base64
+				using var ms = new MemoryStream();
+				await audioFile.CopyToAsync(ms);
+				string base64Audio = Convert.ToBase64String(ms.ToArray());
+
+				// 2. Распознаем речь через твой существующий метод в AiService!
+				string recognizedText = await _aiService.GeminiAudioToText(base64Audio, null);
+
+				if (string.IsNullOrWhiteSpace(recognizedText))
+				{
+					return BadRequest("Не удалось распознать речь. Попробуйте сказать громче.");
+				}
+
+				// 3. Синтезируем этот текст настроенным голосом профиля
+				byte[] rawVoice = await _voiceService.GenerateVoiceAudioAsync(recognizedText, setting, setting.Profile?.Name);
+				byte[] wavVoice = EnsureWavHeader(rawVoice, 24000, 1, 16);
+
+				// Возвращаем и распознанный текст, и сгенерированное аудио в Base64
+				return Ok(new
+				{
+					success = true,
+					recognizedText = recognizedText,
+					audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(wavVoice)}"
+				});
+			}
+			catch (Exception ex)
+			{
+				return BadRequest("Ошибка обработки голоса: " + ex.Message);
+			}
+		}
+
+		/// <summary>
+		/// Добавляет 44-байтный RIFF/WAV заголовок к сырому PCM-потоку 24кГц, чтобы браузер играл звук без конвертеров
+		/// </summary>
+		private static byte[] EnsureWavHeader(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
+		{
+			// Если аудио уже начинается с "RIFF", значит заголовок уже есть
+			if (pcmData.Length >= 4 && pcmData[0] == 0x52 && pcmData[1] == 0x49 && pcmData[2] == 0x46 && pcmData[3] == 0x46)
+			{
+				return pcmData;
+			}
+
+			int byteRate = sampleRate * channels * (bitsPerSample / 8);
+			short blockAlign = (short)(channels * (bitsPerSample / 8));
+			int totalDataLen = pcmData.Length;
+			int totalAudioLen = totalDataLen + 36;
+
+			using var outStream = new MemoryStream();
+			using var writer = new BinaryWriter(outStream);
+
+			writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+			writer.Write(totalAudioLen);
+			writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+			writer.Write(new char[] { 'f', 'm', 't', ' ' });
+			writer.Write(16); // subchunk1Size (16 для PCM)
+			writer.Write((short)1); // AudioFormat 1 = PCM
+			writer.Write(channels);
+			writer.Write(sampleRate);
+			writer.Write(byteRate);
+			writer.Write(blockAlign);
+			writer.Write(bitsPerSample);
+			writer.Write(new char[] { 'd', 'a', 't', 'a' });
+			writer.Write(totalDataLen);
+			writer.Write(pcmData);
+
+			return outStream.ToArray();
+		}
+
+		public class TestVoiceTextDto
+		{
+			public int SettingId { get; set; }
+			public string Text { get; set; } = string.Empty;
+			public string? Provider { get; set; }
+			public string? VoiceName { get; set; }
+			public string? Style { get; set; }
+			public string? Pace { get; set; }
+			public string? Accent { get; set; }
+			public string? Scene { get; set; }
+			public string? SampleContext { get; set; }
 		}
 	}
 }

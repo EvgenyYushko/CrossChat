@@ -836,6 +836,69 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("Profile");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.ProfileVoiceSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Accent")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ElevenLabsApiKey")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ElevenLabsVoiceId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Pace")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SampleContext")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Scene")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("VoiceName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId")
+                        .IsUnique();
+
+                    b.ToTable("ProfileVoiceSettings");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.ReviewEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -1521,6 +1584,17 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.ProfileVoiceSetting", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
+                        .WithOne("VoiceSetting")
+                        .HasForeignKey("CrossChat.Data.Entities.ProfileVoiceSetting", "ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Profile");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.ReviewEntity", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.User", "User")
@@ -1710,6 +1784,8 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("TelegramUserBotSettingsList");
 
                     b.Navigation("ThreadsSettingsList");
+
+                    b.Navigation("VoiceSetting");
 
                     b.Navigation("XSettingsList");
 

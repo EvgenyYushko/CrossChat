@@ -391,6 +391,37 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
         }
 
+        /* 3. ВИДЖЕТ AI ГОЛОСА */
+        .widget-voice:hover {
+            border-color: #a855f7;
+            box-shadow: 0 12px 20px -6px rgba(168, 85, 247, 0.35);
+            background: rgba(168, 85, 247, 0.03);
+        }
+
+        .icon-box-voice {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-right: 14px;
+        }
+
+        .status-voice {
+            background: rgba(168, 85, 247, 0.15);
+            color: #c084fc;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+
+        .widget-voice:hover .widget-arrow {
+            transform: translateX(4px);
+            color: #a855f7;
+        }
+
     </style>
 }
 
@@ -583,6 +614,30 @@
                     </span>
                 </div>
                 <span class="widget-desc">Поиск вирусных идей, топовых публикаций и хештегов</span>
+            </div>
+            <div class="widget-arrow">
+                <svg viewBox="0 0 24 24">
+                    <path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-8.29-1.42 1.42L16.86 11H5v2z" />
+                </svg>
+            </div>
+        </a>
+
+        <!-- 3. Виджет AI-Голоса профиля -->
+        <a href="/profile/voice?profileId=@Model.Id" class="promo-widget widget-voice">
+            <div class="widget-icon-box icon-box-voice">
+                <svg viewBox="0 0 24 24" style="fill: white; width: 22px; height: 22px;">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                </svg>
+            </div>
+            <div class="widget-info">
+                <div class="widget-title-row">
+                    <span class="widget-title">AI Голос профиля</span>
+                    <span class="status-badge status-voice">
+                        <span class="dot"></span> Настроен
+                    </span>
+                </div>
+                <span class="widget-desc">Индивидуальный синтез речи, стиль и голосовые автоответы</span>
             </div>
             <div class="widget-arrow">
                 <svg viewBox="0 0 24 24">

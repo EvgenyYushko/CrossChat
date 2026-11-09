@@ -43,6 +43,8 @@ namespace CrossChat.Data
 
 		public DbSet<BioPageEvent> BioPageEvents { get; set; }
 
+		public DbSet<ProfileVoiceSetting> ProfileVoiceSettings { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);
@@ -70,6 +72,11 @@ namespace CrossChat.Data
 
 			modelBuilder.Entity<BioPageEvent>()
 				.HasIndex(e => new { e.BioPageId, e.CreatedAtUtc });
+
+			// Гарантия, что у одного профиля строго одни настройки голоса
+			modelBuilder.Entity<ProfileVoiceSetting>()
+				.HasIndex(v => v.ProfileId)
+				.IsUnique();
 		}
 	}
 }
