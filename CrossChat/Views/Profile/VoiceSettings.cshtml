@@ -241,7 +241,7 @@
     <div class="voice-grid">
 
         <!-- ========================================================== -->
-        <!-- 1. КОЛОНКА НАСТРОЕК (ПРОМПТ + ПАРАМЕТРЫ)                   -->
+        <!-- 1. КОЛОНКА НАСТРОЕК (В ТОЧНОСТИ КАК В GOOGLE AI STUDIO)   -->
         <!-- ========================================================== -->
         <div class="voice-card">
             <div class="card-header-row">
@@ -249,18 +249,18 @@
                 <span style="font-size:0.75rem; color:#10b981; font-weight:700;">● Активен</span>
             </div>
 
-            <!-- ПРОВАЙДЕР -->
+            <!-- ГОЛОСОВОЙ ДВИЖОК -->
             <div class="form-group">
-                <label>Голосовой движок (Провайдер):</label>
+                <label>Голосовой движок:</label>
                 <select id="providerSelect" class="text-input">
-                    <option value="Gemini" selected="@(Model.Provider == "Gemini")">✨ Google Gemini 3.8 Flash-TTS</option>
+                    <option value="Gemini" selected>✨ Google Gemini 3.8 Flash-TTS</option>
                     <option value="ElevenLabs" disabled>👑 ElevenLabs (Скоро)</option>
                 </select>
             </div>
 
-            <!-- ПОЛНЫЙ ВЫБОР ГОЛОСОВ -->
+            <!-- ТЕМБР ГОЛОСА -->
             <div class="form-group">
-                <label>Тембр (Голос из каталога):</label>
+                <label>Голос (Speaker):</label>
                 <select id="voiceNameSelect" class="text-input">
                     @foreach (var v in VoiceConstants.Voices)
                     {
@@ -269,9 +269,9 @@
                 </select>
             </div>
 
-            <!-- ПОЛНЫЙ ВЫБОР СТИЛЕЙ С ПЕРЕВОДОМ -->
+            <!-- СТИЛЬ РЕЧИ / ЭКСПРЕССИЯ -->
             <div class="form-group">
-                <label>Эмоциональный стиль подачи:</label>
+                <label>Стиль подачи (Expression):</label>
                 <select id="styleSelect" class="text-input">
                     @foreach (var s in VoiceConstants.Styles)
                     {
@@ -280,51 +280,29 @@
                 </select>
             </div>
 
-            <!-- ТЕМП И АКЦЕНТ -->
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                <div class="form-group">
-                    <label>Темп речи:</label>
-                    <select id="paceSelect" class="text-input">
-                        @foreach (var p in VoiceConstants.PaceMap)
-                        {
-                            <option value="@p.Key" selected="@(Model.Pace == p.Key)">@p.Value</option>
-                        }
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Акцент / Подача:</label>
-                    <select id="accentSelect" class="text-input">
-                        @foreach (var a in VoiceConstants.Accents)
-                        {
-                            <option value="@a.Key" selected="@(Model.Accent == a.Key)">@a.Value</option>
-                        }
-                    </select>
-                </div>
-            </div>
-
-            <!-- 🚀 СЛАЙДЕР ТЕМПЕРАТУРЫ (TEMPERATURE) -->
+            <!-- ТЕМПЕРАТУРА (ПО УМОЛЧАНИЮ 1.45 КАК В GOOGLE) -->
             <div class="form-group">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <label>Температура экспрессии (Temperature):</label>
+                    <label>Температура (Temperature):</label>
                     <span style="font-size:0.75rem; color:var(--text-secondary);">от 0.0 до 2.0</span>
                 </div>
                 <div class="temp-slider-box">
                     <span style="font-size:0.75rem; color:var(--text-secondary);">Строго</span>
-                    <input type="range" id="tempSlider" class="temp-slider" min="0.0" max="2.0" step="0.1"
-                           value="@Model.Temperature.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
+                    <input type="range" id="tempSlider" class="temp-slider" min="0.0" max="2.0" step="0.05"
+                           value="@(Model.Temperature > 0 ? Model.Temperature.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "1.45")"
                            oninput="onTempSliderChange(this.value)">
                     <span style="font-size:0.75rem; color:var(--text-secondary);">Эмоции</span>
-                    <span id="tempValBadge" class="temp-val-badge">@Model.Temperature.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)</span>
+                    <span id="tempValBadge" class="temp-val-badge">@(Model.Temperature > 0 ? Model.Temperature.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "1.45")</span>
                 </div>
-                <span style="font-size:0.72rem; color:var(--text-secondary);">
-                    💡 При 0.2–0.5 голос ровный и строгий; при 1.2–1.8 максимум интонаций, вздохов и игры голоса.
-                </span>
             </div>
 
-            <!-- РЕЖИССЕРСКАЯ СЦЕНА -->
+            <!-- СВОБОДНОЕ ОПИСАНИЕ СТИЛЯ (КАК В GOOGLE AI STUDIO) -->
             <div class="form-group">
-                <label>Режиссёрская сцена (Director's Note):</label>
-                <textarea id="sceneInput" rows="2" class="text-input" placeholder="Нежная девушка, говорит тихо, доверительно и с улыбкой">@Model.Scene</textarea>
+                <label>Дополнительное описание (Tone, mood, pace):</label>
+                <textarea id="sceneInput" rows="2" class="text-input" placeholder="например: quiet, whispering, seductive, slow pace">@Model.Scene</textarea>
+                <span style="font-size:0.72rem; color:var(--text-secondary);">
+                    Опционально: можно оставить пустым или дописать нюансы (например: <em>whisper quietly, breathy</em>).
+                </span>
             </div>
 
             <button type="button" class="btn-gradient" onclick="saveVoiceSettings()">
@@ -400,7 +378,7 @@
         const settingId = @Model.Id;
 
         function onTempSliderChange(val) {
-            document.getElementById('tempValBadge').textContent = Number(val).toFixed(1);
+            document.getElementById('tempValBadge').textContent = Number(val).toFixed(2);
         }
 
         function switchSandboxTab(mode) {
@@ -410,17 +388,17 @@
             document.getElementById('sandboxMicMode').style.display = (mode === 'mic') ? 'flex' : 'none';
         }
 
-        // 1. СОХРАНЕНИЕ НАСТРОЕК
+        // 1. СОХРАНЕНИЕ НАСТРОЕК (ИСПРАВЛЕНО: БЕЗ УДАЛЕННЫХ ЭЛЕМЕНТОВ PACE/ACCENT)
         async function saveVoiceSettings() {
             const payload = {
                 id: settingId,
-                provider: document.getElementById('providerSelect').value,
-                voiceName: document.getElementById('voiceNameSelect').value,
-                style: document.getElementById('styleSelect').value,
-                pace: document.getElementById('paceSelect').value,
-                accent: document.getElementById('accentSelect').value,
-                temperature: parseFloat(document.getElementById('tempSlider').value),
-                scene: document.getElementById('sceneInput').value.trim(),
+                provider: document.getElementById('providerSelect')?.value || "Gemini",
+                voiceName: document.getElementById('voiceNameSelect')?.value || "Tavi",
+                style: document.getElementById('styleSelect')?.value || "Whisper",
+                pace: "Natural",
+                accent: "Neutral",
+                temperature: parseFloat(document.getElementById('tempSlider')?.value || "1.45"),
+                scene: document.getElementById('sceneInput')?.value?.trim() || "",
                 isActive: true
             };
 
@@ -441,9 +419,9 @@
             }
         }
 
-        // 2. ТЕСТ: ОЗВУЧКА ТЕКСТА
+        // 2. ТЕСТ: ОЗВУЧКА ТЕКСТА (ИСПРАВЛЕНО)
         async function runTextSynthesis() {
-            const text = document.getElementById('testTextInput').value.trim();
+            const text = document.getElementById('testTextInput')?.value?.trim();
             if (!text) return alert('Введите текст!');
 
             const btn = document.getElementById('btnSynthesize');
@@ -453,13 +431,13 @@
             const payload = {
                 settingId: settingId,
                 text: text,
-                provider: document.getElementById('providerSelect').value,
-                voiceName: document.getElementById('voiceNameSelect').value,
-                style: document.getElementById('styleSelect').value,
-                pace: document.getElementById('paceSelect').value,
-                accent: document.getElementById('accentSelect').value,
-                temperature: parseFloat(document.getElementById('tempSlider').value),
-                scene: document.getElementById('sceneInput').value.trim()
+                provider: document.getElementById('providerSelect')?.value || "Gemini",
+                voiceName: document.getElementById('voiceNameSelect')?.value || "Tavi",
+                style: document.getElementById('styleSelect')?.value || "Whisper",
+                pace: "Natural",
+                accent: "Neutral",
+                temperature: parseFloat(document.getElementById('tempSlider')?.value || "1.45"),
+                scene: document.getElementById('sceneInput')?.value?.trim() || ""
             };
 
             try {

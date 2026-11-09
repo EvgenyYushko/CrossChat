@@ -29,36 +29,58 @@ namespace CrossChat.Integrations.Services
                 throw new InvalidOperationException("API ключ GEMINI_API_KEY не настроен на сервере.");
             }
 
-            // 🚀 КЛЮЧЕВОЙ МОМЕНТ 1: явно переключаем SDK на v1beta, где живет speechConfig!
             var httpOptions = new HttpOptions { ApiVersion = "v1beta" };
+            var client = new Client(apiKey: _apiKey, httpOptions: httpOptions);
 
-            var client = new Client(
-                apiKey: _apiKey,
-                httpOptions: httpOptions
-            );
+            // 🚀 СОБИРАЕМ ТОЧНЫЙ СТИЛЬ КАК В GOOGLE AI STUDIO:
+            // Если выбран Whisper -> "whisper quietly"
+            string baseStyle = (request.Style?.ToLower()) switch
+            {
+                "whisper" => "whisper quietly",
+                "friendly" => "Warm and neutral delivery with micro-pauses",
+                "narration" => "commanding, rich vocal modulation, dramatic pauses",
+                "promote" => "High energy, elongated vowels",
+                "podcast" => "Calm, measured delivery",
+                "intimate" => "intimate, soft and gentle breathing",
+                "empathetic" => "Empathetic, caring and warm",
+                "energetic" => "Energetic, dynamic and lively",
+                "gravelly" => "Gravelly, deep textured tone",
+                "smooth" => "Smooth, velvety delivery",
+                "soft" => "Soft, tender and quiet",
+                "resonant" => "Resonant, deep and full",
+                "firm" => "Firm, confident and direct",
+                _ => request.Style ?? "whisper quietly"
+            };
 
-            // 🚀 КЛЮЧЕВОЙ МОМЕНТ 2: для Gemini 3.8 текст скрипта передаем через ## Transcript:
-            // (ровно как в сниппете из твоего Google AI Studio)
-            var cleanText = request.Text.Trim();
-            var transcriptText = cleanText.StartsWith("## Transcript:", StringComparison.OrdinalIgnoreCase)
-                ? cleanText
-                : $"## Transcript:\n{cleanText}";
+            // Если пользователь дописал что-то в режиссерскую сцену — объединяем:
+            string finalStyle = !string.IsNullOrWhiteSpace(request.Scene)
+                ? $"{baseStyle}, {request.Scene.Trim()}"
+                : baseStyle;
+
+            _logger.LogInformation("🎙️ [Gemini 3.8] Генерация: Голос={Voice}, Стиль='{Style}', Temp={Temp}", 
+                request.VoiceName, finalStyle, request.Temperature);
+
+            // 🚀 ПЕРЕДАЕМ СТИЛЬ В SPEECH METADATA (ТОЧНО КАК В GOOGLE AI STUDIO!)
+            var part = new Part
+            {
+                Text = request.Text.Trim(),
+                SpeechMetadata = new SpeechMetadata
+                {
+                    Style = finalStyle
+                }
+            };
 
             var contents = new List<Content>
             {
                 new Content
                 {
                     Role = "user",
-                    Parts = new List<Part>
-                    {
-                        new Part { Text = transcriptText }
-                    }
+                    Parts = new List<Part> { part }
                 }
             };
 
             var config = new GenerateContentConfig
             {
-                // Дублируем v1beta в конфигурацию запроса для 100% гарантии
                 HttpOptions = httpOptions,
                 Temperature = (float)request.Temperature,
                 ResponseModalities = new List<string> { "audio" },
@@ -74,9 +96,6 @@ namespace CrossChat.Integrations.Services
                 }
             };
 
-            _logger.LogInformation("🎙️ [Gemini 3.8 TTS] Отправка запроса в v1beta (Голос: {Voice}, Модель: {Model})...", 
-                request.VoiceName, _modelName);
-
             var audioChunks = new List<byte>();
 
             try
@@ -86,27 +105,23 @@ namespace CrossChat.Integrations.Services
                     if (chunk.Candidates == null || chunk.Candidates.Count == 0 || chunk.Candidates[0].Content?.Parts == null)
                         continue;
 
-                    // Сканируем все части ответа на наличие аудио
-                    foreach (var part in chunk.Candidates[0].Content.Parts)
+                    foreach (var p in chunk.Candidates[0].Content.Parts)
                     {
-                        if (part.InlineData?.Data != null)
+                        if (p.InlineData?.Data != null)
                         {
-                            audioChunks.AddRange(part.InlineData.Data);
+                            audioChunks.AddRange(p.InlineData.Data);
                         }
                     }
                 }
 
                 if (audioChunks.Count == 0)
-                {
-                    throw new Exception("Gemini 3.8 не вернул аудиоданные.");
-                }
+                    throw new Exception("Gemini 3.8 не вернул аудио.");
 
-                _logger.LogInformation("✅ [Gemini 3.8 TTS] Аудио успешно сгенерировано! Вес: {Size} байт", audioChunks.Count);
                 return audioChunks.ToArray();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ [Gemini 3.8 TTS] Ошибка генерации голоса через модель {Model}", _modelName);
+                _logger.LogError(ex, "❌ Ошибка генерации голоса");
                 throw;
             }
         }
