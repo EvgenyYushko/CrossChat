@@ -8,7 +8,7 @@
 @section Styles {
     <style>
         .voice-container {
-            max-width: 900px;
+            max-width: 960px;
             margin: 5rem auto 3rem;
             padding: 0 1rem;
         }
@@ -71,7 +71,7 @@
             color: var(--text-main);
             padding: 10px 14px;
             border-radius: 12px;
-            font-size: 0.92rem;
+            font-size: 0.9rem;
             outline: none;
             font-family: inherit;
             transition: all 0.2s ease;
@@ -81,6 +81,34 @@
                 border-color: #a855f7;
                 box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25);
             }
+
+        /* КРАСИВЫЙ СЛАЙДЕР ТЕМПЕРАТУРЫ */
+        .temp-slider-box {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            padding: 10px 14px;
+            border-radius: 12px;
+        }
+
+        .temp-slider {
+            flex: 1;
+            accent-color: #a855f7;
+            cursor: pointer;
+        }
+
+        .temp-val-badge {
+            background: #a855f7;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 0.85rem;
+            padding: 3px 10px;
+            border-radius: 8px;
+            min-width: 32px;
+            text-align: center;
+        }
 
         .btn-gradient {
             background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
@@ -134,10 +162,10 @@
         .audio-player-box {
             display: none;
             margin-top: 10px;
-            padding: 10px;
+            padding: 12px;
             background: rgba(168, 85, 247, 0.1);
             border: 1px solid rgba(168, 85, 247, 0.3);
-            border-radius: 12px;
+            border-radius: 14px;
             flex-direction: column;
             gap: 8px;
         }
@@ -147,7 +175,6 @@
                 height: 38px;
             }
 
-        /* КНОПКА ЗАПИСИ С МИКРОФОНА */
         .mic-rec-btn {
             width: 68px;
             height: 68px;
@@ -207,7 +234,7 @@
             🎙️ Персональный AI-Голос: @profile?.Name
         </h2>
         <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
-            Настройте характерную речь вашего персонажа и протестируйте живое звучание в песочнице
+            Настройте живую интонацию и протестируйте воспроизведение в песочнице
         </div>
     </div>
 
@@ -225,32 +252,32 @@
             <!-- ПРОВАЙДЕР -->
             <div class="form-group">
                 <label>Голосовой движок (Провайдер):</label>
-                <select id="providerSelect" class="text-input" onchange="onProviderChanged(this.value)">
-                    <option value="Gemini" selected="@(Model.Provider == "Gemini")">✨ Google Gemini Flash-TTS</option>
+                <select id="providerSelect" class="text-input">
+                    <option value="Gemini" selected="@(Model.Provider == "Gemini")">✨ Google Gemini 3.8 Flash-TTS</option>
                     <option value="ElevenLabs" disabled>👑 ElevenLabs (Скоро)</option>
                 </select>
             </div>
 
-            <!-- ГОЛОС И СТИЛЬ -->
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                <div class="form-group">
-                    <label>Тембр (Голос):</label>
-                    <select id="voiceNameSelect" class="text-input">
-                        @foreach (var v in VoiceConstants.GeminiVoices)
-                        {
-                            <option value="@v" selected="@(Model.VoiceName == v)">@v</option>
-                        }
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Эмоциональный стиль:</label>
-                    <select id="styleSelect" class="text-input">
-                        @foreach (var s in VoiceConstants.Styles)
-                        {
-                            <option value="@s" selected="@(Model.Style == s)">@s</option>
-                        }
-                    </select>
-                </div>
+            <!-- ПОЛНЫЙ ВЫБОР ГОЛОСОВ -->
+            <div class="form-group">
+                <label>Тембр (Голос из каталога):</label>
+                <select id="voiceNameSelect" class="text-input">
+                    @foreach (var v in VoiceConstants.Voices)
+                    {
+                        <option value="@v.Id" selected="@(Model.VoiceName == v.Id)">@v.Label</option>
+                    }
+                </select>
+            </div>
+
+            <!-- ПОЛНЫЙ ВЫБОР СТИЛЕЙ С ПЕРЕВОДОМ -->
+            <div class="form-group">
+                <label>Эмоциональный стиль подачи:</label>
+                <select id="styleSelect" class="text-input">
+                    @foreach (var s in VoiceConstants.Styles)
+                    {
+                        <option value="@s.Id" selected="@(Model.Style == s.Id)">@s.Label</option>
+                    }
+                </select>
             </div>
 
             <!-- ТЕМП И АКЦЕНТ -->
@@ -258,28 +285,46 @@
                 <div class="form-group">
                     <label>Темп речи:</label>
                     <select id="paceSelect" class="text-input">
-                        @foreach (var p in VoiceConstants.PaceMap.Keys)
+                        @foreach (var p in VoiceConstants.PaceMap)
                         {
-                            <option value="@p" selected="@(Model.Pace == p)">@p</option>
+                            <option value="@p.Key" selected="@(Model.Pace == p.Key)">@p.Value</option>
                         }
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Акцент:</label>
+                    <label>Акцент / Подача:</label>
                     <select id="accentSelect" class="text-input">
                         @foreach (var a in VoiceConstants.Accents)
                         {
-                            <option value="@a" selected="@(Model.Accent == a)">@a</option>
+                            <option value="@a.Key" selected="@(Model.Accent == a.Key)">@a.Value</option>
                         }
                     </select>
                 </div>
             </div>
 
+            <!-- 🚀 СЛАЙДЕР ТЕМПЕРАТУРЫ (TEMPERATURE) -->
+            <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label>Температура экспрессии (Temperature):</label>
+                    <span style="font-size:0.75rem; color:var(--text-secondary);">от 0.0 до 2.0</span>
+                </div>
+                <div class="temp-slider-box">
+                    <span style="font-size:0.75rem; color:var(--text-secondary);">Строго</span>
+                    <input type="range" id="tempSlider" class="temp-slider" min="0.0" max="2.0" step="0.1"
+                           value="@Model.Temperature.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)"
+                           oninput="onTempSliderChange(this.value)">
+                    <span style="font-size:0.75rem; color:var(--text-secondary);">Эмоции</span>
+                    <span id="tempValBadge" class="temp-val-badge">@Model.Temperature.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)</span>
+                </div>
+                <span style="font-size:0.72rem; color:var(--text-secondary);">
+                    💡 При 0.2–0.5 голос ровный и строгий; при 1.2–1.8 максимум интонаций, вздохов и игры голоса.
+                </span>
+            </div>
+
             <!-- РЕЖИССЕРСКАЯ СЦЕНА -->
             <div class="form-group">
-                <label>Сцена / Роль для ИИ (Director's Note):</label>
-                <textarea id="sceneInput" rows="2" class="text-input" placeholder="Нежная девушка, говорит мягко и доверительно">@Model.Scene</textarea>
-                <span style="font-size:0.75rem; color:var(--text-secondary);">Опишите образ, настроение и манеру подачи</span>
+                <label>Режиссёрская сцена (Director's Note):</label>
+                <textarea id="sceneInput" rows="2" class="text-input" placeholder="Нежная девушка, говорит тихо, доверительно и с улыбкой">@Model.Scene</textarea>
             </div>
 
             <button type="button" class="btn-gradient" onclick="saveVoiceSettings()">
@@ -314,14 +359,14 @@
                 </div>
 
                 <button type="button" class="btn-gradient" id="btnSynthesize" style="background:#6366f1;" onclick="runTextSynthesis()">
-                    ▶ Озвучить текущим голосом
+                    ▶ Озвучить с текущей температурой
                 </button>
             </div>
 
             <!-- ВАРИАНТ 2: МИКРОФОН ➔ ПЕРЕОЗВУЧКА -->
             <div id="sandboxMicMode" style="display:none; flex-direction:column; gap:12px; text-align:center;">
                 <p style="font-size:0.85rem; color:var(--text-secondary); margin:0;">
-                    Нажмите на микрофон, наговорите любую фразу. ИИ расшифрует её и сразу переозвучит вашим настроенным персонажем!
+                    Нажмите на микрофон и скажите любую фразу. ИИ расшифрует её и тут же переозвучит вашим персонажем!
                 </p>
 
                 <button type="button" class="mic-rec-btn" id="btnMicRec" onclick="toggleMicRecording()">
@@ -341,7 +386,7 @@
             <div class="audio-player-box" id="audioPlayerBox">
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; font-weight:700; color:#a855f7;">
                     <span>🎧 Сгенерированный аудиофайл:</span>
-                    <span id="audioSizeBadge" style="opacity:0.7;">WAV</span>
+                    <span id="audioSizeBadge" style="opacity:0.7;">WAV 24kHz</span>
                 </div>
                 <audio id="sandboxAudio" controls></audio>
             </div>
@@ -353,6 +398,10 @@
 @section Scripts {
     <script>
         const settingId = @Model.Id;
+
+        function onTempSliderChange(val) {
+            document.getElementById('tempValBadge').textContent = Number(val).toFixed(1);
+        }
 
         function switchSandboxTab(mode) {
             document.getElementById('tabTextBtn').classList.toggle('active', mode === 'text');
@@ -370,6 +419,7 @@
                 style: document.getElementById('styleSelect').value,
                 pace: document.getElementById('paceSelect').value,
                 accent: document.getElementById('accentSelect').value,
+                temperature: parseFloat(document.getElementById('tempSlider').value),
                 scene: document.getElementById('sceneInput').value.trim(),
                 isActive: true
             };
@@ -408,6 +458,7 @@
                 style: document.getElementById('styleSelect').value,
                 pace: document.getElementById('paceSelect').value,
                 accent: document.getElementById('accentSelect').value,
+                temperature: parseFloat(document.getElementById('tempSlider').value),
                 scene: document.getElementById('sceneInput').value.trim()
             };
 
@@ -430,7 +481,7 @@
                 alert('Сетевая ошибка.');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '▶ Озвучить текущим голосом';
+                btn.textContent = '▶ Озвучить с текущей температурой';
             }
         }
 
@@ -444,7 +495,6 @@
             const status = document.getElementById('micStatusText');
 
             if (!isRecording) {
-                // СТАРТ ЗАПИСИ
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     mediaRecorder = new MediaRecorder(stream);
@@ -460,10 +510,9 @@
                     alert('Не удалось получить доступ к микрофону.');
                 }
             } else {
-                // СТОП ЗАПИСИ И ОТПРАВКА НА СЕРВЕР
                 isRecording = false;
                 btn.classList.remove('recording');
-                status.textContent = '⏳ Обработка и трансформация голоса...';
+                status.textContent = '⏳ Распознавание речи и синтез персонажа...';
 
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
@@ -487,7 +536,7 @@
                             playSandboxAudio(data.audioBase64);
                         } else {
                             status.textContent = 'Ошибка обработки';
-                            alert(data.error || 'Не удалось обработать аудио.');
+                            alert(data.error || 'Не удалось распознать или озвучить голос.');
                         }
                     } catch {
                         status.textContent = 'Сбой сети';

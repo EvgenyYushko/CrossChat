@@ -10,5 +10,6 @@ namespace CrossChat.Integrations.Models
         public string Accent { get; set; } = "American (Gen)";
         public string Scene { get; set; } = string.Empty;
         public string? SampleContext { get; set; }
+        public double Temperature { get; set; } = 1.0;
     }
 }

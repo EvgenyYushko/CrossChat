@@ -255,6 +255,7 @@ namespace CrossChat.Controllers
 			setting.Scene = dto.Scene ?? "";
 			setting.SampleContext = dto.SampleContext;
 			setting.IsActive = dto.IsActive;
+			setting.Temperature = dto.Temperature;
 
 			await _db.SaveChangesAsync();
 			return Ok(new { success = true });
@@ -286,7 +287,8 @@ namespace CrossChat.Controllers
 				Pace = dto.Pace ?? setting.Pace,
 				Accent = dto.Accent ?? setting.Accent,
 				Scene = dto.Scene ?? setting.Scene,
-				SampleContext = dto.SampleContext ?? setting.SampleContext
+				SampleContext = dto.SampleContext ?? setting.SampleContext,
+				Temperature = dto.Temperature
 			};
 
 			try
@@ -402,6 +404,7 @@ namespace CrossChat.Controllers
 			public string? Accent { get; set; }
 			public string? Scene { get; set; }
 			public string? SampleContext { get; set; }
+			public double Temperature { get; set; } = 1.0;
 		}
 	}
 }

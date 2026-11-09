@@ -60,7 +60,7 @@ namespace CrossChat.Integrations.Services
             {
                 // Дублируем v1beta в конфигурацию запроса для 100% гарантии
                 HttpOptions = httpOptions,
-                Temperature = 1,
+                Temperature = (float)request.Temperature,
                 ResponseModalities = new List<string> { "audio" },
                 SpeechConfig = new SpeechConfig
                 {

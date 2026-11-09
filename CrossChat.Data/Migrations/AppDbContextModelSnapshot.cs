@@ -886,6 +886,9 @@ namespace CrossChat.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<double>("Temperature")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("VoiceName")
                         .IsRequired()
                         .HasMaxLength(100)

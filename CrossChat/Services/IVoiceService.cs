@@ -43,7 +43,8 @@ namespace CrossChat.Services
                 Pace = settings.Pace,
                 Accent = settings.Accent,
                 Scene = settings.Scene,
-                SampleContext = settings.SampleContext
+                SampleContext = settings.SampleContext,
+                Temperature = settings.Temperature
             };
 
             return await provider.SynthesizeAsync(request);
