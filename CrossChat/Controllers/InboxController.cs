@@ -2,8 +2,10 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using CrossChat.Data;
+using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,19 +22,22 @@ namespace CrossChat.Controllers
 		private readonly ILogger<InboxController> _logger;
 		private readonly HttpClient _httpClient; // <-- ОБЪЯВЛЯЕМ ПОЛЕ
 		private readonly IAiService _aiService;
+		private readonly IVoiceService _voiceService; // <-- ДОБАВЛЯЕМ ПОЛЕ
 
 		public InboxController(
 			AppDbContext db,
 			IInboxService inboxService,
 			ILogger<InboxController> logger,
 			HttpClient httpClient,
-			IAiService aiService) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
+			IAiService aiService,
+			IVoiceService voiceService) // <-- ВНЕДРЯЕМ В КОНСТРУКТОР
 		{
 			_db = db;
 			_inboxService = inboxService;
 			_logger = logger;
 			_httpClient = httpClient;
 			_aiService = aiService;
+			_voiceService = voiceService;
 		}
 
 
@@ -402,6 +407,132 @@ namespace CrossChat.Controllers
 				.ExecuteUpdateAsync(s => s.SetProperty(m => m.TranslatedText, dto.TranslatedText.Trim()));
 
 			return Ok(new { success = true });
+		}
+
+		/// <summary>
+		/// Генерация предпрослушивания AI-голоса из микрофона с защитой от лимитов Google API
+		/// </summary>
+		[HttpPost("voice-preview")]
+		[RequestSizeLimit(20 * 1024 * 1024)]
+		public async Task<IActionResult> GenerateVoicePreview(IFormFile audioFile, [FromForm] int conversationId)
+		{
+			if (audioFile == null || audioFile.Length == 0)
+				return BadRequest(new { success = false, error = "Аудиозапись не получена." });
+
+			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == conversationId);
+			if (conv == null)
+				return NotFound(new { success = false, error = "Диалог не найден." });
+
+			// Достаем настройки голоса для профиля этого диалога
+			var profile = await _db.Profile
+				.Include(p => p.VoiceSetting)
+				.FirstOrDefaultAsync(p => p.Id == conv.ProfileId);
+
+			if (profile == null)
+				return NotFound(new { success = false, error = "Профиль диалога не найден." });
+
+			var voiceSetting = profile.VoiceSetting ?? new ProfileVoiceSetting
+			{
+				ProfileId = profile.Id,
+				VoiceName = "Tavi",
+				Style = "Whisper",
+				Temperature = 1.45,
+				Provider = "Gemini"
+			};
+
+			try
+			{
+				// 1. Превращаем аудио в Base64 для передачи в Gemini STT
+				using var ms = new MemoryStream();
+				await audioFile.CopyToAsync(ms);
+				string base64Audio = Convert.ToBase64String(ms.ToArray());
+
+				// 2. Распознавание речи с перехватом 429 (Rate Limit)
+				string recognizedText;
+				try
+				{
+					recognizedText = await _aiService.GeminiAudioToText(base64Audio, null);
+				}
+				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
+				{
+					_logger.LogWarning(ex, "⚠️ [AI Voice] Превышен лимит квот Gemini при распознавании.");
+					return StatusCode(429, new
+					{
+						success = false,
+						error = "RATE_LIMIT",
+						message = "Превышен минутный лимит запросов к Google AI. Подождите 30 секунд или выключите тумблер AI, чтобы отправить обычный войс."
+					});
+				}
+
+				if (string.IsNullOrWhiteSpace(recognizedText))
+				{
+					return BadRequest(new { success = false, error = "Не удалось разобрать слова на записи. Попробуйте наговорить чуть громче." });
+				}
+
+				// 3. Синтез голоса через Gemini TTS с перехватом 429
+				byte[] rawAudio;
+				try
+				{
+					rawAudio = await _voiceService.GenerateVoiceAudioAsync(recognizedText, voiceSetting, profile.Name);
+				}
+				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
+				{
+					_logger.LogWarning(ex, "⚠️ [AI Voice] Превышен лимит квот Gemini при генерации речи.");
+					return StatusCode(429, new
+					{
+						success = false,
+						error = "RATE_LIMIT",
+						message = "Превышен лимит генераций Google AI. Подождите 30 секунд или отправьте обычное голосовое."
+					});
+				}
+
+				// Оборачиваем в чистый WAV
+				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
+				string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(wavAudio)}";
+
+				return Ok(new
+				{
+					success = true,
+					recognizedText = recognizedText.Trim(),
+					audioBase64 = audioBase64
+				});
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [AI Voice Preview] Ошибка обработки голоса");
+				return BadRequest(new { success = false, error = "Ошибка генерации голоса: " + ex.Message });
+			}
+		}
+
+		private static byte[] EnsureWavHeader(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
+		{
+			if (pcmData.Length >= 4 && pcmData[0] == 0x52 && pcmData[1] == 0x49 && pcmData[2] == 0x46 && pcmData[3] == 0x46)
+				return pcmData;
+
+			int byteRate = sampleRate * channels * (bitsPerSample / 8);
+			short blockAlign = (short)(channels * (bitsPerSample / 8));
+			int totalDataLen = pcmData.Length;
+			int totalAudioLen = totalDataLen + 36;
+
+			using var outStream = new MemoryStream();
+			using var writer = new BinaryWriter(outStream);
+
+			writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+			writer.Write(totalAudioLen);
+			writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+			writer.Write(new char[] { 'f', 'm', 't', ' ' });
+			writer.Write(16);
+			writer.Write((short)1);
+			writer.Write(channels);
+			writer.Write(sampleRate);
+			writer.Write(byteRate);
+			writer.Write(blockAlign);
+			writer.Write(bitsPerSample);
+			writer.Write(new char[] { 'd', 'a', 't', 'a' });
+			writer.Write(totalDataLen);
+			writer.Write(pcmData);
+
+			return outStream.ToArray();
 		}
 
 		public class TranslateRequestDto

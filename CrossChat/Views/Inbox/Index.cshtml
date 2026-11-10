@@ -1656,9 +1656,17 @@
                 <!-- Намертво закрепленная панель ввода внизу -->
                 <div class="chat-input-panel">
                     <div class="input-tools-row" style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.72rem; color: var(--text-secondary);" id="replyingAsNotice">
-                            ✍️ Ответ клиенту
-                        </span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 0.72rem; color: var(--text-secondary);" id="replyingAsNotice">
+                                ✍️ Ответ клиенту
+                            </span>
+
+                            <!-- 🚀 ТУМБЛЕР ПРЕОБРАЗОВАНИЯ В AI-ГОЛОС ПЕРСОНАЖА -->
+                            <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; font-size: 0.72rem; font-weight: 700; color: #c084fc; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 8px; border-radius: 8px;" title="Озвучивать голосовые сообщения голосом настроенного персонажа">
+                                <input type="checkbox" id="aiVoiceTransformToggle" checked style="accent-color: #a855f7; width: 14px; height: 14px; cursor: pointer;">
+                                <span>✨ AI Голос</span>
+                            </label>
+                        </div>
 
                         <!-- 🌐 УМНЫЙ ВИДЖЕТ ПЕРЕВОДА НА ЯЗЫК СОБЕСЕДНИКА -->
                         <div id="outgoingTranslateWidget" style="display: none; align-items: center; gap: 6px;">
@@ -1669,6 +1677,32 @@
                             <button type="button" id="btnRevertOutgoing" onclick="revertOutgoingText()" style="display: none; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: 8px; padding: 2px 6px; font-size: 0.72rem; cursor: pointer;" title="Вернуть русский текст">
                                 ↩️ RU
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- 🎧 КАРТОЧКА ПРЕДПРОСЛУШИВАНИЯ AI-ГОЛОСА С КНОПКАМИ ОДОБРЕНИЯ -->
+                    <div id="voicePreviewBox" style="display: none; flex-direction: column; gap: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.75rem; font-weight: 800; color: #c084fc; display: flex; align-items: center; gap: 5px;">
+                                <span>✨</span> AI-Голос готов к отправке
+                            </span>
+                            <span id="voicePreviewStatus" style="font-size: 0.68rem; color: var(--text-secondary);">Предпрослушивание</span>
+                        </div>
+
+                        <div id="voiceRecognizedTextWrap" style="font-size: 0.82rem; color: var(--text-main); line-height: 1.35; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 6px 10px; font-style: italic;">
+                            ⏳ Идёт генерация...
+                        </div>
+
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <audio id="voicePreviewAudio" controls style="flex: 1; min-width: 180px; height: 34px;"></audio>
+                            <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                                <button type="button" onclick="cancelVoicePreview()" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 10px; padding: 6px 12px; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+                                    ✕ Отмена
+                                </button>
+                                <button type="button" id="btnConfirmSendAiVoice" onclick="confirmSendAiVoice()" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: #ffffff; border-radius: 10px; padding: 6px 16px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">
+                                    <span>➤</span> <span>Отправить в чат</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -3038,22 +3072,121 @@
         }
 
         // 3. ОСТАНОВКА И ОТПРАВКА ГОЛОСОВОГО В ЧАТ
+        let pendingAiAudioFile = null;
+
+        // 3. ОСТАНОВКА ЗАПИСИ (С ПРОВЕРКОЙ ТУМБЛЕРА AI ГОЛОСА)
         function stopAndSendVoiceRecording() {
             if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
 
-            mediaRecorder.onstop = async () => {
-                // Создаем Blob из записанного звука
-                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            const isAiEnabled = document.getElementById('aiVoiceTransformToggle')?.checked;
 
-                // Называем voice_*.webm - бэкенд переведет его в идеальный Instagram M4A
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
                 const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: audioBlob.type });
 
-                const fakeInput = { files: [audioFile], value: '' };
-                await uploadAndSendMedia(fakeInput);
+                // А. Если тумблер AI выключен — отправляем своим обычным голосом как всегда:
+                if (!isAiEnabled) {
+                    const fakeInput = { files: [audioFile], value: '' };
+                    await uploadAndSendMedia(fakeInput);
+                    return;
+                }
+
+                // Б. Если тумблер AI включен — запускаем предпрослушивание!
+                await generateAiVoicePreview(audioFile);
             };
 
             mediaRecorder.stop();
             stopRecordingCleanup();
+        }
+
+        // 🚀 ГЕНЕРАЦИЯ ПРЕДПРОСЛУШИВАНИЯ С ОБРАБОТКОЙ ЛИМИТОВ GOOGLE
+        async function generateAiVoicePreview(audioFile) {
+            if (!currentConversationId) return;
+
+            const previewBox = document.getElementById('voicePreviewBox');
+            const recognizedWrap = document.getElementById('voiceRecognizedTextWrap');
+            const previewAudio = document.getElementById('voicePreviewAudio');
+            const sendBtn = document.getElementById('btnConfirmSendAiVoice');
+            const inputRow = document.getElementById('normalInputRow');
+
+            // Блокируем инпут на время генерации
+            inputRow.style.opacity = '0.5';
+            inputRow.style.pointerEvents = 'none';
+
+            previewBox.style.display = 'flex';
+            recognizedWrap.innerHTML = '⏳ <em>ИИ слушает запись и переозвучивает её персонажем...</em>';
+            previewAudio.style.display = 'none';
+            sendBtn.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('audioFile', audioFile);
+            formData.append('conversationId', currentConversationId);
+
+            try {
+                const res = await fetch('/inbox/voice-preview', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    recognizedWrap.innerHTML = `«${escapeHtml(data.recognizedText)}»`;
+                    previewAudio.src = data.audioBase64;
+                    previewAudio.style.display = 'block';
+                    sendBtn.style.display = 'inline-flex';
+
+                    // Превращаем Base64 обратно в WAV-файл для метода отправки
+                    const byteChars = atob(data.audioBase64.split(',')[1]);
+                    const byteNums = new Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) {
+                        byteNums[i] = byteChars.charCodeAt(i);
+                    }
+                    const wavBlob = new Blob([new Uint8Array(byteNums)], { type: 'audio/wav' });
+                    pendingAiAudioFile = new File([wavBlob], `voice_${Date.now()}.wav`, { type: 'audio/wav' });
+
+                    // Автовоспроизведение для проверки
+                    previewAudio.play().catch(() => {});
+                } else {
+                    cancelVoicePreview();
+                    // Красивая обработка лимита Google API:
+                    if (res.status === 429 || data.error === 'RATE_LIMIT') {
+                        alert("⚠️ " + (data.message || "Превышен лимит запросов к Google AI. Подождите 30 секунд или выключите тумблер '✨ AI Голос', чтобы отправить обычный войс."));
+                    } else {
+                        alert(data.error || "Не удалось преобразовать голос через ИИ.");
+                    }
+                }
+            } catch (err) {
+                cancelVoicePreview();
+                alert("Сетевая ошибка при генерации AI-голоса.");
+            } finally {
+                inputRow.style.opacity = '1';
+                inputRow.style.pointerEvents = 'auto';
+            }
+        }
+
+        // ПОДТВЕРЖДЕНИЕ ОТПРАВКИ AI-ГОЛОСА КЛИЕНТУ
+        async function confirmSendAiVoice() {
+            if (!pendingAiAudioFile) return;
+
+            const fileToSend = pendingAiAudioFile;
+            cancelVoicePreview();
+
+            // Отправляем в чат через уже готовый и отлаженный метод:
+            const fakeInput = { files: [fileToSend], value: '' };
+            await uploadAndSendMedia(fakeInput);
+        }
+
+        // ОТМЕНА ПРЕДПРОСМОТРА
+        function cancelVoicePreview() {
+            const previewBox = document.getElementById('voicePreviewBox');
+            const previewAudio = document.getElementById('voicePreviewAudio');
+            if (previewAudio) {
+                previewAudio.pause();
+                previewAudio.src = '';
+            }
+            if (previewBox) previewBox.style.display = 'none';
+            pendingAiAudioFile = null;
         }
 
         function stopRecordingCleanup() {
