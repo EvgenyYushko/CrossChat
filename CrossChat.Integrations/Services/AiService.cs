@@ -87,13 +87,34 @@ namespace CrossChat.Integrations.Services
 				token = _token;
 			}
 
-			var prompt = "Распознай что сказано на этом аудио файле и верни только его содержимое, на том же языке, без всяких дополнителных кооментариев.";
+			// 🚀 ПРОКАЧАННЫЙ РЕЖИССЁРСКИЙ ПРОМПТ ДЛЯ РАСПОЗНАВАНИЯ ЭМОЦИЙ И АРТЕФАКТОВ ГОЛОСА
+			var prompt = @"Сделай точную дословную транскрибацию этого аудиофайла на языке оригинала.
+				Твоя ключевая задача — уловить не только произнесённые слова, но и живой эмоциональный фон, невербальные звуки и дыхание.
+
+				Вставляй специальные теги в угловых скобках <tag> ровно в тех местах, где они звучат в речи:
+				- Смех / усмешка / хихиканье: <chuckle>, <laugh>, <giggle>
+				- Дыхание / вздохи: <sigh>, <breath>, <heavy breath>, <gasp>
+				- Интимность / шёпот: <whisper>
+				- Эмоциональные звуки: <groan>, <whimper>, <yawn>
+				- Прочистка горла / кашель: <throat-clearing>, <cough>
+				- Заметные паузы: <short pause>, <long pause>
+
+				Пример правильного вывода:
+				""Привет! <chuckle> Ты не поверишь, что произошло. <sigh> Я так устала сегодня...""
+
+				Правила:
+				1. Выведи ТОЛЬКО готовый текст с тегами.
+				2. Не добавляй никаких пояснений, комментариев от себя и кавычек.
+				3. Сохраняй естественную пунктуацию.";
+
 			var response = await _geminiServiceClient.RequestWithAudioAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },
 				Base64Idata = base64Iaudio
 			}, AddTokenToHeaders(token));
-			return response.GeneratedText;
+
+			var result = response.GeneratedText ?? "";
+			return result.Trim().Trim('"', '«', '»', '`');
 		}
 
 		private Metadata AddTokenToHeaders(string token)

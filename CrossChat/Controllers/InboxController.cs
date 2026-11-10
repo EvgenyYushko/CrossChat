@@ -475,7 +475,7 @@ namespace CrossChat.Controllers
 					try
 					{
 						// Просим Gemini сделать живой разговорный перевод (с сохранением эмоций, сленга и интонаций)
-						string translatePrompt = $"Translate this conversational voice message into natural, spoken {targetLang.ToUpperInvariant()}. Keep it conversational and friendly. Return ONLY the translation without quotes:\n\n{recognizedRussianText}";
+						string translatePrompt = $"Translate this conversational voice message into natural, spoken {targetLang.ToUpperInvariant()}. Keep it conversational and friendly. Preserve all inline vocal tags like <chuckle>, <laugh>, <sigh>, <breath>, <whisper> in their exact positions! Return ONLY the translation without quotes:\n\n{recognizedRussianText}";
 						string translated = await _aiService.GeminiRequest(translatePrompt, null);
 
 						if (!string.IsNullOrWhiteSpace(translated))
