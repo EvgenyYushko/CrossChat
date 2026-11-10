@@ -13,6 +13,7 @@ using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Posting;
 using CrossChat.Integrations.Services;
+using CrossChat.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -37,19 +38,25 @@ namespace CrossChat.Controllers
 		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly IHubContext<InboxHub> _hubContext; // <-- ВНЕДРЯЕМ ХАБ
 		private readonly ILogger<PlannerController> _logger;
+		private readonly IVoiceService _voiceService; // <-- ВНЕДРЯЕМ
+		private readonly IAiService _aiService;                           // <-- ВНЕДРЯЕМ
 
 		public PlannerController(
 			AppDbContext db,
 			IPostService postService,
 			IGoogleDriveUploader googleDriveUploader,
-			IHubContext<InboxHub> hubContext, // <-- ВНЕДРЯЕМ ХАБ
-			ILogger<PlannerController> logger)
+			IHubContext<InboxHub> hubContext,
+			ILogger<PlannerController> logger,
+			CrossChat.Services.IVoiceService voiceService,
+			IAiService aiService)
 		{
 			_db = db;
 			_postService = postService;
 			_googleDriveUploader = googleDriveUploader;
 			_hubContext = hubContext;
 			_logger = logger;
+			_voiceService = voiceService;
+			_aiService = aiService;
 		}
 
 		[HttpGet]
@@ -902,6 +909,152 @@ namespace CrossChat.Controllers
 			}
 
 			return Json(new { success = true, id = locationId, name = name });
+		}
+
+		// ==========================================================
+		// 1. ОЗВУЧКА ТЕКСТА ПОСТА В ГОЛОСОВОЙ ФАЙЛ ДЛЯ TELEGRAM
+		// ==========================================================
+		[HttpPost("voice/from-text")]
+		public async Task<IActionResult> GenerateVoiceFromText([FromBody] PlannerTextToVoiceDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto?.Text))
+				return BadRequest(new { success = false, error = "Введите текст поста для озвучки." });
+
+			var profile = await _db.Profile
+				.Include(p => p.VoiceSetting)
+				.FirstOrDefaultAsync(p => p.Id == dto.ProfileId);
+
+			if (profile == null)
+				return NotFound(new { success = false, error = "Профиль не найден." });
+
+			var voiceSetting = profile.VoiceSetting ?? new ProfileVoiceSetting
+			{
+				ProfileId = profile.Id,
+				VoiceName = "Tavi",
+				Style = "Whisper",
+				Temperature = 1.45,
+				Provider = "Gemini"
+			};
+
+			try
+			{
+				byte[] rawAudio;
+				try
+				{
+					rawAudio = await _voiceService.GenerateVoiceAudioAsync(dto.Text.Trim(), voiceSetting, profile.Name);
+				}
+				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
+				{
+					return StatusCode(429, new { success = false, error = "Превышен минутный лимит запросов к Google AI. Подождите 30 секунд." });
+				}
+
+				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
+				string fileName = $"voice_{DateTime.UtcNow.Ticks}.wav";
+
+				return File(wavAudio, "audio/wav", fileName);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [Planner Voice] Ошибка генерации войса из текста поста");
+				return BadRequest(new { success = false, error = "Ошибка озвучки: " + ex.Message });
+			}
+		}
+
+		// ==========================================================
+		// 2. ЗАПИСЬ С МИКРОФОНА ➔ РАСПОЗНАВАНИЕ ➔ ГОЛОС ПЕРСОНАЖА ДЛЯ ПОСТА
+		// ==========================================================
+		[HttpPost("voice/from-mic")]
+		[RequestSizeLimit(20 * 1024 * 1024)]
+		public async Task<IActionResult> TransformMicToVoice(IFormFile audioFile, [FromForm] int profileId)
+		{
+			if (audioFile == null || audioFile.Length == 0)
+				return BadRequest(new { success = false, error = "Аудиозапись не получена." });
+
+			var profile = await _db.Profile
+				.Include(p => p.VoiceSetting)
+				.FirstOrDefaultAsync(p => p.Id == profileId);
+
+			if (profile == null)
+				return NotFound(new { success = false, error = "Профиль не найден." });
+
+			var voiceSetting = profile.VoiceSetting ?? new ProfileVoiceSetting
+			{
+				ProfileId = profile.Id,
+				VoiceName = "Tavi",
+				Style = "Whisper",
+				Temperature = 1.45,
+				Provider = "Gemini"
+			};
+
+			try
+			{
+				using var ms = new MemoryStream();
+				await audioFile.CopyToAsync(ms);
+				string base64Audio = Convert.ToBase64String(ms.ToArray());
+
+				// Распознаем речь с живыми эмоциями (<laugh>, <sigh>...)
+				string recognizedText;
+				try
+				{
+					recognizedText = await _aiService.GeminiAudioToText(base64Audio, null);
+				}
+				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
+				{
+					return StatusCode(429, new { success = false, error = "Превышен лимит запросов к Google AI. Подождите 30 секунд." });
+				}
+
+				if (string.IsNullOrWhiteSpace(recognizedText))
+					return BadRequest(new { success = false, error = "Не удалось распознать слова. Скажите чуть громче." });
+
+				// Синтезируем голос персонажа
+				byte[] rawAudio = await _voiceService.GenerateVoiceAudioAsync(recognizedText, voiceSetting, profile.Name);
+				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
+				string fileName = $"voice_{DateTime.UtcNow.Ticks}.wav";
+
+				return File(wavAudio, "audio/wav", fileName);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [Planner Voice] Ошибка преобразования голоса");
+				return BadRequest(new { success = false, error = "Ошибка генерации: " + ex.Message });
+			}
+		}
+
+		private static byte[] EnsureWavHeader(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
+		{
+			if (pcmData.Length >= 4 && pcmData[0] == 0x52 && pcmData[1] == 0x49 && pcmData[2] == 0x46 && pcmData[3] == 0x46)
+				return pcmData;
+
+			int byteRate = sampleRate * channels * (bitsPerSample / 8);
+			short blockAlign = (short)(channels * (bitsPerSample / 8));
+			int totalDataLen = pcmData.Length;
+			int totalAudioLen = totalDataLen + 36;
+
+			using var outStream = new MemoryStream();
+			using var writer = new BinaryWriter(outStream);
+
+			writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+			writer.Write(totalAudioLen);
+			writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+			writer.Write(new char[] { 'f', 'm', 't', ' ' });
+			writer.Write(16);
+			writer.Write((short)1);
+			writer.Write(channels);
+			writer.Write(sampleRate);
+			writer.Write(byteRate);
+			writer.Write(blockAlign);
+			writer.Write(bitsPerSample);
+			writer.Write(new char[] { 'd', 'a', 't', 'a' });
+			writer.Write(totalDataLen);
+			writer.Write(pcmData);
+
+			return outStream.ToArray();
+		}
+
+		public class PlannerTextToVoiceDto
+		{
+			public int ProfileId { get; set; }
+			public string Text { get; set; } = string.Empty;
 		}
 
 		private bool FillNetworkData(BlogPost post, string networkType, List<string> selectedNetworks, string caption, int? botId = null)
