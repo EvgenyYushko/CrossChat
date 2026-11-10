@@ -1722,11 +1722,25 @@
                             🎙️
                         </button>
 
+                        <!-- ПОЛЕ ВВОДА ТЕКСТА -->
                         <textarea id="messageInput" class="chat-textarea" placeholder="Напишите сообщение..." onkeydown="handleInputKeydown(event)"></textarea>
-                        <!-- Кнопка отправки с защитой от закрытия клавиатуры на телефоне -->
-                        <button type="button" class="btn-send" id="btnSendManual" 
-                                onpointerdown="preventSendBlur(event)" 
-                                onclick="sendManualMessage()">➤</button>
+
+                        <!-- 🚀 КНОПКА "ТЕКСТ ➔ В AI-ГОЛОС" -->
+                        <button type="button" class="btn-send" id="btnTextToVoice"
+                                onpointerdown="preventSendBlur(event)"
+                                onclick="convertTextToAiVoice()"
+                                title="Озвучить написанный текст голосом персонажа (AI Войс)"
+                                style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);">
+                            ✨🎙️
+                        </button>
+
+                        <!-- КНОПКА ОБЫЧНОЙ ТЕКСТОВОЙ ОТПРАВКИ -->
+                        <button type="button" class="btn-send" id="btnSendManual"
+                                onpointerdown="preventSendBlur(event)"
+                                onclick="sendManualMessage()"
+                                title="Отправить обычным текстом">
+                            ➤
+                        </button>
                     </div>
 
                     <!-- ИНТЕРФЕЙС ИДЕТ ЗАПИСЬ (СКРЫТ ПО УМОЛЧАНИЮ) -->
@@ -3206,6 +3220,14 @@
             }
             if (previewBox) previewBox.style.display = 'none';
             pendingAiAudioFile = null;
+
+            // Если был черновик — восстанавливаем его в поле ввода, чтобы не потерялся!
+            const input = document.getElementById('messageInput');
+            if (input && draftTextBeforeVoice) {
+                input.value = draftTextBeforeVoice;
+                draftTextBeforeVoice = '';
+                input.focus();
+            }
         }
 
         function stopRecordingCleanup() {
@@ -3649,6 +3671,102 @@
                            (!document.documentElement.getAttribute('data-theme') && !document.body.classList.contains('light-theme') && localStorage.getItem('theme') !== 'light');
 
             btn.textContent = isDark ? '🌙' : '☀️';
+        }
+
+        let draftTextBeforeVoice = '';
+
+        // 🚀 ПРЕВРАЩЕНИЕ НАПИСАННОГО ТЕКСТА В AI-ГОЛОСОВОЕ
+        async function convertTextToAiVoice() {
+            if (!currentConversationId) return;
+
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) {
+                alert("Сначала напишите текст в поле ввода, который нужно озвучить!");
+                input.focus();
+                return;
+            }
+
+            // Запоминаем черновик на случай, если нажмут "Отмена":
+            draftTextBeforeVoice = text;
+
+            const previewBox = document.getElementById('voicePreviewBox');
+            const recognizedWrap = document.getElementById('voiceRecognizedTextWrap');
+            const langBadge = document.getElementById('voicePreviewLangBadge');
+            const previewAudio = document.getElementById('voicePreviewAudio');
+            const sendBtn = document.getElementById('btnConfirmSendAiVoice');
+            const inputRow = document.getElementById('normalInputRow');
+
+            inputRow.style.opacity = '0.5';
+            inputRow.style.pointerEvents = 'none';
+
+            previewBox.style.display = 'flex';
+            recognizedWrap.innerHTML = '⏳ <em>Синтезируем персонажа из написанного текста...</em>';
+            previewAudio.style.display = 'none';
+            sendBtn.style.display = 'none';
+
+            // Язык собеседника для синхронного перевода
+            const targetLang = (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru')
+                ? activeClientLang
+                : 'ru';
+
+            try {
+                const res = await fetch('/inbox/text-to-voice-preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conversationId: currentConversationId,
+                        text: text,
+                        targetLang: targetLang
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    if (data.isTranslated) {
+                        langBadge.textContent = `🌐 ПЕРЕВОД: ${data.targetLang}`;
+                        recognizedWrap.innerHTML = `
+                            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-bottom: 2px;">🇷🇺 Исходный текст: «${escapeHtml(data.originalRussian)}»</div>
+                            <div style="font-size: 0.88rem; font-weight: 700; color: #c084fc;">🗣️ Озвучено: «${escapeHtml(data.spokenText)}»</div>
+                        `;
+                    } else {
+                        langBadge.textContent = `🌐 RU`;
+                        recognizedWrap.innerHTML = `«${escapeHtml(data.originalRussian || data.spokenText)}»`;
+                    }
+
+                    previewAudio.src = data.audioBase64;
+                    previewAudio.style.display = 'block';
+                    sendBtn.style.display = 'inline-flex';
+
+                    // Превращаем Base64 в WAV-файл для отправки в Instagram/Facebook
+                    const byteChars = atob(data.audioBase64.split(',')[1]);
+                    const byteNums = new Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) {
+                        byteNums[i] = byteChars.charCodeAt(i);
+                    }
+                    const wavBlob = new Blob([new Uint8Array(byteNums)], { type: 'audio/wav' });
+                    pendingAiAudioFile = new File([wavBlob], `voice_${Date.now()}.wav`, { type: 'audio/wav' });
+
+                    // Очищаем поле ввода, так как текст ушел в готовый войс
+                    input.value = '';
+
+                    previewAudio.play().catch(() => {});
+                } else {
+                    cancelVoicePreview();
+                    if (res.status === 429 || data.error === 'RATE_LIMIT') {
+                        alert("⚠️ " + (data.message || "Превышен лимит запросов к Google AI. Подождите 30 секунд или отправьте обычный текст."));
+                    } else {
+                        alert(data.error || "Не удалось сгенерировать голос.");
+                    }
+                }
+            } catch (err) {
+                cancelVoicePreview();
+                alert("Сетевая ошибка при озвучке текста.");
+            } finally {
+                inputRow.style.opacity = '1';
+                inputRow.style.pointerEvents = 'auto';
+            }
         }
 
         // Проверяем иконку при запуске страницы:

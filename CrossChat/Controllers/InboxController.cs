@@ -524,6 +524,104 @@ namespace CrossChat.Controllers
 			}
 		}
 
+		/// <summary>
+		/// Генерация предпрослушивания AI-голоса напрямую из напечатанного текста (Text-to-Voice)
+		/// </summary>
+		[HttpPost("text-to-voice-preview")]
+		public async Task<IActionResult> GenerateTextToVoicePreview([FromBody] TextToVoicePreviewDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto?.Text))
+				return BadRequest(new { success = false, error = "Текст сообщения пуст." });
+
+			var conv = await _db.InboxConversations.FirstOrDefaultAsync(c => c.Id == dto.ConversationId);
+			if (conv == null)
+				return NotFound(new { success = false, error = "Диалог не найден." });
+
+			var profile = await _db.Profile
+				.Include(p => p.VoiceSetting)
+				.FirstOrDefaultAsync(p => p.Id == conv.ProfileId);
+
+			if (profile == null)
+				return NotFound(new { success = false, error = "Профиль не найден." });
+
+			var voiceSetting = profile.VoiceSetting ?? new ProfileVoiceSetting
+			{
+				ProfileId = profile.Id,
+				VoiceName = "Tavi",
+				Style = "Whisper",
+				Temperature = 1.45,
+				Provider = "Gemini"
+			};
+
+			try
+			{
+				string textToSpeak = dto.Text.Trim();
+				bool isTranslated = false;
+
+				// 🌐 Синхронный перевод на язык клиента (если включен тумблер и язык не русский)
+				if (!string.IsNullOrWhiteSpace(dto.TargetLang) && !dto.TargetLang.Equals("ru", StringComparison.OrdinalIgnoreCase))
+				{
+					try
+					{
+						string translatePrompt = $"Translate this conversational voice message into natural, spoken {dto.TargetLang.ToUpperInvariant()}. Keep it conversational and friendly. Preserve all inline vocal tags like <chuckle>, <laugh>, <sigh>, <breath>, <whisper> in their exact positions! Return ONLY the translation without quotes:\n\n{textToSpeak}";
+						string translated = await _aiService.GeminiRequest(translatePrompt, null);
+
+						if (!string.IsNullOrWhiteSpace(translated))
+						{
+							textToSpeak = translated.Trim().Trim('"', '«', '»');
+							isTranslated = true;
+							_logger.LogInformation("🌐 [TextToVoice] Переведено: RU: «{Ru}» ➔ {Lang}: «{Tr}»", dto.Text, dto.TargetLang, textToSpeak);
+						}
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "⚠️ [TextToVoice] Сбой перевода перед озвучкой, озвучиваем исходный текст");
+					}
+				}
+
+				// Синтез речи персонажа через Gemini 3.8 Flash TTS
+				byte[] rawAudio;
+				try
+				{
+					rawAudio = await _voiceService.GenerateVoiceAudioAsync(textToSpeak, voiceSetting, profile.Name);
+				}
+				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
+				{
+					return StatusCode(429, new
+					{
+						success = false,
+						error = "RATE_LIMIT",
+						message = "Превышен минутный лимит запросов к Google AI. Подождите 30 секунд или отправьте обычный текст."
+					});
+				}
+
+				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
+				string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(wavAudio)}";
+
+				return Ok(new
+				{
+					success = true,
+					originalRussian = dto.Text.Trim(),
+					spokenText = textToSpeak,
+					isTranslated = isTranslated,
+					targetLang = dto.TargetLang?.ToUpperInvariant() ?? "RU",
+					audioBase64 = audioBase64
+				});
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ [TextToVoice] Ошибка генерации войса из текста");
+				return BadRequest(new { success = false, error = "Ошибка генерации голоса: " + ex.Message });
+			}
+		}
+
+		public class TextToVoicePreviewDto
+		{
+			public int ConversationId { get; set; }
+			public string Text { get; set; } = string.Empty;
+			public string? TargetLang { get; set; }
+		}
+
 		private static byte[] EnsureWavHeader(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
 		{
 			if (pcmData.Length >= 4 && pcmData[0] == 0x52 && pcmData[1] == 0x49 && pcmData[2] == 0x46 && pcmData[3] == 0x46)
