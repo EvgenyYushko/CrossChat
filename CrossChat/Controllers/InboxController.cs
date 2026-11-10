@@ -410,11 +410,14 @@ namespace CrossChat.Controllers
 		}
 
 		/// <summary>
-		/// Генерация предпрослушивания AI-голоса из микрофона с защитой от лимитов Google API
+		/// Мультиязычная генерация AI-голоса: распознает русскую речь и при необходимости переводит на язык клиента
 		/// </summary>
 		[HttpPost("voice-preview")]
 		[RequestSizeLimit(20 * 1024 * 1024)]
-		public async Task<IActionResult> GenerateVoicePreview(IFormFile audioFile, [FromForm] int conversationId)
+		public async Task<IActionResult> GenerateVoicePreview(
+			IFormFile audioFile,
+			[FromForm] int conversationId,
+			[FromForm] string? targetLang = null) // 🚀 ПРИНИМАЕМ ЦЕЛЕВОЙ ЯЗЫК СОБЕСЕДНИКА
 		{
 			if (audioFile == null || audioFile.Length == 0)
 				return BadRequest(new { success = false, error = "Аудиозапись не получена." });
@@ -423,13 +426,12 @@ namespace CrossChat.Controllers
 			if (conv == null)
 				return NotFound(new { success = false, error = "Диалог не найден." });
 
-			// Достаем настройки голоса для профиля этого диалога
 			var profile = await _db.Profile
 				.Include(p => p.VoiceSetting)
 				.FirstOrDefaultAsync(p => p.Id == conv.ProfileId);
 
 			if (profile == null)
-				return NotFound(new { success = false, error = "Профиль диалога не найден." });
+				return NotFound(new { success = false, error = "Профиль не найден." });
 
 			var voiceSetting = profile.VoiceSetting ?? new ProfileVoiceSetting
 			{
@@ -442,64 +444,82 @@ namespace CrossChat.Controllers
 
 			try
 			{
-				// 1. Превращаем аудио в Base64 для передачи в Gemini STT
+				// 1. Читаем аудио в Base64
 				using var ms = new MemoryStream();
 				await audioFile.CopyToAsync(ms);
 				string base64Audio = Convert.ToBase64String(ms.ToArray());
 
-				// 2. Распознавание речи с перехватом 429 (Rate Limit)
-				string recognizedText;
+				// 2. Распознавание русской речи менеджера (STT)
+				string recognizedRussianText;
 				try
 				{
-					recognizedText = await _aiService.GeminiAudioToText(base64Audio, null);
+					recognizedRussianText = await _aiService.GeminiAudioToText(base64Audio, null);
 				}
 				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
 				{
-					_logger.LogWarning(ex, "⚠️ [AI Voice] Превышен лимит квот Gemini при распознавании.");
-					return StatusCode(429, new
-					{
-						success = false,
-						error = "RATE_LIMIT",
-						message = "Превышен минутный лимит запросов к Google AI. Подождите 30 секунд или выключите тумблер AI, чтобы отправить обычный войс."
-					});
+					return StatusCode(429, new { success = false, error = "RATE_LIMIT", message = "Превышен минутный лимит запросов к Google AI. Подождите 30 секунд или отправьте обычный войс." });
 				}
 
-				if (string.IsNullOrWhiteSpace(recognizedText))
+				if (string.IsNullOrWhiteSpace(recognizedRussianText))
 				{
-					return BadRequest(new { success = false, error = "Не удалось разобрать слова на записи. Попробуйте наговорить чуть громче." });
+					return BadRequest(new { success = false, error = "Не удалось разобрать слова на записи. Попробуйте наговорить чуть четче." });
 				}
 
-				// 3. Синтез голоса через Gemini TTS с перехватом 429
+				recognizedRussianText = recognizedRussianText.Trim();
+				string textToSpeak = recognizedRussianText;
+				bool isTranslated = false;
+
+				// 3. 🌐 СИНХРОННЫЙ ПЕРЕВОД ТЕКСТА НА ЯЗЫК СОБЕСЕДНИКА (ЕСЛИ ЯЗЫК НЕ РУССКИЙ)
+				if (!string.IsNullOrWhiteSpace(targetLang) && !targetLang.Equals("ru", StringComparison.OrdinalIgnoreCase))
+				{
+					try
+					{
+						// Просим Gemini сделать живой разговорный перевод (с сохранением эмоций, сленга и интонаций)
+						string translatePrompt = $"Translate this conversational voice message into natural, spoken {targetLang.ToUpperInvariant()}. Keep it conversational and friendly. Return ONLY the translation without quotes:\n\n{recognizedRussianText}";
+						string translated = await _aiService.GeminiRequest(translatePrompt, null);
+
+						if (!string.IsNullOrWhiteSpace(translated))
+						{
+							textToSpeak = translated.Trim().Trim('"', '«', '»');
+							isTranslated = true;
+							_logger.LogInformation("🌐 [Voice Translate] Переведено: RU: «{Ru}» ➔ {Lang}: «{Tr}»",
+								recognizedRussianText, targetLang, textToSpeak);
+						}
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "⚠️ [Voice Translate] Сбой перевода перед озвучкой, озвучиваем исходный текст");
+					}
+				}
+
+				// 4. Синтез речи настроенным персонажем на целевом языке!
 				byte[] rawAudio;
 				try
 				{
-					rawAudio = await _voiceService.GenerateVoiceAudioAsync(recognizedText, voiceSetting, profile.Name);
+					rawAudio = await _voiceService.GenerateVoiceAudioAsync(textToSpeak, voiceSetting, profile.Name);
 				}
 				catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("ResourceExhausted") || ex.Message.Contains("quota"))
 				{
-					_logger.LogWarning(ex, "⚠️ [AI Voice] Превышен лимит квот Gemini при генерации речи.");
-					return StatusCode(429, new
-					{
-						success = false,
-						error = "RATE_LIMIT",
-						message = "Превышен лимит генераций Google AI. Подождите 30 секунд или отправьте обычное голосовое."
-					});
+					return StatusCode(429, new { success = false, error = "RATE_LIMIT", message = "Превышен лимит генераций Google AI. Подождите 30 секунд или отправьте обычный войс." });
 				}
 
-				// Оборачиваем в чистый WAV
 				byte[] wavAudio = EnsureWavHeader(rawAudio, 24000, 1, 16);
 				string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(wavAudio)}";
 
+				// Возвращаем и исходный текст, и перевод, чтобы менеджер всё видел в карточке!
 				return Ok(new
 				{
 					success = true,
-					recognizedText = recognizedText.Trim(),
+					originalRussian = recognizedRussianText,
+					spokenText = textToSpeak,
+					isTranslated = isTranslated,
+					targetLang = targetLang?.ToUpperInvariant() ?? "RU",
 					audioBase64 = audioBase64
 				});
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "❌ [AI Voice Preview] Ошибка обработки голоса");
+				_logger.LogError(ex, "❌ [AI Voice Preview] Ошибка генерации войса");
 				return BadRequest(new { success = false, error = "Ошибка генерации голоса: " + ex.Message });
 			}
 		}

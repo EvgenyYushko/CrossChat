@@ -1680,17 +1680,20 @@
                         </div>
                     </div>
 
-                    <!-- 🎧 КАРТОЧКА ПРЕДПРОСЛУШИВАНИЯ AI-ГОЛОСА С КНОПКАМИ ОДОБРЕНИЯ -->
+                    <!-- 🎧 КАРТОЧКА ПРЕДПРОСЛУШИВАНИЯ С МУЛЬТИЯЗЫЧНЫМ ПЕРЕВОДОМ -->
                     <div id="voicePreviewBox" style="display: none; flex-direction: column; gap: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 6px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 0.75rem; font-weight: 800; color: #c084fc; display: flex; align-items: center; gap: 5px;">
                                 <span>✨</span> AI-Голос готов к отправке
                             </span>
-                            <span id="voicePreviewStatus" style="font-size: 0.68rem; color: var(--text-secondary);">Предпрослушивание</span>
+                            <span id="voicePreviewLangBadge" style="font-size: 0.68rem; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 1px 8px; border-radius: 6px;">
+                                🌐 RU
+                            </span>
                         </div>
 
-                        <div id="voiceRecognizedTextWrap" style="font-size: 0.82rem; color: var(--text-main); line-height: 1.35; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 6px 10px; font-style: italic;">
-                            ⏳ Идёт генерация...
+                        <!-- ДВОЙНОЙ БЛОК: ИСХОДНИК + ПЕРЕВОД -->
+                        <div id="voiceRecognizedTextWrap" style="font-size: 0.82rem; color: var(--text-main); line-height: 1.4; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 8px 12px;">
+                            ⏳ Идёт распознавание и синтез речи...
                         </div>
 
                         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -3099,28 +3102,35 @@
             stopRecordingCleanup();
         }
 
-        // 🚀 ГЕНЕРАЦИЯ ПРЕДПРОСЛУШИВАНИЯ С ОБРАБОТКОЙ ЛИМИТОВ GOOGLE
+        // 🚀 ГЕНЕРАЦИЯ ПРЕДПРОСЛУШИВАНИЯ С МУЛЬТИЯЗЫЧНЫМ ПЕРЕВОДОМ
         async function generateAiVoicePreview(audioFile) {
             if (!currentConversationId) return;
 
             const previewBox = document.getElementById('voicePreviewBox');
             const recognizedWrap = document.getElementById('voiceRecognizedTextWrap');
+            const langBadge = document.getElementById('voicePreviewLangBadge');
             const previewAudio = document.getElementById('voicePreviewAudio');
             const sendBtn = document.getElementById('btnConfirmSendAiVoice');
             const inputRow = document.getElementById('normalInputRow');
 
-            // Блокируем инпут на время генерации
             inputRow.style.opacity = '0.5';
             inputRow.style.pointerEvents = 'none';
 
             previewBox.style.display = 'flex';
-            recognizedWrap.innerHTML = '⏳ <em>ИИ слушает запись и переозвучивает её персонажем...</em>';
+            recognizedWrap.innerHTML = '⏳ <em>Распознаем речь, переводим и синтезируем AI-голос...</em>';
             previewAudio.style.display = 'none';
             sendBtn.style.display = 'none';
+
+            // 🚀 ОПРЕДЕЛЯЕМ ЦЕЛЕВОЙ ЯЗЫК:
+            // Если включен синхронный перевод и язык клиента известен (напр. pt, en, es) — шлем его!
+            const targetLang = (isSyncTranslateActive && activeClientLang && activeClientLang !== 'ru')
+                ? activeClientLang
+                : 'ru';
 
             const formData = new FormData();
             formData.append('audioFile', audioFile);
             formData.append('conversationId', currentConversationId);
+            formData.append('targetLang', targetLang); // <-- Передаем язык!
 
             try {
                 const res = await fetch('/inbox/voice-preview', {
@@ -3131,12 +3141,23 @@
                 const data = await res.json();
 
                 if (res.ok && data.success) {
-                    recognizedWrap.innerHTML = `«${escapeHtml(data.recognizedText)}»`;
+                    // Если был перевод — красиво показываем и русский исходник, и иностранный перевод!
+                    if (data.isTranslated) {
+                        langBadge.textContent = `🌐 ПЕРЕВОД: ${data.targetLang}`;
+                        recognizedWrap.innerHTML = `
+                            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-bottom: 2px;">🇷🇺 Вы сказали: «${escapeHtml(data.originalRussian)}»</div>
+                            <div style="font-size: 0.88rem; font-weight: 700; color: #38bdf8;">🗣️ Озвучено: «${escapeHtml(data.spokenText)}»</div>
+                        `;
+                    } else {
+                        langBadge.textContent = `🌐 RU`;
+                        recognizedWrap.innerHTML = `«${escapeHtml(data.originalRussian || data.spokenText)}»`;
+                    }
+
                     previewAudio.src = data.audioBase64;
                     previewAudio.style.display = 'block';
                     sendBtn.style.display = 'inline-flex';
 
-                    // Превращаем Base64 обратно в WAV-файл для метода отправки
+                    // Превращаем Base64 обратно в WAV для отправки
                     const byteChars = atob(data.audioBase64.split(',')[1]);
                     const byteNums = new Array(byteChars.length);
                     for (let i = 0; i < byteChars.length; i++) {
@@ -3145,15 +3166,13 @@
                     const wavBlob = new Blob([new Uint8Array(byteNums)], { type: 'audio/wav' });
                     pendingAiAudioFile = new File([wavBlob], `voice_${Date.now()}.wav`, { type: 'audio/wav' });
 
-                    // Автовоспроизведение для проверки
                     previewAudio.play().catch(() => {});
                 } else {
                     cancelVoicePreview();
-                    // Красивая обработка лимита Google API:
                     if (res.status === 429 || data.error === 'RATE_LIMIT') {
                         alert("⚠️ " + (data.message || "Превышен лимит запросов к Google AI. Подождите 30 секунд или выключите тумблер '✨ AI Голос', чтобы отправить обычный войс."));
                     } else {
-                        alert(data.error || "Не удалось преобразовать голос через ИИ.");
+                        alert(data.error || "Не удалось преобразовать голос.");
                     }
                 }
             } catch (err) {
