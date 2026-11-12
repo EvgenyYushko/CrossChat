@@ -14,14 +14,23 @@ jobs:
       - name: Install dependencies
         run: |
             sudo apt-get update
-            # Устанавливаем jq и PostgreSQL 18 client
-            sudo apt-get install -y jq wget
-            # Добавляем репозиторий PostgreSQL
-            sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-            wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+            # 1. Устанавливаем базовые утилиты
+            sudo apt-get install -y jq wget ca-certificates lsb-release
+
+            # 2. Создаем системную директорию для GPG-ключей (современный стандарт вместо apt-key)
+            sudo install -d /etc/apt/keyrings
+
+            # 3. Скачиваем официальный ключ PostgreSQL напрямую в keyrings
+            sudo wget --quiet -O /etc/apt/keyrings/postgresql.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+            # 4. Добавляем репозиторий с привязкой к скачанному ключу [signed-by]
+            sudo sh -c 'echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+            # 5. Обновляем список пакетов и ставим клиент PostgreSQL
             sudo apt-get update
             sudo apt-get install -y postgresql-client-18
-            # Проверяем установку
+
+            # 6. Проверяем установку
             pg_dump --version
 
       - name: Install rclone
