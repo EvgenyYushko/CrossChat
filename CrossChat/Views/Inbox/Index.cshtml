@@ -1489,6 +1489,46 @@
             }
         }
 
+        /* 📱 УЛЬТРА-КОМПАКТНЫЙ РЕЖИМ ПАНЕЛИ ВВОДА НА ТЕЛЕФОНАХ */
+        @@media (max-width: 768px) {
+            .chat-input-panel {
+                padding: 6px 8px !important;
+                padding-bottom: max(6px, env(safe-area-inset-bottom)) !important;
+                gap: 4px !important;
+            }
+
+            .input-row {
+                gap: 5px !important;
+            }
+
+            .chat-textarea {
+                height: 38px !important;
+                padding: 8px 10px !important;
+                font-size: 0.88rem !important;
+                border-radius: 10px !important;
+            }
+            /* Компактные кнопки отправки (36x38px вместо 44x42px) */
+            .btn-send {
+                width: 36px !important;
+                height: 38px !important;
+                min-width: 36px !important;
+                border-radius: 10px !important;
+                font-size: 0.95rem !important;
+                padding: 0 !important;
+            }
+            /* Компактные иконки скрепки и микрофона слева */
+            .btn-attach, .btn-mic {
+                font-size: 1.15rem !important;
+                padding: 0 2px !important;
+                width: 26px !important;
+                min-width: 26px !important;
+            }
+
+            .input-tools-row {
+                gap: 6px !important;
+            }
+        }
+
     </style>
 }
 
@@ -1653,62 +1693,59 @@
                 <!-- Скроллящаяся лента сообщений -->
                 <div class="messages-stream" id="messagesStream"></div>
 
-                <!-- Намертво закрепленная панель ввода внизу -->
+                <!-- НАМЕРТВО ЗАКРЕПЛЕННАЯ ПАНЕЛЬ ВВОДА ВНИЗУ (КОМПАКТНАЯ + ПЕРЕВОД) -->
                 <div class="chat-input-panel">
-                    <div class="input-tools-row" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 0.72rem; color: var(--text-secondary);" id="replyingAsNotice">
+
+                    <!-- 1. ВЕРХНЯЯ СТРОКА: ИНФО О СЕТИ + ТУМБЛЕР AI + КНОПКА ПЕРЕВОДА ТЕКСТА -->
+                    <div class="input-tools-row" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                            <span style="font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="replyingAsNotice">
                                 ✍️ Ответ клиенту
                             </span>
 
-                            <!-- 🚀 ТУМБЛЕР ПРЕОБРАЗОВАНИЯ В AI-ГОЛОС ПЕРСОНАЖА -->
-                            <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; font-size: 0.72rem; font-weight: 700; color: #c084fc; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 8px; border-radius: 8px;" title="Озвучивать голосовые сообщения голосом настроенного персонажа">
-                                <input type="checkbox" id="aiVoiceTransformToggle" checked style="accent-color: #a855f7; width: 14px; height: 14px; cursor: pointer;">
-                                <span>✨ AI Голос</span>
+                            <!-- ТУМБЛЕР AI ГОЛОСА -->
+                            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; font-size: 0.72rem; font-weight: 700; color: #c084fc; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); padding: 1px 6px; border-radius: 8px; flex-shrink: 0;" title="Озвучивать голосовые сообщения голосом персонажа">
+                                <input type="checkbox" id="aiVoiceTransformToggle" checked style="accent-color: #a855f7; width: 13px; height: 13px; cursor: pointer;">
+                                <span>✨ AI</span>
                             </label>
                         </div>
 
-                        <!-- 🌐 УМНЫЙ ВИДЖЕТ ПЕРЕВОДА НА ЯЗЫК СОБЕСЕДНИКА -->
-                        <div id="outgoingTranslateWidget" style="display: none; align-items: center; gap: 6px;">
+                        <!-- 🚀 ВОССТАНОВЛЕННАЯ КНОПКА ПЕРЕВОДА НАПИСАННОГО ТЕКСТА -->
+                        <div id="outgoingTranslateWidget" style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;">
                             <button type="button" id="btnTranslateOutgoing" onclick="translateOutgoingText()"
-                                    style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.35); color: #818cf8; border-radius: 8px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                                    style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.35); color: #818cf8; border-radius: 8px; padding: 2px 7px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;"
+                                    title="Перевести написанный текст на язык клиента перед отправкой">
                                 🌐 RU ➔ EN
                             </button>
-                            <button type="button" id="btnRevertOutgoing" onclick="revertOutgoingText()" style="display: none; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: 8px; padding: 2px 6px; font-size: 0.72rem; cursor: pointer;" title="Вернуть русский текст">
+                            <button type="button" id="btnRevertOutgoing" onclick="revertOutgoingText()"
+                                    style="display: none; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: 8px; padding: 2px 5px; font-size: 0.72rem; cursor: pointer;"
+                                    title="Вернуть исходный русский текст">
                                 ↩️ RU
                             </button>
                         </div>
                     </div>
 
-                    <!-- 🎧 КАРТОЧКА ПРЕДПРОСЛУШИВАНИЯ С МУЛЬТИЯЗЫЧНЫМ ПЕРЕВОДОМ -->
-                    <div id="voicePreviewBox" style="display: none; flex-direction: column; gap: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 6px;">
+                    <!-- 2. ПЛАШКА ПРЕДПРОСЛУШИВАНИЯ AI-ГОЛОСА (ПОЯВЛЯЕТСЯ ПРИ ГЕНЕРАЦИИ) -->
+                    <div id="voicePreviewBox" style="display: none; flex-direction: column; gap: 6px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 12px; padding: 8px 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.75rem; font-weight: 800; color: #c084fc; display: flex; align-items: center; gap: 5px;">
-                                <span>✨</span> AI-Голос готов к отправке
-                            </span>
-                            <span id="voicePreviewLangBadge" style="font-size: 0.68rem; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 1px 8px; border-radius: 6px;">
-                                🌐 RU
-                            </span>
+                            <span style="font-size: 0.75rem; font-weight: 800; color: #c084fc;">✨ AI-Голос готов</span>
+                            <span id="voicePreviewLangBadge" style="font-size: 0.65rem; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 6px;">🌐 RU</span>
                         </div>
-
-                        <!-- ДВОЙНОЙ БЛОК: ИСХОДНИК + ПЕРЕВОД -->
-                        <div id="voiceRecognizedTextWrap" style="font-size: 0.82rem; color: var(--text-main); line-height: 1.4; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 8px 12px;">
-                            ⏳ Идёт распознавание и синтез речи...
+                        <div id="voiceRecognizedTextWrap" style="font-size: 0.8rem; color: var(--text-main); line-height: 1.35; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 6px 10px;">
+                            ⏳ Идёт генерация...
                         </div>
-
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <audio id="voicePreviewAudio" controls style="flex: 1; min-width: 180px; height: 34px;"></audio>
-                            <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                                <button type="button" onclick="cancelVoicePreview()" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 10px; padding: 6px 12px; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
-                                    ✕ Отмена
-                                </button>
-                                <button type="button" id="btnConfirmSendAiVoice" onclick="confirmSendAiVoice()" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: #ffffff; border-radius: 10px; padding: 6px 16px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">
-                                    <span>➤</span> <span>Отправить в чат</span>
-                                </button>
-                            </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <audio id="voicePreviewAudio" controls style="flex: 1; height: 32px;"></audio>
+                            <button type="button" onclick="cancelVoicePreview()" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
+                                ✕ Отмена
+                            </button>
+                            <button type="button" id="btnConfirmSendAiVoice" onclick="confirmSendAiVoice()" style="background: #10b981; border: none; color: #ffffff; border-radius: 8px; padding: 5px 14px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                ➤ Отправить
+                            </button>
                         </div>
                     </div>
 
+                    <!-- 3. ОСНОВНАЯ СТРОКА ВВОДА (КОМПАКТНАЯ ДЛЯ МОБИЛОК) -->
                     <div class="input-row" id="normalInputRow">
                         <!-- СКРЕПКА -->
                         <button type="button" class="btn-attach" onclick="triggerFileInput()" title="Прикрепить файл">
@@ -1717,15 +1754,15 @@
                         <input type="file" id="mediaFileInput" style="display: none;"
                                accept="image/*,video/*,audio/*" onchange="uploadAndSendMedia(this)">
 
-                        <!-- МИКРОФОН ДЛЯ ЗАПИСИ ГОЛОСОВОГО -->
-                        <button type="button" class="btn-mic" onclick="startVoiceRecording()" title="Записать голосовое сообщение">
+                        <!-- МИКРОФОН -->
+                        <button type="button" class="btn-mic" onclick="startVoiceRecording()" title="Записать голос">
                             🎙️
                         </button>
 
                         <!-- ПОЛЕ ВВОДА ТЕКСТА -->
-                        <textarea id="messageInput" class="chat-textarea" placeholder="Напишите сообщение..." onkeydown="handleInputKeydown(event)"></textarea>
+                        <textarea id="messageInput" class="chat-textarea" placeholder="Сообщение..." onkeydown="handleInputKeydown(event)"></textarea>
 
-                        <!-- 🚀 КНОПКА "ТЕКСТ ➔ В AI-ГОЛОС" -->
+                        <!-- КНОПКА: ТЕКСТ ➔ В AI-ГОЛОСОВОЕ -->
                         <button type="button" class="btn-send" id="btnTextToVoice"
                                 onpointerdown="preventSendBlur(event)"
                                 onclick="convertTextToAiVoice()"
@@ -1734,7 +1771,7 @@
                             ✨🎙️
                         </button>
 
-                        <!-- КНОПКА ОБЫЧНОЙ ТЕКСТОВОЙ ОТПРАВКИ -->
+                        <!-- КНОПКА: ОБЫЧНАЯ ТЕКСТОВАЯ ОТПРАВКА -->
                         <button type="button" class="btn-send" id="btnSendManual"
                                 onpointerdown="preventSendBlur(event)"
                                 onclick="sendManualMessage()"
@@ -1743,15 +1780,15 @@
                         </button>
                     </div>
 
-                    <!-- ИНТЕРФЕЙС ИДЕТ ЗАПИСЬ (СКРЫТ ПО УМОЛЧАНИЮ) -->
-                    <div class="voice-recording-ui" id="voiceRecordingUi">
+                    <!-- 4. ИНТЕРФЕЙС АКТИВНОЙ ЗАПИСИ МИКРОФОНА -->
+                    <div class="voice-recording-ui" id="voiceRecordingUi" style="display: none;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span class="rec-pulse-dot"></span>
                             <span>Запись: <strong id="voiceRecTimer">0:00</strong></span>
                         </div>
                         <div class="voice-rec-actions">
                             <button type="button" class="btn-rec-action btn-rec-cancel" onclick="cancelVoiceRecording()" title="Отменить">❌</button>
-                            <button type="button" class="btn-rec-action btn-rec-send" onclick="stopAndSendVoiceRecording()" title="Отправить голосовое">✅</button>
+                            <button type="button" class="btn-rec-action btn-rec-send" onclick="stopAndSendVoiceRecording()" title="Готово">✅</button>
                         </div>
                     </div>
                 </div>
@@ -3415,45 +3452,77 @@
             hideAllTranslators();
         }
 
-        // 2. ПЕРЕВОД НАПИСАННОГО РУССКОГО ТЕКСТА НА ЯЗЫК КЛИЕНТА
+        // 2. ПЕРЕВОД НАПИСАННОГО РУССКОГО ТЕКСТА НА ЯЗЫК КЛИЕНТА (БРОНЕБОЙНЫЙ)
         async function translateOutgoingText() {
             const input = document.getElementById('messageInput');
             const btn = document.getElementById('btnTranslateOutgoing');
             const revertBtn = document.getElementById('btnRevertOutgoing');
-            if (!input || !activeClientLang) return;
+            if (!input || !btn) return;
 
             const currentText = input.value.trim();
             if (!currentText) {
                 alert("Сначала напишите текст ответа по-русски!");
+                input.focus();
                 return;
             }
+
+            // 🚀 ЗАЩИТА 1: Если язык не определен — берем по умолчанию 'en' (английский), а не выходим молча!
+            const targetLang = activeClientLang || 'en';
 
             // Запоминаем исходный русский черновик:
             originalRussianDraft = currentText;
 
             const originalBtnText = btn.textContent;
-            btn.textContent = '⏳ Перевод...';
+            btn.disabled = true;
+            btn.textContent = '⏳...';
 
+            // Вспомогательная функция успешной подстановки:
+            function applyTranslation(translatedText) {
+                input.value = translatedText;
+                btn.textContent = `🌐 RU ➔ ${targetLang.toUpperCase()}`;
+                if (revertBtn) revertBtn.style.display = 'inline-block';
+                btn.disabled = false;
+                input.focus();
+            }
+
+            // ЛИНИЯ 1: Прямой бесплатный Google Translate из браузера (быстро, 30 мс)
             try {
-                const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=${activeClientLang}&dt=t&q=${encodeURIComponent(currentText)}`;
+                const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=${targetLang}&dt=t&q=${encodeURIComponent(currentText)}`;
                 const res = await fetch(translateUrl);
                 if (res.ok) {
                     const data = await res.json();
                     if (Array.isArray(data) && data[0]) {
                         const translated = data[0].map(item => item[0]).filter(Boolean).join('');
-                        if (translated) {
-                            input.value = translated; // Заменяем текст прямо в поле ввода!
-                            btn.textContent = originalBtnText;
-                            if (revertBtn) revertBtn.style.display = 'inline-block';
-                            input.focus();
+                        if (translated && translated.trim().toLowerCase() !== currentText.toLowerCase()) {
+                            applyTranslation(translated);
                             return;
                         }
                     }
                 }
             } catch (e) {
-                console.error("Ошибка перевода исходящего сообщения:", e);
+                console.warn("Прямой Google заблокирован, переходим на серверную линию перевода...", e);
             }
 
+            // 🚀 ЗАЩИТА 2: Серверный резервный переводчик (если AdBlock заблокировал Google)
+            try {
+                const resServer = await fetch('/inbox/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: currentText })
+                });
+
+                if (resServer.ok) {
+                    const dataServer = await resServer.json();
+                    if (dataServer && dataServer.translation) {
+                        applyTranslation(dataServer.translation);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.error("Ошибка серверного перевода:", err);
+            }
+
+            btn.disabled = false;
             btn.textContent = originalBtnText;
             alert("Не удалось перевести текст на язык собеседника.");
         }
