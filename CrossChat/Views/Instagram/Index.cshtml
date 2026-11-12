@@ -554,8 +554,8 @@
                 </div>
             </div>
 
-            <!-- ТРИ ЭЛЕГАНТНЫЕ КНОПКИ ДЕЙСТВИЯ -->
-            <div class="action-buttons-group" style="grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <!-- ЧЕТЫРЕ ЭЛЕГАНТНЫЕ КНОПКИ ДЕЙСТВИЯ -->
+            <div class="action-buttons-group" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
                 <a href="/auth/console?provider=instagram&botId=@Model.Id&username=@Model.Username" class="btn btn-console" style="padding: 12px 6px;">
                     💻 Консоль
                 </a>
@@ -564,6 +564,10 @@
                 </a>
                 <a href="/instagram/analytics?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%); color: white; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.25); padding: 12px 6px;">
                     📊 Аналитика
+                </a>
+                <!-- 🚀 4. НОВАЯ КНОПКА: АНАЛИЗ AI ДИАЛОГОВ -->
+                <a href="/instagram/ai-chats?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); padding: 12px 6px;" title="История общения и анализ клиентов ИИ">
+                    🤖 AI Диалоги
                 </a>
             </div>
 

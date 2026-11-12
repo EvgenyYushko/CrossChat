@@ -1,0 +1,540 @@
+@model List<CrossChat.Controllers.InstagramController.InstagramCustomerAnalysisDto>
+@{
+    var settings = ViewBag.Settings as CrossChat.Data.Entities.InstagramSettings;
+    var botUsername = settings?.Username ?? "Instagram";
+    var currentProfileId = settings?.ProfileId ?? 0;
+    var currentBotId = ViewBag.BotId ?? 0;
+    ViewData["Title"] = "AI Диалоги — @" + botUsername;
+}
+
+@section Styles {
+    <style>
+        .ai-chats-container {
+            max-width: 1000px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .header-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 1.5rem;
+        }
+
+        .kpi-box {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .kpi-num {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .kpi-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .search-box {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 16px;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: #10b981;
+        }
+
+        .customers-table-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .table-chats {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            text-align: left;
+        }
+
+        .table-chats th {
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .table-chats td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--glass-border);
+            color: var(--text-main);
+            vertical-align: middle;
+        }
+
+        .table-row-customer {
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .table-row-customer:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .table-row-customer.expanded {
+            background: rgba(16, 185, 129, 0.05);
+            border-bottom-color: transparent;
+        }
+
+        .cust-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--glass-border);
+            flex-shrink: 0;
+            background: #262626;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.85rem;
+        }
+
+        .badge-responses {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            background: rgba(99, 102, 241, 0.12);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+        }
+
+        .badge-today {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-view-vision {
+            background: rgba(236, 72, 153, 0.12);
+            border: 1px solid rgba(236, 72, 153, 0.3);
+            color: #f472b6;
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .btn-view-vision:hover {
+            background: #ec4899;
+            color: #fff;
+        }
+
+        .row-details-chat {
+            display: none;
+            background: rgba(15, 23, 42, 0.4);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .chat-preview-box {
+            padding: 1rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .mini-bubble {
+            max-width: 75%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            line-height: 1.35;
+        }
+
+        .mini-incoming {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            border-bottom-left-radius: 2px;
+        }
+
+        .mini-outgoing {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35));
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .modal-vision-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-vision-card {
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.75rem;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            position: relative;
+        }
+    </style>
+}
+
+@section NavbarActions {
+    <div style="display:flex; align-items:center; gap:8px;">
+        <a href="/instagram?botId=@currentBotId" style="color:var(--text-secondary); text-decoration:none; font-size:0.88rem; font-weight:600;">
+            ← Настройки Instagram
+        </a>
+    </div>
+}
+
+<div class="ai-chats-container">
+
+    <!-- ШАПКА -->
+    <div class="header-card">
+        <div>
+            <h2 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: var(--text-main);">
+                🤖 Анализ AI Общения
+            </h2>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                Бот: <strong style="color: #e1306c;">&#64;@botUsername</strong> • Вся история контактов и сохранённый контекст ИИ
+            </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+            <a href="/inbox?profileId=@currentProfileId&network=INSTAGRAM" class="btn btn-autoposting" style="padding: 8px 14px; font-size:0.85rem; text-decoration:none;">
+                💬 Открыть в Инбоксе
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI РЯД -->
+    @{
+        int totalCustomers = Model.Count;
+        int activeToday = Model.Count(c => c.TodayResponsesCount > 0);
+        int totalResponses = Model.Sum(c => c.TotalResponsesCount);
+        int withVision = Model.Count(c => !string.IsNullOrEmpty(c.AppearanceDescription));
+    }
+    <div class="kpi-row">
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #10b981;">@totalCustomers</span>
+            <span class="kpi-label">Собеседников</span>
+        </div>
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #38bdf8;">@activeToday</span>
+            <span class="kpi-label">Общались сегодня</span>
+        </div>
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #a855f7;">@totalResponses</span>
+            <span class="kpi-label">Всего ответов ИИ</span>
+        </div>
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #ec4899;">@withVision</span>
+            <span class="kpi-label">Анализов фото в БД</span>
+        </div>
+    </div>
+
+    <!-- ПОИСК ПО ИМЕНИ/ID -->
+    <div class="search-box">
+        <input type="text" id="searchInput" class="search-input" placeholder="🔍 Поиск по никнейму или ID пользователя..." oninput="onSearchTable(this.value)">
+    </div>
+
+    <!-- ТАБЛИЦА -->
+    <div class="customers-table-card">
+        <div class="table-responsive">
+            <table class="table-chats">
+                <thead>
+                    <tr>
+                        <th>Клиент</th>
+                        <th>Ответов ИИ</th>
+                        <th>Последний диалог</th>
+                        <th>Взгляд ИИ (Внешность)</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="customersTableBody">
+                    @if (Model == null || Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                📭 Пока не было диалогов. Как только бот ответит первому человеку в Direct, он появится здесь!
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var c in Model)
+                        {
+                            string lastDateText = c.LastRespondedAt.HasValue
+                                ? c.LastRespondedAt.Value.ToString("dd.MM.yyyy HH:mm")
+                                : "Ещё не ответил";
+
+                            string displayName = !string.IsNullOrEmpty(c.Username) ? ("@" + c.Username) : "Instagram User";
+
+                            <tr class="table-row-customer" id="row_@c.CustomerId" onclick="toggleChatHistory(@c.CustomerId, '@c.SenderId', this)">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        @if (!string.IsNullOrEmpty(c.ProfilePictureUrl))
+                                        {
+                                            <img src="@c.ProfilePictureUrl" class="cust-avatar" alt="Avatar" referrerpolicy="no-referrer">
+                                        }
+                                        else
+                                        {
+                                            <div class="cust-avatar" style="background:#e1306c; color:white;">
+                                                @(string.IsNullOrEmpty(c.Username) ? "U" : c.Username.Substring(0, 1).ToUpper())
+                                            </div>
+                                        }
+                                        <div style="display:flex; flex-direction:column;">
+                                            <span style="font-weight:700; color:var(--text-main);" class="cust-name">
+                                                @displayName
+                                            </span>
+                                            <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace;">
+                                                ID: @c.SenderId
+                                            </span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
+                                        <span class="badge-responses badge-today" title="Ответов за последние 24 часа">
+                                            ⚡ Сегодня: @c.TodayResponsesCount
+                                        </span>
+                                        <span class="badge-responses" title="Всего ответов за все время">
+                                            Всего: @c.TotalResponsesCount
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size:0.85rem; font-weight:600; color:var(--text-main);">
+                                        @lastDateText
+                                    </div>
+                                    <div style="font-size:0.72rem; color:var(--text-secondary);">
+                                        Создан: @c.CreatedAt.ToString("dd.MM.yyyy")
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(c.AppearanceDescription) && !c.AppearanceDescription.Contains("disabled"))
+                                    {
+                                        <button type="button" class="btn-view-vision" 
+                                                data-username="@(c.Username ?? "Клиент")"
+                                                data-description="@c.AppearanceDescription"
+                                                onclick="openVisionModalFromBtn(this, event)">
+                                            <span>👁️</span> Внешность в БД
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.6;">Не анализировалось</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="arrow-indicator" style="font-size:0.9rem; color:var(--text-secondary); transition:transform 0.2s;">▼</span>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <tr class="row-details-chat" id="details_@c.CustomerId">
+                                <td colspan="5" style="padding: 0;">
+                                    <div class="chat-preview-box" id="chatBox_@c.CustomerId">
+                                        <div style="color:var(--text-secondary); font-size:0.8rem; text-align:center; padding:10px;">
+                                            ⏳ Загрузка сообщений из Инбокса...
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО ОПИСАНИЯ ВНЕШНОСТИ -->
+<div id="visionModal" class="modal-vision-overlay" onclick="closeVisionModal()">
+    <div class="modal-vision-card" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--glass-border); padding-bottom:8px;">
+            <h3 id="visionModalTitle" style="margin:0; font-size:1.1rem; color:#ec4899; font-weight:800;">👁️ Как ИИ видит клиента</h3>
+            <button type="button" onclick="closeVisionModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.4rem; cursor:pointer;">&times;</button>
+        </div>
+        <div id="visionModalText" style="font-size:0.9rem; line-height:1.5; color:var(--text-main); font-style:italic; background:rgba(0,0,0,0.25); padding:12px; border-radius:10px; border:1px solid var(--glass-border);"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const botId = Number('@currentBotId') || 0;
+        const profileId = Number('@currentProfileId') || 0;
+        const loadedChatsCache = new Set();
+
+        // 1. РАСКРЫТИЕ АККОРДЕОНА И ЛЕНИВАЯ ЗАГРУЗКА ПЕРЕПИСКИ
+        async function toggleChatHistory(customerId, senderId, rowElement) {
+            const detailsRow = document.getElementById(`details_${customerId}`);
+            const arrow = rowElement.querySelector('.arrow-indicator');
+            const chatBox = document.getElementById(`chatBox_${customerId}`);
+
+            const isCurrentlyOpen = detailsRow.style.display === 'table-row';
+
+            if (isCurrentlyOpen) {
+                detailsRow.style.display = 'none';
+                rowElement.classList.remove('expanded');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+                return;
+            }
+
+            detailsRow.style.display = 'table-row';
+            rowElement.classList.add('expanded');
+            if (arrow) arrow.style.transform = 'rotate(180deg)';
+
+            if (loadedChatsCache.has(customerId)) return;
+
+            try {
+                const res = await fetch(`/instagram/ai-chats/messages?botId=${botId}&senderId=${encodeURIComponent(senderId)}`);
+                const data = await res.json();
+
+                chatBox.innerHTML = '';
+
+                if (data && data.messages && data.messages.length > 0) {
+                    data.messages.forEach(m => {
+                        const bubble = document.createElement('div');
+                        bubble.className = `mini-bubble ${m.isIncoming ? 'mini-incoming' : 'mini-outgoing'}`;
+                        const prefix = m.isIncoming ? '👤 Клиент' : (m.isSentByBot ? '🤖 ИИ-Бот' : '👤 Вы');
+                        bubble.innerHTML = `
+                            <div style="font-size:0.7rem; opacity:0.6; margin-bottom:2px;">${prefix} • ${m.time}</div>
+                            <div>${escapeHtml(m.text || '[Медиа]')}</div>
+                        `;
+                        chatBox.appendChild(bubble);
+                    });
+
+                    const footerLink = document.createElement('div');
+                    footerLink.style.cssText = 'text-align:center; padding-top:6px;';
+                    footerLink.innerHTML = `<a href="/inbox?profileId=${profileId}&network=INSTAGRAM" target="_blank" style="color:#10b981; font-size:0.78rem; text-decoration:none; font-weight:700;">Перейти к полному диалогу в Инбоксе ↗️</a>`;
+                    chatBox.appendChild(footerLink);
+
+                    loadedChatsCache.add(customerId);
+                } else {
+                    chatBox.innerHTML = `
+                        <div style="color:var(--text-secondary); font-size:0.8rem; text-align:center; padding:12px;">
+                            Диалог чист (сообщения были архивированы или ещё не сохранены в Инбокс).
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                chatBox.innerHTML = '<div style="color:#ef4444; font-size:0.8rem; text-align:center;">Ошибка загрузки сообщений</div>';
+            }
+        }
+
+        // 2. БЕЗОПАСНАЯ МОДАЛКА ОПИСАНИЯ ВНЕШНОСТИ ЧЕРЕЗ DATA-АТРИБУТ
+        function openVisionModalFromBtn(btn, e) {
+            if (e) e.stopPropagation();
+            const username = btn.getAttribute('data-username') || 'Клиент';
+            const description = btn.getAttribute('data-description') || 'Описание отсутствует';
+            showVisionModal(username, description);
+        }
+
+        function showVisionModal(username, description) {
+            document.getElementById('visionModalTitle').textContent = `👁️ Внешность @@${username} в базе данных`;
+            document.getElementById('visionModalText').textContent = description;
+            document.getElementById('visionModal').style.display = 'flex';
+        }
+
+        function closeVisionModal() {
+            document.getElementById('visionModal').style.display = 'none';
+        }
+
+        // 3. ПОИСК ПО ТАБЛИЦЕ
+        function onSearchTable(query) {
+            query = query.toLowerCase().trim();
+            const rows = document.querySelectorAll('.table-row-customer');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                const match = text.includes(query);
+                r.style.display = match ? 'table-row' : 'none';
+                const detailsId = r.id.replace('row_', 'details_');
+                const details = document.getElementById(detailsId);
+                if (details && !match) details.style.display = 'none';
+            });
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+    </script>
+}

@@ -691,6 +691,105 @@ namespace CrossChat.Controllers
 
 			return Ok(new { success = true });
 		}
+
+		// ==========================================================
+		// 🚀 СТРАНИЦА: АНАЛИЗ ДИАЛОГОВ И АУДИТОРИИ ИИ (/instagram/ai-chats)
+		// ==========================================================
+		[HttpGet("ai-chats")]
+		public async Task<IActionResult> AiChats(int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null) return NotFound();
+
+			var last24h = DateTime.UtcNow.AddDays(-1);
+
+			// Загружаем клиентов со счетчиками за 1 быстрый SQL-запрос
+			var customers = await _db.InstagramBotCustomers
+				.AsNoTracking()
+				.Where(c => c.InstagramSettingsId == botId)
+				.Select(c => new InstagramCustomerAnalysisDto
+				{
+					CustomerId = c.Id,
+					SenderId = c.InstagramSenderId,
+					Username = c.Username,
+					ProfilePictureUrl = c.ProfilePictureUrl,
+					AppearanceDescription = c.AppearanceDescription,
+					IsIgnored = c.IsIgnored,
+					TotalResponsesCount = c.ResponseLogs.Count,
+					TodayResponsesCount = c.ResponseLogs.Count(l => l.RespondedAt >= last24h),
+					LastRespondedAt = c.ResponseLogs.Max(l => (DateTime?)l.RespondedAt),
+					CreatedAt = c.CreatedAt
+				})
+				// 🚀 Сортировка: сверху те, кому ответили недавно, затем старые
+				.OrderByDescending(c => c.LastRespondedAt ?? c.CreatedAt)
+				.ToListAsync();
+
+			ViewBag.Settings = settings;
+			ViewBag.BotId = botId;
+
+			return View("AiChats", customers);
+		}
+
+		/// <summary>
+		/// Ленивая AJAX-подгрузка сообщений из Инбокса при раскрытии строки (0 мс задержки для таблицы!)
+		/// </summary>
+		[HttpGet("ai-chats/messages")]
+		public async Task<IActionResult> GetCustomerChatMessages([FromQuery] int botId, [FromQuery] string senderId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var isOwner = await _db.InstagramSettings.AnyAsync(s => s.Id == botId && s.UserId == userId);
+			if (!isOwner) return Unauthorized();
+
+			var conversation = await _db.InboxConversations
+				.AsNoTracking()
+				.Include(c => c.Messages)
+				.FirstOrDefaultAsync(c => c.NetworkType == (int)NetworkType.Instagram &&
+										  c.BotId == botId &&
+										  c.ExternalUserId == senderId);
+
+			if (conversation == null || !conversation.Messages.Any())
+			{
+				return Json(new { messages = new List<object>() });
+			}
+
+			// Берем последние 20 сообщений (хронологически)
+			var messages = conversation.Messages
+				.OrderBy(m => m.CreatedAtUtc)
+				.TakeLast(20)
+				.Select(m => new
+				{
+					id = m.Id,
+					text = m.Text,
+					isIncoming = m.IsIncoming,
+					isSentByBot = m.IsSentByBot,
+					time = m.CreatedAtUtc.ToString("dd.MM HH:mm"),
+					mediaUrl = m.MediaUrl,
+					mediaType = m.MediaType
+				})
+				.ToList();
+
+			return Json(new { messages, conversationId = conversation.Id });
+		}
+
+		public class InstagramCustomerAnalysisDto
+		{
+			public int CustomerId { get; set; }
+			public string SenderId { get; set; } = string.Empty;
+			public string? Username { get; set; }
+			public string? ProfilePictureUrl { get; set; }
+			public string? AppearanceDescription { get; set; }
+			public bool IsIgnored { get; set; }
+			public int TotalResponsesCount { get; set; }
+			public int TodayResponsesCount { get; set; }
+			public DateTime? LastRespondedAt { get; set; }
+			public DateTime CreatedAt { get; set; }
+		}
 	}
 
 	public class IgReplyCommentDto
