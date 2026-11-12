@@ -217,6 +217,14 @@ builder.Services.AddQuartz(q =>
 		.ForJob(bskyRadarKey)
 		.WithIdentity($"{nameof(BlueSkyHashtagEngagementJob)}-Trigger")
 		.WithSimpleSchedule(x => x.WithIntervalInHours(1).RepeatForever()));
+
+	// 14. Мониторинг размера базы данных (каждое 1-е число месяца в 04:00 утра)
+	var dbStatsKey = new JobKey(nameof(DatabaseStatsJob));
+	q.AddJob<DatabaseStatsJob>(opts => opts.WithIdentity(dbStatsKey));
+	q.AddTrigger(opts => opts
+		.ForJob(dbStatsKey)
+		.WithIdentity($"{nameof(DatabaseStatsJob)}-Trigger")
+		.WithCronSchedule("0 10 7 ? * MON"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
