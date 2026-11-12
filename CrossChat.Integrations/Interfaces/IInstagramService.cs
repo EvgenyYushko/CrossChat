@@ -62,7 +62,11 @@ namespace CrossChat.Integrations.Interfaces
 
 		Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId);
 
-		Task<string> GetUserContextForAiAsync(string userId, string accessToken);
+		Task<(string Context, string? NewAppearance)> GetUserContextForAiAsync(
+			string userId, 
+			string accessToken, 
+			bool processPhotos = false, 
+			string? existingAppearance = null);
 
 
 		// Media part

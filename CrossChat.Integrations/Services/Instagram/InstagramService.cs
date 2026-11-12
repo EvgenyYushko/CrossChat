@@ -486,39 +486,53 @@ public partial class InstagramService : IInstagramService
 
 	public static ConcurrentDictionary<string, string> ContextCache = new();
 
-	public async Task<string> GetUserContextForAiAsync(string userId, string accessToken)
+	/// <summary>
+	/// Формирует контекст о клиенте: учитывает настройки анализа фото и использует уже сохраненное описание из БД
+	/// </summary>
+	public async Task<(string Context, string? NewAppearance)> GetUserContextForAiAsync(
+		string userId,
+		string accessToken,
+		bool processPhotos = false,
+		string? existingAppearance = null)
 	{
-		// 1. Проверка КЭША
-		if (ContextCache.TryGetValue(userId, out string cachedContext))
-		{
-			_logger.LogInformation($"Взяли текст для userId: {userId} из кеша");
-			return cachedContext;
-		}
-
 		try
 		{
-			// 2. Запрос к API Instagram
+			// 1. Запрашиваем свежие данные из Instagram (имя, подписчики)
 			var userProfile = await GetInstagramUserProfileAsync(userId, accessToken);
-			if (userProfile == null) return "";
+			if (userProfile == null) return ("", null);
 
-			// 3. Анализ внешности (Vision)
 			string appearanceDescription = "The profile photo is missing.";
-			if (!string.IsNullOrEmpty(userProfile.ProfilePicUrl))
+			string? newAppearance = null;
+
+			// 2. ПРОВЕРКА КЭША ВНЕШНОСТИ:
+			// А. Если внешность уже была один раз распознана и лежит в БД — берем её мгновенно (0 токенов!)
+			if (!string.IsNullOrEmpty(existingAppearance))
+			{
+				appearanceDescription = existingAppearance;
+			}
+			// Б. Если фото есть И в настройках ВКЛЮЧЕН анализ фото (processPhotos == true):
+			else if (processPhotos && !string.IsNullOrEmpty(userProfile.ProfilePicUrl))
 			{
 				try
 				{
-					// Скачиваем фото в байты/base64 (используем ваш существующий метод)
+					_logger.LogInformation("📸 [Vision] Анализируем аватарку клиента {User} через Gemini Vision...", userProfile.Username);
 					var base64Image = await DownloadImageAsBase64(userProfile.ProfilePicUrl);
 					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", null);
+					newAppearance = appearanceDescription; // Запоминаем для сохранения в БД
 				}
 				catch (Exception ex)
 				{
-					_logger.LogInformation($"[Profile Vision Error]: {ex.Message}");
-					appearanceDescription = "Failed to upload profile photo.";
+					_logger.LogWarning("[Profile Vision Error]: {Msg}", ex.Message);
+					appearanceDescription = "Failed to analyze profile photo.";
 				}
 			}
+			// В. Если анализ фото ВЫКЛЮЧЕН пользователем в настройках:
+			else if (!processPhotos)
+			{
+				appearanceDescription = "Photo analysis is disabled in settings.";
+			}
 
-			// 4. Формирование текста контекста
+			// 3. Формирование текста контекста для системного промпта
 			var sb = new StringBuilder();
 			sb.AppendLine("INFORMATION ABOUT THE INTERLOCUTOR:");
 			sb.AppendLine($"Name: {userProfile.Name ?? "Not specified"}");
@@ -529,18 +543,12 @@ public partial class InstagramService : IInstagramService
 			sb.AppendLine($"Verification check mark: {(userProfile.IsVerified ? "Yes" : "No")}");
 			sb.AppendLine($"Appearance (based on profile photo): {appearanceDescription}");
 
-			string finalContext = sb.ToString();
-
-			// 5. Сохранение в кэш
-			ContextCache.TryAdd(userId, finalContext);
-
-			_logger.LogInformation($"[User Profile] Сформирован контекст для {userProfile.Username}");
-			return finalContext;
+			return (sb.ToString(), newAppearance);
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError($"Ошибка получения профиля: {ex.Message}");
-			return "";
+			_logger.LogError(ex, "Ошибка получения профиля {UserId}", userId);
+			return ("", null);
 		}
 	}
 

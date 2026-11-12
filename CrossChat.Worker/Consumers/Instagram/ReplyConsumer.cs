@@ -330,7 +330,42 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				// 4. Отправляем в ИИ (через твой gRPC сервис)
 				var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
 
-				string userContextInfo = await _instaService.GetUserContextForAiAsync(senderId, accessInstaToken);
+				// =========================================================================
+				// 🚀 ДВУХУРОВНЕВЫЙ КЭШ: REDIS (24 ЧАСА) + БАЗА ДАННЫХ (НАВСЕГДА)
+				// =========================================================================
+				var contextRedisKey = $"ig:user_context:{senderId}";
+				string? userContextInfo = await _redis.StringGetAsync(contextRedisKey);
+
+				if (string.IsNullOrEmpty(userContextInfo))
+				{
+					// Передаем флаг настроек ProcessPhotos и уже имеющееся в БД описание внешности:
+					var (contextText, newAppearance) = await _instaService.GetUserContextForAiAsync(
+						senderId, 
+						accessInstaToken, 
+						processPhotos: settings.ProcessPhotos, 
+						existingAppearance: customer.AppearanceDescription);
+
+					userContextInfo = contextText;
+
+					// Сохраняем в Redis на 24 часа (переживает любые перезапуски серверов!)
+					if (!string.IsNullOrEmpty(userContextInfo))
+					{
+						await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
+					}
+
+					// Если ИИ впервые описал внешность — НАВСЕГДА сохраняем в БД клиенту!
+					if (!string.IsNullOrEmpty(newAppearance) && customer.AppearanceDescription != newAppearance)
+					{
+						customer.AppearanceDescription = newAppearance;
+						await _db.SaveChangesAsync();
+						_logger.LogInformation("💾 [Profile Vision] Описание внешности клиента @{User} навсегда зафиксировано в БД!", customer.Username);
+					}
+				}
+				else
+				{
+					_logger.LogInformation("⚡ [Profile Context] Взят готовый контекст для @{User} из Redis (0 запросов к API/ИИ)", customer.Username);
+				}
+
 				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
 					+ userContextInfo;
 

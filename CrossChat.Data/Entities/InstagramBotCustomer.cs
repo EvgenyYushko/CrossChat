@@ -27,6 +27,9 @@ public class InstagramBotCustomer
 
 	public DateTime CreatedAt { get; set; } = DateTimeNow;
 
+	// Описание внешности от Gemini Vision (кэшируется навсегда в БД, 0 повторных запросов)
+	public string? AppearanceDescription { get; set; }
+
 	// Навигационное свойство для логов
 	public ICollection<BotResponseLog> ResponseLogs { get; set; } = new List<BotResponseLog>();
 }
