@@ -184,8 +184,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (messageCount == settings.MaxAnswerMessagesCount)
 			{
-				await _instaService.SendMessageAsync(senderId, "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡", accessInstaToken);
-				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {customer.Username}");
+				// 🚀 БЕРЕМ ТЕКСТ ИЗ НАСТРОЕК БД (с поддержкой Spintax)
+				string rawLimitMessage = !string.IsNullOrWhiteSpace(settings.DailyLimitMessage)
+					? settings.DailyLimitMessage
+					: "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡";
+
+				// Применяем Spintax-рандомайзер (выберет случайный вариант, если есть скобки {})
+				string finalFarewellMessage = InstagramCommentEngine.GetRandomTemplate(rawLimitMessage);
+
+				await _instaService.SendMessageAsync(senderId, finalFarewellMessage, accessInstaToken);
+				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {customer.Username}: «{finalFarewellMessage}»");
 				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 				return;
 			}

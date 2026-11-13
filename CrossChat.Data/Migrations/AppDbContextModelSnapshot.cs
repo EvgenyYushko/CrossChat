@@ -598,6 +598,9 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("CommentTemplates")
                         .HasColumnType("text");
 
+                    b.Property<string>("DailyLimitMessage")
+                        .HasColumnType("text");
+
                     b.Property<string>("DailyStoryTime")
                         .IsRequired()
                         .HasMaxLength(5)

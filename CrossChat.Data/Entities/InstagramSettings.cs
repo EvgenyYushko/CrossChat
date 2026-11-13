@@ -66,6 +66,9 @@ public class InstagramSettings
 	// 1 = Только ИИ, 2 = Только шаблоны (дефолт), 3 = Комбинированный
 	public int CommentReplyMode { get; set; } = 2;
 
+	// Сообщение-прощание при исчерпании суточного лимита
+	public string? DailyLimitMessage { get; set; } = "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡";
+
 	// Список шаблонов для комментариев (каждый с новой строки или массив)
 	public string? CommentTemplates { get; set; } = "Спасибо за ваш комментарий! ❤️\nРады, что вам понравилось! 😊\nСпасибо за отклик! ✨";
 }

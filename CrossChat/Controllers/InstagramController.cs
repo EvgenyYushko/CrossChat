@@ -134,6 +134,7 @@ namespace CrossChat.Controllers
 			bool processAudios,
 			string systemPrompt,
 			string commentPrompt,
+			string? dailyLimitMessage, 
 			bool isReactionsEnabled,
 			string allowedReactions,
 			int maxAnswerMessagesCount,
@@ -175,6 +176,7 @@ namespace CrossChat.Controllers
 
 				settings.SystemPrompt = systemPrompt ?? "";
 				settings.CommentPrompt = commentPrompt ?? "";
+				settings.DailyLimitMessage = string.IsNullOrWhiteSpace(dailyLimitMessage) ? null : dailyLimitMessage.Trim();
 
 				settings.ProcessPhotos = processPhotos;
 				settings.ProcessVideos = processVideos;
