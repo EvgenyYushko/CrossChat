@@ -1552,7 +1552,7 @@
 
             function formatToInput(date) {
                 const pad = (num) => num.toString().padStart(2, '0');
-                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T12:00`;
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
             }
 
             // Функция синхронизации массива selectedFiles с элементом input[type="file"]
@@ -2383,6 +2383,8 @@
                     updateTelegramSpoilerVisibility();
 
                     const currentNetwork = "@ViewBag.Network";
+                    const currentProfId = typeof currentProfileId !== 'undefined' ? currentProfileId : ("@ViewBag.ProfileId" || "default");
+
                     const postForm = document.getElementById('postForm');
                     if (postForm) postForm.action = "/planner/create";
 
@@ -2402,6 +2404,7 @@
                     const netSelectGroup = document.getElementById('networkSelectGroup');
                     const defaultCaptionGroup = document.getElementById('defaultCaptionGroup');
 
+                    // 1. Восстановление локации (местоположения)
                     const stickyId = localStorage.getItem('crosschat_last_loc_id');
                     const stickyName = localStorage.getItem('crosschat_last_loc_name');
 
@@ -2419,6 +2422,7 @@
                         if (typeof clearLocationSelection === 'function') clearLocationSelection();
                     }
 
+                    // 2. Восстановление соцсетей
                     if (currentNetwork === "All") {
                         if (netSelectGroup) netSelectGroup.style.display = 'block';
                         const unifiedTextGroup = document.getElementById('unifiedTextGroup');
@@ -2431,8 +2435,15 @@
                             defCapInput.value = "";
                         }
 
+                        // 🚀 ДОСТАЕМ СОХРАНЕННЫЙ НАБОР СОЦСЕТЕЙ ИЗ ПАМЯТИ:
+                        const savedNetsJson = localStorage.getItem(`crosschat_last_nets_${currentProfId}`);
+                        let savedNets = [];
+                        if (savedNetsJson) {
+                            try { savedNets = JSON.parse(savedNetsJson) || []; } catch(e){}
+                        }
+
                         document.querySelectorAll('input[name="selectedNetworks"]').forEach(cb => {
-                            cb.checked = false;
+                            cb.checked = savedNets.includes(cb.value);
                         });
                     } else {
                         if (netSelectGroup) netSelectGroup.style.display = 'none';
@@ -2447,10 +2458,21 @@
                         }
                     }
 
-                    let selectedDate = info.date;
-                    if (info.allDay) selectedDate.setHours(12, 0);
+                    // 🚀 3. ВОССТАНОВЛЕНИЕ ВРЕМЕНИ ПУБЛИКАЦИИ (ВМЕСТО ПРИНУДИТЕЛЬНЫХ 12:00)
+                    let selectedDate = new Date(info.date);
+                    const savedTime = localStorage.getItem(`crosschat_last_time_${currentProfId}`) || "12:00";
+                    const [savedH, savedM] = savedTime.split(':').map(Number);
+                    selectedDate.setHours(savedH || 12, savedM || 0, 0, 0);
 
                     if (dateInput) dateInput.value = formatToInput(selectedDate);
+
+                    // 🚀 4. ВОССТАНОВЛЕНИЕ ГАЛОЧКИ ПЕРВОГО КОММЕНТАРИЯ
+                    const isCommentSaved = localStorage.getItem(`crosschat_last_has_comment_${currentProfId}`) === 'true';
+                    const commentCb = document.getElementById('hasFirstCommentCheckbox');
+                    if (commentCb) {
+                        commentCb.checked = isCommentSaved;
+                        if (typeof toggleFirstCommentMode === 'function') toggleFirstCommentMode();
+                    }
 
                     // Открываем модальное окно безопасно:
                     const modalElem = document.getElementById('postModal');
@@ -2459,9 +2481,12 @@
                     // Замораживаем скролл заднего фона с календарём:
                     document.body.classList.add('modal-open');
 
+                    // 🚀 5. ОБНОВЛЯЕМ ВСЕ ЗАВИСИМЫЕ БЛОКИ ПОД ВОССТАНОВЛЕННЫЕ СОЦСЕТИ
                     if (typeof updateTelegramPaidVisibility === 'function') updateTelegramPaidVisibility();
                     if (typeof updateTelegramButtonVisibility === 'function') updateTelegramButtonVisibility();
+                    if (typeof updateTelegramSpoilerVisibility === 'function') updateTelegramSpoilerVisibility();
                     if (typeof updateFirstCommentVisibility === 'function') updateFirstCommentVisibility();
+                    if (typeof updateYouTubePrivacyVisibility === 'function') updateYouTubePrivacyVisibility();
 
                     const createGroup = document.getElementById('recurrenceCreateGroup');
                     if (createGroup) createGroup.style.display = 'block';
@@ -2473,7 +2498,6 @@
 
                     const privacySelect = document.getElementById('youtubePrivacySelect');
                     if (privacySelect) privacySelect.value = "public";
-                    if (typeof updateYouTubePrivacyVisibility === 'function') updateYouTubePrivacyVisibility();
                 }
                 });
                 calendar.render();
@@ -2854,6 +2878,7 @@
                 const form = document.getElementById('postForm');
                 const currentNetwork = "@ViewBag.Network";
                 const selectedNets = form.querySelectorAll('input[name="selectedNetworks"]:checked');
+                const currentProfileId = form.querySelector('[name="profileId"]')?.value || "@ViewBag.ProfileId" || "default";
 
                 if (currentNetwork === "All" && selectedNets.length === 0) {
                     alert("Пожалуйста, выберите хотя бы одну социальную сеть для публикации поста!");
@@ -3035,6 +3060,27 @@
                 formData.append('updateSeries', updateSeries ? 'true' : 'false');
 
                 formData.append('youtubePrivacy', document.getElementById('youtubePrivacySelect')?.value || 'public');
+
+                // ==========================================================
+                // 🚀 ЗАПОМИНАЕМ ВЫБОР ДЛЯ СЛЕДУЮЩИХ ПОСТОВ:
+                // ==========================================================
+                // 1. Сохраняем набор выбранных соцсетей:
+                if (currentNetwork === "All" && selectedNets.length > 0) {
+                    const netsToSave = Array.from(selectedNets).map(cb => cb.value);
+                    localStorage.setItem(`crosschat_last_nets_${currentProfileId}`, JSON.stringify(netsToSave));
+                }
+
+                // 2. Сохраняем время публикации (HH:mm):
+                const dateVal = form.querySelector('[name="showDate"]')?.value;
+                if (dateVal && dateVal.includes('T')) {
+                    const timeOnly = dateVal.split('T')[1].substring(0, 5); // "18:30"
+                    localStorage.setItem(`crosschat_last_time_${currentProfileId}`, timeOnly);
+                }
+
+                // 3. Сохраняем состояние галочки первого комментария:
+                const isFirstCommentOn = document.getElementById('hasFirstCommentCheckbox')?.checked ?? false;
+                localStorage.setItem(`crosschat_last_has_comment_${currentProfileId}`, isFirstCommentOn ? 'true' : 'false');
+                // ==========================================================
 
                 xhr.send(formData);
             }
