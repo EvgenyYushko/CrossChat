@@ -167,23 +167,24 @@
         }
 
         .btn-view-vision {
-            background: rgba(236, 72, 153, 0.12);
-            border: 1px solid rgba(236, 72, 153, 0.3);
-            color: #f472b6;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
             border-radius: 8px;
-            padding: 4px 8px;
+            padding: 4px 10px;
             font-size: 0.75rem;
             font-weight: 700;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
             transition: all 0.2s;
         }
 
         .btn-view-vision:hover {
-            background: #ec4899;
-            color: #fff;
+            background: #10b981;
+            color: #ffffff;
+            transform: translateY(-1px);
         }
 
         .row-details-chat {
@@ -244,7 +245,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 20px;
             padding: 1.75rem;
-            max-width: 500px;
+            max-width: 520px;
             width: 100%;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
             position: relative;
@@ -269,7 +270,7 @@
                 🤖 Анализ AI Общения
             </h2>
             <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
-                Бот: <strong style="color: #e1306c;">&#64;@botUsername</strong> • Вся история контактов и сохранённый контекст ИИ
+                Бот: <strong style="color: #e1306c;">&#64;@botUsername</strong> • Вся история контактов и сохранённое досье ИИ
             </div>
         </div>
 
@@ -302,7 +303,7 @@
         </div>
         <div class="kpi-box">
             <span class="kpi-num" style="color: #ec4899;">@withVision</span>
-            <span class="kpi-label">Анализов фото в БД</span>
+            <span class="kpi-label">Досье сохранено</span>
         </div>
     </div>
 
@@ -320,7 +321,7 @@
                         <th>Клиент</th>
                         <th>Ответов ИИ</th>
                         <th>Последний диалог</th>
-                        <th>Взгляд ИИ (Внешность)</th>
+                        <th>Контекст ИИ (Досье)</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -342,6 +343,11 @@
                                 : "Ещё не ответил";
 
                             string displayName = !string.IsNullOrEmpty(c.Username) ? ("@" + c.Username) : "Instagram User";
+
+                            // Формируем красивый текст досье:
+                            string dossierText = !string.IsNullOrWhiteSpace(c.AppearanceDescription)
+                                ? c.AppearanceDescription
+                                : $"ИНФОРМАЦИЯ О СОБЕСЕДНИКЕ:\nНикнейм: @{c.Username ?? "не указан"}\nID в Instagram: {c.SenderId}\nОтветов бота: {c.TotalResponsesCount}\nДата первого контакта: {c.CreatedAt:dd.MM.yyyy HH:mm}\nВнешность: Фото-анализ выключен в настройках.";
 
                             <tr class="table-row-customer" id="row_@c.CustomerId" onclick="toggleChatHistory(@c.CustomerId, '@c.SenderId', this)">
                                 <td>
@@ -385,19 +391,13 @@
                                     </div>
                                 </td>
                                 <td>
-                                    @if (!string.IsNullOrEmpty(c.AppearanceDescription) && !c.AppearanceDescription.Contains("disabled"))
-                                    {
-                                        <button type="button" class="btn-view-vision" 
-                                                data-username="@(c.Username ?? "Клиент")"
-                                                data-description="@c.AppearanceDescription"
-                                                onclick="openVisionModalFromBtn(this, event)">
-                                            <span>👁️</span> Внешность в БД
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.6;">Не анализировалось</span>
-                                    }
+                                    <!-- 🚀 КНОПКА ДОСЬЕ ИИ: всегда доступна и кликабельна -->
+                                    <button type="button" class="btn-view-vision" 
+                                            data-username="@(c.Username ?? "Клиент")"
+                                            data-description="@dossierText"
+                                            onclick="openVisionModalFromBtn(this, event)">
+                                        <span>🧠</span> Досье ИИ
+                                    </button>
                                 </td>
                                 <td>
                                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -424,14 +424,14 @@
 
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО ОПИСАНИЯ ВНЕШНОСТИ -->
+<!-- МОДАЛЬНОЕ ОКНО ДОСЬЕ ИИ -->
 <div id="visionModal" class="modal-vision-overlay" onclick="closeVisionModal()">
     <div class="modal-vision-card" onclick="event.stopPropagation()">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--glass-border); padding-bottom:8px;">
-            <h3 id="visionModalTitle" style="margin:0; font-size:1.1rem; color:#ec4899; font-weight:800;">👁️ Как ИИ видит клиента</h3>
+            <h3 id="visionModalTitle" style="margin:0; font-size:1.1rem; color:#10b981; font-weight:800;">🧠 Досье клиента в памяти ИИ</h3>
             <button type="button" onclick="closeVisionModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.4rem; cursor:pointer;">&times;</button>
         </div>
-        <div id="visionModalText" style="font-size:0.9rem; line-height:1.5; color:var(--text-main); font-style:italic; background:rgba(0,0,0,0.25); padding:12px; border-radius:10px; border:1px solid var(--glass-border);"></div>
+        <div id="visionModalText" style="font-size:0.88rem; line-height:1.6; color:var(--text-main); background:rgba(0,0,0,0.3); padding:14px; border-radius:12px; border:1px solid var(--glass-border); white-space:pre-wrap; font-family:monospace;"></div>
     </div>
 </div>
 
@@ -498,16 +498,15 @@
             }
         }
 
-        // 2. БЕЗОПАСНАЯ МОДАЛКА ОПИСАНИЯ ВНЕШНОСТИ ЧЕРЕЗ DATA-АТРИБУТ
         function openVisionModalFromBtn(btn, e) {
             if (e) e.stopPropagation();
             const username = btn.getAttribute('data-username') || 'Клиент';
-            const description = btn.getAttribute('data-description') || 'Описание отсутствует';
+            const description = btn.getAttribute('data-description') || 'Досье отсутствует';
             showVisionModal(username, description);
         }
 
         function showVisionModal(username, description) {
-            document.getElementById('visionModalTitle').textContent = `👁️ Внешность @@${username} в базе данных`;
+            document.getElementById('visionModalTitle').textContent = "🧠 Досье клиента @@" + username;
             document.getElementById('visionModalText').textContent = description;
             document.getElementById('visionModal').style.display = 'flex';
         }

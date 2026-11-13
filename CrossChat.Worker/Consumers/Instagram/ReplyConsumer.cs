@@ -330,14 +330,18 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				if (!string.IsNullOrEmpty(userContextInfo))
 				{
 					await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
+
+					// 🚀 СОХРАНЯЕМ ВСЁ ДОСЬЕ В БАЗУ ДАННЫХ ДЛЯ ВКЛАДКИ AI-CHATS!
+					customer.AiContext = userContextInfo;
 				}
 
 				if (!string.IsNullOrEmpty(newAppearance) && customer.AppearanceDescription != newAppearance)
 				{
 					customer.AppearanceDescription = newAppearance;
-					await _db.SaveChangesAsync();
-					_logger.LogInformation("💾 [Profile Vision] Описание внешности клиента @{User} сохранено в БД", customer.Username);
 				}
+
+				await _db.SaveChangesAsync();
+				_logger.LogInformation("💾 [Profile Context] Досье клиента @{User} сохранено в БД!", customer.Username);
 			}
 
 			systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"

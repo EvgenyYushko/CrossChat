@@ -538,6 +538,9 @@ namespace CrossChat.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AiContext")
+                        .HasColumnType("text");
+
                     b.Property<string>("AppearanceDescription")
                         .HasColumnType("text");
 

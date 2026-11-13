@@ -30,6 +30,9 @@ public class InstagramBotCustomer
 	// Описание внешности от Gemini Vision (кэшируется навсегда в БД, 0 повторных запросов)
 	public string? AppearanceDescription { get; set; }
 
+	// Полное досье клиента для системного промпта ИИ (подписчики, подписка, галочка, внешность)
+    public string? AiContext { get; set; }
+
 	// Навигационное свойство для логов
 	public ICollection<BotResponseLog> ResponseLogs { get; set; } = new List<BotResponseLog>();
 }

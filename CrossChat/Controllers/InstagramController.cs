@@ -719,6 +719,7 @@ namespace CrossChat.Controllers
 					Username = c.Username,
 					ProfilePictureUrl = c.ProfilePictureUrl,
 					AppearanceDescription = c.AppearanceDescription,
+					AiContext = c.AiContext ?? c.AppearanceDescription, // <-- ПОДТЯГИВАЕМ ДОСЬЕ ИЗ БД
 					IsIgnored = c.IsIgnored,
 					TotalResponsesCount = c.ResponseLogs.Count,
 					TodayResponsesCount = c.ResponseLogs.Count(l => l.RespondedAt >= last24h),
@@ -789,6 +790,7 @@ namespace CrossChat.Controllers
 			public int TodayResponsesCount { get; set; }
 			public DateTime? LastRespondedAt { get; set; }
 			public DateTime CreatedAt { get; set; }
+			public string? AiContext { get; set; }
 		}
 	}
 
