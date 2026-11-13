@@ -743,13 +743,13 @@
                         <textarea name="commentPrompt" rows="3">@Model.CommentPrompt</textarea>
                     </div>
 
-                    <!-- 🚀 НОВОЕ ПОЛЕ: ПРОЩАЛЬНОЕ СООБЩЕНИЕ ПРИ ИСЧЕРПАНИИ ЛИМИТА -->
+                    <!-- 🚀 ПРОМПТ ДЛЯ ПРОЩАНИЯ ИИ -->
                     <div class="form-group">
-                        <label>Сообщение при исчерпании лимита (последний ответ за сутки)</label>
-                        <textarea name="dailyLimitMessage" rows="2" class="text-input"
-                                  placeholder="Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡">@(Model.DailyLimitMessage ?? "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡")</textarea>
+                        <label>Промпт для завершения диалога (при исчерпании лимита)</label>
+                        <textarea name="dailyLimitPrompt" rows="3" class="text-input"
+                              placeholder="Это твой последний ответ на сегодня...">@(Model.DailyLimitPrompt ?? "Это твой последний ответ на сегодня, так как дневной лимит сообщений исчерпан. Обязательно ответь на вопрос собеседника, но в конце мягко и естественно попрощайся до завтра в своем стиле (например: убегаешь по делам / на съемку / спать). Будь краткой и теплой.")</textarea>
                         <small style="display:block; color:var(--text-secondary); font-size:0.75rem; margin-top:4px;">
-                            Это сообщение уйдёт собеседнику, когда он достигнет лимита сообщений. Поддерживается Spintax: <code>{Прости|Извини}, мне {пора бежать|нужно идти}. Спишемся завтра! 🧡</code>
+                            💡 ИИ ответит на реплику собеседника с учётом этого промпта, естественно попрощается в своём образе и только после этого поставит диалог на паузу до завтра.
                         </small>
                     </div>
 

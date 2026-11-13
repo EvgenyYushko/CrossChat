@@ -176,27 +176,15 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			var messageCount = await _db.BotResponseLogs
 				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
+			// Если лимит УЖЕ был исчерпан ранее — молчим
 			if (messageCount > settings.MaxAnswerMessagesCount)
 			{
-				await _console.LogWarning($"Аккаунт {customer.Username} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
+				await _console.LogWarning($"Аккаунт {customer.Username} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} (бот на паузе до завтра)");
 				return;
 			}
 
-			if (messageCount == settings.MaxAnswerMessagesCount)
-			{
-				// 🚀 БЕРЕМ ТЕКСТ ИЗ НАСТРОЕК БД (с поддержкой Spintax)
-				string rawLimitMessage = !string.IsNullOrWhiteSpace(settings.DailyLimitMessage)
-					? settings.DailyLimitMessage
-					: "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡";
-
-				// Применяем Spintax-рандомайзер (выберет случайный вариант, если есть скобки {})
-				string finalFarewellMessage = InstagramCommentEngine.GetRandomTemplate(rawLimitMessage);
-
-				await _instaService.SendMessageAsync(senderId, finalFarewellMessage, accessInstaToken);
-				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {customer.Username}: «{finalFarewellMessage}»");
-				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
-				return;
-			}
+			// 🚀 ФЛАГ: Если это ровно последнее разрешённое сообщение на сегодня — сгенерируем красивое прощание через ИИ!
+			bool isLastMessageForToday = (messageCount == settings.MaxAnswerMessagesCount);
 
 			// В) Проверяем лимит токенов
 			var tokensUsed = await _db.BotResponseLogs
@@ -354,6 +342,17 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
 				+ userContextInfo;
+
+			// 🚀 ПОДМЕШИВАЕМ ПРОЩАЛЬНЫЙ ПРОМПТ В СИСТЕМНУЮ ИНСТРУКЦИЮ ИИ:
+			if (isLastMessageForToday)
+			{
+				var farewellInstruction = !string.IsNullOrWhiteSpace(settings.DailyLimitPrompt)
+					? settings.DailyLimitPrompt
+					: "Это твой последний ответ на сегодня, так как дневной лимит сообщений исчерпан. Обязательно ответь на вопрос собеседника, но в конце мягко и естественно попрощайся до завтра в своем стиле (например: убегаешь по делам / на съемку / спать). Будь краткой и теплой. Отвечай строго на языке собеседника!";
+
+				systemPrompt += $"\n\n{farewellInstruction}";
+				_logger.LogInformation("👋 [Reply] Генерируем персонализированное прощание ИИ для @{User}", customer.Username);
+			}
 
 			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
 
