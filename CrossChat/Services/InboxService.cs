@@ -10,6 +10,7 @@ using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace CrossChat.Services
 {
@@ -23,16 +24,18 @@ namespace CrossChat.Services
 		private readonly SiteSettings _siteSettings;
 		private readonly IBlueSkyService _bskyService;
 		private readonly IBlueSkyTokenManager _bskyTokenManager;
+		private readonly IDatabase _redis;
 
 		public InboxService(
 			AppDbContext db,
 			IHubContext<InboxHub> hubContext,
 			IInstagramService instaService,
 			IFaceBookService fbService,
-			IBlueSkyService bskyService,               // <-- ВНЕДРЯЕМ
-			IBlueSkyTokenManager bskyTokenManager,     // <-- ВНЕДРЯЕМ
+			IBlueSkyService bskyService,
+			IBlueSkyTokenManager bskyTokenManager,
 			SiteSettings siteSettings,
-			ILogger<InboxService> logger)
+			ILogger<InboxService> logger,
+			IConnectionMultiplexer redisMux) // <-- ВНЕДРЯЕМ
 		{
 			_db = db;
 			_hubContext = hubContext;
@@ -42,6 +45,7 @@ namespace CrossChat.Services
 			_bskyTokenManager = bskyTokenManager;
 			_siteSettings = siteSettings;
 			_logger = logger;
+			_redis = redisMux.GetDatabase(); // <-- ИНИЦИАЛИЗИРУЕМ
 		}
 
 		public async Task<InboxConversationDto> GetOrCreateConversationAsync(
@@ -872,19 +876,26 @@ namespace CrossChat.Services
 					if (alreadyExists) return false;
 				}
 
-				// 3. Сохраняем эхо-сообщение с медиафайлом
-				conversation.IsHumanTakeover = true;
-				conversation.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
+				// 🚀 ПРОВЕРЯЕМ: это эхо от нашего бота или реально человек ответил с телефона?
+				var botReplyingKey = $"bot:replying:{businessAccountId}:{customerId}";
+				bool isSentByBot = await _redis.KeyExistsAsync(botReplyingKey);
+
+				// Перехват управления включаем ТОЛЬКО если ответил живой человек с телефона!
+				if (!isSentByBot)
+				{
+					conversation.IsHumanTakeover = true;
+					conversation.HumanTakeoverUntil = DateTime.UtcNow.AddHours(2);
+				}
 
 				var message = new InboxMessage
 				{
 					ConversationId = conversation.Id,
 					ExternalMessageId = messageId,
 					Text = text,
-					MediaUrl = mediaUrl,     // <-- СОХРАНЯЕМ ССЫЛКУ НА ФОТО/ВИДЕО
-					MediaType = mediaType,   // <-- СОХРАНЯЕМ ТИП (image/video/audio)
+					MediaUrl = mediaUrl,
+					MediaType = mediaType,
 					IsIncoming = false,
-					IsSentByBot = false,
+					IsSentByBot = isSentByBot, // <-- Фиксируем авторство: бот или человек!
 					IsReadByManager = true,
 					CreatedAtUtc = DateTime.UtcNow
 				};
@@ -903,8 +914,11 @@ namespace CrossChat.Services
 				// Пушим в браузер через SignalR (он сразу отобразит фото/видео/голосовое!)
 				await NotifySignalRNewMessage(conversation, message);
 
-				await _hubContext.Clients.Group($"profile_inbox_{conversation.ProfileId}")
-					.SendAsync("TakeoverStatusChanged", conversation.Id, true);
+				if (!isSentByBot)
+				{
+					await _hubContext.Clients.Group($"profile_inbox_{conversation.ProfileId}")
+						.SendAsync("TakeoverStatusChanged", conversation.Id, true);
+				}
 
 				return true;
 			}

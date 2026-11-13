@@ -340,9 +340,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				{
 					// Передаем флаг настроек ProcessPhotos и уже имеющееся в БД описание внешности:
 					var (contextText, newAppearance) = await _instaService.GetUserContextForAiAsync(
-						senderId, 
-						accessInstaToken, 
-						processPhotos: settings.ProcessPhotos, 
+						senderId,
+						accessInstaToken,
+						processPhotos: settings.ProcessPhotos,
 						existingAppearance: customer.AppearanceDescription);
 
 					userContextInfo = contextText;
@@ -397,10 +397,14 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					return;
 				}
 
+				// 🚀 ВАЖНО: Ставим метку в Redis, чтобы входящий вебхук эхо знал, что это НАШ БОТ, а не человек с телефона!
+				var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
+				await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
+
 				// 5. Отправляем ответ в Инстаграм
 				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
 
-				// 🚀 Сохраняем ответ ИИ-бота в Единый Инбокс, чтобы менеджер на сайте видел ответ в чате!
+				// 🚀 Сохраняем ответ ИИ-бота в Единый Инбокс
 				await _inboxService.SaveBotReplyAsync(conversation.Id, aiResponse);
 
 				// Если мы это сообщение УЖЕ обработали — выходим
