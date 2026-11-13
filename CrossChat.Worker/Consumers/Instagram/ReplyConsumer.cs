@@ -56,7 +56,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
 	{
-		var messageId = context.Message.ReplyId; // Передай сюда уникальный ID сообщения
+		var messageId = context.Message.ReplyId;
 		var processingKey = $"processed:{messageId}";
 
 		// 1. Проверяем, не было ли сообщение уже обработано УСПЕШНО ранее
@@ -66,13 +66,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
-		var senderId = context.Message.SenderId; // Клиент (кто написал)
-		var businessAccountId = context.Message.RecipientId; // Бот (кому написали)
+		var senderId = context.Message.SenderId;
+		var businessAccountId = context.Message.RecipientId;
 
 		var targetTimeKey = $"debounce:target_time:ig:{senderId}:{businessAccountId}";
 		var activeTimerKey = $"debounce:timer_active:ig:{senderId}:{businessAccountId}";
 
-		// ПРОВЕРКА: продолжал ли пользователь писать?
+		// ПРОВЕРКА ДЕБАУНСА: продолжал ли пользователь писать?
 		var storedTicks = await _redis.StringGetAsync(targetTimeKey);
 		if (storedTicks.HasValue && long.TryParse(storedTicks, out long ticks))
 		{
@@ -87,66 +87,72 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 		}
 
-		// Время тишины вышло — сбрасываем ключи
+		// Время тишины вышло — сбрасываем ключи дебаунса
 		await _redis.KeyDeleteAsync(targetTimeKey);
 		await _redis.KeyDeleteAsync(activeTimerKey);
 
-		// Пытаемся получить разрешение на выполнение
-		using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
+		// =========================================================================
+		// 🚀 ЗАЩИТА ОТ ДВОЙНЫХ ОТВЕТОВ: Блокировка диалога (1 поток генерации на юзера)
+		// =========================================================================
+		var dialogBusyKey = $"lock:dialog_busy:{businessAccountId}:{senderId}";
 
-		if (!lease.IsAcquired)
+		// Если диалог прямо сейчас уже обрабатывается другим потоком — откладываем повтор на 10 сек
+		if (await _redis.KeyExistsAsync(dialogBusyKey))
 		{
-			// Лимит исчерпан -> бросаем исключение, чтобы сработал Redelivery (повтор через минуту)
-			throw new RateLimitExceededException("Rate limit exceeded (Gemini). Triggering Redelivery.");
-		}
-
-		_logger.LogInformation($"[Reply] 🚀 Обработка диалога. BusinessID: {businessAccountId}, SenderID: {senderId}");
-
-		// 2. Ищем настройки владельца бота в БД
-		// Нам нужно найти того юзера, у которого InstagramBusinessId совпадает с RecipientId
-		var settings = await _db.InstagramSettings
-			.AsNoTracking()
-			.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
-
-		//_logger.LogInformation($"[Reply] Проверка настроек: BotID={businessAccountId}, Active={settings.IsActive}, Prompt={settings.SystemPrompt}");
-
-		if (settings == null)
-		{
-			_logger.LogWarning($"[Reply] ❌ Настройки для BusinessID {businessAccountId} не найдены в БД. Игнорируем.");
+			_logger.LogInformation("[Reply] ⏳ Диалог {SenderId} уже генерирует ответ в другом потоке. Откладываем...", senderId);
+			await context.SchedulePublish(TimeSpan.FromSeconds(10), context.Message);
 			return;
 		}
 
-		_console.Init(settings.UserId, settings.Id);
+		// Захватываем замок на 90 секунд (с запасом на время ответа нейросети)
+		await _redis.StringSetAsync(dialogBusyKey, "busy", TimeSpan.FromSeconds(90));
 
-		if (!settings.IsActive)
-		{
-			await _console.Log($"⏸ У бота выключены ответы на сообщения. Пропускаем.");
-			return;
-		}
-
-		if (!settings.IsDirectEnabled)
-		{
-			await _console.LogError($"⏸ У бота выключены ответы на сообщения. Пропускаем.");
-			return;
-		}
-
-		var accessInstaToken = settings.AccessToken;
-
-		if (string.IsNullOrEmpty(accessInstaToken))
-		{
-			await _console.LogError($"❌ Токен отсутствует для BusinessID {businessAccountId}.");
-			return;
-		}
-
+		// 🚀 ВАЖНО: ВЕСЬ КОД ОБОРАЧИВАЕМ В TRY СРАЗУ ПОСЛЕ ЗАХВАТА ЗАМКА!
 		try
 		{
+			// Пытаемся получить разрешение на выполнение
+			using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
+
+			if (!lease.IsAcquired)
+			{
+				throw new RateLimitExceededException("Rate limit exceeded (Gemini). Triggering Redelivery.");
+			}
+
+			_logger.LogInformation($"[Reply] 🚀 Обработка диалога. BusinessID: {businessAccountId}, SenderID: {senderId}");
+
+			// 2. Ищем настройки владельца бота в БД
+			var settings = await _db.InstagramSettings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
+
+			if (settings == null)
+			{
+				_logger.LogWarning($"[Reply] ❌ Настройки для BusinessID {businessAccountId} не найдены в БД. Игнорируем.");
+				return;
+			}
+
+			_console.Init(settings.UserId, settings.Id);
+
+			if (!settings.IsActive || !settings.IsDirectEnabled)
+			{
+				await _console.Log($"⏸ У бота выключены ответы на сообщения. Пропускаем.");
+				return;
+			}
+
+			var accessInstaToken = settings.AccessToken;
+
+			if (string.IsNullOrEmpty(accessInstaToken))
+			{
+				await _console.LogError($"❌ Токен отсутствует для BusinessID {businessAccountId}.");
+				return;
+			}
+
 			var customer = await _db.InstagramBotCustomers
 				.FirstOrDefaultAsync(c => c.InstagramSettingsId == settings.Id && c.InstagramSenderId == senderId);
 
 			if (customer == null)
 			{
 				var customerInfo = await _instaService.GetInstagramUserProfileAsync(senderId, accessInstaToken);
-				// Пользователь пишет нам впервые - создаем его карточку
 				customer = new InstagramBotCustomer
 				{
 					InstagramSettingsId = settings.Id,
@@ -155,40 +161,36 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					ProfilePictureUrl = customerInfo.ProfilePicUrl
 				};
 				_db.InstagramBotCustomers.Add(customer);
-				await _db.SaveChangesAsync(); // Сохраняем, чтобы получить ID
+				await _db.SaveChangesAsync();
 			}
 
 			// А) Проверяем галочку "Игнорировать"
 			if (customer.IsIgnored)
 			{
 				await _console.LogInfo($"Пользователь {senderId} в игнор-листе. Пропускаем диалог.");
-				return; // Сразу выходим! Никаких запросов в ИИ, никаких скачиваний.
+				return;
 			}
 
-			// Б) Проверяем лимит (например, 100 ответов в сутки)
-			// 1. Проверка по количеству сообщений
-			var startOfPeriod = DateTimeNow.AddDays(-1); // Сутки
+			// Б) Проверяем лимит сообщений в сутки
+			var startOfPeriod = DateTimeNow.AddDays(-1);
 			var messageCount = await _db.BotResponseLogs
 				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
 			if (messageCount > settings.MaxAnswerMessagesCount)
 			{
-				//{senderId}
-				await _console.LogWarning($"Аккаунт {customer.Username}  превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} сообщение проигнорировано");
+				await _console.LogWarning($"Аккаунт {customer.Username} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount}");
 				return;
 			}
 
 			if (messageCount == settings.MaxAnswerMessagesCount)
 			{
-				// Можно отправить пользователю в Direct сообщение: "Ваш лимит на сегодня исчерпан"
 				await _instaService.SendMessageAsync(senderId, "Sorry, but I need to go urgently, let's write tomorrow. Bye 🧡", accessInstaToken);
 				await _console.LogInfo($"Отправлено последнее сообщение на сегодня пользователю {customer.Username}");
 				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 				return;
 			}
 
-			// 2. Проверка по токенам (если ты пишешь их в логи)
-			// Допустим, при каждой отправке ответа ты записываешь `TokensUsed` в `BotResponseLogs`
+			// В) Проверяем лимит токенов
 			var tokensUsed = await _db.BotResponseLogs
 				.Where(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod)
 				.SumAsync(log => log.TokensSpent);
@@ -199,25 +201,25 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				return;
 			}
 
-			// 3. Получаем историю переписки (используя токен юзера)
+			// Г) Получаем историю переписки
 			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 10);
 
 			if (messages == null || messages.Count == 0) return;
 
+			// 🚀 СВЕРХВАЖНАЯ ПРОВЕРКА: если последнее сообщение УЖЕ от нашего бота (пока мы ждали) — выходим!
 			var lastMsg = messages[0];
 			string lastSenderId = lastMsg.From.Id;
 			if (lastSenderId == businessAccountId)
 			{
 				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+				_logger.LogInformation("Последнее сообщение уже от бота. Второй ответ не требуется.");
 				return;
 			}
 
 			int unreadCount = 0;
 			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
 
-			// ==================================================================================
-			// 1. СИНХРОНИЗАЦИЯ ВСЕЙ ПАЧКИ СООБЩЕНИЙ В ИНБОКС (ОТ СТАРЫХ К НОВЫМ)
-			// ==================================================================================
+			// Синхронизация пачки сообщений в Инбокс
 			int networkTypeInstagram = 1;
 			var conversation = await _inboxService.GetOrCreateConversationAsync(
 				settings.ProfileId,
@@ -228,7 +230,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				customer.Username,
 				customer.ProfilePictureUrl);
 
-			// Сохраняем ВСЕ сообщения из пачки, которые написал клиент (защита от дублей встроена)
 			if (unreadCount > 0)
 			{
 				for (int i = unreadCount - 1; i >= 0; i--)
@@ -242,15 +243,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 			}
 
-			// ==================================================================================
-			// 2. ПРОВЕРКА HUMAN TAKEOVER (ПЕРЕХВАТ УПРАВЛЕНИЯ)
-			// ==================================================================================
+			// Проверка Human Takeover
 			if (conversation.IsHumanTakeover)
 			{
 				if (conversation.HumanTakeoverUntil.HasValue && conversation.HumanTakeoverUntil.Value > DateTime.UtcNow)
 				{
 					await _console.LogInfo($"👤 Диалог с @{customer.Username} перехвачен менеджером (до {conversation.HumanTakeoverUntil.Value:HH:mm} UTC). Бот молчит.");
-					return; // Выходим, бот не отвечает!
+					return;
 				}
 				else if (!conversation.HumanTakeoverUntil.HasValue)
 				{
@@ -260,37 +259,28 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			var chatHistory = new List<AiRequest>();
-			var unreadUserMessageIds = new List<string>(); // Для реакций
+			var unreadUserMessageIds = new List<string>();
 
-			// Идем по списку с конца (от старых) к началу (к новым), чтобы сохранить хронологию
 			for (int i = messages.Count - 1; i >= 0; i--)
 			{
 				var msg = messages[i];
-
-				// 1. Получаем текстовое содержание (с учетом кэша, фото, видео)
 				string content = await ResolveMessageContentAsync(msg);
-				//_logger.LogInformation($"[CHAT MSG] {content}");
+
 				if (content is null)
 				{
 					await _console.LogInfo("Медиа еще обрабатываются, Snooze...");
-					// Ставим себя в очередь снова через 10 секунд
 					await context.SchedulePublish(TimeSpan.FromSeconds(60), context.Message);
 					return;
 				}
 
-				// 2. Определяем роль для AI (model - это бот, user - это пользователь)
 				string role = msg.From.Id == businessAccountId ? "model" : "user";
 
-				// 3. Добавляем в историю в формате объектов
 				chatHistory.Add(new AiRequest
 				{
 					Role = role,
 					Text = string.IsNullOrEmpty(content) ? "[Empty message]" : content
 				});
 
-				// 4. Логика для Реакций:
-				// Проверяем, является ли сообщение непрочитанным (по индексу unreadCount) и от пользователя
-				// (unreadCount вычисляется перед этим циклом, как в прошлом коде)
 				bool isUnread = i < unreadCount;
 				if (isUnread && role == "user")
 				{
@@ -298,19 +288,15 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 			}
 
+			// Реакции (лайки на сообщения)
 			var random = new Random();
-
-			// Если есть непрочитанные сообщения от юзера и выпал шанс (например > 50 из 100)
 			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
 			{
 				try
 				{
 					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
-
-					// Выбираем случайное сообщение из списка непрочитанных
 					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
-					// Отправляем реакцию (без await, чтобы не задерживать процесс, или с await для надежности)
-					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken); // Например "love" или рандом
+					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
 					if (isSuccess)
 					{
 						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
@@ -325,112 +311,90 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			await _instaService.SetTypingStatusAsync(senderId, accessInstaToken);
 
-			try
+			// Запрос к ИИ
+			var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
+
+			var contextRedisKey = $"ig:user_context:{senderId}";
+			string? userContextInfo = await _redis.StringGetAsync(contextRedisKey);
+
+			if (string.IsNullOrEmpty(userContextInfo))
 			{
-				// 4. Отправляем в ИИ (через твой gRPC сервис)
-				var systemPrompt = settings.SystemPrompt ?? "Ты полезный помощник.";
+				var (contextText, newAppearance) = await _instaService.GetUserContextForAiAsync(
+					senderId,
+					accessInstaToken,
+					processPhotos: settings.ProcessPhotos,
+					existingAppearance: customer.AppearanceDescription);
 
-				// =========================================================================
-				// 🚀 ДВУХУРОВНЕВЫЙ КЭШ: REDIS (24 ЧАСА) + БАЗА ДАННЫХ (НАВСЕГДА)
-				// =========================================================================
-				var contextRedisKey = $"ig:user_context:{senderId}";
-				string? userContextInfo = await _redis.StringGetAsync(contextRedisKey);
+				userContextInfo = contextText;
 
-				if (string.IsNullOrEmpty(userContextInfo))
+				if (!string.IsNullOrEmpty(userContextInfo))
 				{
-					// Передаем флаг настроек ProcessPhotos и уже имеющееся в БД описание внешности:
-					var (contextText, newAppearance) = await _instaService.GetUserContextForAiAsync(
-						senderId,
-						accessInstaToken,
-						processPhotos: settings.ProcessPhotos,
-						existingAppearance: customer.AppearanceDescription);
-
-					userContextInfo = contextText;
-
-					// Сохраняем в Redis на 24 часа (переживает любые перезапуски серверов!)
-					if (!string.IsNullOrEmpty(userContextInfo))
-					{
-						await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
-					}
-
-					// Если ИИ впервые описал внешность — НАВСЕГДА сохраняем в БД клиенту!
-					if (!string.IsNullOrEmpty(newAppearance) && customer.AppearanceDescription != newAppearance)
-					{
-						customer.AppearanceDescription = newAppearance;
-						await _db.SaveChangesAsync();
-						_logger.LogInformation("💾 [Profile Vision] Описание внешности клиента @{User} навсегда зафиксировано в БД!", customer.Username);
-					}
-				}
-				else
-				{
-					_logger.LogInformation("⚡ [Profile Context] Взят готовый контекст для @{User} из Redis (0 запросов к API/ИИ)", customer.Username);
+					await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
 				}
 
-				systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
-					+ userContextInfo;
-
-				//_logger.LogInformation($"Системный промпт {systemPrompt}");
-				var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
-
-				if (string.IsNullOrWhiteSpace(aiResponse))
+				if (!string.IsNullOrEmpty(newAppearance) && customer.AppearanceDescription != newAppearance)
 				{
-					await _console.LogError("ИИ вернул пустой ответ.");
+					customer.AppearanceDescription = newAppearance;
+					await _db.SaveChangesAsync();
+					_logger.LogInformation("💾 [Profile Vision] Описание внешности клиента @{User} сохранено в БД", customer.Username);
+				}
+			}
 
-					string retryKey = $"retry_ai_{messageId}"; // ID вашего сообщения
-					long retryCount = await _redis.StringIncrementAsync(retryKey);
+			systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
+				+ userContextInfo;
 
-					if (retryCount == 1)
-					{
-						// Устанавливаем время жизни ключа, чтобы он не висел вечно
-						await _redis.KeyExpireAsync(retryKey, TimeSpan.FromMinutes(10));
-					}
+			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
 
-					// 2. Лимит попыток (например, 3 раза)
-					if (retryCount <= 3)
-					{
-						await _console.Log($"Попытка {retryCount}/3. Отправим запрос в очередь через {60 * retryCount}сек...");
+			if (string.IsNullOrWhiteSpace(aiResponse))
+			{
+				await _console.LogError("ИИ вернул пустой ответ.");
 
-						await context.SchedulePublish(TimeSpan.FromSeconds(60 * retryCount), context.Message);
-						return; // Выходим
-					}
+				string retryKey = $"retry_ai_{messageId}";
+				long retryCount = await _redis.StringIncrementAsync(retryKey);
 
+				if (retryCount == 1)
+				{
+					await _redis.KeyExpireAsync(retryKey, TimeSpan.FromMinutes(10));
+				}
+
+				if (retryCount <= 3)
+				{
+					await _console.Log($"Попытка {retryCount}/3. Отправим запрос в очередь через {60 * retryCount}сек...");
+					await context.SchedulePublish(TimeSpan.FromSeconds(60 * retryCount), context.Message);
 					return;
 				}
 
-				// 🚀 ВАЖНО: Ставим метку в Redis, чтобы входящий вебхук эхо знал, что это НАШ БОТ, а не человек с телефона!
-				var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
-				await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
-
-				// 5. Отправляем ответ в Инстаграм
-				await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
-
-				// 🚀 Сохраняем ответ ИИ-бота в Единый Инбокс
-				await _inboxService.SaveBotReplyAsync(conversation.Id, aiResponse);
-
-				// Если мы это сообщение УЖЕ обработали — выходим
-				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
-				await SaveCustomerLog(context.Message.ReplyId, customer.Id);
-
-				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
+				return;
 			}
-			catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
-			{
-				// ОШИБКА БЕЗОПАСНОСТИ (Google Policy) - ПОВТОР НЕ ПОМОЖЕТ
-				await _console.LogWarning("Gemini заблокировал контент. Прекращаем обработку.");
-			}
-			catch (Exception ex)
-			{
-				// ТЕХНИЧЕСКАЯ ОШИБКА (Сеть, API упало) - ПОВТОР ПОМОЖЕТ
-				await _console.LogError($"Техническая ошибка. RabbitMQ сделает Retry. {ex.ToString()}");
-				throw; // Вот здесь мы кидаем throw, чтобы сработал твой UseMessageRetry
-			}
+
+			// Метка эхо для нашего бота:
+			var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
+			await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
+
+			// Отправка ответа в Instagram
+			await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
+
+			// Сохранение в Инбокс
+			await _inboxService.SaveBotReplyAsync(conversation.Id, aiResponse);
+
+			await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+			await SaveCustomerLog(context.Message.ReplyId, customer.Id);
+
+			await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
+		}
+		catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
+		{
+			await _console.LogWarning("Gemini заблокировал контент. Прекращаем обработку.");
 		}
 		catch (Exception ex)
 		{
-			await _console.LogError($"💥 Ошибка при обработке диалога {senderId}. {ex.ToString()}");
-			// Здесь можно решить: бросать исключение (чтобы повторить попытку) или нет.
-			// Если ошибка в логике (например, ИИ упал) - лучше повторить.
+			await _console.LogError($"Техническая ошибка. RabbitMQ сделает Retry. {ex.Message}");
 			throw;
+		}
+		finally
+		{
+			// 🚀 ГАРАНТИРОВАННОЕ СНЯТИЕ ЗАМКА ДИАЛОГА: срабатывает при ЛЮБОМ исходе!
+			await _redis.KeyDeleteAsync(dialogBusyKey);
 		}
 	}
 
