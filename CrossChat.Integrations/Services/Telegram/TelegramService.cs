@@ -34,6 +34,7 @@ namespace CrossChat.Integrations.Services.Telegram
 
 				UpdateType.ChatBoost,           // Бусты и голоса за канал
 				UpdateType.MessageReaction,     // Платные реакции (Stars)
+				UpdateType.MessageReactionCount,
 				UpdateType.PurchasedPaidMedia   // Покупка платных медиа
 			};
 		}

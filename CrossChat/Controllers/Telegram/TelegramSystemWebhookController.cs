@@ -609,29 +609,25 @@ namespace CrossChat.Controllers
 				}
 
 				// ===================================================================
-				// 8. СЦЕНАРИЙ: Платная реакция (Telegram Star Reaction) на пост
+				// 8. СЦЕНАРИЙ: Платная реакция-звезда (Telegram Star Reaction)
 				// ===================================================================
-				if (update.Type == UpdateType.MessageReaction && update.MessageReaction != null)
+				// А. ДЛЯ КАНАЛОВ: Telegram присылает именно MessageReactionCount!
+				if (update.Type == UpdateType.MessageReactionCount && update.MessageReactionCount != null)
 				{
-					var reactUpdate = update.MessageReaction;
-					var channelId = reactUpdate.Chat.Id;
+					var countUpdate = update.MessageReactionCount;
+					var channelId = countUpdate.Chat.Id;
 
-					// Проверяем, есть ли среди новых реакций платная реакция-звезда (ReactionTypePaid)
-					bool hasPaidReaction = reactUpdate.NewReaction.Any(r => r is ReactionTypePaid);
+					// Проверяем, есть ли среди реакций звезда (ReactionTypePaid)
+					var paidReaction = countUpdate.Reactions.FirstOrDefault(r => r.Type is ReactionTypePaid);
 
-					if (hasPaidReaction)
+					if (paidReaction != null && paidReaction.TotalCount > 0)
 					{
 						var channel = await _db.TelegramChannelSettings
 							.FirstOrDefaultAsync(c => c.ChannelId == channelId);
 
 						if (channel != null)
 						{
-							var senderUser = reactUpdate.User;
-							string userDisplay = senderUser != null
-								? (!string.IsNullOrEmpty(senderUser.Username) ? $"@{senderUser.Username}" : $"{senderUser.FirstName} {senderUser.LastName}".Trim())
-								: "Подписчик (анонимно)";
-
-							int messageId = reactUpdate.MessageId;
+							int messageId = countUpdate.MessageId;
 							string postUrl = !string.IsNullOrEmpty(channel.ChannelUsername)
 								? $"https://t.me/{channel.ChannelUsername}/{messageId}"
 								: "";
@@ -639,8 +635,8 @@ namespace CrossChat.Controllers
 							string adminMessage =
 								$"⭐ <b>ДОНАТ: ПЛАТНАЯ РЕАКЦИЯ В КАНАЛЕ!</b>\n\n" +
 								$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
-								$"<b>Отправитель:</b> {userDisplay}\n" +
-								$"<b>ID сообщения:</b> #{messageId}\n" +
+								$"<b>Всего звёзд на посте:</b> {paidReaction.TotalCount} ⭐\n" +
+								$"<b>ID поста:</b> #{messageId}\n" +
 								$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}\n\n" +
 								$"<i>Звёзды зачислены на баланс монетизации вашего канала!</i>";
 
@@ -654,7 +650,52 @@ namespace CrossChat.Controllers
 							}
 
 							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
-							_logger.LogInformation($"[Telegram Star Reaction] Получена платная реакция в канале {channel.ChannelTitle}");
+							_logger.LogInformation($"[Telegram Star] Зафиксированы платные реакции на посте #{messageId} в канале {channel.ChannelTitle}");
+						}
+					}
+				}
+				// Б. ДЛЯ ЛИЧНЫХ ЧАТОВ И ГРУПП (где реакции не анонимны):
+				else if (update.Type == UpdateType.MessageReaction && update.MessageReaction != null)
+				{
+					var reactUpdate = update.MessageReaction;
+					var channelId = reactUpdate.Chat.Id;
+
+					bool hasPaidReaction = reactUpdate.NewReaction.Any(r => r is ReactionTypePaid);
+
+					if (hasPaidReaction)
+					{
+						var channel = await _db.TelegramChannelSettings
+							.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+						if (channel != null)
+						{
+							var senderUser = reactUpdate.User;
+							string userDisplay = senderUser != null
+								? (!string.IsNullOrEmpty(senderUser.Username) ? $"@{senderUser.Username}" : $"{senderUser.FirstName} {senderUser.LastName}".Trim())
+								: "Подписчик";
+
+							int messageId = reactUpdate.MessageId;
+							string postUrl = !string.IsNullOrEmpty(channel.ChannelUsername)
+								? $"https://t.me/{channel.ChannelUsername}/{messageId}"
+								: "";
+
+							string adminMessage =
+								$"⭐ <b>ДОНАТ: ПЛАТНАЯ РЕАКЦИЯ!</b>\n\n" +
+								$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+								$"<b>Отправитель:</b> {userDisplay}\n" +
+								$"<b>ID поста:</b> #{messageId}\n" +
+								$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}";
+
+							InlineKeyboardMarkup? inlineKeyboard = null;
+							if (!string.IsNullOrEmpty(postUrl))
+							{
+								inlineKeyboard = new InlineKeyboardMarkup(new[]
+								{
+									InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+								});
+							}
+
+							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
 						}
 					}
 				}
