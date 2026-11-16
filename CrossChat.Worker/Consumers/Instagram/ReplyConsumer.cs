@@ -28,6 +28,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly IAiService _aiService;
 	private readonly IInstagramConsole _console;
 	private readonly IInboxService _inboxService;
+	private readonly IGeminiDecisionService _decisionService; // <-- ДОБАВЛЯЕМ ПОЛЕ
+	IDatabase _redis;
 
 	// Статический лимитер (один на всё приложение)
 	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
@@ -40,10 +42,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		QueueLimit = 0
 	});
 
-	IDatabase _redis;
 	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
-	public ReplyConsumer(ILogger<ReplyConsumer> logger, AppDbContext db, IInstagramService instaService,
-		IAiService aiService, IConnectionMultiplexer redisMux, IInstagramConsole console, IInboxService inboxService)
+	public ReplyConsumer(
+		ILogger<ReplyConsumer> logger,
+		AppDbContext db,
+		IInstagramService instaService,
+		IAiService aiService,
+		IConnectionMultiplexer redisMux,
+		IInstagramConsole console,
+		IInboxService inboxService,
+		IGeminiDecisionService decisionService) // <-- ВНЕДРЯЕМ
 	{
 		_logger = logger;
 		_db = db;
@@ -51,6 +59,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		_aiService = aiService;
 		_console = console;
 		_inboxService = inboxService;
+		_decisionService = decisionService;
 		_redis = redisMux.GetDatabase();
 	}
 
@@ -282,6 +291,69 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				{
 					unreadUserMessageIds.Add(msg.Id);
 				}
+			}
+
+			// =========================================================================
+			// 🧠 ФИЛЬТР GEMINI DECISION 1: ОТВЕЧАТЬ, СТАВИТЬ СМАЙЛИК ИЛИ ИГНОРИРОВАТЬ СПАМ?
+			// =========================================================================
+			var transcriptBuilder = new System.Text.StringBuilder();
+			foreach (var item in chatHistory)
+			{
+				string speaker = item.Role == "model" ? "[Assistant]" : "[User]";
+				transcriptBuilder.AppendLine($"{speaker}: {item.Text}");
+			}
+
+			var decision = await _decisionService.EvaluateDirectReplyAsync(transcriptBuilder.ToString(), context.CancellationToken);
+
+			if (decision.IsSuccess)
+			{
+				string logMsg = $"🧠 [Decision 1] @{customer.Username} | Нужен ответ: {decision.NeedsReplyProb:P0} (увер. {decision.NeedsReplyConfidence:P0}) | Спам: {decision.IsSpamProb:P0} | Токены: {decision.InputTokens} | {decision.ElapsedMs} мс";
+				_logger.LogInformation(logMsg);
+				await _console.LogInfo(logMsg);
+
+				// 1. СПАМ / РЕКЛАМА (высокая уверенность >= 85%) -> ПОЛНЫЙ ИГНОР
+				if (decision.IsSpamProb >= 0.85)
+				{
+					await _console.LogWarning($"🚫 [Decision 1] Сообщение от @{customer.Username} признано спамом ({decision.IsSpamProb:P0}). Игнорируем без ответа и реакций.");
+					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+					return;
+				}
+
+				// 2. СМАЙЛИК, СТИКЕР ИЛИ "ОК, СПАСИБО" (вероятность ответа < 45%) -> ТОЛЬКО СМАЙЛИК-РЕАКЦИЯ!
+				if (decision.NeedsReplyProb < 0.45)
+				{
+					await _console.Log($"💬 [Decision 1] Текстовый ответ для @{customer.Username} не требуется (вероятность {decision.NeedsReplyProb:P0}). Ставим реакцию вместо текста.");
+
+					if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0)
+					{
+						try
+						{
+							var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+							// Ставим реакцию на самое свежее непрочитанное сообщение пользователя
+							string targetMessageId = unreadUserMessageIds.Last();
+							bool isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
+							if (isSuccess)
+							{
+								await _console.Log($"❤️ [Decision 1] Поставили реакцию {reaction} на сообщение @{customer.Username} (вместо ответа ИИ).");
+							}
+						}
+						catch (Exception ex)
+						{
+							await _console.LogError($"[Decision 1 Reaction Error] {ex.Message}");
+						}
+					}
+					else
+					{
+						await _console.LogInfo("ℹ️ Реакции отключены в настройках бота или нет целевого ID сообщения — просто промолчали.");
+					}
+
+					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+					return; // Выходим, дорогую генеративную модель НЕ вызываем!
+				}
+			}
+			else
+			{
+				await _console.LogWarning($"⚠️ [Decision 1] Не сработал ({decision.ErrorMessage}). Идём стандартно в ИИ.");
 			}
 
 			// Реакции (лайки на сообщения)

@@ -110,6 +110,12 @@ namespace CrossChat.Worker
 
 			services.AddScoped<TrendRadarService>();
 			services.AddSingleton<IBlueSkyTokenManager, BlueSkyTokenManager>();
+
+			services.AddHttpClient<IGeminiDecisionService, GeminiDecisionService>(client =>
+			{
+				client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+				client.Timeout = TimeSpan.FromSeconds(10); // Быстрый таймаут, модель отвечает за ~200 мс
+			});
 		}
 	}
 }
