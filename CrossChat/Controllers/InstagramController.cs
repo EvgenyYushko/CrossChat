@@ -35,13 +35,14 @@ namespace CrossChat.Controllers
 			ILogger<InstagramController> logger,
 			IOptions<SocialMediaSettings> options,
 			AppDbContext db,
-			IInstagramService instagramService)
+			IInstagramService instagramService,
+			IHttpClientFactory httpClientFactory)
 		{
 			_logger = logger;
 			_settings = options.Value;
 			_db = db;
 			_instagramService = instagramService;
-			_httpClient = new HttpClient();
+			_httpClient = httpClientFactory.CreateClient();
 		}
 
 		// ==========================================================
@@ -134,7 +135,7 @@ namespace CrossChat.Controllers
 			bool processAudios,
 			string systemPrompt,
 			string commentPrompt,
-			string? dailyLimitPrompt, 
+			string? dailyLimitPrompt,
 			bool isReactionsEnabled,
 			string allowedReactions,
 			int maxAnswerMessagesCount,

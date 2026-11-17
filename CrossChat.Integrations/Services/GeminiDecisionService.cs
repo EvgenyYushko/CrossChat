@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using CrossChat.Integrations.Interfaces;
@@ -12,6 +13,9 @@ namespace CrossChat.Integrations.Services
         private readonly HttpClient _httpClient;
         private readonly ILogger<GeminiDecisionService> _logger;
         private readonly string _apiKey;
+
+        private const int MaxAttempts = 2;
+        private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(6);
 
         public GeminiDecisionService(
             HttpClient httpClient,
@@ -58,53 +62,98 @@ namespace CrossChat.Integrations.Services
                 }
             };
 
-            try
+            Exception? lastException = null;
+
+            for (int attempt = 1; attempt <= MaxAttempts; attempt++)
             {
-                using var req = new HttpRequestMessage(HttpMethod.Post, "v1beta/decisions");
-                req.Headers.Add("x-goog-api-key", _apiKey);
-                req.Content = JsonContent.Create(payload);
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attemptCts.CancelAfter(AttemptTimeout);
 
-                using var resp = await _httpClient.SendAsync(req, ct);
-
-                if (!resp.IsSuccessStatusCode)
+                try
                 {
-                    var errBody = await resp.Content.ReadAsStringAsync(ct);
+                    using var req = new HttpRequestMessage(HttpMethod.Post, "v1beta/decisions");
+                    req.Headers.Add("x-goog-api-key", _apiKey);
+                    req.Content = JsonContent.Create(payload);
+
+                    using var resp = await _httpClient.SendAsync(req, attemptCts.Token);
+
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        var errBody = await resp.Content.ReadAsStringAsync(attemptCts.Token);
+                        bool isTransient = (int)resp.StatusCode >= 500 ||
+                                           resp.StatusCode == HttpStatusCode.RequestTimeout ||
+                                           resp.StatusCode == HttpStatusCode.TooManyRequests;
+
+                        if (isTransient && attempt < MaxAttempts)
+                        {
+                            _logger.LogWarning("⚠️ [Gemini Decision 1] Временная ошибка HTTP {Code} на попытке {Attempt}/{Max}. Повторяем...",
+                                (int)resp.StatusCode, attempt, MaxAttempts);
+                            await Task.Delay(200, ct);
+                            continue;
+                        }
+
+                        sw.Stop();
+                        result.ElapsedMs = sw.ElapsedMilliseconds;
+                        result.ErrorMessage = $"HTTP {(int)resp.StatusCode}: {errBody}";
+                        _logger.LogWarning("⚠️ [Gemini Decision 1] Ошибка API: {Err}. Используем Fail-Open (отвечаем обычно).", result.ErrorMessage);
+                        return result;
+                    }
+
+                    var apiResp = await resp.Content.ReadFromJsonAsync<DecisionsApiResponse>(cancellationToken: attemptCts.Token);
                     sw.Stop();
                     result.ElapsedMs = sw.ElapsedMilliseconds;
-                    result.ErrorMessage = $"HTTP {(int)resp.StatusCode}: {errBody}";
-                    _logger.LogWarning("⚠️ [Gemini Decision 1] Ошибка API: {Err}. Используем Fail-Open (отвечаем обычно).", result.ErrorMessage);
+
+                    if (apiResp?.Answers != null)
+                    {
+                        if (apiResp.Answers.TryGetValue("needs_reply", out var nr))
+                        {
+                            result.NeedsReplyProb = nr.Noul ?? 1.0;
+                            result.NeedsReplyConfidence = nr.Confidence ?? 1.0;
+                        }
+
+                        if (apiResp.Answers.TryGetValue("is_spam", out var sp))
+                        {
+                            result.IsSpamProb = sp.Noul ?? 0.0;
+                            result.IsSpamConfidence = sp.Confidence ?? 1.0;
+                        }
+
+                        result.InputTokens = apiResp.Usage?.TotalInputTokens ?? 0;
+                        result.IsSuccess = true;
+                    }
+
                     return result;
                 }
-
-                var apiResp = await resp.Content.ReadFromJsonAsync<DecisionsApiResponse>(cancellationToken: ct);
-                sw.Stop();
-                result.ElapsedMs = sw.ElapsedMilliseconds;
-
-                if (apiResp?.Answers != null)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    if (apiResp.Answers.TryGetValue("needs_reply", out var nr))
-                    {
-                        result.NeedsReplyProb = nr.Noul ?? 1.0;
-                        result.NeedsReplyConfidence = nr.Confidence ?? 1.0;
-                    }
+                    // Отмена пришла снаружи (остановка приложения / RabbitMQ) — не ретраим
+                    sw.Stop();
+                    result.ElapsedMs = sw.ElapsedMilliseconds;
+                    result.ErrorMessage = "Operation canceled by caller";
+                    return result;
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException)
+                {
+                    lastException = ex;
 
-                    if (apiResp.Answers.TryGetValue("is_spam", out var sp))
+                    if (attempt < MaxAttempts)
                     {
-                        result.IsSpamProb = sp.Noul ?? 0.0;
-                        result.IsSpamConfidence = sp.Confidence ?? 1.0;
+                        _logger.LogWarning("⚠️ [Gemini Decision 1] Сетевой сбой/таймаут на попытке {Attempt}/{Max} ({Msg}). Повторяем на новом соединении...",
+                            attempt, MaxAttempts, ex.Message);
+                        await Task.Delay(100, ct);
+                        continue;
                     }
-
-                    result.InputTokens = apiResp.Usage?.TotalInputTokens ?? 0;
-                    result.IsSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                    break;
                 }
             }
-            catch (Exception ex)
-            {
-                sw.Stop();
-                result.ElapsedMs = sw.ElapsedMilliseconds;
-                result.ErrorMessage = ex.Message;
-                _logger.LogWarning(ex, "⚠️ [Gemini Decision 1] Исключение при вызове. Используем Fail-Open.");
-            }
+
+            sw.Stop();
+            result.ElapsedMs = sw.ElapsedMilliseconds;
+            result.ErrorMessage = lastException?.Message ?? "Unknown error";
+            _logger.LogWarning(lastException, "⚠️ [Gemini Decision 1] Исключение при вызове после {MaxAttempts} попыток. Используем Fail-Open.", MaxAttempts);
 
             return result;
         }

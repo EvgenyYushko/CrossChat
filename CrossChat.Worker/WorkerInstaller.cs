@@ -114,7 +114,17 @@ namespace CrossChat.Worker
 			services.AddHttpClient<IGeminiDecisionService, GeminiDecisionService>(client =>
 			{
 				client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
-				client.Timeout = TimeSpan.FromSeconds(10); // Быстрый таймаут, модель отвечает за ~200 мс
+				// Общий таймаут ставим с запасом на 2 попытки; реальный таймаут на 1 попытку (6 сек) контролируем внутри сервиса
+				client.Timeout = TimeSpan.FromSeconds(20);
+			})
+			.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+			{
+				// Закрываем простаивающие соединения через 15 сек, пока их молча не обрубил NAT Render или балансировщик Google
+				PooledConnectionIdleTimeout = TimeSpan.FromSeconds(15),
+				// Принудительно обновляем соединения каждые 2 минуты
+				PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+				// Не ждём бесконечно на установке TCP/TLS-соединения
+				ConnectTimeout = TimeSpan.FromSeconds(5)
 			});
 		}
 	}

@@ -672,8 +672,8 @@ namespace CrossChat.Controllers
 								{
 									inlineKeyboard = new InlineKeyboardMarkup(new[]
 									{
-						InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
-					});
+										InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+									});
 								}
 
 								await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
@@ -721,8 +721,8 @@ namespace CrossChat.Controllers
 							{
 								inlineKeyboard = new InlineKeyboardMarkup(new[]
 								{
-					InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
-				});
+									InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+								});
 							}
 
 							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
