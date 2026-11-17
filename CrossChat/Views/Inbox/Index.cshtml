@@ -1884,7 +1884,7 @@
                     }
 
                     // Б. Ищем среди последних 3 отправленных баблов (поглощаем эхо-дубль от Meta!)
-                    const recentBubbles = Array.from(stream.querySelectorAll('.msg-outgoing-human')).slice(-3);
+                    const recentBubbles = Array.from(stream.querySelectorAll('.msg-outgoing-human, .msg-outgoing-bot')).slice(-3);
                     for (const b of recentBubbles) {
                         const bText = (b.dataset.rawText || b.dataset.text || '').trim().toLowerCase();
                         if (bText === incomingClean) {

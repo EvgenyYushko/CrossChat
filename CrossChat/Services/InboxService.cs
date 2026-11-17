@@ -246,6 +246,22 @@ namespace CrossChat.Services
 			var conversation = await _db.InboxConversations.FindAsync(conversationId);
 			if (conversation == null) return false;
 
+			var thresholdUtc = DateTime.UtcNow.AddSeconds(-60);
+			string cleanText = (text ?? "").Trim();
+
+			// 🚀 ЗАЩИТА ОТ ЗАДВОЕНИЯ: если вебхук Meta Echo уже успел сохранить это сообщение 10 мс назад — выходим!
+			bool alreadySavedByEcho = await _db.InboxMessages
+				.AnyAsync(m => m.ConversationId == conversationId &&
+							   !m.IsIncoming &&
+							   m.CreatedAtUtc >= thresholdUtc &&
+							   m.Text.Trim() == cleanText);
+
+			if (alreadySavedByEcho)
+			{
+				_logger.LogInformation("🤖 [Bot Reply Deduplicated] Сообщение уже зафиксировано через Meta Echo. Дубль предотвращен.");
+				return false; // Вторую копию в базу не пишем и в SignalR не шлем!
+			}
+
 			var message = new InboxMessage
 			{
 				ConversationId = conversation.Id,
