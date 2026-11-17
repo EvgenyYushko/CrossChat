@@ -7,6 +7,7 @@ using CrossChat.Integrations.Interfaces.Google;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using StackExchange.Redis;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -28,6 +29,7 @@ namespace CrossChat.Controllers
 		private readonly IServiceScopeFactory _serviceScopeFactory;
 		private readonly ITelegramService _telegramService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
+		private readonly IConnectionMultiplexer _redis;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
@@ -36,7 +38,8 @@ namespace CrossChat.Controllers
 			ITelegramBotClient telegramBotClient,
 			IServiceScopeFactory serviceScopeFactory,
 			ITelegramService telegramService,
-			IGoogleDriveUploader googleDriveUploader) // <-- ДОБАВЛЕНО
+			IGoogleDriveUploader googleDriveUploader,
+			IConnectionMultiplexer redis)
 		{
 			_db = db;
 			_cache = cache;
@@ -45,6 +48,7 @@ namespace CrossChat.Controllers
 			_serviceScopeFactory = serviceScopeFactory;
 			_telegramService = telegramService;
 			_googleDriveUploader = googleDriveUploader;
+			_redis = redis;
 		}
 
 		public async Task RunLocalBotListener()
@@ -611,46 +615,70 @@ namespace CrossChat.Controllers
 				// ===================================================================
 				// 8. СЦЕНАРИЙ: Платная реакция-звезда (Telegram Star Reaction)
 				// ===================================================================
-				// А. ДЛЯ КАНАЛОВ: Telegram присылает именно MessageReactionCount!
+				// А. ДЛЯ КАНАЛОВ: Telegram присылает именно MessageReactionCount (полный снимок всех реакций на посте)
 				if (update.Type == UpdateType.MessageReactionCount && update.MessageReactionCount != null)
 				{
 					var countUpdate = update.MessageReactionCount;
 					var channelId = countUpdate.Chat.Id;
+					int messageId = countUpdate.MessageId;
 
-					// Проверяем, есть ли среди реакций звезда (ReactionTypePaid)
+					// Детальный лог, чтобы видеть все реакции, которые реально прислал Telegram
+					var reactionsSummary = string.Join(", ", countUpdate.Reactions.Select(r =>
+						$"{r.Type.GetType().Name}:{r.TotalCount}"));
+					_logger.LogInformation("[Telegram Reactions Debug] Channel={ChannelId}, Msg={MsgId}, Reactions=[{Summary}]",
+						channelId, messageId, reactionsSummary);
+
 					var paidReaction = countUpdate.Reactions.FirstOrDefault(r => r.Type is ReactionTypePaid);
+					int currentStars = paidReaction?.TotalCount ?? 0;
 
-					if (paidReaction != null && paidReaction.TotalCount > 0)
+					if (currentStars > 0)
 					{
-						var channel = await _db.TelegramChannelSettings
-							.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+						var redisDb = _redis.GetDatabase();
+						string redisKey = $"tg:paid_stars:{channelId}:{messageId}";
 
-						if (channel != null)
+						var prevValue = await redisDb.StringGetAsync(redisKey);
+						int previousStars = prevValue.HasValue && int.TryParse(prevValue.ToString(), out var parsed)
+							? parsed
+							: 0;
+
+						// Уведомляем ТОЛЬКО если количество звёзд реально выросло!
+						if (currentStars > previousStars)
 						{
-							int messageId = countUpdate.MessageId;
-							string postUrl = !string.IsNullOrEmpty(channel.ChannelUsername)
-								? $"https://t.me/{channel.ChannelUsername}/{messageId}"
-								: "";
+							int addedStars = currentStars - previousStars;
 
-							string adminMessage =
-								$"⭐ <b>ДОНАТ: ПЛАТНАЯ РЕАКЦИЯ В КАНАЛЕ!</b>\n\n" +
-								$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
-								$"<b>Всего звёзд на посте:</b> {paidReaction.TotalCount} ⭐\n" +
-								$"<b>ID поста:</b> #{messageId}\n" +
-								$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}\n\n" +
-								$"<i>Звёзды зачислены на баланс монетизации вашего канала!</i>";
+							// Сохраняем новое актуальное число звёзд в Redis
+							await redisDb.StringSetAsync(redisKey, currentStars);
 
-							InlineKeyboardMarkup? inlineKeyboard = null;
-							if (!string.IsNullOrEmpty(postUrl))
+							var channel = await _db.TelegramChannelSettings
+								.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+							if (channel != null)
 							{
-								inlineKeyboard = new InlineKeyboardMarkup(new[]
-								{
-									InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
-								});
-							}
+								string postUrl = !string.IsNullOrEmpty(channel.ChannelUsername)
+									? $"https://t.me/{channel.ChannelUsername}/{messageId}"
+									: "";
 
-							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
-							_logger.LogInformation($"[Telegram Star] Зафиксированы платные реакции на посте #{messageId} в канале {channel.ChannelTitle}");
+								string adminMessage =
+									$"⭐ <b>ДОНАТ: ПЛАТНАЯ РЕАКЦИЯ В КАНАЛЕ!</b>\n\n" +
+									$"<b>Канал:</b> «{channel.ChannelTitle}»\n" +
+									$"<b>Получено сейчас:</b> +{addedStars} ⭐\n" +
+									$"<b>Всего звёзд на посте:</b> {currentStars} ⭐\n" +
+									$"<b>ID поста:</b> #{messageId}\n" +
+									$"<b>Дата:</b> {DateTimeNow:dd.MM.yyyy HH:mm}\n\n" +
+									$"<i>Звёзды зачислены на баланс монетизации вашего канала!</i>";
+
+								InlineKeyboardMarkup? inlineKeyboard = null;
+								if (!string.IsNullOrEmpty(postUrl))
+								{
+									inlineKeyboard = new InlineKeyboardMarkup(new[]
+									{
+						InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+					});
+								}
+
+								await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
+								_logger.LogInformation($"[Telegram Star] +{addedStars} звёзд (всего {currentStars}) на посте #{messageId} в канале {channel.ChannelTitle}");
+							}
 						}
 					}
 				}
@@ -660,9 +688,11 @@ namespace CrossChat.Controllers
 					var reactUpdate = update.MessageReaction;
 					var channelId = reactUpdate.Chat.Id;
 
-					bool hasPaidReaction = reactUpdate.NewReaction.Any(r => r is ReactionTypePaid);
+					bool wasPaidBefore = reactUpdate.OldReaction.Any(r => r is ReactionTypePaid);
+					bool isPaidNow = reactUpdate.NewReaction.Any(r => r is ReactionTypePaid);
 
-					if (hasPaidReaction)
+					// Реагируем только если платная звезда появилась именно сейчас
+					if (!wasPaidBefore && isPaidNow)
 					{
 						var channel = await _db.TelegramChannelSettings
 							.FirstOrDefaultAsync(c => c.ChannelId == channelId);
@@ -691,8 +721,8 @@ namespace CrossChat.Controllers
 							{
 								inlineKeyboard = new InlineKeyboardMarkup(new[]
 								{
-									InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
-								});
+					InlineKeyboardButton.WithUrl("🔗 Открыть пост с донатом", postUrl)
+				});
 							}
 
 							await _telegramService.SendMessageToAdmin(adminMessage, replyMarkup: inlineKeyboard);
