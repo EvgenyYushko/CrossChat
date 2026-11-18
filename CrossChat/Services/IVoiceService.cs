@@ -4,11 +4,6 @@ using CrossChat.Integrations.Models;
 
 namespace CrossChat.Services
 {
-    public interface IVoiceService
-    {
-        Task<byte[]> GenerateVoiceAudioAsync(string text, ProfileVoiceSetting settings, string? profileName = null);
-    }
-
     public class VoiceService : IVoiceService
     {
         private readonly IEnumerable<ITtsProvider> _providers;
@@ -20,12 +15,12 @@ namespace CrossChat.Services
             _logger = logger;
         }
 
-        public async Task<byte[]> GenerateVoiceAudioAsync(string text, ProfileVoiceSetting settings, string? profileName = null)
+        public async Task<byte[]> GenerateVoiceAudioAsync(VoiceGenerationRequest request, string? providerName = "Gemini")
         {
-            if (string.IsNullOrWhiteSpace(text))
-                throw new ArgumentException("Текст не может быть пустым", nameof(text));
+            if (string.IsNullOrWhiteSpace(request.Text))
+                throw new ArgumentException("Текст не может быть пустым", nameof(request));
 
-            string targetProvider = settings.Provider ?? "Gemini";
+            string targetProvider = string.IsNullOrWhiteSpace(providerName) ? "Gemini" : providerName;
 
             var provider = _providers.FirstOrDefault(p => p.ProviderName.Equals(targetProvider, StringComparison.OrdinalIgnoreCase))
                            ?? _providers.FirstOrDefault(p => p.ProviderName == "Gemini");
@@ -33,7 +28,19 @@ namespace CrossChat.Services
             if (provider == null)
                 throw new InvalidOperationException($"Провайдер '{targetProvider}' не зарегистрирован.");
 
-            // Маппим сущность БД в независимый запрос для интеграции:
+            return await provider.SynthesizeAsync(request);
+        }
+    }
+
+    // Расширение для контроллеров Web-проекта: вызовы в ProfileController менять не придётся!
+    public static class VoiceServiceExtensions
+    {
+        public static Task<byte[]> GenerateVoiceAudioAsync(
+            this IVoiceService voiceService,
+            string text,
+            ProfileVoiceSetting settings,
+            string? profileName = null)
+        {
             var request = new VoiceGenerationRequest
             {
                 Text = text,
@@ -47,7 +54,7 @@ namespace CrossChat.Services
                 Temperature = settings.Temperature
             };
 
-            return await provider.SynthesizeAsync(request);
+            return voiceService.GenerateVoiceAudioAsync(request, settings.Provider);
         }
     }
 }

@@ -47,7 +47,7 @@ namespace CrossChat.Controllers
 			IGoogleDriveUploader googleDriveUploader,
 			IHubContext<InboxHub> hubContext,
 			ILogger<PlannerController> logger,
-			CrossChat.Services.IVoiceService voiceService,
+			IVoiceService voiceService,
 			IAiService aiService)
 		{
 			_db = db;

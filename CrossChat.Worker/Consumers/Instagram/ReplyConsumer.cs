@@ -1,9 +1,14 @@
 using System.Collections.Concurrent;
+using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
+using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Services;
+using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Exceptions;
 using Grpc.Core;
@@ -11,6 +16,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Telegram.Bot.Types.ReplyMarkups;
 using static CrossChat.Integrations.Helpers.TimeZoneHelper;
 
 namespace CrossChat.Worker.Consumers.Instagram;
@@ -29,6 +35,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly IInstagramConsole _console;
 	private readonly IInboxService _inboxService;
 	private readonly IGeminiDecisionService _decisionService; // <-- ДОБАВЛЯЕМ ПОЛЕ
+	private readonly ITelegramService _telegramService;
+	private readonly IVoiceService _voiceService;
+	private readonly SiteSettings _siteSettings;
 	IDatabase _redis;
 
 	// Статический лимитер (один на всё приложение)
@@ -51,7 +60,11 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		IConnectionMultiplexer redisMux,
 		IInstagramConsole console,
 		IInboxService inboxService,
-		IGeminiDecisionService decisionService) // <-- ВНЕДРЯЕМ
+		IGeminiDecisionService decisionService,
+		ITelegramService telegramService,
+		IVoiceService voiceService,
+		SiteSettings siteSettings
+	)
 	{
 		_logger = logger;
 		_db = db;
@@ -61,6 +74,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		_inboxService = inboxService;
 		_decisionService = decisionService;
 		_redis = redisMux.GetDatabase();
+		_telegramService = telegramService;
+		_voiceService = voiceService;
+		_siteSettings = siteSettings;
 	}
 
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
@@ -132,6 +148,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// 2. Ищем настройки владельца бота в БД
 			var settings = await _db.InstagramSettings
 				.AsNoTracking()
+				.Include(s => s.User)
+				.Include(s => s.Profile)
+					.ThenInclude(p => p.VoiceSetting)
 				.FirstOrDefaultAsync(s => s.InstagramBusinessId == businessAccountId);
 
 			if (settings == null)
@@ -305,36 +324,93 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			var decision = await _decisionService.EvaluateDirectReplyAsync(transcriptBuilder.ToString(), context.CancellationToken);
 
+			bool shouldRespondWithVoice = false;
 			if (decision.IsSuccess)
 			{
-				string logMsg = $"🧠 [Decision 1] @{customer.Username} | Нужен ответ: {decision.NeedsReplyProb:P0} (увер. {decision.NeedsReplyConfidence:P0}) | Спам: {decision.IsSpamProb:P0} | Токены: {decision.InputTokens} | {decision.ElapsedMs} мс";
+				string logMsg =
+					$"🧠 [Decision 1] @{customer.Username} | Ответ: {decision.NeedsReplyProb:P0} | " +
+					$"Спам: {decision.IsSpamProb:P0} | Ссылка: {decision.WantsLinkProb:P0} | " +
+					$"Человек: {decision.NeedsHumanProb:P0} | Голос: {decision.ShouldVoiceReplyProb:P0} | " +
+					$"{decision.ElapsedMs} мс";
 				_logger.LogInformation(logMsg);
 				await _console.LogInfo(logMsg);
 
-				// 1. СПАМ / РЕКЛАМА (высокая уверенность >= 85%) -> ПОЛНЫЙ ИГНОР
+				// 1. СПАМ / РЕКЛАМА (>= 85%) -> ПОЛНЫЙ ИГНОР
 				if (decision.IsSpamProb >= 0.85)
 				{
-					await _console.LogWarning($"🚫 [Decision 1] Сообщение от @{customer.Username} признано спамом ({decision.IsSpamProb:P0}). Игнорируем без ответа и реакций.");
+					await _console.LogWarning($"🚫 [Decision 1] Сообщение от @{customer.Username} признано спамом ({decision.IsSpamProb:P0}). Игнорируем.");
 					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 					return;
 				}
 
-				// 2. СМАЙЛИК, СТИКЕР ИЛИ "ОК, СПАСИБО" (вероятность ответа < 45%) -> ТОЛЬКО СМАЙЛИК-РЕАКЦИЯ!
+				// 2. ПРОСИТ ССЫЛКУ / TELEGRAM ИЛИ НУЖЕН ЖИВОЙ ЧЕЛОВЕК -> ПЕРЕДАЁМ ВЛАДЕЛЬЦУ, БОТ МОЛЧИТ!
+				bool wantsLink = decision.WantsLinkProb >= 0.70;
+				bool needsHuman = decision.NeedsHumanProb >= 0.75;
+
+				if (wantsLink || needsHuman)
+				{
+					// Ставим диалог на ручную паузу (таймер 2 часа + уведомление в InboxHub)
+					await _inboxService.ToggleHumanTakeoverAsync(conversation.Id, true);
+
+					string reasonTitle = wantsLink
+						? "🔗 <b>КЛИЕНТ ПРОСИТ ССЫЛКУ / TELEGRAM</b>"
+						: "🙋 <b>ДИАЛОГ ТРЕБУЕТ УЧАСТИЯ ВЛАДЕЛЬЦА</b>";
+
+					string lastUserMsgText = chatHistory.LastOrDefault(m => m.Role == "user")?.Text ?? "[Вложение]";
+					string safeClientName = WebUtility.HtmlEncode(customer.Username ?? senderId);
+					string safeBotName = WebUtility.HtmlEncode(settings.Username ?? "Instagram");
+					string safeProfileName = WebUtility.HtmlEncode(settings.Profile?.Name ?? "Профиль");
+					string safeText = WebUtility.HtmlEncode(lastUserMsgText);
+
+					long? ownerTgId = settings.User?.TelegramUserId;
+					if (ownerTgId.HasValue)
+					{
+						string tgMessage =
+							$"{reasonTitle}\n\n" +
+							$"<b>Профиль:</b> {safeProfileName} (@{safeBotName})\n" +
+							$"<b>Клиент:</b> @{safeClientName}\n" +
+							$"<b>Сообщение:</b> «{safeText}»\n\n" +
+							$"⏸ <i>ИИ поставлен на паузу на 2 часа, чтобы вы могли ответить лично.</i>";
+
+						var inlineKeyboard = new InlineKeyboardMarkup(new[]
+						{
+							InlineKeyboardButton.WithCallbackData("🤖 Вернуть диалог боту", $"resume_ai:{conversation.Id}")
+						});
+
+						try
+						{
+							await _telegramService.SendMessage(ownerTgId.Value, tgMessage, inlineKeyboard);
+							await _console.Log($"📨 [Human Takeover] Отправлено уведомление владельцу в Telegram (conv #{conversation.Id}). Бот молчит.");
+						}
+						catch (Exception tgEx)
+						{
+							await _console.LogWarning($"⚠️ Не удалось отправить уведомление владельцу {ownerTgId.Value} в Telegram: {tgEx.Message}");
+						}
+					}
+					else
+					{
+						await _console.LogWarning($"⚠️ [Human Takeover] Включена пауза на 2ч для @{customer.Username}, но владелец не привязал Telegram к аккаунту.");
+					}
+
+					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+					return; // БОТ МОЛЧИТ!
+				}
+
+				// 3. СМАЙЛИК, СТИКЕР ИЛИ "ОК, СПАСИБО" -> ТОЛЬКО РЕАКЦИЯ
 				if (decision.NeedsReplyProb < 0.45)
 				{
-					await _console.Log($"💬 [Decision 1] Текстовый ответ для @{customer.Username} не требуется (вероятность {decision.NeedsReplyProb:P0}). Ставим реакцию вместо текста.");
+					await _console.Log($"💬 [Decision 1] Текстовый ответ для @{customer.Username} не требуется ({decision.NeedsReplyProb:P0}). Ставим реакцию.");
 
 					if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0)
 					{
 						try
 						{
 							var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
-							// Ставим реакцию на самое свежее непрочитанное сообщение пользователя
 							string targetMessageId = unreadUserMessageIds.Last();
 							bool isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
 							if (isSuccess)
 							{
-								await _console.Log($"❤️ [Decision 1] Поставили реакцию {reaction} на сообщение @{customer.Username} (вместо ответа ИИ).");
+								await _console.Log($"❤️ [Decision 1] Поставили реакцию {reaction} на сообщение @{customer.Username}.");
 							}
 						}
 						catch (Exception ex)
@@ -342,13 +418,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 							await _console.LogError($"[Decision 1 Reaction Error] {ex.Message}");
 						}
 					}
-					else
-					{
-						await _console.LogInfo("ℹ️ Реакции отключены в настройках бота или нет целевого ID сообщения — просто промолчали.");
-					}
 
 					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
-					return; // Выходим, дорогую генеративную модель НЕ вызываем!
+					return;
+				}
+
+				// 4. ПРОВЕРЯЕМ ГОТОВНОСТЬ ГОЛОСОВОГО ОТВЕТА
+				if (decision.ShouldVoiceReplyProb >= 0.65)
+				{
+					var voiceSetting = settings.Profile?.VoiceSetting;
+					if (voiceSetting != null && voiceSetting.IsActive)
+					{
+						shouldRespondWithVoice = true;
+						await _console.Log($"🎙️ [Decision 1] Ответ будет сгенерирован голосом профиля ({decision.ShouldVoiceReplyProb:P0}).");
+					}
+					else
+					{
+						await _console.LogInfo($"🎙️ [Decision 1] Модель решила ответить голосом ({decision.ShouldVoiceReplyProb:P0}), но настройки голоса профиля отключены — отвечаем текстом.");
+					}
 				}
 			}
 			else
@@ -454,11 +541,66 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
 			await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
 
-			// Отправка ответа в Instagram
-			await SendLongMessageAsHumanAsync(senderId, aiResponse, accessInstaToken);
+			bool sentAsVoice = false;
 
-			// Сохранение в Инбокс
-			await _inboxService.SaveBotReplyAsync(conversation.Id, aiResponse);
+			if (shouldRespondWithVoice)
+			{
+				try
+				{
+					var voiceSetting = settings.Profile!.VoiceSetting!;
+					var voiceRequest = new VoiceGenerationRequest
+					{
+						Text = aiResponse.Trim(),
+						ProfileName = settings.Profile.Name ?? "Creator",
+						VoiceName = voiceSetting.VoiceName,
+						Style = voiceSetting.Style,
+						Pace = voiceSetting.Pace,
+						Accent = voiceSetting.Accent,
+						Scene = voiceSetting.Scene,
+						SampleContext = voiceSetting.SampleContext,
+						Temperature = voiceSetting.Temperature
+					};
+
+					byte[] rawVoiceBytes = await _voiceService.GenerateVoiceAudioAsync(voiceRequest, voiceSetting.Provider);
+
+					if (rawVoiceBytes != null && rawVoiceBytes.Length > 0)
+					{
+						string m4aPath = await VideoService.SaveTtsAudioAsInstagramM4aAsync(
+							rawVoiceBytes,
+							_siteSettings.TempFolder,
+							_logger);
+
+						string m4aFileName = Path.GetFileName(m4aPath);
+						string publicAudioUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{m4aFileName}";
+
+						await _instaService.SendMediaAttachmentAsync(senderId, "audio", publicAudioUrl, accessInstaToken);
+
+						// Чистим теги вроде <chuckle> для красивого отображения текста в Инбоксе
+						string readableTranscript = Regex.Replace(aiResponse, @"<[^>]+>", "").Trim();
+						await _inboxService.SaveBotReplyAsync(
+							conversation.Id,
+							$"🎙️ {readableTranscript}",
+							mediaUrl: publicAudioUrl,
+							mediaType: "audio");
+
+						sentAsVoice = true;
+						await _console.Log($"🎙️ Голосовой ответ успешно отправлен пользователю {customer.Username}");
+					}
+				}
+				catch (Exception voiceEx)
+				{
+					await _console.LogWarning($"⚠️ Не удалось отправить голосовой ответ ({voiceEx.Message}). Отправляем обычным текстом.");
+				}
+			}
+
+			if (!sentAsVoice)
+			{
+				// На случай фолбэка после VOICE REPLY MODE вычищаем вокальные <теги>
+				string cleanTextReply = Regex.Replace(aiResponse, @"<[^>]+>", "").Trim();
+				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken);
+				await _inboxService.SaveBotReplyAsync(conversation.Id, cleanTextReply);
+				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
+			}
 
 			await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 			await SaveCustomerLog(context.Message.ReplyId, customer.Id);

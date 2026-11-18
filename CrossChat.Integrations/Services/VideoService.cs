@@ -650,5 +650,57 @@ namespace CrossChat.Integrations.Services
 				}
 			}
 		}
+
+		/// <summary>
+		/// Упаковывает сырой аудио-выход TTS (PCM 24кГц или уже готовый WAV/MP3) во временный .m4a файл для Instagram Direct
+		/// </summary>
+		public static async Task<string> SaveTtsAudioAsInstagramM4aAsync(byte[] audioBytes, string targetFolder, ILogger? logger = null)
+		{
+			if (!Directory.Exists(targetFolder))
+				Directory.CreateDirectory(targetFolder);
+
+			bool isWav = audioBytes.Length >= 4 && audioBytes[0] == 'R' && audioBytes[1] == 'I' && audioBytes[2] == 'F' && audioBytes[3] == 'F';
+			bool isMp3 = audioBytes.Length >= 3 && ((audioBytes[0] == 'I' && audioBytes[1] == 'D' && audioBytes[2] == '3') || (audioBytes[0] == 0xFF && (audioBytes[1] & 0xE0) == 0xE0));
+			bool isOgg = audioBytes.Length >= 4 && audioBytes[0] == 'O' && audioBytes[1] == 'g' && audioBytes[2] == 'g' && audioBytes[3] == 'S';
+
+			string ext = isMp3 ? ".mp3" : isOgg ? ".ogg" : ".wav";
+			byte[] preparedBytes = (isWav || isMp3 || isOgg)
+				? audioBytes
+				: BuildWavFromRawPcm(audioBytes, 24000, 1, 16);
+
+			string tempInputPath = Path.Combine(targetFolder, $"{Guid.NewGuid():N}{ext}");
+			await File.WriteAllBytesAsync(tempInputPath, preparedBytes);
+
+			// Перекодируем в эталонный AAC .m4a (исходный tempInputPath удалится внутри ConvertToInstagramAudioAsync)
+			return await ConvertToInstagramAudioAsync(tempInputPath, logger);
+		}
+
+		private static byte[] BuildWavFromRawPcm(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
+		{
+			int byteRate = sampleRate * channels * (bitsPerSample / 8);
+			short blockAlign = (short)(channels * (bitsPerSample / 8));
+			int totalDataLen = pcmData.Length;
+			int totalAudioLen = totalDataLen + 36;
+
+			using var outStream = new MemoryStream();
+			using var writer = new BinaryWriter(outStream);
+
+			writer.Write(new[] { 'R', 'I', 'F', 'F' });
+			writer.Write(totalAudioLen);
+			writer.Write(new[] { 'W', 'A', 'V', 'E' });
+			writer.Write(new[] { 'f', 'm', 't', ' ' });
+			writer.Write(16);
+			writer.Write((short)1);
+			writer.Write(channels);
+			writer.Write(sampleRate);
+			writer.Write(byteRate);
+			writer.Write(blockAlign);
+			writer.Write(bitsPerSample);
+			writer.Write(new[] { 'd', 'a', 't', 'a' });
+			writer.Write(totalDataLen);
+			writer.Write(pcmData);
+
+			return outStream.ToArray();
+		}
 	}
 }

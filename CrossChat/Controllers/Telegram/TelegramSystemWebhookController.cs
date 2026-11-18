@@ -30,6 +30,7 @@ namespace CrossChat.Controllers
 		private readonly ITelegramService _telegramService;
 		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly IConnectionMultiplexer _redis;
+		private readonly IInboxService _inboxService;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
@@ -39,7 +40,8 @@ namespace CrossChat.Controllers
 			IServiceScopeFactory serviceScopeFactory,
 			ITelegramService telegramService,
 			IGoogleDriveUploader googleDriveUploader,
-			IConnectionMultiplexer redis)
+			IConnectionMultiplexer redis,
+			IInboxService inboxService)
 		{
 			_db = db;
 			_cache = cache;
@@ -49,6 +51,7 @@ namespace CrossChat.Controllers
 			_telegramService = telegramService;
 			_googleDriveUploader = googleDriveUploader;
 			_redis = redis;
+			_inboxService = inboxService;
 		}
 
 		public async Task RunLocalBotListener()
@@ -547,6 +550,61 @@ namespace CrossChat.Controllers
 						// Пустой клик по уже забаненной кнопке
 						await _telegramBotClient.AnswerCallbackQuery(callback.Id);
 						return Ok();
+					}
+					else if (data.StartsWith("resume_ai:"))
+					{
+						var parts = data.Split(':');
+						if (parts.Length == 2 && int.TryParse(parts[1], out var targetConversationId))
+						{
+							try
+							{
+								// Проверяем, что кнопку нажал именно владелец этого профиля
+								var conv = await _db.InboxConversations
+									.Include(c => c.Profile)
+										.ThenInclude(p => p.User)
+									.FirstOrDefaultAsync(c => c.Id == targetConversationId);
+
+								if (conv == null || conv.Profile?.User?.TelegramUserId != callback.From.Id)
+								{
+									await _telegramBotClient.AnswerCallbackQuery(
+										callback.Id,
+										"⚠️ Диалог не найден или у вас нет прав на управление им.",
+										showAlert: true);
+									return Ok();
+								}
+
+								await _inboxService.ToggleHumanTakeoverAsync(targetConversationId, false);
+								_logger.LogInformation("[Telegram Owner] Владелец {TgId} вернул диалог #{ConvId} под управление ИИ.", callback.From.Id, targetConversationId);
+
+								await _telegramBotClient.AnswerCallbackQuery(
+									callback.Id,
+									"✅ Готово! ИИ-бот снова отвечает в этом диалоге.",
+									showAlert: true);
+
+								if (callback.Message != null)
+								{
+									var updatedMarkup = new InlineKeyboardMarkup(new[]
+									{
+										InlineKeyboardButton.WithCallbackData("✅ ИИ-бот снова активен", "noop")
+									});
+
+									await _telegramBotClient.EditMessageReplyMarkup(
+										chatId: callback.Message.Chat.Id,
+										messageId: callback.Message.MessageId,
+										replyMarkup: updatedMarkup);
+								}
+							}
+							catch (Exception ex)
+							{
+								_logger.LogError(ex, "[Telegram Owner] Ошибка при возврате диалога #{ConvId} боту", targetConversationId);
+								await _telegramBotClient.AnswerCallbackQuery(
+									callback.Id,
+									"⚠️ Не удалось включить бота. Попробуйте через Инбокс на сайте.",
+									showAlert: true);
+							}
+
+							return Ok();
+						}
 					}
 				}
 

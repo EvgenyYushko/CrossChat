@@ -26,7 +26,9 @@ namespace CrossChat.Integrations.Interfaces
 		// 3. Сохранить ответ ИИ-бота по Id диалога
 		Task<bool> SaveBotReplyAsync(
 			int conversationId,
-			string text);
+			string text,
+			string? mediaUrl = null,
+			string? mediaType = null);
 
 		// 4. Отправка сообщения менеджером руками через сайт
 		Task<(bool Success, string? ErrorMessage)> SendManagerReplyAsync(

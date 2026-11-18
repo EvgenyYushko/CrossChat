@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using CrossChat.Integrations.Interfaces;
+using CrossChat.Services;
 
 namespace CrossChat.Controllers
 {
@@ -22,14 +24,14 @@ namespace CrossChat.Controllers
 		private readonly AppDbContext _db;
 		private readonly ILogger<ProfileController> _logger;
 
-		private readonly CrossChat.Services.IVoiceService _voiceService;
-		private readonly CrossChat.Integrations.Interfaces.IAiService _aiService;
+		private readonly IVoiceService _voiceService;
+		private readonly IAiService _aiService;
 
 		public ProfileController(
 			AppDbContext db,
 			ILogger<ProfileController> logger,
-			CrossChat.Services.IVoiceService voiceService,
-			CrossChat.Integrations.Interfaces.IAiService aiService)
+			IVoiceService voiceService,
+			IAiService aiService)
 		{
 			_db = db;
 			_logger = logger;

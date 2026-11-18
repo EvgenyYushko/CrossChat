@@ -241,7 +241,11 @@ namespace CrossChat.Services
 			return true;
 		}
 
-		public async Task<bool> SaveBotReplyAsync(int conversationId, string text)
+		public async Task<bool> SaveBotReplyAsync(
+			int conversationId,
+			string text,
+			string? mediaUrl = null,
+			string? mediaType = null)
 		{
 			var conversation = await _db.InboxConversations.FindAsync(conversationId);
 			if (conversation == null) return false;
@@ -249,23 +253,26 @@ namespace CrossChat.Services
 			var thresholdUtc = DateTime.UtcNow.AddSeconds(-60);
 			string cleanText = (text ?? "").Trim();
 
-			// 🚀 ЗАЩИТА ОТ ЗАДВОЕНИЯ: если вебхук Meta Echo уже успел сохранить это сообщение 10 мс назад — выходим!
+			// Защита от задвоения с Meta Echo (по тексту или по факту отправки аудио за последние 60 сек)
 			bool alreadySavedByEcho = await _db.InboxMessages
 				.AnyAsync(m => m.ConversationId == conversationId &&
 							   !m.IsIncoming &&
 							   m.CreatedAtUtc >= thresholdUtc &&
-							   m.Text.Trim() == cleanText);
+							   (m.Text.Trim() == cleanText ||
+								(!string.IsNullOrEmpty(mediaType) && m.MediaType == mediaType)));
 
 			if (alreadySavedByEcho)
 			{
 				_logger.LogInformation("🤖 [Bot Reply Deduplicated] Сообщение уже зафиксировано через Meta Echo. Дубль предотвращен.");
-				return false; // Вторую копию в базу не пишем и в SignalR не шлем!
+				return false;
 			}
 
 			var message = new InboxMessage
 			{
 				ConversationId = conversation.Id,
 				Text = text,
+				MediaUrl = mediaUrl,
+				MediaType = mediaType,
 				IsIncoming = false,
 				IsSentByBot = true,
 				IsReadByManager = true,
@@ -274,7 +281,7 @@ namespace CrossChat.Services
 
 			_db.InboxMessages.Add(message);
 
-			conversation.LastMessageSnippet = text;
+			conversation.LastMessageSnippet = mediaType == "audio" ? "🎙️ Голосовое сообщение" : text;
 			conversation.LastMessageAt = DateTime.UtcNow;
 
 			await _db.SaveChangesAsync();
@@ -862,28 +869,28 @@ namespace CrossChat.Services
 								!m.IsIncoming &&
 								m.CreatedAtUtc >= thresholdUtc)
 					.OrderByDescending(m => m.CreatedAtUtc)
-					.FirstOrDefaultAsync(m => m.Text.Trim() == cleanText);
+					.FirstOrDefaultAsync(m =>
+						m.Text.Trim() == cleanText ||
+						(!string.IsNullOrEmpty(mediaType) && m.MediaType == mediaType));
 
 				if (recentSentMessage != null)
 				{
-					// Это эхо нашего же сообщения с сайта! Привязываем ID от Meta и НЕ создаем дубль:
+					bool needSave = false;
 					if (string.IsNullOrEmpty(recentSentMessage.ExternalMessageId))
 					{
 						recentSentMessage.ExternalMessageId = messageId;
-						await _db.SaveChangesAsync();
+						needSave = true;
 					}
+					// Подменяем временный URL сервера на постоянный Meta CDN URL
+					if (!string.IsNullOrEmpty(mediaUrl) && recentSentMessage.MediaUrl != mediaUrl)
+					{
+						recentSentMessage.MediaUrl = mediaUrl;
+						needSave = true;
+					}
+					if (needSave) await _db.SaveChangesAsync();
+
 					_logger.LogInformation("📱 [Echo Deduplicated] Эхо от Meta успешно склеено с сообщением #{Id}", recentSentMessage.Id);
-					return false; // ВЫХОДИМ: второй раз в базу не пишем и в SignalR не шлем!
-				}
-
-				if (recentSentMessage != null)
-				{
-					if (string.IsNullOrEmpty(recentSentMessage.ExternalMessageId))
-					{
-						recentSentMessage.ExternalMessageId = messageId;
-						await _db.SaveChangesAsync();
-					}
-					return false; // Склеено с сообщением с сайта
+					return false;
 				}
 
 				if (!string.IsNullOrEmpty(messageId))
