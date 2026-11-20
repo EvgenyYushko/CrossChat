@@ -27,7 +27,10 @@ namespace CrossChat.Integrations.Services
 			_apiKey = config["GEMINI_API_KEY"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "";
 		}
 
-		public async Task<DirectReplyDecisionResult> EvaluateDirectReplyAsync(string conversationTranscript, CancellationToken ct = default)
+		public async Task<DirectReplyDecisionResult> EvaluateDirectReplyAsync(
+			string conversationTranscript,
+			CancellationToken ct = default,
+			IReadOnlyList<MediaCategoryPromptOption>? mediaCategories = null)
 		{
 			var sw = Stopwatch.StartNew();
 			var result = new DirectReplyDecisionResult();
@@ -38,57 +41,82 @@ namespace CrossChat.Integrations.Services
 				return result;
 			}
 
+			var questions = new Dictionary<string, object>
+			{
+				["needs_reply"] = new
+				{
+					type = "noul",
+					instructions = "Analyze the latest [User] message in the context of the Instagram Direct conversation. " +
+						   "Does it require a meaningful text reply? " +
+						   "Answer TRUE if the user asks a question, greets, flirts, shares news, makes a request, or invites further conversation. " +
+						   "Answer FALSE if the latest message is ONLY emojis, stickers, laughter (like 'haha', 'лол', 'ахах'), " +
+						   "or a brief closing acknowledgment that ends the turn (like 'ok', 'thanks', 'got it', 'ок', 'спасибо', 'понятно', 'хорошо', 'угу')."
+				},
+				["is_spam"] = new
+				{
+					type = "noul",
+					instructions = "Is the latest [User] message unsolicited commercial spam, crypto/betting/promotion advertising, " +
+						   "suspicious phishing links, mass-follow bot spam, or an automated promotional broadcast?"
+				},
+				["wants_link"] = new
+				{
+					type = "noul",
+					instructions = "Is the latest [User] message asking for a link, URL, Telegram channel/group/username, " +
+						   "external website, private page, or asking where to find/buy/subscribe to content " +
+						   "(e.g. 'drop the link', 'send your tg', 'дай ссылку', 'скинь тг', 'где тебя найти')?"
+				},
+				["needs_human"] = new
+				{
+					type = "noul",
+					instructions = "Should this conversation be handed over to a real human owner/manager right now? " +
+						   "Answer TRUE if the user explicitly asks for a human/manager/admin, expresses anger or a complaint, " +
+						   "reports a payment or order problem, or makes a specific business/collaboration inquiry."
+				},
+				["should_reply_with_voice"] = new
+				{
+					type = "noul",
+					instructions = "Should the assistant reply with a rare voice note instead of plain text? " +
+						   "Answer TRUE ONLY if: (1) the user sent a voice message, OR (2) the user explicitly asks for a voice/audio reply, " +
+						   "OR (3) it is a truly special emotional moment where a voice note adds major value — AND the assistant has NOT already sent a voice message ('🎙️') in the recent messages. " +
+						   "Answer FALSE for normal flirting, casual chat, factual questions, links, or frequent back-to-back voice notes."
+				},
+				["contains_personal_fact"] = new
+				{
+					type = "noul",
+					instructions = "Did the latest [User] message(s) reveal any meaningful, lasting personal fact about the user worth remembering long-term " +
+						   "(such as their real name, city/country, job/occupation, hobbies, pets, relationship status, birthday/upcoming life event, or stable preferences)? " +
+						   "Answer FALSE for generic small talk, greetings, compliments, questions about the assistant, or temporary reactions."
+				}
+			};
+
+			if (mediaCategories != null && mediaCategories.Count > 0)
+			{
+				questions["wants_media"] = new
+				{
+					type = "noul",
+					instructions = "Should the assistant attach a personal photo or short video right now? " +
+								   "Answer TRUE if the user explicitly asks for a photo/video/pic/selfie ('скинь фото', 'покажись', 'send a pic'), " +
+								   "OR if the conversation naturally and strongly calls for sharing a visual moment right now — " +
+								   "AND the assistant has NOT just sent a photo/video ('📷' or '🎬') in the very last few turns. " +
+								   "Answer FALSE for casual greetings, factual questions, spam, or plain acknowledgments."
+				};
+
+				foreach (var cat in mediaCategories)
+				{
+					string descHint = string.IsNullOrWhiteSpace(cat.Description) ? "" : $" ({cat.Description})";
+					questions[$"media_cat_{cat.Id}"] = new
+					{
+						type = "noul",
+						instructions = $"If sending a photo/video right now, does the user's request or conversation specifically match the category '{cat.Name}'{descHint}?"
+					};
+				}
+			}
+
 			var payload = new
 			{
 				model = "gemini-decision-1",
 				input = conversationTranscript,
-				questions = new
-				{
-					needs_reply = new
-					{
-						type = "noul",
-						instructions = "Analyze the latest [User] message in the context of the Instagram Direct conversation. " +
-					   "Does it require a meaningful text reply? " +
-					   "Answer TRUE if the user asks a question, greets, flirts, shares news, makes a request, or invites further conversation. " +
-					   "Answer FALSE if the latest message is ONLY emojis, stickers, laughter (like 'haha', 'лол', 'ахах'), " +
-					   "or a brief closing acknowledgment that ends the turn (like 'ok', 'thanks', 'got it', 'ок', 'спасибо', 'понятно', 'хорошо', 'угу')."
-					},
-					is_spam = new
-					{
-						type = "noul",
-						instructions = "Is the latest [User] message unsolicited commercial spam, crypto/betting/promotion advertising, " +
-					   "suspicious phishing links, mass-follow bot spam, or an automated promotional broadcast?"
-					},
-					wants_link = new
-					{
-						type = "noul",
-						instructions = "Is the latest [User] message asking for a link, URL, Telegram channel/group/username, " +
-					   "external website, private page, or asking where to find/buy/subscribe to content " +
-					   "(e.g. 'drop the link', 'send your tg', 'дай ссылку', 'скинь тг', 'где тебя найти')?"
-					},
-					needs_human = new
-					{
-						type = "noul",
-						instructions = "Should this conversation be handed over to a real human owner/manager right now? " +
-					   "Answer TRUE if the user explicitly asks for a human/manager/admin, expresses anger or a complaint, " +
-					   "reports a payment or order problem, or makes a specific business/collaboration inquiry."
-					},
-					should_reply_with_voice = new
-					{
-						type = "noul",
-						instructions = "Should the assistant reply with a rare voice note instead of plain text? " +
-									   "Answer TRUE ONLY if: (1) the user sent a voice message, OR (2) the user explicitly asks for a voice/audio reply, " +
-									   "OR (3) it is a truly special emotional moment where a voice note adds major value — AND the assistant has NOT already sent a voice message ('🎙️') in the recent messages. " +
-									   "Answer FALSE for normal flirting, casual chat, factual questions, links, or frequent back-to-back voice notes."
-					},
-					contains_personal_fact = new
-					{
-						type = "noul",
-						instructions = "Did the latest [User] message(s) reveal any meaningful, lasting personal fact about the user worth remembering long-term " +
-						"(such as their real name, city/country, job/occupation, hobbies, pets, relationship status, birthday/upcoming life event, or stable preferences)? " +
-						"Answer FALSE for generic small talk, greetings, compliments, questions about the assistant, or temporary reactions."
-					}
-				}
+				questions
 			};
 
 			Exception? lastException = null;
@@ -168,6 +196,23 @@ namespace CrossChat.Integrations.Services
 						{
 							result.ContainsPersonalFactProb = pf.Noul ?? 0.0;
 							result.ContainsPersonalFactConfidence = pf.Confidence ?? 1.0;
+						}
+
+						if (apiResp.Answers.TryGetValue("wants_media", out var wm))
+						{
+							result.WantsMediaProb = wm.Noul ?? 0.0;
+							result.WantsMediaConfidence = wm.Confidence ?? 1.0;
+						}
+
+						if (mediaCategories != null)
+						{
+							foreach (var cat in mediaCategories)
+							{
+								if (apiResp.Answers.TryGetValue($"media_cat_{cat.Id}", out var catAns) && catAns.Noul.HasValue)
+								{
+									result.MediaCategoryProbs[cat.Id] = catAns.Noul.Value;
+								}
+							}
 						}
 
 						result.InputTokens = apiResp.Usage?.TotalInputTokens ?? 0;

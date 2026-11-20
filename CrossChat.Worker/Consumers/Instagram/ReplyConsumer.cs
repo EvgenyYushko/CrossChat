@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
@@ -38,6 +39,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly IVoiceService _voiceService;
 	private readonly SiteSettings _siteSettings;
 	IDatabase _redis;
+	private readonly IGoogleDriveUploader _googleDriveUploader;
 
 	// Статический лимитер (один на всё приложение)
 	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
@@ -62,7 +64,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		IGeminiDecisionService decisionService,
 		ITelegramService telegramService,
 		IVoiceService voiceService,
-		SiteSettings siteSettings
+		SiteSettings siteSettings,
+		IGoogleDriveUploader googleDriveUploader
 	)
 	{
 		_logger = logger;
@@ -76,6 +79,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		_telegramService = telegramService;
 		_voiceService = voiceService;
 		_siteSettings = siteSettings;
+		_googleDriveUploader = googleDriveUploader;
 	}
 
 	public async Task Consume(ConsumeContext<ProcessDialogReply> context)
@@ -344,10 +348,66 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				transcriptBuilder.AppendLine($"{speaker}: {item.Text}");
 			}
 
-			var decision = await _decisionService.EvaluateDirectReplyAsync(transcriptBuilder.ToString(), context.CancellationToken);
+			List<MediaCategoryPromptOption>? mediaCategoryOptions = null;
+			List<InstagramMediaItem> availableGalleryItems = new();
+			HashSet<int> sentMediaIds = new();
+			int totalGalleryCount = 0;
+
+			if (settings.IsAutoMediaEnabled)
+			{
+				var botCategories = await _db.InstagramMediaCategories
+					.AsNoTracking()
+					.Where(c => c.InstagramSettingsId == settings.Id)
+					.ToListAsync();
+
+				var allItems = await _db.InstagramMediaItems
+					.AsNoTracking()
+					.Where(i => i.InstagramSettingsId == settings.Id)
+					.ToListAsync();
+
+				totalGalleryCount = allItems.Count;
+
+				if (totalGalleryCount > 0)
+				{
+					sentMediaIds = (await _db.InstagramCustomerSentMedias
+						.AsNoTracking()
+						.Where(s => s.CustomerId == customer.Id)
+						.Select(s => s.MediaItemId)
+						.ToListAsync())
+						.ToHashSet();
+
+					availableGalleryItems = allItems
+						.Where(i => !sentMediaIds.Contains(i.Id))
+						.ToList();
+
+					if (availableGalleryItems.Count > 0)
+					{
+						// Передаём в Decision 1 категории, в которых вообще загружены файлы
+						mediaCategoryOptions = botCategories
+							.Where(c => allItems.Any(i => i.CategoryId == c.Id))
+							.Select(c => new MediaCategoryPromptOption
+							{
+								Id = c.Id,
+								Name = c.Name,
+								Description = c.Description,
+								IsDefault = c.IsDefault
+							})
+							.ToList();
+					}
+				}
+			}
+
+			var decision = await _decisionService.EvaluateDirectReplyAsync(
+				transcriptBuilder.ToString(),
+				context.CancellationToken,
+				mediaCategoryOptions);
+
 			bool shouldExtractPersonalFact = false;
 			bool shouldRespondWithVoice = false;
 			var voiceCooldownKey = $"voice:cooldown:{businessAccountId}:{senderId}";
+			var mediaCooldownKey = $"media:cooldown:{businessAccountId}:{senderId}";
+			InstagramMediaItem? selectedMediaToSend = null;
+			string? selectedMediaCategoryName = null;
 
 			if (decision.IsSuccess)
 			{
@@ -355,8 +415,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					$"🧠 [Decision 1] @{customer.Username} | Ответ: {decision.NeedsReplyProb:P0} | " +
 					$"Спам: {decision.IsSpamProb:P0} | Ссылка: {decision.WantsLinkProb:P0} | " +
 					$"Человек: {decision.NeedsHumanProb:P0} | Голос: {decision.ShouldVoiceReplyProb:P0} | " +
-					$"Факт: {decision.ContainsPersonalFactProb:P0} | " +
+					$"Факт: {decision.ContainsPersonalFactProb:P0} | Медиа: {decision.WantsMediaProb:P0} | " +
 					$"{decision.ElapsedMs} мс";
+
 				_logger.LogInformation(logMsg);
 				await _console.LogInfo(logMsg);
 
@@ -473,6 +534,62 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 
 				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.60;
+
+				// 5. ВЫБОР ФОТО/ВИДЕО ИЗ МЕДИАТЕКИ ПО КАТЕГОРИЯМ
+				if (availableGalleryItems.Count > 0 && decision.WantsMediaProb >= 0.72)
+				{
+					bool isMediaOnCooldown = await _redis.KeyExistsAsync(mediaCooldownKey);
+					if (isMediaOnCooldown && decision.WantsMediaProb < 0.90)
+					{
+						await _console.LogInfo($"⏳ [Media Cooldown] Недавно уже отправляли медиа @{customer.Username} ({decision.WantsMediaProb:P0}) — пропускаем.");
+					}
+					else
+					{
+						int? targetCategoryId = null;
+
+						var bestCat = decision.MediaCategoryProbs
+							.Where(kv => kv.Value >= 0.55)
+							.OrderByDescending(kv => kv.Value)
+							.FirstOrDefault();
+
+						if (bestCat.Key > 0)
+						{
+							var itemsInBest = availableGalleryItems.Where(i => i.CategoryId == bestCat.Key).ToList();
+							if (itemsInBest.Count > 0)
+							{
+								targetCategoryId = bestCat.Key;
+								selectedMediaToSend = itemsInBest[Random.Shared.Next(itemsInBest.Count)];
+							}
+						}
+
+						// Фоллбэк в дефолтную категорию ("Общее"), если запрос общий или целевая категория исчерпана
+						if (selectedMediaToSend == null)
+						{
+							var defaultCat = mediaCategoryOptions?.FirstOrDefault(c => c.IsDefault);
+							if (defaultCat != null)
+							{
+								var itemsInDefault = availableGalleryItems.Where(i => i.CategoryId == defaultCat.Id).ToList();
+								if (itemsInDefault.Count > 0)
+								{
+									targetCategoryId = defaultCat.Id;
+									selectedMediaToSend = itemsInDefault[Random.Shared.Next(itemsInDefault.Count)];
+								}
+							}
+						}
+
+						if (selectedMediaToSend != null)
+						{
+							selectedMediaCategoryName = mediaCategoryOptions?.FirstOrDefault(c => c.Id == targetCategoryId)?.Name ?? "Общее";
+							// Если прикрепляем фото/видео — отвечаем текстом + медиа (без одновременного ГС)
+							shouldRespondWithVoice = false;
+							await _console.Log($"🖼️ [Decision 1] Выбрано {selectedMediaToSend.MediaType} из «{selectedMediaCategoryName}» ({decision.WantsMediaProb:P0}).");
+						}
+						else
+						{
+							await _console.LogInfo("🖼️ [Media Gallery] В нужной и дефолтной категориях нет неотправленных файлов для этого клиента — пропускаем.");
+						}
+					}
+				}
 			}
 			else
 			{
@@ -519,8 +636,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				if (!string.IsNullOrEmpty(contextText))
 				{
 					// Сохраняем ранее накопленные факты из переписки, чтобы суточное обновление профиля их не затёрло!
-					string existingMemory = ExtractMemorySection(customer.AiContext);
-					userContextInfo = CombineAiContext(contextText, existingMemory);
+					string existingMemory = ExtractSection(customer.AiContext, MemorySectionMarker, MediaStatsSectionMarker);
+					string existingMediaStats = ExtractSection(customer.AiContext, MediaStatsSectionMarker, null);
+					userContextInfo = CombineAiContext(contextText, existingMemory, existingMediaStats);
 
 					await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
 					customer.AiContext = userContextInfo;
@@ -552,11 +670,27 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			if (shouldRespondWithVoice)
 			{
 				systemPrompt +=
-					"\n\n[VOICE REPLY MODE]: Your answer will be synthesized into a natural voice message. " +
+					"\n\nNote for voice reply: Your answer will be synthesized into a natural voice message. " +
 					"Reply in 1-3 warm, conversational, human-like sentences. " +
 					"STRICT RULE: NEVER include any URLs, website links, domain names, t.me links, @usernames, or emojis. " +
 					"Do NOT use markdown (*, **, #) or bullet lists. " +
 					"You may naturally add subtle vocal cues where appropriate: <chuckle>, <sigh>, <whisper>, <short pause>.";
+			}
+
+			if (selectedMediaToSend != null)
+			{
+				string mediaLabel = selectedMediaToSend.MediaType == "video" ? "short video" : "photo";
+				systemPrompt +=
+					$"\n\nNote for this reply (do NOT print any tags or brackets like [MEDIA] in your message): " +
+					$"Right after this text message, your {mediaLabel} (category: '{selectedMediaCategoryName}') will be sent automatically. " +
+					"Write 1-2 natural sentences accompanying it (and do NOT say you cannot send photos or videos).";
+			}
+			else if (settings.IsAutoMediaEnabled && totalGalleryCount > 0 && availableGalleryItems.Count == 0)
+			{
+				systemPrompt +=
+					"\n\nNote for this reply (do NOT pricleanTextReplynt any tags or brackets): " +
+					"All available gallery photos/videos have already been sent to this user. " +
+					"Do NOT promise to send a new photo or video right now.";
 			}
 
 			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
@@ -650,10 +784,78 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			if (!sentAsVoice)
 			{
 				// На случай фолбэка после VOICE REPLY MODE вычищаем вокальные <теги>
-				string cleanTextReply = Regex.Replace(aiResponse, @"<[^>]+>", "").Trim();
+				string cleanTextReply = Regex.Replace(aiResponse,@"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?","",RegexOptions.IgnoreCase).Trim();
 				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken);
 				await _inboxService.SaveBotReplyAsync(conversation.Id, cleanTextReply);
 				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
+			}
+
+			if (selectedMediaToSend != null)
+			{
+				try
+				{
+					if (!Directory.Exists(_siteSettings.TempFolder))
+						Directory.CreateDirectory(_siteSettings.TempFolder);
+
+					string ext = Path.GetExtension(selectedMediaToSend.FileName);
+					if (string.IsNullOrWhiteSpace(ext))
+						ext = selectedMediaToSend.MediaType == "video" ? ".mp4" : ".jpg";
+
+					string tempFileName = $"gal_{Guid.NewGuid():N}{ext}";
+					string tempLocalPath = Path.Combine(_siteSettings.TempFolder, tempFileName);
+
+					// 1. Скачиваем оригинал из Google Drive на диск сервера
+					await _googleDriveUploader.DownloadFileAsync(selectedMediaToSend.GoogleDriveFileId, tempLocalPath);
+					string publicMediaUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
+
+					// 2. Небольшая живая пауза после текста и обновление флага эха
+					await Task.Delay(1200);
+					await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
+
+					// 3. Отправляем фото/видео в Instagram Direct
+					await _instaService.SendMediaAttachmentAsync(
+						senderId,
+						selectedMediaToSend.MediaType,
+						publicMediaUrl,
+						accessInstaToken);
+
+					// 4. Фиксируем в БД, что этот файл уже отправлен этому клиенту
+					_db.InstagramCustomerSentMedias.Add(new InstagramCustomerSentMedia
+					{
+						CustomerId = customer.Id,
+						MediaItemId = selectedMediaToSend.Id,
+						SentAtUtc = DateTime.UtcNow
+					});
+
+					// 5. Обновляем статистику отправленных медиа в AiContext (для ИИ и вкладки AI Диалоги)
+					int newSentCount = sentMediaIds.Count + 1;
+					string mediaStatsText = $"Отправлено медиа из галереи: {newSentCount} из {totalGalleryCount} (последнее: «{selectedMediaCategoryName}», {selectedMediaToSend.MediaType})";
+
+					string rawCtx = !string.IsNullOrWhiteSpace(customer.AiContext) ? customer.AiContext : (userContextInfo ?? "");
+					string profilePart = ExtractProfileSection(rawCtx);
+					string memoryPart = ExtractSection(rawCtx, MemorySectionMarker, MediaStatsSectionMarker);
+
+					customer.AiContext = CombineAiContext(profilePart, memoryPart, mediaStatsText);
+					await _db.SaveChangesAsync();
+
+					await _redis.StringSetAsync(contextRedisKey, customer.AiContext, TimeSpan.FromHours(24));
+					await _redis.StringSetAsync(mediaCooldownKey, "1", TimeSpan.FromMinutes(20));
+
+					// 6. Сохраняем в Инбокс
+					string inboxLabel = selectedMediaToSend.MediaType == "video" ? "🎬 Видеозапись" : "📷 Фотография";
+					await _inboxService.SaveBotReplyAsync(
+						conversation.Id,
+						inboxLabel,
+						mediaUrl: publicMediaUrl,
+						mediaType: selectedMediaToSend.MediaType);
+
+					await _console.Log($"🖼️ Отправлено {selectedMediaToSend.MediaType} из «{selectedMediaCategoryName}» клиенту {customer.Username} ({newSentCount}/{totalGalleryCount}).");
+				}
+				catch (Exception mediaEx)
+				{
+					_logger.LogWarning(mediaEx, "⚠️ [Media Gallery] Ошибка отправки медиа #{Id} для @{User}", selectedMediaToSend.Id, customer.Username);
+					await _console.LogWarning($"⚠️ Не удалось отправить медиа из галереи: {mediaEx.Message}");
+				}
 			}
 
 			await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
@@ -716,13 +918,17 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	}
 
 	private const string MemorySectionMarker = "MEMORY FACTS (LEARNED FROM CONVERSATION):";
+	private const string MediaStatsSectionMarker = "GALLERY MEDIA STATS:";
 
 	private static string ExtractProfileSection(string? aiContext)
 	{
 		if (string.IsNullOrWhiteSpace(aiContext)) return string.Empty;
 
-		int idx = aiContext.IndexOf(MemorySectionMarker, StringComparison.OrdinalIgnoreCase);
-		return idx >= 0 ? aiContext.Substring(0, idx).Trim() : aiContext.Trim();
+		int idxMem = aiContext.IndexOf(MemorySectionMarker, StringComparison.OrdinalIgnoreCase);
+		int idxMed = aiContext.IndexOf(MediaStatsSectionMarker, StringComparison.OrdinalIgnoreCase);
+
+		int cutIdx = new[] { idxMem, idxMed }.Where(i => i >= 0).DefaultIfEmpty(-1).Min();
+		return cutIdx >= 0 ? aiContext.Substring(0, cutIdx).Trim() : aiContext.Trim();
 	}
 
 	private static string ExtractMemorySection(string? aiContext)
@@ -735,15 +941,27 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		return aiContext.Substring(idx + MemorySectionMarker.Length).Trim();
 	}
 
-	private static string CombineAiContext(string? profilePart, string? memoryBullets)
+	private static string ExtractSection(string? aiContext, string marker, string? nextMarker)
 	{
-		string cleanProfile = (profilePart ?? string.Empty).Trim();
-		string cleanMemory = (memoryBullets ?? string.Empty).Trim();
+		if (string.IsNullOrWhiteSpace(aiContext)) return string.Empty;
+		int start = aiContext.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+		if (start < 0) return string.Empty;
 
-		if (string.IsNullOrWhiteSpace(cleanMemory)) return cleanProfile;
-		if (string.IsNullOrWhiteSpace(cleanProfile)) return $"{MemorySectionMarker}\n{cleanMemory}";
+		int bodyStart = start + marker.Length;
+		int end = !string.IsNullOrEmpty(nextMarker)
+			? aiContext.IndexOf(nextMarker, bodyStart, StringComparison.OrdinalIgnoreCase)
+			: -1;
 
-		return $"{cleanProfile}\n\n{MemorySectionMarker}\n{cleanMemory}";
+		return (end >= 0 ? aiContext.Substring(bodyStart, end - bodyStart) : aiContext.Substring(bodyStart)).Trim();
+	}
+
+	private static string CombineAiContext(string? profilePart, string? memoryBullets, string? mediaStats = null)
+	{
+		var parts = new List<string>();
+		if (!string.IsNullOrWhiteSpace(profilePart)) parts.Add(profilePart.Trim());
+		if (!string.IsNullOrWhiteSpace(memoryBullets)) parts.Add($"{MemorySectionMarker}\n{memoryBullets.Trim()}");
+		if (!string.IsNullOrWhiteSpace(mediaStats)) parts.Add($"{MediaStatsSectionMarker}\n{mediaStats.Trim()}");
+		return string.Join("\n\n", parts);
 	}
 
 	private async Task TryUpdateLongTermMemoryAsync(
@@ -764,8 +982,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			if (latestUserMessages.Count == 0) return;
 
-			string existingMemory = ExtractMemorySection(customer.AiContext);
+			string existingMemory = ExtractSection(customer.AiContext, MemorySectionMarker, MediaStatsSectionMarker);
 			string existingBlock = string.IsNullOrWhiteSpace(existingMemory) ? "None" : existingMemory;
+			string existingMediaStats = ExtractSection(customer.AiContext, MediaStatsSectionMarker, null);
 			string latestBlock = string.Join("\n", latestUserMessages);
 
 			string prompt =
@@ -809,7 +1028,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			string profilePart = ExtractProfileSection(
 				!string.IsNullOrWhiteSpace(customer.AiContext) ? customer.AiContext : fallbackProfileContext);
 
-			string mergedContext = CombineAiContext(profilePart, updatedBullets);
+			string mergedContext = CombineAiContext(profilePart, updatedBullets, existingMediaStats);
 
 			customer.AiContext = mergedContext;
 			await _db.SaveChangesAsync();

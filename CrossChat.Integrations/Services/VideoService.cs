@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 
 namespace CrossChat.Integrations.Services
 {
@@ -673,6 +676,49 @@ namespace CrossChat.Integrations.Services
 
 			// Перекодируем в эталонный AAC .m4a (исходный tempInputPath удалится внутри ConvertToInstagramAudioAsync)
 			return await ConvertToInstagramAudioAsync(tempInputPath, logger);
+		}
+
+		/// <summary>
+		/// Генерирует компактную Base64-миниатюру (до 360px, ~15 КБ) для фото или видео галереи
+		/// </summary>
+		public static async Task<string?> CreateGalleryThumbnailBase64Async(string localFilePath, bool isVideo)
+		{
+			if (!File.Exists(localFilePath)) return null;
+
+			string? tempVideoThumb = null;
+			try
+			{
+				string imagePath = localFilePath;
+				if (isVideo)
+				{
+					tempVideoThumb = await GenerateVideoThumbnailAsync(localFilePath);
+					if (string.IsNullOrEmpty(tempVideoThumb) || !File.Exists(tempVideoThumb))
+						return null;
+					imagePath = tempVideoThumb;
+				}
+
+				using var image = await Image.LoadAsync(imagePath);
+				image.Mutate(x => x.Resize(new ResizeOptions
+				{
+					Mode = ResizeMode.Max,
+					Size = new Size(360, 360)
+				}));
+
+				using var ms = new MemoryStream();
+				await image.SaveAsJpegAsync(ms, new JpegEncoder { Quality = 75 });
+				return $"data:image/jpeg;base64,{Convert.ToBase64String(ms.ToArray())}";
+			}
+			catch
+			{
+				return null;
+			}
+			finally
+			{
+				if (!string.IsNullOrEmpty(tempVideoThumb) && File.Exists(tempVideoThumb))
+				{
+					try { File.Delete(tempVideoThumb); } catch { }
+				}
+			}
 		}
 
 		private static byte[] BuildWavFromRawPcm(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)

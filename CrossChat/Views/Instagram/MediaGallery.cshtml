@@ -1,0 +1,415 @@
+@model CrossChat.Data.Entities.InstagramSettings
+@{
+    var categories = ViewBag.Categories as List<CrossChat.Data.Entities.InstagramMediaCategory> ?? new();
+    int totalItems = categories.Sum(c => c.Items.Count);
+    ViewData["Title"] = "Медиатека — @" + (Model.Username ?? "Instagram");
+}
+
+@section Styles {
+    <style>
+        .gallery-wrap {
+            max-width: 1050px;
+            margin: 5rem auto 3rem;
+            padding: 0 1rem;
+        }
+
+        .top-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .cat-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+            align-items: center;
+        }
+
+        .cat-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: 0.2s;
+        }
+
+            .cat-pill.active {
+                background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+                border-color: transparent;
+                color: #fff;
+                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+            }
+
+        .cat-del-btn {
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: inherit;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+        }
+
+        .upload-zone {
+            background: var(--glass-bg);
+            border: 2px dashed var(--glass-border);
+            border-radius: 18px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 1.5rem;
+            transition: 0.2s;
+        }
+
+            .upload-zone:hover, .upload-zone.dragover {
+                border-color: #f59e0b;
+                background: rgba(245, 158, 11, 0.06);
+            }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 14px;
+        }
+
+        .media-card {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            background: #0f172a;
+            aspect-ratio: 3 / 4;
+        }
+
+            .media-card img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+
+        .media-badge-top {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0,0,0,0.68);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 8px;
+        }
+
+        .media-badge-sent {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(16,185,129,0.85);
+            color: #fff;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 8px;
+        }
+
+        .media-del-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(239,68,68,0.85);
+            border: none;
+            color: #fff;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .cat-panel {
+            display: none;
+        }
+
+            .cat-panel.active {
+                display: block;
+            }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 4px;
+                bottom: 4px;
+                background: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background: #10b981;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(24px);
+            }
+    </style>
+}
+
+@section NavbarActions {
+    <a href="/instagram?botId=@Model.Id" style="color:var(--text-secondary); text-decoration:none; font-size:0.9rem; font-weight:600;">
+        ← Назад к настройкам @@@Model.Username
+    </a>
+}
+
+<div class="gallery-wrap">
+    <div class="top-card">
+        <div>
+            <h2 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: var(--text-main);">
+                🖼️ Умная Медиатека для Direct
+            </h2>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+                Аккаунт: <strong style="color:#e1306c;">@@@Model.Username</strong> • Всего файлов: <strong>@totalItems</strong> • Категорий: <strong>@categories.Count</strong>
+            </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:0.88rem; font-weight:600; color:var(--text-main);">Автоотправка в Direct:</span>
+            <label class="switch">
+                <input type="checkbox" id="autoMediaSwitch" @(Model.IsAutoMediaEnabled ? "checked" : "") onchange="toggleAutoMedia(this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- ВКЛАДКИ КАТЕГОРИЙ -->
+    <div class="cat-bar">
+        @for (int i = 0; i < categories.Count; i++)
+        {
+            var cat = categories[i];
+            <div class="cat-pill @(i == 0 ? "active" : "")" data-cat-id="@cat.Id" onclick="selectCategory(@cat.Id, this)">
+                <span>@(cat.IsDefault ? "⭐ " : "📁 ")@cat.Name (@cat.Items.Count)</span>
+                @if (!cat.IsDefault)
+                {
+                    <button type="button" class="cat-del-btn" title="Удалить категорию" onclick="deleteCategory(@cat.Id, '@cat.Name', event)">×</button>
+                }
+            </div>
+        }
+
+        <button type="button" onclick="openAddCategoryModal()" class="cat-pill" style="border-style:dashed; color:#10b981; border-color:rgba(16,185,129,0.4);">
+            + Новая категория
+        </button>
+    </div>
+
+    <!-- ЗОНА ЗАГРУЗКИ -->
+    <div id="uploadZone" class="upload-zone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" style="display:none;" onchange="handleFiles(this.files)">
+        <div style="font-size:2rem; margin-bottom:6px;">📤</div>
+        <div id="uploadTitle" style="font-weight:700; color:var(--text-main);">Нажмите или перетащите фото / видео в выбранную категорию</div>
+        <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">Поддерживаются JPG, PNG, WEBP, MP4, MOV • Можно пачкой сразу несколько файлов</div>
+        <div id="uploadProgress" style="display:none; margin-top:10px; color:#f59e0b; font-weight:700;">⏳ Загрузка и обработка файлов...</div>
+    </div>
+
+    <!-- СЕТКИ МЕДИА ПО КАТЕГОРИЯМ -->
+    @for (int i = 0; i < categories.Count; i++)
+    {
+        var cat = categories[i];
+        <div class="cat-panel @(i == 0 ? "active" : "")" id="panel_@cat.Id">
+            @if (!string.IsNullOrWhiteSpace(cat.Description))
+            {
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:12px;">
+                    💡 Подсказка для ИИ: <em>@cat.Description</em>
+                </div>
+            }
+
+            @if (cat.Items.Count == 0)
+            {
+                <div style="text-align:center; padding:3rem; color:var(--text-secondary); background:var(--glass-bg); border-radius:16px; border:1px solid var(--glass-border);">
+                    В этой категории пока пусто. Загрузите сюда фото или видео выше!
+                </div>
+            }
+            else
+            {
+                <div class="media-grid">
+                    @foreach (var item in cat.Items.OrderByDescending(x => x.CreatedAtUtc))
+                    {
+                        <div class="media-card" id="item_@item.Id">
+                            @if (!string.IsNullOrEmpty(item.ThumbnailBase64))
+                            {
+                                <img src="@item.ThumbnailBase64" alt="@item.FileName">
+                            }
+                            else
+                            {
+                                <div style="display:flex; align-items:center; justify-content:center; height:100%; color:#94a3b8; font-size:0.8rem; padding:10px; text-align:center;">
+                                    @item.FileName
+                                </div>
+                            }
+
+                            <span class="media-badge-top">@(item.MediaType == "video" ? "🎬 ВИДЕО" : "📷 ФОТО")</span>
+                            <span class="media-badge-sent" title="Скольким клиентам уже отправлено">👁️ @item.SentHistory.Count</span>
+                            <button type="button" class="media-del-btn" title="Удалить" onclick="deleteItem(@item.Id)">🗑️</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- МОДАЛКА СОЗДАНИЯ КАТЕГОРИИ -->
+<div id="catModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; padding:1rem;" onclick="closeCatModal()">
+    <div style="background:#1e293b; border:1px solid var(--glass-border); border-radius:18px; padding:1.5rem; width:100%; max-width:420px;" onclick="event.stopPropagation()">
+        <h3 style="margin:0 0 12px; color:#fff;">📁 Новая категория медиа</h3>
+        <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-bottom:4px;">Название (увидит модель при выборе):</label>
+        <input type="text" id="newCatName" placeholder="Например: Ноги, Спортзал, Пляж" style="width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#fff; margin-bottom:12px;">
+
+        <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-bottom:4px;">Подсказка для ИИ (необязательно):</label>
+        <input type="text" id="newCatDesc" placeholder="Когда отправлять: если просит показать ноги / обувь" style="width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#fff; margin-bottom:16px;">
+
+        <div style="display:flex; gap:10px;">
+            <button type="button" onclick="createCategory()" style="flex:1; padding:10px; border-radius:10px; border:none; background:#10b981; color:#fff; font-weight:700; cursor:pointer;">Создать</button>
+            <button type="button" onclick="closeCatModal()" style="padding:10px 16px; border-radius:10px; border:1px solid #334155; background:transparent; color:#cbd5e1; cursor:pointer;">Отмена</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const botId = @Model.Id;
+        let activeCategoryId = @(categories.FirstOrDefault()?.Id ?? 0);
+
+        function selectCategory(catId, el) {
+            activeCategoryId = catId;
+            document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.cat-panel').forEach(p => p.classList.remove('active'));
+            el.classList.add('active');
+            const panel = document.getElementById('panel_' + catId);
+            if (panel) panel.classList.add('active');
+        }
+
+        async function toggleAutoMedia(enabled) {
+            await fetch('/instagram/media-gallery/toggle-auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, enabled })
+            });
+        }
+
+        function openAddCategoryModal() { document.getElementById('catModal').style.display = 'flex'; }
+        function closeCatModal() { document.getElementById('catModal').style.display = 'none'; }
+
+        async function createCategory() {
+            const name = document.getElementById('newCatName').value.trim();
+            const description = document.getElementById('newCatDesc').value.trim();
+            if (!name) return alert('Введите название категории');
+
+            const res = await fetch('/instagram/media-gallery/categories/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, name, description })
+            });
+            const data = await res.json();
+            if (data.success) location.reload();
+            else alert(data.error || 'Ошибка создания');
+        }
+
+        async function deleteCategory(categoryId, name, e) {
+            e.stopPropagation();
+            if (!confirm(`Удалить категорию «${name}» и все её файлы?`)) return;
+
+            const res = await fetch('/instagram/media-gallery/categories/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ categoryId })
+            });
+            const data = await res.json();
+            if (data.success) location.reload();
+            else alert(data.error || 'Ошибка удаления');
+        }
+
+        async function deleteItem(itemId) {
+            if (!confirm('Удалить этот файл из Медиатеки?')) return;
+            const res = await fetch('/instagram/media-gallery/items/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId })
+            });
+            const data = await res.json();
+            if (data.success) document.getElementById('item_' + itemId)?.remove();
+        }
+
+        const zone = document.getElementById('uploadZone');
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
+        });
+
+        async function handleFiles(fileList) {
+            if (!activeCategoryId || !fileList.length) return;
+            const prog = document.getElementById('uploadProgress');
+            prog.style.display = 'block';
+
+            const formData = new FormData();
+            formData.append('botId', botId);
+            formData.append('categoryId', activeCategoryId);
+            for (const f of fileList) formData.append('files', f);
+
+            try {
+                const res = await fetch('/instagram/media-gallery/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.errors && data.errors.length) alert('Предупреждения:\n' + data.errors.join('\n'));
+                if (data.success) location.reload();
+            } catch (err) {
+                alert('Ошибка загрузки: ' + err.message);
+            } finally {
+                prog.style.display = 'none';
+            }
+        }
+    </script>
+}

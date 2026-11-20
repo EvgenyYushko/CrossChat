@@ -72,4 +72,9 @@ public class InstagramSettings
 
 	// Список шаблонов для комментариев (каждый с новой строки или массив)
 	public string? CommentTemplates { get; set; } = "Спасибо за ваш комментарий! ❤️\nРады, что вам понравилось! 😊\nСпасибо за отклик! ✨";
+
+	// === УМНАЯ ГАЛЕРЕЯ МЕДИА ДЛЯ DIRECT ===
+	public bool IsAutoMediaEnabled { get; set; } = false;
+
+	public ICollection<InstagramMediaCategory> MediaCategories { get; set; } = new List<InstagramMediaCategory>();
 }

@@ -573,6 +573,118 @@ namespace CrossChat.Data.Migrations
                     b.ToTable("InstagramBotCustomers");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramCustomerSentMedia", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SentAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaItemId");
+
+                    b.HasIndex("CustomerId", "MediaItemId")
+                        .IsUnique();
+
+                    b.ToTable("InstagramCustomerSentMedias");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("InstagramSettingsId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstagramSettingsId");
+
+                    b.ToTable("InstagramMediaCategories");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("GoogleDriveFileId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("InstagramSettingsId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ThumbnailBase64")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("InstagramSettingsId", "CategoryId");
+
+                    b.ToTable("InstagramMediaItems");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -598,8 +710,9 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("CommentTemplates")
                         .HasColumnType("text");
 
-                    b.Property<string>("DailyLimitMessage")
-                        .HasColumnType("text");
+                    b.Property<string>("DailyLimitPrompt")
+                        .HasColumnType("text")
+                        .HasColumnName("DailyLimitMessage");
 
                     b.Property<string>("DailyStoryTime")
                         .IsRequired()
@@ -610,6 +723,9 @@ namespace CrossChat.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAutoMediaEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsCommentsEnabled")
@@ -1533,6 +1649,47 @@ namespace CrossChat.Data.Migrations
                     b.Navigation("InstagramSettings");
                 });
 
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramCustomerSentMedia", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.InstagramBotCustomer", "Customer")
+                        .WithMany("SentMediaHistory")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CrossChat.Data.Entities.InstagramMediaItem", "MediaItem")
+                        .WithMany("SentHistory")
+                        .HasForeignKey("MediaItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("MediaItem");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaCategory", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.InstagramSettings", "InstagramSettings")
+                        .WithMany("MediaCategories")
+                        .HasForeignKey("InstagramSettingsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InstagramSettings");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaItem", b =>
+                {
+                    b.HasOne("CrossChat.Data.Entities.InstagramMediaCategory", "Category")
+                        .WithMany("Items")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+                });
+
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramSettings", b =>
                 {
                     b.HasOne("CrossChat.Data.Entities.Profile", "Profile")
@@ -1767,11 +1924,25 @@ namespace CrossChat.Data.Migrations
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramBotCustomer", b =>
                 {
                     b.Navigation("ResponseLogs");
+
+                    b.Navigation("SentMediaHistory");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaCategory", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("CrossChat.Data.Entities.InstagramMediaItem", b =>
+                {
+                    b.Navigation("SentHistory");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.InstagramSettings", b =>
                 {
                     b.Navigation("Customers");
+
+                    b.Navigation("MediaCategories");
                 });
 
             modelBuilder.Entity("CrossChat.Data.Entities.Posting.PostEntity", b =>

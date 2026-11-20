@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using CrossChat.Data;
-using CrossChat.Infrastructure.Constants;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using Microsoft.EntityFrameworkCore;
@@ -72,7 +71,16 @@ namespace CrossChat.Worker.Jobs
 						.Select(m => m.ThumbnailDriveFileId!)
 						.ToListAsync();
 
-					activeDbFileIds = originalIds.Concat(thumbnailIds).Distinct().ToHashSet();
+					var galleryMediaIds = await db.InstagramMediaItems
+						.AsNoTracking()
+						.Select(m => m.GoogleDriveFileId)
+						.ToListAsync();
+
+					activeDbFileIds = originalIds
+						.Concat(thumbnailIds)
+						.Concat(galleryMediaIds)
+						.Distinct()
+						.ToHashSet();
 				}
 
 				_logger.LogInformation("💾 [Drive GC] Активных файлов в базе данных: {Count}", activeDbFileIds.Count);
@@ -88,9 +96,9 @@ namespace CrossChat.Worker.Jobs
 						continue;
 
 					// Достаем дату создания файла в UTC
-					DateTime createdTimeUtc = file.CreatedTimeDateTimeOffset?.UtcDateTime 
-					                          ?? file.CreatedTime?.ToUniversalTime() 
-					                          ?? DateTime.UtcNow;
+					DateTime createdTimeUtc = file.CreatedTimeDateTimeOffset?.UtcDateTime
+											  ?? file.CreatedTime?.ToUniversalTime()
+											  ?? DateTime.UtcNow;
 
 					if (createdTimeUtc < safetyThresholdUtc)
 					{
