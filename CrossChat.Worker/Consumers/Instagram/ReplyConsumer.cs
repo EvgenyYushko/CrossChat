@@ -281,6 +281,22 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 			}
 
+			// Подтягиваем расшифровки из Инбокса (чтобы вместо [Empty message] на наших прошлых ГС был их реальный текст)
+			var recentSavedRows = await _db.InboxMessages
+				.AsNoTracking()
+				.Where(m => m.ConversationId == conversation.Id && m.ExternalMessageId != null)
+				.OrderByDescending(m => m.CreatedAtUtc)
+				.Take(20)
+				.Select(m => new { m.ExternalMessageId, m.Text })
+				.ToListAsync();
+
+			var savedTextByExternalId = new Dictionary<string, string>();
+			foreach (var row in recentSavedRows)
+			{
+				if (!string.IsNullOrEmpty(row.ExternalMessageId) && !string.IsNullOrEmpty(row.Text))
+					savedTextByExternalId.TryAdd(row.ExternalMessageId, row.Text);
+			}
+
 			var chatHistory = new List<AiRequest>();
 			var unreadUserMessageIds = new List<string>();
 
@@ -294,6 +310,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					await _console.LogInfo("Медиа еще обрабатываются, Snooze...");
 					await context.SchedulePublish(TimeSpan.FromSeconds(60), context.Message);
 					return;
+				}
+
+				if (content == "[Empty message]" &&
+					!string.IsNullOrEmpty(msg.Id) &&
+					savedTextByExternalId.TryGetValue(msg.Id, out var savedInboxText))
+				{
+					content = savedInboxText;
 				}
 
 				string role = msg.From.Id == businessAccountId ? "model" : "user";
@@ -323,8 +346,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			var decision = await _decisionService.EvaluateDirectReplyAsync(transcriptBuilder.ToString(), context.CancellationToken);
 			bool shouldExtractPersonalFact = false;
-
 			bool shouldRespondWithVoice = false;
+			var voiceCooldownKey = $"voice:cooldown:{businessAccountId}:{senderId}";
+
 			if (decision.IsSuccess)
 			{
 				string logMsg =
@@ -425,21 +449,30 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 
 				// 4. ПРОВЕРЯЕМ ГОТОВНОСТЬ ГОЛОСОВОГО ОТВЕТА
-				if (decision.ShouldVoiceReplyProb >= 0.65)
+				bool userSentVoiceJustNow = chatHistory
+					.Where(m => m.Role == "user")
+					.TakeLast(Math.Max(1, unreadCount))
+					.Any(m => m.Text.Contains("[voice message]", StringComparison.OrdinalIgnoreCase));
+
+				if (decision.ShouldVoiceReplyProb >= 0.75)
 				{
 					var voiceSetting = settings.Profile?.VoiceSetting;
-					if (voiceSetting != null && voiceSetting.IsActive)
+					if (voiceSetting == null || !voiceSetting.IsActive)
+					{
+						await _console.LogInfo($"🎙️ [Decision 1] Модель предложила голос ({decision.ShouldVoiceReplyProb:P0}), но настройки голоса профиля отключены — отвечаем текстом.");
+					}
+					else if (!userSentVoiceJustNow && await _redis.KeyExistsAsync(voiceCooldownKey))
+					{
+						await _console.LogInfo($"⏳ [Voice Cooldown] Недавно уже отправляли ГС @{customer.Username} — отвечаем текстом, чтобы не спамить аудио.");
+					}
+					else
 					{
 						shouldRespondWithVoice = true;
 						await _console.Log($"🎙️ [Decision 1] Ответ будет сгенерирован голосом профиля ({decision.ShouldVoiceReplyProb:P0}).");
 					}
-					else
-					{
-						await _console.LogInfo($"🎙️ [Decision 1] Модель решила ответить голосом ({decision.ShouldVoiceReplyProb:P0}), но настройки голоса профиля отключены — отвечаем текстом.");
-					}
 				}
 
-				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.70;
+				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.60;
 			}
 			else
 			{
@@ -516,6 +549,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				_logger.LogInformation("👋 [Reply] Генерируем персонализированное прощание ИИ для @{User}", customer.Username);
 			}
 
+			if (shouldRespondWithVoice)
+			{
+				systemPrompt +=
+					"\n\n[VOICE REPLY MODE]: Your answer will be synthesized into a natural voice message. " +
+					"Reply in 1-3 warm, conversational, human-like sentences. " +
+					"STRICT RULE: NEVER include any URLs, website links, domain names, t.me links, @usernames, or emojis. " +
+					"Do NOT use markdown (*, **, #) or bullet lists. " +
+					"You may naturally add subtle vocal cues where appropriate: <chuckle>, <sigh>, <whisper>, <short pause>.";
+			}
+
 			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
 
 			if (string.IsNullOrWhiteSpace(aiResponse))
@@ -543,6 +586,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// Метка эхо для нашего бота:
 			var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
 			await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
+
+			if (shouldRespondWithVoice && ContainsUrl(aiResponse))
+			{
+				shouldRespondWithVoice = false;
+				await _console.LogInfo("🔗 [Voice Guard] В ответе ИИ есть ссылка — отменяем озвучку и отправляем текстом, чтобы ссылка была кликабельной.");
+			}
 
 			bool sentAsVoice = false;
 
@@ -587,6 +636,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 							mediaType: "audio");
 
 						sentAsVoice = true;
+						// Ставим кулдаун на 25 минут, чтобы следующее сообщение не превратилось в серию голосовых
+						await _redis.StringSetAsync(voiceCooldownKey, "1", TimeSpan.FromMinutes(25));
 						await _console.Log($"🎙️ Голосовой ответ успешно отправлен пользователю {customer.Username}");
 					}
 				}
@@ -633,6 +684,15 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			// 🚀 ГАРАНТИРОВАННОЕ СНЯТИЕ ЗАМКА ДИАЛОГА: срабатывает при ЛЮБОМ исходе!
 			await _redis.KeyDeleteAsync(dialogBusyKey);
 		}
+	}
+
+	private static bool ContainsUrl(string text)
+	{
+		if (string.IsNullOrWhiteSpace(text)) return false;
+		return Regex.IsMatch(
+			text,
+			@"(?:https?://|www\.|t\.me/|\b[a-z0-9-]+\.(?:com|ru|net|org|io|me|app|club|pro|by|ua|kz)\b(?:/\S*)?)",
+			RegexOptions.IgnoreCase);
 	}
 
 	private async Task SaveCustomerLog(string replyId, int id)

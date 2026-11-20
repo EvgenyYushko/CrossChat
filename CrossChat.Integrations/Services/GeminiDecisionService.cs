@@ -76,10 +76,10 @@ namespace CrossChat.Integrations.Services
 					should_reply_with_voice = new
 					{
 						type = "noul",
-						instructions = "Would a short, warm voice message be noticeably better here than a text reply? " +
-					   "Answer TRUE if the user sent a voice message, explicitly asks for a voice/audio note, " +
-					   "or writes something personal, emotional, or flirty where a voice note shines. " +
-					   "Answer FALSE for short factual questions, links, spam, or plain 'ok/thanks'."
+						instructions = "Should the assistant reply with a rare voice note instead of plain text? " +
+									   "Answer TRUE ONLY if: (1) the user sent a voice message, OR (2) the user explicitly asks for a voice/audio reply, " +
+									   "OR (3) it is a truly special emotional moment where a voice note adds major value — AND the assistant has NOT already sent a voice message ('🎙️') in the recent messages. " +
+									   "Answer FALSE for normal flirting, casual chat, factual questions, links, or frequent back-to-back voice notes."
 					},
 					contains_personal_fact = new
 					{
