@@ -569,6 +569,9 @@
                 <a href="/instagram/ai-chats?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); padding: 12px 6px;" title="История общения и анализ клиентов ИИ">
                     🤖 AI Диалоги
                 </a>
+                <a href="/instagram/media-gallery?botId=@Model.Id" class="btn" style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25); padding: 12px 6px;" title="Галерея фото и видео по категориям для автоотправки в Direct">
+                    🖼️ Медиатека
+                </a>
             </div>
 
             <div class="form-section">
@@ -580,6 +583,22 @@
                         <label>Автоответы в Direct</label>
                         <input type="checkbox" name="isDirectEnabled" value="true" @(Model.IsDirectEnabled ? "checked" : "")>
                         <input type="hidden" name="isDirectEnabled" value="false">
+                    </div>
+
+                    <div class="switch-container" style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+	                    <div>
+		                    <label style="margin: 0; font-weight: 600; cursor: pointer;" for="autoMediaToggle">
+			                    🖼️ Отправлять фото/видео из Медиатеки в Direct
+		                    </label>
+		                    <small style="display: block; color: var(--text-secondary); font-size: 0.78rem; margin-top: 4px;">
+			                    Бот сам подбирает категорию из <a href="/instagram/media-gallery?botId=@Model.Id" style="color:#38bdf8; text-decoration:none; font-weight:600;">Медиатеки</a> и не повторяет уже отправленные файлы.
+		                    </small>
+	                    </div>
+	                    <label class="switch">
+		                    <input type="checkbox" id="autoMediaToggle" name="isAutoMediaEnabled" value="true" @(Model.IsAutoMediaEnabled ? "checked" : "")>
+		                    <span class="slider"></span>
+	                    </label>
+	                    <input type="hidden" name="isAutoMediaEnabled" value="false">
                     </div>
 
                     <!-- АВТООТВЕТЫ В КОММЕНТАРИЯХ С РЕЖИМАМИ -->

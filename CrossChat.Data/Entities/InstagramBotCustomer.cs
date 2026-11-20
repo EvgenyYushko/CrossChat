@@ -35,4 +35,6 @@ public class InstagramBotCustomer
 
 	// Навигационное свойство для логов
 	public ICollection<BotResponseLog> ResponseLogs { get; set; } = new List<BotResponseLog>();
+
+	public ICollection<InstagramCustomerSentMedia> SentMediaHistory { get; set; } = new List<InstagramCustomerSentMedia>();
 }

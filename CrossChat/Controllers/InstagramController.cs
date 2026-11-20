@@ -5,6 +5,9 @@ using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
+using CrossChat.Integrations.Interfaces.Google;
+using CrossChat.Integrations.Models.Site;
+using CrossChat.Integrations.Services;
 using CrossChat.Worker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using static CrossChat.Infrastructure.Constants.AppConstants;
+using static CrossChat.Infrastructure.Constants.EnvConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
 
 namespace CrossChat.Controllers
@@ -31,18 +35,24 @@ namespace CrossChat.Controllers
 
 		private string RedirectUri => $"{APP_URL}/instagram/auth/callback";
 
+		private readonly IGoogleDriveUploader _googleDriveUploader;
+		private readonly SiteSettings _siteSettings;
+
 		public InstagramController(
 			ILogger<InstagramController> logger,
 			IOptions<SocialMediaSettings> options,
 			AppDbContext db,
 			IInstagramService instagramService,
-			IHttpClientFactory httpClientFactory)
+			IGoogleDriveUploader googleDriveUploader,
+			SiteSettings siteSettings)
 		{
 			_logger = logger;
 			_settings = options.Value;
 			_db = db;
 			_instagramService = instagramService;
-			_httpClient = httpClientFactory.CreateClient();
+			_googleDriveUploader = googleDriveUploader;
+			_siteSettings = siteSettings;
+			_httpClient = new HttpClient();
 		}
 
 		// ==========================================================
@@ -146,7 +156,8 @@ namespace CrossChat.Controllers
 			bool isStoryOverlayTextEnabled,
 			string? storyOverlayText,
 			int commentReplyMode,
-			string? commentTemplates)
+			string? commentTemplates,
+			bool isAutoMediaEnabled)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -159,7 +170,7 @@ namespace CrossChat.Controllers
 			try
 			{
 				bool newIsActiveStatus = isDirectEnabled || isCommentsEnabled;
-
+				settings.IsAutoMediaEnabled = isAutoMediaEnabled;
 				if (settings.IsActive != newIsActiveStatus)
 				{
 					_logger.LogInformation($"Изменение статуса вебхуков для бота {botId} (User {userId}): {settings.IsActive} -> {newIsActiveStatus}");
@@ -496,6 +507,17 @@ namespace CrossChat.Controllers
 
 			if (fullDataDelete)
 			{
+				var galleryDriveIds = await _db.InstagramMediaItems
+					.AsNoTracking()
+					.Where(m => m.InstagramSettingsId == settings.Id)
+					.Select(m => m.GoogleDriveFileId)
+					.ToListAsync();
+
+				foreach (var driveId in galleryDriveIds)
+				{
+					try { await _googleDriveUploader.DeleteFileByIdAsync(driveId); } catch { }
+				}
+
 				_db.InstagramSettings.Remove(settings);
 				_logger.LogInformation($"Instagram settings deleted for BusinessId: {instagramUserId}");
 			}
@@ -780,6 +802,240 @@ namespace CrossChat.Controllers
 
 			return Json(new { messages, conversationId = conversation.Id });
 		}
+
+		// ==========================================================
+		// 🖼️ МЕДИАТЕКА БОТА (КАТЕГОРИИ + ФОТО/ВИДЕО НА GOOGLE DRIVE)
+		// ==========================================================
+		[HttpGet("media-gallery")]
+		public async Task<IActionResult> MediaGallery(int botId)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == botId && s.UserId == userId);
+
+			if (settings == null) return NotFound();
+
+			// Гарантируем наличие дефолтной категории "Общее"
+			bool hasDefault = await _db.InstagramMediaCategories
+				.AnyAsync(c => c.InstagramSettingsId == botId && c.IsDefault);
+
+			if (!hasDefault)
+			{
+				_db.InstagramMediaCategories.Add(new InstagramMediaCategory
+				{
+					InstagramSettingsId = botId,
+					Name = "Общее",
+					Description = "Общие фото и видео, селфи, лайфстайл",
+					IsDefault = true
+				});
+				await _db.SaveChangesAsync();
+			}
+
+			var categories = await _db.InstagramMediaCategories
+				.AsNoTracking()
+				.Where(c => c.InstagramSettingsId == botId)
+				.Include(c => c.Items)
+					.ThenInclude(i => i.SentHistory)
+				.OrderByDescending(c => c.IsDefault)
+				.ThenBy(c => c.CreatedAtUtc)
+				.ToListAsync();
+
+			ViewBag.Categories = categories;
+			return View("MediaGallery", settings);
+		}
+
+		[HttpPost("media-gallery/toggle-auto")]
+		public async Task<IActionResult> ToggleAutoMedia([FromBody] ToggleAutoMediaDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == dto.BotId && s.UserId == userId);
+
+			if (settings == null) return Unauthorized();
+
+			settings.IsAutoMediaEnabled = dto.Enabled;
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true, enabled = settings.IsAutoMediaEnabled });
+		}
+
+		[HttpPost("media-gallery/categories/create")]
+		public async Task<IActionResult> CreateMediaCategory([FromBody] CreateMediaCategoryDto dto)
+		{
+			if (string.IsNullOrWhiteSpace(dto.Name))
+				return BadRequest(new { success = false, error = "Введите название категории" });
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			bool isOwner = await _db.InstagramSettings.AnyAsync(s => s.Id == dto.BotId && s.UserId == userId);
+			if (!isOwner) return Unauthorized();
+
+			var category = new InstagramMediaCategory
+			{
+				InstagramSettingsId = dto.BotId,
+				Name = dto.Name.Trim(),
+				Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+				IsDefault = false
+			};
+
+			_db.InstagramMediaCategories.Add(category);
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true, id = category.Id });
+		}
+
+		[HttpPost("media-gallery/categories/delete")]
+		public async Task<IActionResult> DeleteMediaCategory([FromBody] DeleteMediaCategoryDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var category = await _db.InstagramMediaCategories
+				.Include(c => c.InstagramSettings)
+				.Include(c => c.Items)
+				.FirstOrDefaultAsync(c => c.Id == dto.CategoryId && c.InstagramSettings.UserId == userId);
+
+			if (category == null) return NotFound();
+			if (category.IsDefault) return BadRequest(new { success = false, error = "Дефолтную категорию нельзя удалить." });
+
+			foreach (var item in category.Items)
+			{
+				try { await _googleDriveUploader.DeleteFileByIdAsync(item.GoogleDriveFileId); } catch { }
+			}
+
+			_db.InstagramMediaCategories.Remove(category);
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true });
+		}
+
+		[HttpPost("media-gallery/upload")]
+		[RequestSizeLimit(100 * 1024 * 1024)]
+		public async Task<IActionResult> UploadGalleryMedia(
+			[FromForm] int botId,
+			[FromForm] int categoryId,
+			[FromForm] List<IFormFile> files)
+		{
+			if (files == null || files.Count == 0)
+				return BadRequest(new { success = false, error = "Файлы не выбраны." });
+
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var category = await _db.InstagramMediaCategories
+				.Include(c => c.InstagramSettings)
+				.FirstOrDefaultAsync(c => c.Id == categoryId &&
+											c.InstagramSettingsId == botId &&
+											c.InstagramSettings.UserId == userId);
+
+			if (category == null) return NotFound(new { success = false, error = "Категория не найдена." });
+
+			if (!Directory.Exists(_siteSettings.TempFolder))
+				Directory.CreateDirectory(_siteSettings.TempFolder);
+
+			int uploadedCount = 0;
+			var errors = new List<string>();
+
+			foreach (var file in files)
+			{
+				if (file.Length == 0) continue;
+
+				var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+				bool isVideo = ext is ".mp4" or ".mov";
+				bool isImage = ext is ".jpg" or ".jpeg" or ".png" or ".webp";
+
+				if (!isVideo && !isImage)
+				{
+					errors.Add($"{file.FileName}: неподдерживаемый формат (разрешены jpg, png, webp, mp4, mov).");
+					continue;
+				}
+
+				string tempPath = Path.Combine(_siteSettings.TempFolder, $"gal_up_{Guid.NewGuid():N}{ext}");
+				try
+				{
+					using (var fs = new FileStream(tempPath, FileMode.Create))
+					{
+						await file.CopyToAsync(fs);
+					}
+
+					if (isVideo)
+					{
+						// Сжимаем для лимитов Instagram Direct (если > 20 МБ) и срезаем метаданные ИИ
+						tempPath = await VideoService.CompressVideoForDirectAsync(tempPath, _logger);
+						await VideoService.StripAiMetadataAsync(tempPath, _logger);
+					}
+
+					string? thumbBase64 = await VideoService.CreateGalleryThumbnailBase64Async(tempPath, isVideo);
+					long finalSize = new FileInfo(tempPath).Length;
+					string mimeType = isVideo ? "video/mp4" : (ext == ".png" ? "image/png" : "image/jpeg");
+					string driveFileName = $"ig_bot_{botId}_cat_{categoryId}_{Guid.NewGuid():N}{(isVideo ? ".mp4" : ext)}";
+
+					string driveFileId;
+					using (var uploadStream = new FileStream(tempPath, FileMode.Open, FileAccess.Read))
+					{
+						driveFileId = await _googleDriveUploader.UploadStreamAsync(
+							uploadStream,
+							driveFileName,
+							GOOGLE_POSTS_FOLDER_ID,
+							mimeType);
+					}
+
+					var item = new InstagramMediaItem
+					{
+						InstagramSettingsId = botId,
+						CategoryId = categoryId,
+						MediaType = isVideo ? "video" : "image",
+						GoogleDriveFileId = driveFileId,
+						FileName = Path.GetFileName(file.FileName),
+						MimeType = mimeType,
+						FileSizeBytes = finalSize,
+						ThumbnailBase64 = thumbBase64
+					};
+
+					_db.InstagramMediaItems.Add(item);
+					await _db.SaveChangesAsync();
+					uploadedCount++;
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "[Media Gallery] Ошибка загрузки файла {Name}", file.FileName);
+					errors.Add($"{file.FileName}: {ex.Message}");
+				}
+				finally
+				{
+					if (System.IO.File.Exists(tempPath))
+					{
+						try { System.IO.File.Delete(tempPath); } catch { }
+					}
+				}
+			}
+
+			return Ok(new { success = uploadedCount > 0, uploadedCount, errors });
+		}
+
+		[HttpPost("media-gallery/items/delete")]
+		public async Task<IActionResult> DeleteGalleryItem([FromBody] DeleteGalleryItemDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var item = await _db.InstagramMediaItems
+				.Include(i => i.Category)
+					.ThenInclude(c => c.InstagramSettings)
+				.FirstOrDefaultAsync(i => i.Id == dto.ItemId && i.Category.InstagramSettings.UserId == userId);
+
+			if (item == null) return NotFound();
+
+			try { await _googleDriveUploader.DeleteFileByIdAsync(item.GoogleDriveFileId); } catch { }
+
+			_db.InstagramMediaItems.Remove(item);
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true });
+		}
+
+		public class ToggleAutoMediaDto { public int BotId { get; set; } public bool Enabled { get; set; } }
+		public class CreateMediaCategoryDto { public int BotId { get; set; } public string Name { get; set; } = string.Empty; public string? Description { get; set; } }
+		public class DeleteMediaCategoryDto { public int CategoryId { get; set; } }
+		public class DeleteGalleryItemDto { public int ItemId { get; set; } }
 
 		public class InstagramCustomerAnalysisDto
 		{

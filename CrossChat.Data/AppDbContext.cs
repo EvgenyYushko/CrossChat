@@ -45,6 +45,10 @@ namespace CrossChat.Data
 
 		public DbSet<ProfileVoiceSetting> ProfileVoiceSettings { get; set; }
 
+		public DbSet<InstagramMediaCategory> InstagramMediaCategories { get; set; }
+		public DbSet<InstagramMediaItem> InstagramMediaItems { get; set; }
+		public DbSet<InstagramCustomerSentMedia> InstagramCustomerSentMedias { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);
@@ -76,6 +80,14 @@ namespace CrossChat.Data
 			// Гарантия, что у одного профиля строго одни настройки голоса
 			modelBuilder.Entity<ProfileVoiceSetting>()
 				.HasIndex(v => v.ProfileId)
+				.IsUnique();
+
+			// Индекс для быстрого выбора медиа по боту и уникальная защита от повторной отправки одного файла клиенту
+			modelBuilder.Entity<InstagramMediaItem>()
+				.HasIndex(m => new { m.InstagramSettingsId, m.CategoryId });
+
+			modelBuilder.Entity<InstagramCustomerSentMedia>()
+				.HasIndex(s => new { s.CustomerId, s.MediaItemId })
 				.IsUnique();
 		}
 	}

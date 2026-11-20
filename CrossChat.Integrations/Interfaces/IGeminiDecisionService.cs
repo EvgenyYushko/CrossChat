@@ -2,7 +2,18 @@ namespace CrossChat.Integrations.Interfaces
 {
 	public interface IGeminiDecisionService
 	{
-		Task<DirectReplyDecisionResult> EvaluateDirectReplyAsync(string conversationTranscript, CancellationToken ct = default);
+		Task<DirectReplyDecisionResult> EvaluateDirectReplyAsync(
+				string conversationTranscript,
+				CancellationToken ct = default,
+				IReadOnlyList<MediaCategoryPromptOption>? mediaCategories = null);
+	}
+
+	public class MediaCategoryPromptOption
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = string.Empty;
+		public string? Description { get; set; }
+		public bool IsDefault { get; set; }
 	}
 
 	public class DirectReplyDecisionResult
@@ -29,5 +40,9 @@ namespace CrossChat.Integrations.Interfaces
 
 		public double ContainsPersonalFactProb { get; set; } = 0.0;
 		public double ContainsPersonalFactConfidence { get; set; } = 1.0;
+
+		public double WantsMediaProb { get; set; } = 0.0;
+		public double WantsMediaConfidence { get; set; } = 1.0;
+		public Dictionary<int, double> MediaCategoryProbs { get; set; } = new();
 	}
 }
