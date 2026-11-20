@@ -80,6 +80,13 @@ namespace CrossChat.Integrations.Services
 					   "Answer TRUE if the user sent a voice message, explicitly asks for a voice/audio note, " +
 					   "or writes something personal, emotional, or flirty where a voice note shines. " +
 					   "Answer FALSE for short factual questions, links, spam, or plain 'ok/thanks'."
+					},
+					contains_personal_fact = new
+					{
+						type = "noul",
+						instructions = "Did the latest [User] message(s) reveal any meaningful, lasting personal fact about the user worth remembering long-term " +
+						"(such as their real name, city/country, job/occupation, hobbies, pets, relationship status, birthday/upcoming life event, or stable preferences)? " +
+						"Answer FALSE for generic small talk, greetings, compliments, questions about the assistant, or temporary reactions."
 					}
 				}
 			};
@@ -155,6 +162,12 @@ namespace CrossChat.Integrations.Services
 						{
 							result.ShouldVoiceReplyProb = sv.Noul ?? 0.0;
 							result.ShouldVoiceReplyConfidence = sv.Confidence ?? 1.0;
+						}
+
+						if (apiResp.Answers.TryGetValue("contains_personal_fact", out var pf))
+						{
+							result.ContainsPersonalFactProb = pf.Noul ?? 0.0;
+							result.ContainsPersonalFactConfidence = pf.Confidence ?? 1.0;
 						}
 
 						result.InputTokens = apiResp.Usage?.TotalInputTokens ?? 0;

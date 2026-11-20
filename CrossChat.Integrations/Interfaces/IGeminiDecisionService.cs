@@ -26,5 +26,8 @@ namespace CrossChat.Integrations.Interfaces
 		public int InputTokens { get; set; }
 		public long ElapsedMs { get; set; }
 		public string? ErrorMessage { get; set; }
+
+		public double ContainsPersonalFactProb { get; set; } = 0.0;
+		public double ContainsPersonalFactConfidence { get; set; } = 1.0;
 	}
 }

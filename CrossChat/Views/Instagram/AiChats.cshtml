@@ -286,7 +286,7 @@
         int totalCustomers = Model.Count;
         int activeToday = Model.Count(c => c.TodayResponsesCount > 0);
         int totalResponses = Model.Sum(c => c.TotalResponsesCount);
-        int withVision = Model.Count(c => !string.IsNullOrEmpty(c.AppearanceDescription));
+        int withVision = Model.Count(c => !string.IsNullOrEmpty(c.AiContext) || !string.IsNullOrEmpty(c.AppearanceDescription));
     }
     <div class="kpi-row">
         <div class="kpi-box">
@@ -345,9 +345,11 @@
                             string displayName = !string.IsNullOrEmpty(c.Username) ? ("@" + c.Username) : "Instagram User";
 
                             // Формируем красивый текст досье:
-                            string dossierText = !string.IsNullOrWhiteSpace(c.AppearanceDescription)
-                                ? c.AppearanceDescription
-                                : $"ИНФОРМАЦИЯ О СОБЕСЕДНИКЕ:\nНикнейм: @{c.Username ?? "не указан"}\nID в Instagram: {c.SenderId}\nОтветов бота: {c.TotalResponsesCount}\nДата первого контакта: {c.CreatedAt:dd.MM.yyyy HH:mm}\nВнешность: Фото-анализ выключен в настройках.";
+                            string dossierText = !string.IsNullOrWhiteSpace(c.AiContext)
+                            ? c.AiContext
+                            : (!string.IsNullOrWhiteSpace(c.AppearanceDescription)
+                            ? c.AppearanceDescription
+                            : $"ИНФОРМАЦИЯ О СОБЕСЕДНИКЕ:\nНикнейм: @{c.Username ?? "не указан"}\nID в Instagram: {c.SenderId}\nОтветов бота: {c.TotalResponsesCount}\nДата первого контакта: {c.CreatedAt:dd.MM.yyyy HH:mm}\nВнешность: Фото-анализ выключен в настройках.");
 
                             <tr class="table-row-customer" id="row_@c.CustomerId" onclick="toggleChatHistory(@c.CustomerId, '@c.SenderId', this)">
                                 <td>

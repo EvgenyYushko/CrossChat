@@ -8,7 +8,6 @@ using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Integrations.Models.Site;
 using CrossChat.Integrations.Services;
-using CrossChat.Integrations.Services.Telegram;
 using CrossChat.Worker.Contracts;
 using CrossChat.Worker.Exceptions;
 using Grpc.Core;
@@ -323,6 +322,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			var decision = await _decisionService.EvaluateDirectReplyAsync(transcriptBuilder.ToString(), context.CancellationToken);
+			bool shouldExtractPersonalFact = false;
 
 			bool shouldRespondWithVoice = false;
 			if (decision.IsSuccess)
@@ -331,6 +331,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					$"🧠 [Decision 1] @{customer.Username} | Ответ: {decision.NeedsReplyProb:P0} | " +
 					$"Спам: {decision.IsSpamProb:P0} | Ссылка: {decision.WantsLinkProb:P0} | " +
 					$"Человек: {decision.NeedsHumanProb:P0} | Голос: {decision.ShouldVoiceReplyProb:P0} | " +
+					$"Факт: {decision.ContainsPersonalFactProb:P0} | " +
 					$"{decision.ElapsedMs} мс";
 				_logger.LogInformation(logMsg);
 				await _console.LogInfo(logMsg);
@@ -437,6 +438,8 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 						await _console.LogInfo($"🎙️ [Decision 1] Модель решила ответить голосом ({decision.ShouldVoiceReplyProb:P0}), но настройки голоса профиля отключены — отвечаем текстом.");
 					}
 				}
+
+				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.70;
 			}
 			else
 			{
@@ -480,13 +483,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					processPhotos: settings.ProcessPhotos,
 					existingAppearance: customer.AppearanceDescription);
 
-				userContextInfo = contextText;
-
-				if (!string.IsNullOrEmpty(userContextInfo))
+				if (!string.IsNullOrEmpty(contextText))
 				{
-					await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
+					// Сохраняем ранее накопленные факты из переписки, чтобы суточное обновление профиля их не затёрло!
+					string existingMemory = ExtractMemorySection(customer.AiContext);
+					userContextInfo = CombineAiContext(contextText, existingMemory);
 
-					// 🚀 СОХРАНЯЕМ ВСЁ ДОСЬЕ В БАЗУ ДАННЫХ ДЛЯ ВКЛАДКИ AI-CHATS!
+					await _redis.StringSetAsync(contextRedisKey, userContextInfo, TimeSpan.FromHours(24));
 					customer.AiContext = userContextInfo;
 				}
 
@@ -605,7 +608,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 			await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 
-			await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
+			// 🧠 Обновляем долгую память ТОЛЬКО если Decision 1 увидел новый личный факт
+			if (shouldExtractPersonalFact)
+			{
+				await TryUpdateLongTermMemoryAsync(
+					customer,
+					chatHistory,
+					unreadCount,
+					userContextInfo,
+					contextRedisKey);
+			}
 		}
 		catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
 		{
@@ -640,6 +652,117 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		catch (Exception ex)
 		{
 			await _console.LogError($"Ошибка сохранения инфы ответе пользователю {ex.ToString()}");
+		}
+	}
+
+	private const string MemorySectionMarker = "MEMORY FACTS (LEARNED FROM CONVERSATION):";
+
+	private static string ExtractProfileSection(string? aiContext)
+	{
+		if (string.IsNullOrWhiteSpace(aiContext)) return string.Empty;
+
+		int idx = aiContext.IndexOf(MemorySectionMarker, StringComparison.OrdinalIgnoreCase);
+		return idx >= 0 ? aiContext.Substring(0, idx).Trim() : aiContext.Trim();
+	}
+
+	private static string ExtractMemorySection(string? aiContext)
+	{
+		if (string.IsNullOrWhiteSpace(aiContext)) return string.Empty;
+
+		int idx = aiContext.IndexOf(MemorySectionMarker, StringComparison.OrdinalIgnoreCase);
+		if (idx < 0) return string.Empty;
+
+		return aiContext.Substring(idx + MemorySectionMarker.Length).Trim();
+	}
+
+	private static string CombineAiContext(string? profilePart, string? memoryBullets)
+	{
+		string cleanProfile = (profilePart ?? string.Empty).Trim();
+		string cleanMemory = (memoryBullets ?? string.Empty).Trim();
+
+		if (string.IsNullOrWhiteSpace(cleanMemory)) return cleanProfile;
+		if (string.IsNullOrWhiteSpace(cleanProfile)) return $"{MemorySectionMarker}\n{cleanMemory}";
+
+		return $"{cleanProfile}\n\n{MemorySectionMarker}\n{cleanMemory}";
+	}
+
+	private async Task TryUpdateLongTermMemoryAsync(
+		InstagramBotCustomer customer,
+		List<AiRequest> chatHistory,
+		int unreadCount,
+		string? fallbackProfileContext,
+		string contextRedisKey)
+	{
+		try
+		{
+			// Берём непрочитанные сообщения клиента (или последние 2 от user), чтобы учесть склеенные дебаунсом реплики
+			var latestUserMessages = chatHistory
+				.Where(m => m.Role == "user")
+				.TakeLast(Math.Max(1, Math.Min(unreadCount, 3)))
+				.Select(m => m.Text)
+				.ToList();
+
+			if (latestUserMessages.Count == 0) return;
+
+			string existingMemory = ExtractMemorySection(customer.AiContext);
+			string existingBlock = string.IsNullOrWhiteSpace(existingMemory) ? "None" : existingMemory;
+			string latestBlock = string.Join("\n", latestUserMessages);
+
+			string prompt =
+				"You maintain a concise long-term memory dossier about an Instagram user for an AI assistant.\n\n" +
+				$"Existing memory facts:\n{existingBlock}\n\n" +
+				$"Latest user message(s):\n{latestBlock}\n\n" +
+				"Task:\n" +
+				"Extract any NEW lasting personal facts about the user from the latest message(s) " +
+				"(real name, city/country, job/occupation, hobbies, pets, relationships, birthday/plans, stable preferences) " +
+				"and merge them with existing facts.\n" +
+				"Rules:\n" +
+				"- Replace outdated/conflicting facts (e.g. if user moved to a new city, update it).\n" +
+				"- Keep max 15 ultra-concise bullet points in Russian, each starting with \"- \".\n" +
+				"- Do NOT invent anything. Ignore small talk, compliments, or temporary phrases like 'how are you'.\n" +
+				"- If there are NO new lasting facts to add or update, output EXACTLY: NO_CHANGES\n" +
+				"- Otherwise output ONLY the updated bullet list starting with \"- \".";
+
+			string extracted = await _aiService.GeminiRequest(prompt, null);
+			if (string.IsNullOrWhiteSpace(extracted)) return;
+
+			string trimmed = extracted.Trim();
+			if (trimmed.Contains("NO_CHANGES", StringComparison.OrdinalIgnoreCase))
+			{
+				_logger.LogInformation("🧠 [Long Memory] Новых устойчивых фактов для @{User} не найдено (NO_CHANGES).", customer.Username);
+				return;
+			}
+
+			// Оставляем только строки-буллеты и нормализуем к формату "- ..."
+			var bulletLines = trimmed
+				.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+				.Select(l => l.Trim())
+				.Where(l => l.StartsWith("-") || l.StartsWith("•") || l.StartsWith("*"))
+				.Select(l => "- " + l.TrimStart('-', '•', '*', ' '))
+				.Distinct()
+				.Take(15)
+				.ToList();
+
+			if (bulletLines.Count == 0) return;
+
+			string updatedBullets = string.Join("\n", bulletLines);
+			string profilePart = ExtractProfileSection(
+				!string.IsNullOrWhiteSpace(customer.AiContext) ? customer.AiContext : fallbackProfileContext);
+
+			string mergedContext = CombineAiContext(profilePart, updatedBullets);
+
+			customer.AiContext = mergedContext;
+			await _db.SaveChangesAsync();
+
+			// Обновляем и Redis, чтобы уже на следующем сообщении ИИ видел новые факты
+			await _redis.StringSetAsync(contextRedisKey, mergedContext, TimeSpan.FromHours(24));
+
+			await _console.Log($"🧠 [Long Memory] Обновлена долгая память @{customer.Username} (фактов: {bulletLines.Count}).");
+		}
+		catch (Exception ex)
+		{
+			// Ошибка памяти никогда не должна ронять основной цикл обработки диалога
+			_logger.LogWarning(ex, "⚠️ [Long Memory] Не удалось обновить долгую память для @{User}", customer.Username);
 		}
 	}
 
