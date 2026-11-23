@@ -4,6 +4,7 @@ using System.Text.Json;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Integrations.Enums;
+using CrossChat.Integrations.Helpers;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models.Site;
@@ -157,7 +158,10 @@ namespace CrossChat.Controllers
 			string? storyOverlayText,
 			int commentReplyMode,
 			string? commentTemplates,
-			bool isAutoMediaEnabled)
+			bool isAutoMediaEnabled,
+			int botFilterMode = 0,
+			string? botWhitelist = null
+			)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -169,6 +173,9 @@ namespace CrossChat.Controllers
 
 			try
 			{
+				settings.BotFilterMode = botFilterMode == 1 ? 1 : 0;
+				settings.BotWhitelist = string.IsNullOrWhiteSpace(botWhitelist) ? null : botWhitelist.Trim();
+
 				bool newIsActiveStatus = isDirectEnabled || isCommentsEnabled;
 				settings.IsAutoMediaEnabled = isAutoMediaEnabled;
 				if (settings.IsActive != newIsActiveStatus)
@@ -755,6 +762,14 @@ namespace CrossChat.Controllers
 				.OrderByDescending(c => c.LastRespondedAt ?? c.CreatedAt)
 				.ToListAsync();
 
+			foreach (var c in customers)
+			{
+				c.IsWhitelisted = InstagramWhitelistHelper.IsInWhitelist(settings.BotWhitelist, c.Username, c.SenderId);
+			}
+
+			ViewBag.BotFilterMode = settings.BotFilterMode;
+			ViewBag.BotWhitelist = settings.BotWhitelist;
+
 			ViewBag.Settings = settings;
 			ViewBag.BotId = botId;
 
@@ -1032,6 +1047,65 @@ namespace CrossChat.Controllers
 			return Ok(new { success = true });
 		}
 
+		[HttpPost("ai-chats/toggle-ignore")]
+		public async Task<IActionResult> ToggleCustomerIgnore([FromBody] ToggleCustomerFlagDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var customer = await _db.InstagramBotCustomers
+				.Include(c => c.InstagramSettings)
+				.FirstOrDefaultAsync(c => c.Id == dto.CustomerId &&
+											c.InstagramSettingsId == dto.BotId &&
+											c.InstagramSettings.UserId == userId);
+
+			if (customer == null) return NotFound();
+
+			customer.IsIgnored = !customer.IsIgnored;
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true, isIgnored = customer.IsIgnored });
+		}
+
+		[HttpPost("ai-chats/toggle-whitelist")]
+		public async Task<IActionResult> ToggleCustomerWhitelist([FromBody] ToggleCustomerFlagDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var customer = await _db.InstagramBotCustomers
+				.Include(c => c.InstagramSettings)
+				.FirstOrDefaultAsync(c => c.Id == dto.CustomerId &&
+											c.InstagramSettingsId == dto.BotId &&
+											c.InstagramSettings.UserId == userId);
+
+			if (customer == null) return NotFound();
+
+			var (newList, isAdded) = InstagramWhitelistHelper.Toggle(
+				customer.InstagramSettings.BotWhitelist,
+				customer.Username,
+				customer.InstagramSenderId);
+
+			customer.InstagramSettings.BotWhitelist = string.IsNullOrWhiteSpace(newList) ? null : newList;
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true, isWhitelisted = isAdded, whitelist = customer.InstagramSettings.BotWhitelist });
+		}
+
+		[HttpPost("ai-chats/set-filter-mode")]
+		public async Task<IActionResult> SetFilterMode([FromBody] SetBotFilterModeDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+			var settings = await _db.InstagramSettings
+				.FirstOrDefaultAsync(s => s.Id == dto.BotId && s.UserId == userId);
+
+			if (settings == null) return Unauthorized();
+
+			settings.BotFilterMode = dto.Mode == 1 ? 1 : 0;
+			await _db.SaveChangesAsync();
+
+			return Ok(new { success = true, mode = settings.BotFilterMode });
+		}
+
+		public class ToggleCustomerFlagDto { public int BotId { get; set; } public int CustomerId { get; set; } }
+		public class SetBotFilterModeDto { public int BotId { get; set; } public int Mode { get; set; } }
+
 		public class ToggleAutoMediaDto { public int BotId { get; set; } public bool Enabled { get; set; } }
 		public class CreateMediaCategoryDto { public int BotId { get; set; } public string Name { get; set; } = string.Empty; public string? Description { get; set; } }
 		public class DeleteMediaCategoryDto { public int CategoryId { get; set; } }
@@ -1050,6 +1124,7 @@ namespace CrossChat.Controllers
 			public DateTime? LastRespondedAt { get; set; }
 			public DateTime CreatedAt { get; set; }
 			public string? AiContext { get; set; }
+			public bool IsWhitelisted { get; set; }
 		}
 	}
 

@@ -281,6 +281,31 @@
         </div>
     </div>
 
+    @{
+        int filterMode = ViewBag.BotFilterMode ?? 0;
+        string whitelistStr = ViewBag.BotWhitelist as string ?? "";
+    }
+    <div style="background: var(--card-bg, #1e293b); border: 1px solid @(filterMode == 1 ? "rgba(245,158,11,0.5)" : "var(--glass-border)"); border-radius: 16px; padding: 12px 18px; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 0.85rem; color: var(--text-main);">
+            @if (filterMode == 1)
+            {
+                <span style="color:#fbbf24; font-weight:700;">🧪 Включён ТЕСТ-РЕЖИМ (Белый список):</span>
+                <span style="color:var(--text-secondary); font-family:monospace; margin-left:6px;">@(string.IsNullOrWhiteSpace(whitelistStr) ? "пока никого не выбрано" : whitelistStr)</span>
+            }
+            else
+            {
+                <span style="color:#10b981; font-weight:700;">🌍 Рабочий режим:</span>
+                <span style="color:var(--text-secondary); margin-left:6px;">ИИ отвечает всем, кроме тех, у кого включён «🚫 Игнор».</span>
+            }
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button type="button" onclick="setFilterMode(@(filterMode == 1 ? 0 : 1))"
+                    style="padding:7px 12px; border-radius:10px; border:1px solid var(--glass-border); cursor:pointer; font-weight:700; font-size:0.8rem; background:@(filterMode == 1 ? "#10b981" : "rgba(245,158,11,0.18)"); color:@(filterMode == 1 ? "#fff" : "#fbbf24");">
+                @(filterMode == 1 ? "🌍 Вернуть рабочий режим (Всем)" : "🧪 Включить Тест-режим (Только белый список)")
+            </button>
+        </div>
+    </div>
+
     <!-- KPI РЯД -->
     @{
         int totalCustomers = Model.Count;
@@ -404,6 +429,25 @@
                                 <td>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <span class="arrow-indicator" style="font-size:0.9rem; color:var(--text-secondary); transition:transform 0.2s;">▼</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <button type="button"
+                                                onclick="toggleIgnore(@c.CustomerId, this, event)"
+                                                title="Игнорировать этого пользователя (в Direct и Комментариях)"
+                                                style="padding:5px 9px; border-radius:8px; font-size:0.75rem; font-weight:700; cursor:pointer; border:1px solid @(c.IsIgnored ? "rgba(239,68,68,0.5)" : "var(--glass-border)"); background:@(c.IsIgnored ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.04)"); color:@(c.IsIgnored ? "#f87171" : "var(--text-secondary)");">
+                                            @(c.IsIgnored ? "🚫 В игноре" : "🚫 Игнор")
+                                        </button>
+
+                                        <button type="button"
+                                                onclick="toggleWhitelist(@c.CustomerId, this, event)"
+                                                title="Добавить/убрать из белого списка для Тест-режима"
+                                                style="padding:5px 9px; border-radius:8px; font-size:0.75rem; font-weight:700; cursor:pointer; border:1px solid @(c.IsWhitelisted ? "rgba(245,158,11,0.55)" : "var(--glass-border)"); background:@(c.IsWhitelisted ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.04)"); color:@(c.IsWhitelisted ? "#fbbf24" : "var(--text-secondary)");">
+                                            @(c.IsWhitelisted ? "🧪 В тесте" : "🧪 В тест")
+                                        </button>
+
+                                        <span class="arrow-indicator" style="font-size:0.9rem; color:var(--text-secondary); transition:transform 0.2s; margin-left:4px;">▼</span>
                                     </div>
                                 </td>
                             </tr>
@@ -536,6 +580,48 @@
             const p = document.createElement('p');
             p.textContent = str;
             return p.innerHTML;
+        }
+
+        async function toggleIgnore(customerId, btn, e) {
+            if (e) e.stopPropagation();
+            const res = await fetch('/instagram/ai-chats/toggle-ignore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, customerId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                btn.textContent = data.isIgnored ? '🚫 В игноре' : '🚫 Игнор';
+                btn.style.background = data.isIgnored ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.04)';
+                btn.style.borderColor = data.isIgnored ? 'rgba(239,68,68,0.5)' : 'var(--glass-border)';
+                btn.style.color = data.isIgnored ? '#f87171' : 'var(--text-secondary)';
+            }
+        }
+
+        async function toggleWhitelist(customerId, btn, e) {
+            if (e) e.stopPropagation();
+            const res = await fetch('/instagram/ai-chats/toggle-whitelist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, customerId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                btn.textContent = data.isWhitelisted ? '🧪 В тесте' : '🧪 В тест';
+                btn.style.background = data.isWhitelisted ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.04)';
+                btn.style.borderColor = data.isWhitelisted ? 'rgba(245,158,11,0.55)' : 'var(--glass-border)';
+                btn.style.color = data.isWhitelisted ? '#fbbf24' : 'var(--text-secondary)';
+            }
+        }
+
+        async function setFilterMode(mode) {
+            const res = await fetch('/instagram/ai-chats/set-filter-mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, mode })
+            });
+            const data = await res.json();
+            if (data.success) location.reload();
         }
     </script>
 }

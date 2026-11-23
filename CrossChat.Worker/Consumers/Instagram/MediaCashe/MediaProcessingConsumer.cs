@@ -1,4 +1,5 @@
 using CrossChat.Data;
+using CrossChat.Integrations.Helpers;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Models;
 using CrossChat.Worker.Contracts;
@@ -54,6 +55,32 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 					.FirstOrDefaultAsync(c => c.InstagramSettingsId == settings.Id && c.InstagramSenderId == msg.SenderId);
 
 				bool isIgnored = customer?.IsIgnored ?? false;
+
+				bool isBlockedByTestMode = false;
+				if (settings.BotFilterMode == 1)
+				{
+					string? checkUsername = customer?.Username;
+					if (string.IsNullOrEmpty(checkUsername) && !string.IsNullOrEmpty(settings.AccessToken))
+					{
+						try
+						{
+							var profileInfo = await _instaService.GetInstagramUserProfileAsync(msg.SenderId, settings.AccessToken);
+							checkUsername = profileInfo?.Username;
+						}
+						catch { }
+					}
+
+					isBlockedByTestMode = !InstagramWhitelistHelper.IsInWhitelist(settings.BotWhitelist, checkUsername, msg.SenderId);
+				}
+
+				if (isBlockedByTestMode)
+				{
+					_logger.LogInformation("[MediaWorker] 🧪 Test Mode: пропуск AI-анализа медиа {Type} от {SenderId}.", msg.MediaType, msg.SenderId);
+					targetMedia.AiResult = $"[{msg.MediaType}]";
+					targetMedia.IsProcessed = true;
+					return;
+				}
+
 				bool isAllowedToProcess = msg.MediaType switch
 				{
 					"image" => settings.ProcessPhotos,

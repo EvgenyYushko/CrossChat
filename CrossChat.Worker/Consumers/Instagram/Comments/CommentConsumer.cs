@@ -1,5 +1,6 @@
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Helpers;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Worker.Contracts;
 using MassTransit;
@@ -46,17 +47,6 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 				return;
 			}
 
-			// 2. ПРАВИЛО: НЕ БОЛЕЕ 1 ОТВЕТА ОДНОМУ ПОЛЬЗОВАТЕЛЮ ПОД ОДНИМ ПОСТОМ (24 часа)
-			if (!string.IsNullOrEmpty(msg.MediaId))
-			{
-				var userPostKey = $"lock:ig_comment_user:{msg.MediaId}:{msg.Username}";
-				if (!await _redis.StringSetAsync(userPostKey, "answered", TimeSpan.FromHours(24), When.NotExists))
-				{
-					_logger.LogInformation("[Comment] Мы уже отвечали пользователю @{User} под постом {MediaId}. Пропускаем.", msg.Username, msg.MediaId);
-					return;
-				}
-			}
-
 			// 3. Ищем настройки аккаунта
 			var settings = await _db.InstagramSettings
 				.AsNoTracking()
@@ -66,6 +56,43 @@ namespace CrossChat.Worker.Consumers.Instagram.Comments
 			{
 				_logger.LogInformation("[Comment] Игнорируем коммент. Бот выключен или не настроен.");
 				return;
+			}
+
+			// 2А. ТЕСТ-РЕЖИМ (БЕЛЫЙ СПИСОК)
+			if (settings.BotFilterMode == 1 &&
+				!InstagramWhitelistHelper.IsInWhitelist(settings.BotWhitelist, msg.Username))
+			{
+				_logger.LogInformation("[Comment] 🧪 Test Mode: коммент от @{User} пропущен (нет в белом списке).", msg.Username);
+				return;
+			}
+
+			// 2Б. ЕДИНЫЙ ИГНОР-ЛИСТ (из AI Диалогов)
+			if (!string.IsNullOrEmpty(msg.Username))
+			{
+				string normUser = InstagramWhitelistHelper.NormalizeToken(msg.Username);
+				bool isIgnoredUser = await _db.InstagramBotCustomers
+					.AsNoTracking()
+					.AnyAsync(c => c.InstagramSettingsId == settings.Id &&
+								   c.IsIgnored &&
+								   c.Username != null &&
+								   c.Username.ToLower() == normUser);
+
+				if (isIgnoredUser)
+				{
+					await _console.LogInfo($"🚫 [Comment] @{msg.Username} в игнор-листе — коммент пропущен.", settings.UserId, settings.Id);
+					return;
+				}
+			}
+
+			// 3. ПРАВИЛО: НЕ БОЛЕЕ 1 ОТВЕТА ОДНОМУ ПОЛЬЗОВАТЕЛЮ ПОД ОДНИМ ПОСТОМ (24 часа)
+			if (!string.IsNullOrEmpty(msg.MediaId))
+			{
+				var userPostKey = $"lock:ig_comment_user:{msg.MediaId}:{msg.Username}";
+				if (!await _redis.StringSetAsync(userPostKey, "answered", TimeSpan.FromHours(24), When.NotExists))
+				{
+					_logger.LogInformation("[Comment] Мы уже отвечали пользователю @{User} под постом {MediaId}. Пропускаем.", msg.Username, msg.MediaId);
+					return;
+				}
 			}
 
 			int replyMode = settings.CommentReplyMode > 0 ? settings.CommentReplyMode : 2;

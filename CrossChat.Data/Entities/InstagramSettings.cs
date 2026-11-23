@@ -76,5 +76,13 @@ public class InstagramSettings
 	// === УМНАЯ ГАЛЕРЕЯ МЕДИА ДЛЯ DIRECT ===
 	public bool IsAutoMediaEnabled { get; set; } = false;
 
+	// === ФИЛЬТР ДОСТУПА ИИ (РЕЖИМ ТЕСТИРОВАНИЯ / БЕЛЫЙ СПИСОК) ===
+	// 0 = Все пользователи (кроме тех, у кого IsIgnored = true)
+	// 1 = Только белый список (отвечать строго указанным в BotWhitelist — для тестов)
+	public int BotFilterMode { get; set; } = 0;
+
+	// Список @username или SenderId через запятую / с новой строки
+	public string? BotWhitelist { get; set; }
+
 	public ICollection<InstagramMediaCategory> MediaCategories { get; set; } = new List<InstagramMediaCategory>();
 }

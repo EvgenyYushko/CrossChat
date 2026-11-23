@@ -700,6 +700,12 @@ namespace CrossChat.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("BotFilterMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BotWhitelist")
+                        .HasColumnType("text");
+
                     b.Property<string>("CommentPrompt")
                         .IsRequired()
                         .HasColumnType("text");

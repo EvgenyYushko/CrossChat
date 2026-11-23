@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
+using CrossChat.Integrations.Helpers;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
 using CrossChat.Integrations.Models;
@@ -265,9 +266,19 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					if (m.From.Id != businessAccountId)
 					{
 						string content = await ResolveMessageContentAsync(m);
-						await _inboxService.SaveIncomingMessageAsync(conversation.Id, m.Id, content);
+						await _inboxService.SaveIncomingMessageAsync(conversation.Id, m.Id, content ?? "[Вложение]");
 					}
 				}
+			}
+
+			// 🧪 ФИЛЬТР ТЕСТ-РЕЖИМА (БЕЛЫЙ СПИСОК):
+			// Сообщения в Инбокс уже сохранены выше, но Decision 1 и генерацию ответа ИИ отменяем!
+			if (settings.BotFilterMode == 1 &&
+				!InstagramWhitelistHelper.IsInWhitelist(settings.BotWhitelist, customer.Username, senderId))
+			{
+				await _console.LogInfo($"🧪 [Test Mode] Сообщение от @{customer.Username ?? senderId} сохранено в Инбокс, но ИИ и Decision 1 отключены (не в белом списке).");
+				await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+				return;
 			}
 
 			// Проверка Human Takeover
@@ -784,7 +795,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			if (!sentAsVoice)
 			{
 				// На случай фолбэка после VOICE REPLY MODE вычищаем вокальные <теги>
-				string cleanTextReply = Regex.Replace(aiResponse,@"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?","",RegexOptions.IgnoreCase).Trim();
+				string cleanTextReply = Regex.Replace(aiResponse, @"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?", "", RegexOptions.IgnoreCase).Trim();
 				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken);
 				await _inboxService.SaveBotReplyAsync(conversation.Id, cleanTextReply);
 				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
