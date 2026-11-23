@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using StackExchange.Redis;
 using static CrossChat.Infrastructure.Constants.AppConstants;
 using static CrossChat.Infrastructure.Constants.EnvConstants;
 using static CrossChat.Integrations.Helpers.HttpHelper;
@@ -38,6 +39,7 @@ namespace CrossChat.Controllers
 
 		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly SiteSettings _siteSettings;
+		private readonly IDatabase _redis;
 
 		public InstagramController(
 			ILogger<InstagramController> logger,
@@ -45,7 +47,8 @@ namespace CrossChat.Controllers
 			AppDbContext db,
 			IInstagramService instagramService,
 			IGoogleDriveUploader googleDriveUploader,
-			SiteSettings siteSettings)
+			SiteSettings siteSettings,
+			IConnectionMultiplexer redisMux)
 		{
 			_logger = logger;
 			_settings = options.Value;
@@ -54,6 +57,7 @@ namespace CrossChat.Controllers
 			_googleDriveUploader = googleDriveUploader;
 			_siteSettings = siteSettings;
 			_httpClient = new HttpClient();
+			_redis = redisMux.GetDatabase();
 		}
 
 		// ==========================================================
@@ -756,7 +760,8 @@ namespace CrossChat.Controllers
 					TotalResponsesCount = c.ResponseLogs.Count,
 					TodayResponsesCount = c.ResponseLogs.Count(l => l.RespondedAt >= last24h),
 					LastRespondedAt = c.ResponseLogs.Max(l => (DateTime?)l.RespondedAt),
-					CreatedAt = c.CreatedAt
+					CreatedAt = c.CreatedAt,
+					SentMediaCount = c.SentMediaHistory.Count
 				})
 				// 🚀 Сортировка: сверху те, кому ответили недавно, затем старые
 				.OrderByDescending(c => c.LastRespondedAt ?? c.CreatedAt)
@@ -772,6 +777,10 @@ namespace CrossChat.Controllers
 
 			ViewBag.Settings = settings;
 			ViewBag.BotId = botId;
+
+			ViewBag.TotalGalleryItemsCount = await _db.InstagramMediaItems
+				.AsNoTracking()
+				.CountAsync(m => m.InstagramSettingsId == botId);
 
 			return View("AiChats", customers);
 		}
@@ -1103,6 +1112,57 @@ namespace CrossChat.Controllers
 			return Ok(new { success = true, mode = settings.BotFilterMode });
 		}
 
+		[HttpPost("ai-chats/reset-sent-media")]
+		public async Task<IActionResult> ResetCustomerSentMedia([FromBody] ToggleCustomerFlagDto dto)
+		{
+			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+			var customer = await _db.InstagramBotCustomers
+				.Include(c => c.InstagramSettings)
+				.FirstOrDefaultAsync(c => c.Id == dto.CustomerId &&
+											c.InstagramSettingsId == dto.BotId &&
+											c.InstagramSettings.UserId == userId);
+
+			if (customer == null) return NotFound();
+
+			// 1. Удаляем всю историю отправленных этому клиенту фото/видео
+			int deletedCount = await _db.InstagramCustomerSentMedias
+				.Where(s => s.CustomerId == customer.Id)
+				.ExecuteDeleteAsync();
+
+			// 2. Убираем секцию GALLERY MEDIA STATS из AiContext (сохраняя профиль и долгую память!)
+			customer.AiContext = StripMediaStatsSection(customer.AiContext);
+			await _db.SaveChangesAsync();
+
+			// 3. Сбрасываем кэш контекста и 20-минутный кулдаун в Redis, чтобы можно было тестить сразу
+			await _redis.KeyDeleteAsync($"ig:user_context:{customer.InstagramSenderId}");
+			if (!string.IsNullOrEmpty(customer.InstagramSettings.InstagramBusinessId))
+			{
+				await _redis.KeyDeleteAsync($"media:cooldown:{customer.InstagramSettings.InstagramBusinessId}:{customer.InstagramSenderId}");
+			}
+
+			_logger.LogInformation("🔄 [Media Reset] Сброшена история медиа ({Count} шт.) для @{User}", deletedCount, customer.Username);
+
+			return Ok(new
+			{
+				success = true,
+				deletedCount,
+				aiContext = customer.AiContext
+			});
+		}
+
+		private static string? StripMediaStatsSection(string? aiContext)
+		{
+			if (string.IsNullOrWhiteSpace(aiContext)) return aiContext;
+
+			const string marker = "GALLERY MEDIA STATS:";
+			int idx = aiContext.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+			if (idx < 0) return aiContext;
+
+			string cleaned = aiContext.Substring(0, idx).Trim();
+			return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+		}
+
 		public class ToggleCustomerFlagDto { public int BotId { get; set; } public int CustomerId { get; set; } }
 		public class SetBotFilterModeDto { public int BotId { get; set; } public int Mode { get; set; } }
 
@@ -1125,6 +1185,7 @@ namespace CrossChat.Controllers
 			public DateTime CreatedAt { get; set; }
 			public string? AiContext { get; set; }
 			public bool IsWhitelisted { get; set; }
+			public int SentMediaCount { get; set; }
 		}
 	}
 

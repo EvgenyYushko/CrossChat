@@ -312,6 +312,8 @@
         int activeToday = Model.Count(c => c.TodayResponsesCount > 0);
         int totalResponses = Model.Sum(c => c.TotalResponsesCount);
         int withVision = Model.Count(c => !string.IsNullOrEmpty(c.AiContext) || !string.IsNullOrEmpty(c.AppearanceDescription));
+        int totalGallery = ViewBag.TotalGalleryItemsCount ?? 0;
+        int totalMediaSent = Model.Sum(c => c.SentMediaCount);
     }
     <div class="kpi-row">
         <div class="kpi-box">
@@ -329,6 +331,10 @@
         <div class="kpi-box">
             <span class="kpi-num" style="color: #ec4899;">@withVision</span>
             <span class="kpi-label">Досье сохранено</span>
+        </div>
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #f59e0b;">@totalMediaSent</span>
+            <span class="kpi-label">Медиа отправлено</span>
         </div>
     </div>
 
@@ -407,6 +413,11 @@
                                         <span class="badge-responses" title="Всего ответов за все время">
                                             Всего: @c.TotalResponsesCount
                                         </span>
+                                        <span class="badge-responses" id="mediaBadge_@c.CustomerId"
+                                              style="background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.35);"
+                                              title="Отправлено фото/видео из Медиатеки этому клиенту">
+                                            🖼️ Медиа: <span class="media-count-val">@c.SentMediaCount</span>/@totalGallery
+                                        </span>
                                     </div>
                                 </td>
                                 <td>
@@ -419,7 +430,7 @@
                                 </td>
                                 <td>
                                     <!-- 🚀 КНОПКА ДОСЬЕ ИИ: всегда доступна и кликабельна -->
-                                    <button type="button" class="btn-view-vision" 
+                                    <button type="button" class="btn-view-vision" id="dossierBtn_@c.CustomerId"
                                             data-username="@(c.Username ?? "Клиент")"
                                             data-description="@dossierText"
                                             onclick="openVisionModalFromBtn(this, event)">
@@ -445,6 +456,14 @@
                                                 title="Добавить/убрать из белого списка для Тест-режима"
                                                 style="padding:5px 9px; border-radius:8px; font-size:0.75rem; font-weight:700; cursor:pointer; border:1px solid @(c.IsWhitelisted ? "rgba(245,158,11,0.55)" : "var(--glass-border)"); background:@(c.IsWhitelisted ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.04)"); color:@(c.IsWhitelisted ? "#fbbf24" : "var(--text-secondary)");">
                                             @(c.IsWhitelisted ? "🧪 В тесте" : "🧪 В тест")
+                                        </button>
+
+                                        <button type="button"
+                                                id="resetMediaBtn_@c.CustomerId"
+                                                onclick="resetSentMedia(@c.CustomerId, this, event)"
+                                                title="Сбросить счётчик отправленных фото/видео и кулдаун"
+                                                style="padding:5px 9px; border-radius:8px; font-size:0.75rem; font-weight:700; cursor:pointer; border:1px solid rgba(56,189,248,0.4); background:rgba(56,189,248,0.12); color:#38bdf8; @(c.SentMediaCount == 0 ? "opacity:0.45;" : "")">
+                                            🔄 Сброс фото
                                         </button>
 
                                         <span class="arrow-indicator" style="font-size:0.9rem; color:var(--text-secondary); transition:transform 0.2s; margin-left:4px;">▼</span>
@@ -622,6 +641,29 @@
             });
             const data = await res.json();
             if (data.success) location.reload();
+        }
+
+        async function resetSentMedia(customerId, btn, e) {
+            if (e) e.stopPropagation();
+            if (!confirm('Сбросить историю отправленных фото/видео и кулдаун для этого клиента?')) return;
+
+            const res = await fetch('/instagram/ai-chats/reset-sent-media', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId, customerId })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                const badge = document.querySelector(`#mediaBadge_${customerId} .media-count-val`);
+                if (badge) badge.textContent = '0';
+                btn.style.opacity = '0.45';
+
+                const dossierBtn = document.getElementById(`dossierBtn_${customerId}`);
+                if (dossierBtn && data.aiContext) {
+                    dossierBtn.setAttribute('data-description', data.aiContext);
+                }
+            }
         }
     </script>
 }
