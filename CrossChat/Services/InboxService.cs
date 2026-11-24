@@ -231,7 +231,7 @@ namespace CrossChat.Services
 
 			_db.InboxMessages.Add(message);
 
-			conversation.LastMessageSnippet = text;
+			conversation.LastMessageSnippet = TruncateSnippet(text);
 			conversation.LastMessageAt = DateTime.UtcNow;
 			conversation.UnreadCount++;
 
@@ -281,7 +281,7 @@ namespace CrossChat.Services
 
 			_db.InboxMessages.Add(message);
 
-			conversation.LastMessageSnippet = mediaType == "audio" ? "🎙️ Голосовое сообщение" : text;
+			conversation.LastMessageSnippet = mediaType == "audio" ? "🎙️ Голосовое сообщение" : TruncateSnippet(text);
 			conversation.LastMessageAt = DateTime.UtcNow;
 
 			await _db.SaveChangesAsync();
@@ -527,7 +527,7 @@ namespace CrossChat.Services
 						{
 							if (!string.IsNullOrEmpty(avatar)) conversation.AvatarUrl = avatar;
 							if (!string.IsNullOrEmpty(username)) conversation.Username = username;
-							conversation.LastMessageSnippet = c.LastMessageText ?? conversation.LastMessageSnippet;
+							conversation.LastMessageSnippet = TruncateSnippet(c.LastMessageText) ?? TruncateSnippet(conversation.LastMessageSnippet);
 							conversation.LastMessageAt = c.LastMessageTime;
 						}
 
@@ -925,7 +925,7 @@ namespace CrossChat.Services
 
 				_db.InboxMessages.Add(message);
 
-				conversation.LastMessageSnippet = text;
+				conversation.LastMessageSnippet = TruncateSnippet(text);
 				conversation.LastMessageAt = DateTime.UtcNow;
 				conversation.UnreadCount = 0;
 
@@ -1443,6 +1443,13 @@ namespace CrossChat.Services
 			}
 
 			return settings;
+		}
+
+		private static string TruncateSnippet(string? text, int maxLength = 450)
+		{
+			if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+			var clean = text.Trim();
+			return clean.Length <= maxLength ? clean : clean.Substring(0, maxLength - 3) + "...";
 		}
 	}
 }

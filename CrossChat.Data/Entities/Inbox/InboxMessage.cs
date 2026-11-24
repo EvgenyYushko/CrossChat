@@ -28,7 +28,6 @@ namespace CrossChat.Data.Entities.Inbox
 		public bool IsSentByBot { get; set; } = false;
 
 		// Медиафайлы (если клиент прислал фото/голосовое)
-		[MaxLength(500)]
 		public string? MediaUrl { get; set; }
 
 		[MaxLength(50)]

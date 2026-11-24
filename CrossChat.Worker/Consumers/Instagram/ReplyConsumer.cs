@@ -606,28 +606,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			{
 				await _console.LogWarning($"⚠️ [Decision 1] Не сработал ({decision.ErrorMessage}). Идём стандартно в ИИ.");
 			}
-
-			// Реакции (лайки на сообщения)
-			var random = new Random();
-			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
-			{
-				try
-				{
-					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
-					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
-					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
-					if (isSuccess)
-					{
-						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
-						await Task.Delay(1500);
-					}
-				}
-				catch (Exception ex)
-				{
-					await _console.LogError($"[Send reaction error] {ex.ToString()}");
-				}
-			}
-
+			
 			await _instaService.SetTypingStatusAsync(senderId, accessInstaToken);
 
 			// Запрос к ИИ
@@ -705,6 +684,27 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
+
+			// Реакции (лайки на сообщения)
+			var random = new Random();
+			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
+			{
+				try
+				{
+					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
+					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
+					if (isSuccess)
+					{
+						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
+						await Task.Delay(1500);
+					}
+				}
+				catch (Exception ex)
+				{
+					await _console.LogError($"[Send reaction error] {ex.ToString()}");
+				}
+			}
 
 			if (string.IsNullOrWhiteSpace(aiResponse))
 			{

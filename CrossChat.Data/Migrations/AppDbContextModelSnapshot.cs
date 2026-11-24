@@ -507,8 +507,7 @@ namespace CrossChat.Data.Migrations
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("MediaUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Reaction")
                         .HasMaxLength(20)
