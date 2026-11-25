@@ -19,7 +19,7 @@ public partial class InstagramService : IInstagramService
 	private readonly IAiService _aiService;
 	private readonly SiteSettings _siteSettings;
 	private const string ApiVersion = "v21.0";
-
+	private static readonly HttpClient _cdnDownloadClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 	public InstagramService(HttpClient httpClient, ILogger<InstagramService> logger, IAiService aiService, SiteSettings siteSettings)
 	{
 		_httpClient = httpClient;
@@ -561,15 +561,23 @@ public partial class InstagramService : IInstagramService
 
 		_logger.LogInformation($"Starting {type} analysis");
 
-		var prompt = $"Analyze what is depicted on this {type} and give a description 2-3 sentences. " +
-					"Response format: only the response text, no quotes or formatting.";
+		var prompt = type switch
+		{
+			"ig_reel" => "This is a shared Instagram Reel video sent by the user (likely a meme, trend, or clip). " +
+						 "Briefly summarize in 1-2 sentences what happens in it, any visible on-screen text/captions, and the overall mood/joke. " +
+						 "Response format: only the summary text, no quotes or formatting.",
+			"video" => "Analyze what happens in this short video sent by the user and summarize it in 1-2 concise sentences (key person/objects, action, mood). " +
+					   "Response format: only the response text, no quotes or formatting.",
+			_ => "Analyze what is depicted on this photo and give a concise description in 1-2 sentences. " +
+				 "Response format: only the response text, no quotes or formatting."
+		};
 
 		_logger.LogInformation($"Calling Gemini with base64 {type} (length: {base64Image?.Length ?? 0})");
 
 		string responseText = "";
 		try
 		{
-			if (type == "video")
+			if (type == "video" || type == "ig_reel")
 			{
 				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, aiToken);
 			}
@@ -639,10 +647,15 @@ public partial class InstagramService : IInstagramService
 					}
 					break;
 				case "video":
+					{
+						var base64 = await PrepareVideoBase64ForAiAsync(media.Url);
+						resultText = $"[Video]: {await AnalyzeImageAsync(base64, "video", null)}";
+					}
+					break;
 				case "ig_reel":
 					{
-						var base64 = await DownloadImageAsBase64(media.Url);
-						resultText = $"[Video]: {await AnalyzeImageAsync(base64, "video", null)}";
+						var base64 = await PrepareVideoBase64ForAiAsync(media.Url);
+						resultText = $"[Shared Instagram Reel]: {await AnalyzeImageAsync(base64, "ig_reel", null)}";
 					}
 					break;
 				default:
@@ -650,20 +663,87 @@ public partial class InstagramService : IInstagramService
 					break;
 			}
 
-			// Записываем результат в сам объект
 			media.AiResult = resultText;
 			media.IsProcessed = true;
-
-			// Если это объект из КЭША, он там уже лежит по ссылке, изменения отразятся сразу.
-			// Если это новый объект из API, вызывающий код сам добавит его в словарь.
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Ошибка обработки медиа ({media.MediaType}): {ex.Message}");
-			resultText = $"[Failed to process {media.MediaType}]";
+			_logger.LogWarning(ex, "Ошибка обработки медиа ({Type}) для {MsgId}", media.MediaType, messageId);
+			resultText = $"[Пользователь отправил {media.MediaType}, но не удалось его распознать]";
+			// ВАЖНО: закрываем элемент, чтобы ReplyConsumer не завис в вечном Snooze!
+			media.AiResult = resultText;
+			media.IsProcessed = true;
 		}
 
 		return resultText;
+	}
+
+	private async Task<string> PrepareVideoBase64ForAiAsync(string videoUrl)
+	{
+		if (!Directory.Exists(_siteSettings.TempFolder))
+			Directory.CreateDirectory(_siteSettings.TempFolder);
+
+		string tempInputPath = Path.Combine(_siteSettings.TempFolder, $"ai_in_{Guid.NewGuid():N}.mp4");
+		string? processedPath = null;
+
+		try
+		{
+			using var req = new HttpRequestMessage(HttpMethod.Get, videoUrl);
+			req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+			using var resp = await _cdnDownloadClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+			resp.EnsureSuccessStatusCode();
+
+			var contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
+			if (contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidOperationException($"Meta CDN вернула {contentType} вместо видео.");
+			}
+
+			// Жёсткий предохранитель по памяти/диску: не качаем файлы тяжелее 40 МБ
+			const long maxDownloadBytes = 40 * 1024 * 1024;
+			if (resp.Content.Headers.ContentLength > maxDownloadBytes)
+			{
+				throw new InvalidOperationException("Видео превышает лимит скачивания 40 МБ.");
+			}
+
+			await using (var remoteStream = await resp.Content.ReadAsStreamAsync())
+			await using (var fileStream = new FileStream(tempInputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+			{
+				var buffer = new byte[81920];
+				long totalRead = 0;
+				int read;
+				while ((read = await remoteStream.ReadAsync(buffer)) > 0)
+				{
+					totalRead += read;
+					if (totalRead > maxDownloadBytes)
+						throw new InvalidOperationException("Видео превышает лимит 40 МБ при потоковом чтении.");
+					await fileStream.WriteAsync(buffer.AsMemory(0, read));
+				}
+			}
+
+			long rawSize = new FileInfo(tempInputPath).Length;
+
+			// Если видео лёгкое (<= 2.5 МБ) — отдаём сразу без запуска FFmpeg!
+			if (rawSize <= 2_500_000)
+			{
+				byte[] rawBytes = await File.ReadAllBytesAsync(tempInputPath);
+				return Convert.ToBase64String(rawBytes);
+			}
+
+			// Иначе за 1-2 сек режем до первых 15 секунд в 480p
+			processedPath = await VideoService.TrimAndCompressVideoForAiAsync(tempInputPath, _logger);
+			byte[] finalBytes = await File.ReadAllBytesAsync(processedPath);
+			return Convert.ToBase64String(finalBytes);
+		}
+		finally
+		{
+			if (File.Exists(tempInputPath)) try { File.Delete(tempInputPath); } catch { }
+			if (!string.IsNullOrEmpty(processedPath) && processedPath != tempInputPath && File.Exists(processedPath))
+			{
+				try { File.Delete(processedPath); } catch { }
+			}
+		}
 	}
 
 	/// <summary>

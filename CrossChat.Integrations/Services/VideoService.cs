@@ -721,6 +721,77 @@ namespace CrossChat.Integrations.Services
 			}
 		}
 
+		/// <summary>
+		/// Обрезает тяжелое видео до первых 15 секунд и сжимает в 480p (с аудио) для быстрого анализа Gemini и прохождения лимита gRPC (4 МБ)
+		/// </summary>
+		public static async Task<string> TrimAndCompressVideoForAiAsync(string inputPath, ILogger? logger = null)
+		{
+			if (!File.Exists(inputPath)) return inputPath;
+
+			await _videoCompressionSemaphore.WaitAsync();
+
+			string directory = Path.GetDirectoryName(inputPath)!;
+			string outputPath = Path.Combine(directory, $"ai_vid_{Guid.NewGuid():N}.mp4");
+
+			try
+			{
+				// -ss 0 -t 15 : читаем и кодируем ТОЛЬКО первые 15 секунд (1-2 сек работы CPU)
+				// Аудио сохраняем (64k), чтобы Gemini слышал речь в Reels/видео
+				var arguments = $"-y -nostdin -ss 0 -t 15 -i \"{inputPath}\" -threads 1 " +
+								$"-vf \"scale='min(480,iw)':-2\" " +
+								$"-c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p " +
+								$"-c:a aac -b:a 64k -ar 22050 -movflags +faststart \"{outputPath}\"";
+
+				var startInfo = new ProcessStartInfo
+				{
+					FileName = "ffmpeg",
+					Arguments = arguments,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+
+				using var process = new Process { StartInfo = startInfo };
+				process.Start();
+
+				var errorTask = process.StandardError.ReadToEndAsync();
+				var outputTask = process.StandardOutput.ReadToEndAsync();
+
+				using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+				try
+				{
+					await process.WaitForExitAsync(cts.Token);
+				}
+				catch (OperationCanceledException)
+				{
+					try { process.Kill(entireProcessTree: true); } catch { }
+					logger?.LogWarning("[Video AI] Таймаут обрезки видео через FFmpeg (30с).");
+					return inputPath;
+				}
+
+				await errorTask;
+				await outputTask;
+
+				if (process.ExitCode == 0 && File.Exists(outputPath))
+				{
+					long finalSize = new FileInfo(outputPath).Length;
+					logger?.LogInformation("🎬 [Video AI] Видео подготовлено для Gemini: {Kb:F0} КБ (до 15 сек, 480p)", finalSize / 1024.0);
+					return outputPath;
+				}
+			}
+			catch (Exception ex)
+			{
+				logger?.LogWarning(ex, "[Video AI] Ошибка обрезки видео для анализа");
+			}
+			finally
+			{
+				_videoCompressionSemaphore.Release();
+			}
+
+			return inputPath;
+		}
+
 		private static byte[] BuildWavFromRawPcm(byte[] pcmData, int sampleRate = 24000, short channels = 1, short bitsPerSample = 16)
 		{
 			int byteRate = sampleRate * channels * (bitsPerSample / 8);

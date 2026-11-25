@@ -84,7 +84,7 @@ public class MediaProcessingConsumer : IConsumer<ProcessMediaCommand>
 				bool isAllowedToProcess = msg.MediaType switch
 				{
 					"image" => settings.ProcessPhotos,
-					"video" => settings.ProcessVideos,
+					"video" or "ig_reel" => settings.ProcessVideos,
 					"audio" => settings.ProcessAudios,
 					_ => false
 				};
