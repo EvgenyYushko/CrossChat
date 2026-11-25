@@ -302,15 +302,28 @@ namespace CrossChat.Data.Migrations
                     b.Property<int>("CustomerId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("integer");
+
                     b.Property<string>("MessageId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("ModelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("RespondedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("TokensSpent")
                         .HasColumnType("integer");
+
+                    b.Property<string>("UsageDetailsJson")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

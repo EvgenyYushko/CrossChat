@@ -16,77 +16,78 @@ namespace CrossChat.Integrations.Services
 			_token = token;
 		}
 
-		public async Task<string> GeminiRequest(string prompt, string token)
-		{
-			if (token is null)
-			{
-				token = _token;
-			}
 
-			var response = await _geminiServiceClient.RequestAsync(new Prompt { Text = prompt }, AddTokenToHeaders(token));
-			return response.GeneratedText;
+		
+
+		private Metadata AddTokenToHeaders(string token)
+		{
+			var headers = new Metadata();
+			headers.Add("x-goog-api-key", token);
+			return headers;
+		}
+
+
+		private static AiGenerationResult ToUsageResult(GeminiResponse r, string? overrideText = null) => new()
+		{
+			Text = overrideText ?? r.GeneratedText ?? string.Empty,
+			InputTokens = r.InputTokens,
+			OutputTokens = r.OutputTokens,
+			ThoughtTokens = r.ThoughtTokens,
+			TotalTokens = r.TotalTokens > 0 ? r.TotalTokens : (r.InputTokens + r.OutputTokens + r.ThoughtTokens),
+			ModelName = r.ModelName ?? string.Empty
+		};
+
+		public async Task<AiGenerationResult> GeminiRequestWithUsageAsync(string prompt, string? token = null)
+		{
+			var response = await _geminiServiceClient.RequestAsync(new Prompt { Text = prompt }, AddTokenToHeaders(token ?? _token));
+			return ToUsageResult(response);
+		}
+
+		public async Task<string> GeminiRequest(string prompt, string token)
+			=> (await GeminiRequestWithUsageAsync(prompt, token)).Text;
+
+		public async Task<AiGenerationResult> GetAnswerWithUsageAsync(string systemPrompt, List<AiRequest> messages, string? token = null)
+		{
+			var response = await _geminiServiceClient.RequestWithChatAsync(new()
+			{
+				SystemInstruction = systemPrompt,
+				History = { messages.Select(m => new ChatMessage { Role = m.Role, Text = m.Text }) }
+			}, AddTokenToHeaders(token ?? _token));
+
+			return ToUsageResult(response);
 		}
 
 		public async Task<string> GetAnswerAsync(string systemPrompt, List<AiRequest> messages, string token)
+			=> (await GetAnswerWithUsageAsync(systemPrompt, messages, token)).Text;
+
+		public async Task<AiGenerationResult> GeminiRequestWithImageWithUsageAsync(string prompt, string base64Image, string? token = null)
 		{
-			if (token is null)
-			{
-				token = _token;
-			}
-
-			var rsponce = await _geminiServiceClient.RequestWithChatAsync(new()
-			{
-				SystemInstruction = systemPrompt,
-				History =
-				{
-					messages.Select(m => new ChatMessage
-					{
-						Role = m.Role,
-						Text = m.Text
-					})
-				}
-			}, AddTokenToHeaders(token));
-
-			return rsponce.GeneratedText;
-		}
-
-		public async Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token)
-		{
-			if (token is null)
-			{
-				token = _token;
-			}
-
 			var response = await _geminiServiceClient.RequestWithImageAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },
 				Base64Idata = base64Image
-			}, AddTokenToHeaders(token));
-			return response.GeneratedText;
+			}, AddTokenToHeaders(token ?? _token));
+			return ToUsageResult(response);
 		}
 
-		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
-		{
-			if (token is null)
-			{
-				token = _token;
-			}
+		public async Task<string> GeminiRequestWithImage(string prompt, string base64Image, string token)
+			=> (await GeminiRequestWithImageWithUsageAsync(prompt, base64Image, token)).Text;
 
+		public async Task<AiGenerationResult> GeminiRequestWithVideoWithUsageAsync(string prompt, string base64video, string? token = null)
+		{
 			var response = await _geminiServiceClient.RequestWithVideoAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },
 				Base64Idata = base64video
-			}, AddTokenToHeaders(token));
-			return response.GeneratedText;
+			}, AddTokenToHeaders(token ?? _token));
+			return ToUsageResult(response);
 		}
 
-		public async Task<string> GeminiAudioToText(string base64Iaudio, string token)
-		{
-			if (token is null)
-			{
-				token = _token;
-			}
+		public async Task<string> GeminiRequestWithVideo(string prompt, string base64video, string token)
+			=> (await GeminiRequestWithVideoWithUsageAsync(prompt, base64video, token)).Text;
 
+		public async Task<AiGenerationResult> GeminiAudioToTextWithUsageAsync(string base64Audio, string? token = null)
+		{
 			// 🚀 ПРОКАЧАННЫЙ РЕЖИССЁРСКИЙ ПРОМПТ ДЛЯ РАСПОЗНАВАНИЯ ЭМОЦИЙ И АРТЕФАКТОВ ГОЛОСА
 			var prompt = @"Сделай точную дословную транскрибацию этого аудиофайла на языке оригинала.
 				Твоя ключевая задача — уловить не только произнесённые слова, но и живой эмоциональный фон, невербальные звуки и дыхание.
@@ -110,18 +111,14 @@ namespace CrossChat.Integrations.Services
 			var response = await _geminiServiceClient.RequestWithAudioAsync(new()
 			{
 				Prompt = { new Prompt { Text = prompt } },
-				Base64Idata = base64Iaudio
-			}, AddTokenToHeaders(token));
+				Base64Idata = base64Audio
+			}, AddTokenToHeaders(token ?? _token));
 
-			var result = response.GeneratedText ?? "";
-			return result.Trim().Trim('"', '«', '»', '`');
+			var clean = (response.GeneratedText ?? "").Trim().Trim('"', '«', '»', '`');
+			return ToUsageResult(response, clean);
 		}
 
-		private Metadata AddTokenToHeaders(string token)
-		{
-			var headers = new Metadata();
-			headers.Add("x-goog-api-key", token);
-			return headers;
-		}
+		public async Task<string> GeminiAudioToText(string base64Iaudio, string token)
+			=> (await GeminiAudioToTextWithUsageAsync(base64Iaudio, token)).Text;
 	}
 }

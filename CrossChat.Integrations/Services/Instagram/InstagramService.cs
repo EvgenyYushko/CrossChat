@@ -517,7 +517,8 @@ public partial class InstagramService : IInstagramService
 				{
 					_logger.LogInformation("📸 [Vision] Анализируем аватарку клиента {User} через Gemini Vision...", userProfile.Username);
 					var base64Image = await DownloadImageAsBase64(userProfile.ProfilePicUrl);
-					appearanceDescription = await AnalyzeImageAsync(base64Image, "photo", null);
+					var visionResult = await AnalyzeImageAsync(base64Image, "photo", null);
+					appearanceDescription = visionResult.Text;
 					newAppearance = appearanceDescription; // Запоминаем для сохранения в БД
 				}
 				catch (Exception ex)
@@ -552,12 +553,10 @@ public partial class InstagramService : IInstagramService
 		}
 	}
 
-	private async Task<string> AnalyzeImageAsync(string base64Image, string type, string aiToken)
+	private async Task<AiGenerationResult> AnalyzeImageAsync(string base64Image, string type, string? aiToken)
 	{
 		if (string.IsNullOrEmpty(base64Image))
-		{
-			return "";
-		}
+			return new AiGenerationResult();
 
 		_logger.LogInformation($"Starting {type} analysis");
 
@@ -574,62 +573,54 @@ public partial class InstagramService : IInstagramService
 
 		_logger.LogInformation($"Calling Gemini with base64 {type} (length: {base64Image?.Length ?? 0})");
 
-		string responseText = "";
 		try
 		{
-			if (type == "video" || type == "ig_reel")
-			{
-				responseText = await _aiService.GeminiRequestWithVideo(prompt, base64Image, aiToken);
-			}
-			else
-			{
-				responseText = await _aiService.GeminiRequestWithImage(prompt, base64Image, aiToken);
-			}
-			_logger.LogInformation($"Gemini response received: {responseText?.Substring(0, Math.Min(50, responseText.Length))}...");
+			AiGenerationResult result = (type == "video" || type == "ig_reel")
+				? await _aiService.GeminiRequestWithVideoWithUsageAsync(prompt, base64Image, aiToken)
+				: await _aiService.GeminiRequestWithImageWithUsageAsync(prompt, base64Image, aiToken);
+
+			_logger.LogInformation($"Gemini response received ({result.TotalTokens} tok, {result.ModelName}): {result.Text?.Substring(0, Math.Min(50, result.Text.Length))}...");
+			return result;
 		}
 		catch (RpcException ex)
 		{
-			// Проверяем, заблокировал ли Google контент
 			if (ex.Status.Detail.Contains("blocked"))
 			{
 				_logger.LogWarning($"[Safety Filter] Gemini заблокировал контент: {ex.Status.Detail}");
-				return "NSFW content";
+				return new AiGenerationResult { Text = "NSFW content" };
 			}
 
-			// Если это другая ошибка gRPC
 			_logger.LogError(ex, "gRPC ошибка при анализе медиа");
-			return "";
+			return new AiGenerationResult();
 		}
 		catch (Exception geminiEx)
 		{
-			_logger.LogError(geminiEx, $"Gemini API error");
+			_logger.LogError(geminiEx, "Gemini API error");
+			return new AiGenerationResult();
 		}
-
-		return responseText ?? "";
 	}
 
-	private async Task<string> ProcessAudioMessage(string audioBase64)
+	private async Task<AiGenerationResult> ProcessAudioMessage(string audioBase64)
 	{
 		try
 		{
-			_logger.LogInformation($"Audio message received");
-
-			var audioText = await _aiService.GeminiAudioToText(audioBase64, null);
-			Console.WriteLine("Распознонное голосовое: " + audioText);
-			return audioText;
-			//await SendMessageWithHistory(audioText, senderId);
+			_logger.LogInformation("Audio message received");
+			var result = await _aiService.GeminiAudioToTextWithUsageAsync(audioBase64, null);
+			Console.WriteLine($"Распознанное голосовое ({result.TotalTokens} tok): {result.Text}");
+			return result;
 		}
 		catch (Exception ex)
 		{
-			_logger.LogInformation(ex, $"Error processing audio");
+			_logger.LogInformation(ex, "Error processing audio");
+			return new AiGenerationResult();
 		}
-
-		return "";
 	}
 
 	public async Task<string> ProcessAndCacheMediaAsync(MediaDataEntry media, string messageId)
 	{
 		string resultText = "";
+		AiGenerationResult? mediaUsage = null;
+
 		try
 		{
 			switch (media.MediaType)
@@ -637,25 +628,29 @@ public partial class InstagramService : IInstagramService
 				case "audio":
 					{
 						var base64 = await DownloadAudioFileAsBase64(media.Url);
-						resultText = $"[voice message]: {await ProcessAudioMessage(base64)}";
+						mediaUsage = await ProcessAudioMessage(base64);
+						resultText = $"[voice message]: {mediaUsage.Text}";
 					}
 					break;
 				case "image":
 					{
 						var base64 = await DownloadImageAsBase64(media.Url);
-						resultText = $"[Photo]: {await AnalyzeImageAsync(base64, "photo", null)}";
+						mediaUsage = await AnalyzeImageAsync(base64, "photo", null);
+						resultText = $"[Photo]: {mediaUsage.Text}";
 					}
 					break;
 				case "video":
 					{
 						var base64 = await PrepareVideoBase64ForAiAsync(media.Url);
-						resultText = $"[Video]: {await AnalyzeImageAsync(base64, "video", null)}";
+						mediaUsage = await AnalyzeImageAsync(base64, "video", null);
+						resultText = $"[Video]: {mediaUsage.Text}";
 					}
 					break;
 				case "ig_reel":
 					{
 						var base64 = await PrepareVideoBase64ForAiAsync(media.Url);
-						resultText = $"[Shared Instagram Reel]: {await AnalyzeImageAsync(base64, "ig_reel", null)}";
+						mediaUsage = await AnalyzeImageAsync(base64, "ig_reel", null);
+						resultText = $"[Shared Instagram Reel]: {mediaUsage.Text}";
 					}
 					break;
 				default:
@@ -664,13 +659,16 @@ public partial class InstagramService : IInstagramService
 			}
 
 			media.AiResult = resultText;
+			media.InputTokens = mediaUsage?.InputTokens ?? 0;
+			media.OutputTokens = (mediaUsage?.OutputTokens ?? 0) + (mediaUsage?.ThoughtTokens ?? 0);
+			media.TotalTokens = mediaUsage?.TotalTokens ?? 0;
+			media.ModelName = mediaUsage?.ModelName;
 			media.IsProcessed = true;
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Ошибка обработки медиа ({Type}) для {MsgId}", media.MediaType, messageId);
 			resultText = $"[Пользователь отправил {media.MediaType}, но не удалось его распознать]";
-			// ВАЖНО: закрываем элемент, чтобы ReplyConsumer не завис в вечном Snooze!
 			media.AiResult = resultText;
 			media.IsProcessed = true;
 		}

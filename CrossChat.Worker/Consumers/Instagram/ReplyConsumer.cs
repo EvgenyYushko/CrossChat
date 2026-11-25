@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using CrossChat.Data;
@@ -35,25 +36,21 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	private readonly IAiService _aiService;
 	private readonly IInstagramConsole _console;
 	private readonly IInboxService _inboxService;
-	private readonly IGeminiDecisionService _decisionService; // <-- ДОБАВЛЯЕМ ПОЛЕ
+	private readonly IGeminiDecisionService _decisionService;
 	private readonly ITelegramService _telegramService;
 	private readonly IVoiceService _voiceService;
 	private readonly SiteSettings _siteSettings;
-	IDatabase _redis;
+	private readonly IDatabase _redis;
 	private readonly IGoogleDriveUploader _googleDriveUploader;
 
-	// Статический лимитер (один на всё приложение)
-	// 2. СОЗДАЕМ ЛИМИТЕР (Static - один на все потоки приложения)
-	// Настройка: 15 запросов в 1 минуту (Безопасно для Free Tier)
 	private static readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
 	{
-		PermitLimit = 20,                     // Сколько разрешаем (20 шт)
-		Window = TimeSpan.FromMinutes(1),     // За какое время (1 мин)
-		QueueProcessingOrder = QueueProcessingOrder.OldestFirst, // Кто первый встал, тот первый получит разрешение, когда оно освободится
+		PermitLimit = 20,
+		Window = TimeSpan.FromMinutes(1),
+		QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
 		QueueLimit = 0
 	});
 
-	// Сюда потом внедришь свои сервисы: IInstagramService, IAiService
 	public ReplyConsumer(
 		ILogger<ReplyConsumer> logger,
 		AppDbContext db,
@@ -66,8 +63,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		ITelegramService telegramService,
 		IVoiceService voiceService,
 		SiteSettings siteSettings,
-		IGoogleDriveUploader googleDriveUploader
-	)
+		IGoogleDriveUploader googleDriveUploader)
 	{
 		_logger = logger;
 		_db = db;
@@ -88,7 +84,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		var messageId = context.Message.ReplyId;
 		var processingKey = $"processed:{messageId}";
 
-		// 1. Проверяем, не было ли сообщение уже обработано УСПЕШНО ранее
 		if (await _redis.KeyExistsAsync(processingKey))
 		{
 			_logger.LogInformation("Сообщение уже обработано успешно, игнорируем дубль.");
@@ -101,7 +96,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		var targetTimeKey = $"debounce:target_time:ig:{senderId}:{businessAccountId}";
 		var activeTimerKey = $"debounce:timer_active:ig:{senderId}:{businessAccountId}";
 
-		// ПРОВЕРКА ДЕБАУНСА: продолжал ли пользователь писать?
 		var storedTicks = await _redis.StringGetAsync(targetTimeKey);
 		if (storedTicks.HasValue && long.TryParse(storedTicks, out long ticks))
 		{
@@ -112,20 +106,15 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			{
 				_logger.LogInformation($"[Instagram Debounce] ⏳ Пользователь {senderId} еще пишет! Откладываем ответ еще на {remaining.TotalSeconds:F0} сек...");
 				await context.SchedulePublish(remaining, context.Message);
-				return; // НЕ ОТВЕЧАЕМ СЕЙЧАС!
+				return;
 			}
 		}
 
-		// Время тишины вышло — сбрасываем ключи дебаунса
 		await _redis.KeyDeleteAsync(targetTimeKey);
 		await _redis.KeyDeleteAsync(activeTimerKey);
 
-		// =========================================================================
-		// 🚀 ЗАЩИТА ОТ ДВОЙНЫХ ОТВЕТОВ: Блокировка диалога (1 поток генерации на юзера)
-		// =========================================================================
 		var dialogBusyKey = $"lock:dialog_busy:{businessAccountId}:{senderId}";
 
-		// Если диалог прямо сейчас уже обрабатывается другим потоком — откладываем повтор на 10 сек
 		if (await _redis.KeyExistsAsync(dialogBusyKey))
 		{
 			_logger.LogInformation("[Reply] ⏳ Диалог {SenderId} уже генерирует ответ в другом потоке. Откладываем...", senderId);
@@ -133,15 +122,11 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			return;
 		}
 
-		// Захватываем замок на 90 секунд (с запасом на время ответа нейросети)
 		await _redis.StringSetAsync(dialogBusyKey, "busy", TimeSpan.FromSeconds(90));
 
-		// 🚀 ВАЖНО: ВЕСЬ КОД ОБОРАЧИВАЕМ В TRY СРАЗУ ПОСЛЕ ЗАХВАТА ЗАМКА!
 		try
 		{
-			// Пытаемся получить разрешение на выполнение
 			using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, context.CancellationToken);
-
 			if (!lease.IsAcquired)
 			{
 				throw new RateLimitExceededException("Rate limit exceeded (Gemini). Triggering Redelivery.");
@@ -149,7 +134,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			_logger.LogInformation($"[Reply] 🚀 Обработка диалога. BusinessID: {businessAccountId}, SenderID: {senderId}");
 
-			// 2. Ищем настройки владельца бота в БД
 			var settings = await _db.InstagramSettings
 				.AsNoTracking()
 				.Include(s => s.User)
@@ -172,7 +156,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			var accessInstaToken = settings.AccessToken;
-
 			if (string.IsNullOrEmpty(accessInstaToken))
 			{
 				await _console.LogError($"❌ Токен отсутствует для BusinessID {businessAccountId}.");
@@ -196,29 +179,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				await _db.SaveChangesAsync();
 			}
 
-			// А) Проверяем галочку "Игнорировать"
 			if (customer.IsIgnored)
 			{
 				await _console.LogInfo($"Пользователь {senderId} в игнор-листе. Пропускаем диалог.");
 				return;
 			}
 
-			// Б) Проверяем лимит сообщений в сутки
 			var startOfPeriod = DateTimeNow.AddDays(-1);
 			var messageCount = await _db.BotResponseLogs
 				.CountAsync(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod);
 
-			// Если лимит УЖЕ был исчерпан ранее — молчим
 			if (messageCount > settings.MaxAnswerMessagesCount)
 			{
 				await _console.LogWarning($"Аккаунт {customer.Username} превысил лимит сообщений: {messageCount}/{settings.MaxAnswerMessagesCount} (бот на паузе до завтра)");
 				return;
 			}
 
-			// 🚀 ФЛАГ: Если это ровно последнее разрешённое сообщение на сегодня — сгенерируем красивое прощание через ИИ!
 			bool isLastMessageForToday = (messageCount == settings.MaxAnswerMessagesCount);
 
-			// В) Проверяем лимит токенов
 			var tokensUsed = await _db.BotResponseLogs
 				.Where(log => log.CustomerId == customer.Id && log.RespondedAt >= startOfPeriod)
 				.SumAsync(log => log.TokensSpent);
@@ -229,12 +207,9 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				return;
 			}
 
-			// Г) Получаем историю переписки
 			var messages = await _instaService.GetHistoryAsync(senderId, accessInstaToken, 10);
-
 			if (messages == null || messages.Count == 0) return;
 
-			// 🚀 СВЕРХВАЖНАЯ ПРОВЕРКА: если последнее сообщение УЖЕ от нашего бота (пока мы ждали) — выходим!
 			var lastMsg = messages[0];
 			string lastSenderId = lastMsg.From.Id;
 			if (lastSenderId == businessAccountId)
@@ -247,7 +222,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			int unreadCount = 0;
 			foreach (var msg in messages) { if (msg.From.Id != businessAccountId) unreadCount++; else break; }
 
-			// Синхронизация пачки сообщений в Инбокс
 			int networkTypeInstagram = 1;
 			var conversation = await _inboxService.GetOrCreateConversationAsync(
 				settings.ProfileId,
@@ -272,7 +246,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			// 🧪 ФИЛЬТР ТЕСТ-РЕЖИМА (БЕЛЫЙ СПИСОК):
-			// Сообщения в Инбокс уже сохранены выше, но Decision 1 и генерацию ответа ИИ отменяем!
 			if (settings.BotFilterMode == 1 &&
 				!InstagramWhitelistHelper.IsInWhitelist(settings.BotWhitelist, customer.Username, senderId))
 			{
@@ -281,7 +254,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				return;
 			}
 
-			// Проверка Human Takeover
 			if (conversation.IsHumanTakeover)
 			{
 				if (conversation.HumanTakeoverUntil.HasValue && conversation.HumanTakeoverUntil.Value > DateTime.UtcNow)
@@ -296,7 +268,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				}
 			}
 
-			// Подтягиваем расшифровки из Инбокса (чтобы вместо [Empty message] на наших прошлых ГС был их реальный текст)
 			var recentSavedRows = await _db.InboxMessages
 				.AsNoTracking()
 				.Where(m => m.ConversationId == conversation.Id && m.ExternalMessageId != null)
@@ -314,6 +285,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 			var chatHistory = new List<AiRequest>();
 			var unreadUserMessageIds = new List<string>();
+			var turnMediaUsages = new List<MediaDataEntry>();
 
 			for (int i = messages.Count - 1; i >= 0; i--)
 			{
@@ -346,11 +318,19 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				if (isUnread && role == "user")
 				{
 					unreadUserMessageIds.Add(msg.Id);
+
+					if (!string.IsNullOrEmpty(msg.Id) && MediaMessageStorage.Storage.TryGetValue(msg.Id, out var mediaEntries))
+					{
+						lock (mediaEntries)
+						{
+							turnMediaUsages.AddRange(mediaEntries.Where(x => x.TotalTokens > 0));
+						}
+					}
 				}
 			}
 
 			// =========================================================================
-			// 🧠 ФИЛЬТР GEMINI DECISION 1: ОТВЕЧАТЬ, СТАВИТЬ СМАЙЛИК ИЛИ ИГНОРИРОВАТЬ СПАМ?
+			// 🧠 ФИЛЬТР GEMINI DECISION 1
 			// =========================================================================
 			var transcriptBuilder = new System.Text.StringBuilder();
 			foreach (var item in chatHistory)
@@ -393,7 +373,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 					if (availableGalleryItems.Count > 0)
 					{
-						// Передаём в Decision 1 категории, в которых вообще загружены файлы
 						mediaCategoryOptions = botCategories
 							.Where(c => allItems.Any(i => i.CategoryId == c.Id))
 							.Select(c => new MediaCategoryPromptOption
@@ -446,7 +425,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				if (wantsLink || needsHuman)
 				{
-					// Ставим диалог на ручную паузу (таймер 2 часа + уведомление в InboxHub)
 					await _inboxService.ToggleHumanTakeoverAsync(conversation.Id, true);
 
 					string reasonTitle = wantsLink
@@ -490,37 +468,10 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					}
 
 					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
-					return; // БОТ МОЛЧИТ!
-				}
-
-				// 3. СМАЙЛИК, СТИКЕР ИЛИ "ОК, СПАСИБО" -> ТОЛЬКО РЕАКЦИЯ
-				if (decision.NeedsReplyProb < 0.45)
-				{
-					await _console.Log($"💬 [Decision 1] Текстовый ответ для @{customer.Username} не требуется ({decision.NeedsReplyProb:P0}). Ставим реакцию.");
-
-					if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0)
-					{
-						try
-						{
-							var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
-							string targetMessageId = unreadUserMessageIds.Last();
-							bool isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
-							if (isSuccess)
-							{
-								await _console.Log($"❤️ [Decision 1] Поставили реакцию {reaction} на сообщение @{customer.Username}.");
-							}
-						}
-						catch (Exception ex)
-						{
-							await _console.LogError($"[Decision 1 Reaction Error] {ex.Message}");
-						}
-					}
-
-					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
 					return;
 				}
 
-				// 4. ПРОВЕРЯЕМ ГОТОВНОСТЬ ГОЛОСОВОГО ОТВЕТА
+				// 3. ПРОВЕРЯЕМ ГОТОВНОСТЬ ГОЛОСОВОГО ОТВЕТА
 				bool userSentVoiceJustNow = chatHistory
 					.Where(m => m.Role == "user")
 					.TakeLast(Math.Max(1, unreadCount))
@@ -544,9 +495,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					}
 				}
 
-				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.60;
-
-				// 5. ВЫБОР ФОТО/ВИДЕО ИЗ МЕДИАТЕКИ ПО КАТЕГОРИЯМ
+				// 4. ВЫБОР ФОТО/ВИДЕО ИЗ МЕДИАТЕКИ ПО КАТЕГОРИЯМ
 				if (availableGalleryItems.Count > 0 && decision.WantsMediaProb >= 0.72)
 				{
 					bool isMediaOnCooldown = await _redis.KeyExistsAsync(mediaCooldownKey);
@@ -573,7 +522,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 							}
 						}
 
-						// Фоллбэк в дефолтную категорию ("Общее"), если запрос общий или целевая категория исчерпана
 						if (selectedMediaToSend == null)
 						{
 							var defaultCat = mediaCategoryOptions?.FirstOrDefault(c => c.IsDefault);
@@ -591,7 +539,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 						if (selectedMediaToSend != null)
 						{
 							selectedMediaCategoryName = mediaCategoryOptions?.FirstOrDefault(c => c.Id == targetCategoryId)?.Name ?? "Общее";
-							// Если прикрепляем фото/видео — отвечаем текстом + медиа (без одновременного ГС)
 							shouldRespondWithVoice = false;
 							await _console.Log($"🖼️ [Decision 1] Выбрано {selectedMediaToSend.MediaType} из «{selectedMediaCategoryName}» ({decision.WantsMediaProb:P0}).");
 						}
@@ -601,12 +548,42 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 						}
 					}
 				}
+
+				shouldExtractPersonalFact = decision.ContainsPersonalFactProb >= 0.60;
+
+				// 5. СМАЙЛИК, СТИКЕР ИЛИ "ОК, СПАСИБО" -> СТАВИМ РЕАКЦИЮ И ВЫХОДИМ,
+				// ТОЛЬКО ЕСЛИ НЕ НУЖНО ОТПРАВЛЯТЬ НИ МЕДИА, НИ ГОЛОСОВОЕ!
+				if (decision.NeedsReplyProb < 0.45 && selectedMediaToSend == null && !shouldRespondWithVoice)
+				{
+					await _console.Log($"💬 [Decision 1] Текстовый ответ для @{customer.Username} не требуется ({decision.NeedsReplyProb:P0}). Ставим реакцию.");
+
+					if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0)
+					{
+						try
+						{
+							var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+							string targetMessageId = unreadUserMessageIds.Last();
+							bool isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
+							if (isSuccess)
+							{
+								await _console.Log($"❤️ [Decision 1] Поставили реакцию {reaction} на сообщение @{customer.Username}.");
+							}
+						}
+						catch (Exception ex)
+						{
+							await _console.LogError($"[Decision 1 Reaction Error] {ex.Message}");
+						}
+					}
+
+					await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
+					return;
+				}
 			}
 			else
 			{
 				await _console.LogWarning($"⚠️ [Decision 1] Не сработал ({decision.ErrorMessage}). Идём стандартно в ИИ.");
 			}
-			
+
 			await _instaService.SetTypingStatusAsync(senderId, accessInstaToken);
 
 			// Запрос к ИИ
@@ -625,7 +602,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 				if (!string.IsNullOrEmpty(contextText))
 				{
-					// Сохраняем ранее накопленные факты из переписки, чтобы суточное обновление профиля их не затёрло!
 					string existingMemory = ExtractSection(customer.AiContext, MemorySectionMarker, MediaStatsSectionMarker);
 					string existingMediaStats = ExtractSection(customer.AiContext, MediaStatsSectionMarker, null);
 					userContextInfo = CombineAiContext(contextText, existingMemory, existingMediaStats);
@@ -646,7 +622,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			systemPrompt += "\n\nKeep this information in mind when responding. For example, whether you are mutual subscribers. If not, ask him to subscribe.\n"
 				+ userContextInfo;
 
-			// 🚀 ПОДМЕШИВАЕМ ПРОЩАЛЬНЫЙ ПРОМПТ В СИСТЕМНУЮ ИНСТРУКЦИЮ ИИ:
 			if (isLastMessageForToday)
 			{
 				var farewellInstruction = !string.IsNullOrWhiteSpace(settings.DailyLimitPrompt)
@@ -678,33 +653,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			else if (settings.IsAutoMediaEnabled && totalGalleryCount > 0 && availableGalleryItems.Count == 0)
 			{
 				systemPrompt +=
-					"\n\nNote for this reply (do NOT pricleanTextReplynt any tags or brackets): " +
+					"\n\nNote for this reply (do NOT print any tags or brackets): " +
 					"All available gallery photos/videos have already been sent to this user. " +
 					"Do NOT promise to send a new photo or video right now.";
 			}
 
-			var aiResponse = await _aiService.GetAnswerAsync(systemPrompt, chatHistory, null);
-
-			// Реакции (лайки на сообщения)
-			var random = new Random();
-			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
-			{
-				try
-				{
-					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
-					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
-					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
-					if (isSuccess)
-					{
-						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
-						await Task.Delay(1500);
-					}
-				}
-				catch (Exception ex)
-				{
-					await _console.LogError($"[Send reaction error] {ex.ToString()}");
-				}
-			}
+			var aiResult = await _aiService.GetAnswerWithUsageAsync(systemPrompt, chatHistory, null);
+			var aiResponse = aiResult?.Text ?? string.Empty;
 
 			if (string.IsNullOrWhiteSpace(aiResponse))
 			{
@@ -728,7 +683,27 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				return;
 			}
 
-			// Метка эхо для нашего бота:
+			// Случайная реакция — только после успешного ответа ИИ (чтобы не дублировалась при retry RabbitMQ)
+			var random = new Random();
+			if (settings.IsReactionsEnabled && unreadUserMessageIds.Count > 0 && random.Next(1, 101) > 50)
+			{
+				try
+				{
+					var reaction = _instaService.GetRandomReaction(settings.AllowedReactions);
+					string targetMessageId = unreadUserMessageIds[random.Next(unreadUserMessageIds.Count)];
+					var isSuccess = await _instaService.SendReactionAsync(senderId, targetMessageId, reaction, accessInstaToken);
+					if (isSuccess)
+					{
+						await _console.Log($"Отправлена реакция {reaction} пользователю {customer.Username} на сообщение");
+						await Task.Delay(1500);
+					}
+				}
+				catch (Exception ex)
+				{
+					await _console.LogError($"[Send reaction error] {ex.ToString()}");
+				}
+			}
+
 			var botReplyingKey = $"bot:replying:{businessAccountId}:{senderId}";
 			await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
 
@@ -772,7 +747,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 						await _instaService.SendMediaAttachmentAsync(senderId, "audio", publicAudioUrl, accessInstaToken);
 
-						// Чистим теги вроде <chuckle> для красивого отображения текста в Инбоксе
 						string readableTranscript = Regex.Replace(aiResponse, @"<[^>]+>", "").Trim();
 						await _inboxService.SaveBotReplyAsync(
 							conversation.Id,
@@ -781,21 +755,24 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 							mediaType: "audio");
 
 						sentAsVoice = true;
-						// Ставим кулдаун на 25 минут, чтобы следующее сообщение не превратилось в серию голосовых
 						await _redis.StringSetAsync(voiceCooldownKey, "1", TimeSpan.FromMinutes(25));
 						await _console.Log($"🎙️ Голосовой ответ успешно отправлен пользователю {customer.Username}");
 					}
 				}
 				catch (Exception voiceEx)
 				{
+					_logger.LogWarning(voiceEx, "⚠️ [Voice Reply] Ошибка при генерации/отправке голосового ответа для @{User}", customer.Username);
 					await _console.LogWarning($"⚠️ Не удалось отправить голосовой ответ ({voiceEx.Message}). Отправляем обычным текстом.");
 				}
 			}
 
 			if (!sentAsVoice)
 			{
-				// На случай фолбэка после VOICE REPLY MODE вычищаем вокальные <теги>
-				string cleanTextReply = Regex.Replace(aiResponse, @"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?", "", RegexOptions.IgnoreCase).Trim();
+				string cleanTextReply = Regex.Replace(
+					aiResponse,
+					@"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?",
+					"",
+					RegexOptions.IgnoreCase).Trim();
 				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken);
 				await _inboxService.SaveBotReplyAsync(conversation.Id, cleanTextReply);
 				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
@@ -815,22 +792,18 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					string tempFileName = $"gal_{Guid.NewGuid():N}{ext}";
 					string tempLocalPath = Path.Combine(_siteSettings.TempFolder, tempFileName);
 
-					// 1. Скачиваем оригинал из Google Drive на диск сервера
 					await _googleDriveUploader.DownloadFileAsync(selectedMediaToSend.GoogleDriveFileId, tempLocalPath);
 					string publicMediaUrl = $"{_siteSettings.AppUrl.TrimEnd('/')}/temp_media/{tempFileName}";
 
-					// 2. Небольшая живая пауза после текста и обновление флага эха
 					await Task.Delay(1200);
 					await _redis.StringSetAsync(botReplyingKey, "1", TimeSpan.FromSeconds(60));
 
-					// 3. Отправляем фото/видео в Instagram Direct
 					await _instaService.SendMediaAttachmentAsync(
 						senderId,
 						selectedMediaToSend.MediaType,
 						publicMediaUrl,
 						accessInstaToken);
 
-					// 4. Фиксируем в БД, что этот файл уже отправлен этому клиенту
 					_db.InstagramCustomerSentMedias.Add(new InstagramCustomerSentMedia
 					{
 						CustomerId = customer.Id,
@@ -838,7 +811,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 						SentAtUtc = DateTime.UtcNow
 					});
 
-					// 5. Обновляем статистику отправленных медиа в AiContext (для ИИ и вкладки AI Диалоги)
 					int newSentCount = sentMediaIds.Count + 1;
 					string mediaStatsText = $"Отправлено медиа из галереи: {newSentCount} из {totalGalleryCount} (последнее: «{selectedMediaCategoryName}», {selectedMediaToSend.MediaType})";
 
@@ -852,7 +824,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					await _redis.StringSetAsync(contextRedisKey, customer.AiContext, TimeSpan.FromHours(24));
 					await _redis.StringSetAsync(mediaCooldownKey, "1", TimeSpan.FromMinutes(20));
 
-					// 6. Сохраняем в Инбокс
 					string inboxLabel = selectedMediaToSend.MediaType == "video" ? "🎬 Видеозапись" : "📷 Фотография";
 					await _inboxService.SaveBotReplyAsync(
 						conversation.Id,
@@ -870,18 +841,27 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			}
 
 			await _redis.StringSetAsync(processingKey, "done", TimeSpan.FromMinutes(6), When.NotExists);
-			await SaveCustomerLog(context.Message.ReplyId, customer.Id);
 
 			// 🧠 Обновляем долгую память ТОЛЬКО если Decision 1 увидел новый личный факт
+			AiGenerationResult? memoryResult = null;
 			if (shouldExtractPersonalFact)
 			{
-				await TryUpdateLongTermMemoryAsync(
+				memoryResult = await TryUpdateLongTermMemoryAsync(
 					customer,
 					chatHistory,
 					unreadCount,
 					userContextInfo,
 					contextRedisKey);
 			}
+
+			// 🪙 Считаем все токены за этот ход (Decision 1 + Медиа + Чат + Память) и пишем в БД
+			await SaveCustomerLog(
+				context.Message.ReplyId,
+				customer.Id,
+				decision,
+				turnMediaUsages,
+				aiResult,
+				memoryResult);
 		}
 		catch (RpcException ex) when (ex.StatusCode == StatusCode.Internal && ex.Message.Contains("blocked"))
 		{
@@ -894,7 +874,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		}
 		finally
 		{
-			// 🚀 ГАРАНТИРОВАННОЕ СНЯТИЕ ЗАМКА ДИАЛОГА: срабатывает при ЛЮБОМ исходе!
 			await _redis.KeyDeleteAsync(dialogBusyKey);
 		}
 	}
@@ -908,17 +887,62 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			RegexOptions.IgnoreCase);
 	}
 
-	private async Task SaveCustomerLog(string replyId, int id)
+	private async Task SaveCustomerLog(
+		string replyId,
+		int customerId,
+		DirectReplyDecisionResult decision,
+		List<MediaDataEntry> mediaUsages,
+		AiGenerationResult? chatResult,
+		AiGenerationResult? memoryResult)
 	{
 		try
 		{
+			var usageSteps = new List<object>();
+			int turnInputTokens = 0;
+			int turnOutputTokens = 0;
+
+			if (decision.IsSuccess && decision.InputTokens > 0)
+			{
+				turnInputTokens += decision.InputTokens;
+				usageSteps.Add(new { step = "decision", model = "gemini-decision-1", input = decision.InputTokens, output = 0 });
+			}
+
+			foreach (var me in mediaUsages)
+			{
+				int mOut = me.OutputTokens > 0 ? me.OutputTokens : Math.Max(0, me.TotalTokens - me.InputTokens);
+				turnInputTokens += me.InputTokens;
+				turnOutputTokens += mOut;
+				usageSteps.Add(new { step = $"media_{me.MediaType}", model = me.ModelName ?? "", input = me.InputTokens, output = mOut });
+			}
+
+			if (chatResult != null && chatResult.TotalTokens > 0)
+			{
+				int chatOut = chatResult.OutputTokens + chatResult.ThoughtTokens;
+				turnInputTokens += chatResult.InputTokens;
+				turnOutputTokens += chatOut;
+				usageSteps.Add(new { step = "chat", model = chatResult.ModelName, input = chatResult.InputTokens, output = chatOut });
+			}
+
+			if (memoryResult != null && memoryResult.TotalTokens > 0)
+			{
+				int memOut = memoryResult.OutputTokens + memoryResult.ThoughtTokens;
+				turnInputTokens += memoryResult.InputTokens;
+				turnOutputTokens += memOut;
+				usageSteps.Add(new { step = "memory", model = memoryResult.ModelName, input = memoryResult.InputTokens, output = memOut });
+			}
+
 			var responseLog = new BotResponseLog
 			{
-				CustomerId = id,
-				MessageId = replyId, // ID последнего сообщения Инсты
-				TokensSpent = 0, // Пока 0
+				CustomerId = customerId,
+				MessageId = replyId,
+				TokensSpent = turnInputTokens + turnOutputTokens,
+				InputTokens = turnInputTokens,
+				OutputTokens = turnOutputTokens,
+				ModelName = chatResult?.ModelName,
+				UsageDetailsJson = JsonSerializer.Serialize(usageSteps),
 				RespondedAt = DateTimeNow
 			};
+
 			_db.BotResponseLogs.Add(responseLog);
 			await _db.SaveChangesAsync();
 		}
@@ -940,16 +964,6 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 
 		int cutIdx = new[] { idxMem, idxMed }.Where(i => i >= 0).DefaultIfEmpty(-1).Min();
 		return cutIdx >= 0 ? aiContext.Substring(0, cutIdx).Trim() : aiContext.Trim();
-	}
-
-	private static string ExtractMemorySection(string? aiContext)
-	{
-		if (string.IsNullOrWhiteSpace(aiContext)) return string.Empty;
-
-		int idx = aiContext.IndexOf(MemorySectionMarker, StringComparison.OrdinalIgnoreCase);
-		if (idx < 0) return string.Empty;
-
-		return aiContext.Substring(idx + MemorySectionMarker.Length).Trim();
 	}
 
 	private static string ExtractSection(string? aiContext, string marker, string? nextMarker)
@@ -975,7 +989,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		return string.Join("\n\n", parts);
 	}
 
-	private async Task TryUpdateLongTermMemoryAsync(
+	private async Task<AiGenerationResult?> TryUpdateLongTermMemoryAsync(
 		InstagramBotCustomer customer,
 		List<AiRequest> chatHistory,
 		int unreadCount,
@@ -984,14 +998,13 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 	{
 		try
 		{
-			// Берём непрочитанные сообщения клиента (или последние 2 от user), чтобы учесть склеенные дебаунсом реплики
 			var latestUserMessages = chatHistory
 				.Where(m => m.Role == "user")
 				.TakeLast(Math.Max(1, Math.Min(unreadCount, 3)))
 				.Select(m => m.Text)
 				.ToList();
 
-			if (latestUserMessages.Count == 0) return;
+			if (latestUserMessages.Count == 0) return null;
 
 			string existingMemory = ExtractSection(customer.AiContext, MemorySectionMarker, MediaStatsSectionMarker);
 			string existingBlock = string.IsNullOrWhiteSpace(existingMemory) ? "None" : existingMemory;
@@ -1013,17 +1026,16 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				"- If there are NO new lasting facts to add or update, output EXACTLY: NO_CHANGES\n" +
 				"- Otherwise output ONLY the updated bullet list starting with \"- \".";
 
-			string extracted = await _aiService.GeminiRequest(prompt, null);
-			if (string.IsNullOrWhiteSpace(extracted)) return;
+			var extracted = await _aiService.GeminiRequestWithUsageAsync(prompt, null);
+			if (extracted == null || string.IsNullOrWhiteSpace(extracted.Text)) return extracted;
 
-			string trimmed = extracted.Trim();
+			string trimmed = extracted.Text.Trim();
 			if (trimmed.Contains("NO_CHANGES", StringComparison.OrdinalIgnoreCase))
 			{
 				_logger.LogInformation("🧠 [Long Memory] Новых устойчивых фактов для @{User} не найдено (NO_CHANGES).", customer.Username);
-				return;
+				return extracted;
 			}
 
-			// Оставляем только строки-буллеты и нормализуем к формату "- ..."
 			var bulletLines = trimmed
 				.Split('\n', StringSplitOptions.RemoveEmptyEntries)
 				.Select(l => l.Trim())
@@ -1033,7 +1045,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 				.Take(15)
 				.ToList();
 
-			if (bulletLines.Count == 0) return;
+			if (bulletLines.Count == 0) return extracted;
 
 			string updatedBullets = string.Join("\n", bulletLines);
 			string profilePart = ExtractProfileSection(
@@ -1044,21 +1056,20 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			customer.AiContext = mergedContext;
 			await _db.SaveChangesAsync();
 
-			// Обновляем и Redis, чтобы уже на следующем сообщении ИИ видел новые факты
 			await _redis.StringSetAsync(contextRedisKey, mergedContext, TimeSpan.FromHours(24));
 
 			await _console.Log($"🧠 [Long Memory] Обновлена долгая память @{customer.Username} (фактов: {bulletLines.Count}).");
+			return extracted;
 		}
 		catch (Exception ex)
 		{
-			// Ошибка памяти никогда не должна ронять основной цикл обработки диалога
 			_logger.LogWarning(ex, "⚠️ [Long Memory] Не удалось обновить долгую память для @{User}", customer.Username);
+			return null;
 		}
 	}
 
 	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
 	{
-		// 1. Разбиваем текст на части (например, по ~200 символов или по предложениям)
 		var chunks = SplitMessageIntoHumanChunks(fullText, 100);
 
 		for (int i = 0; i < chunks.Count; i++)
@@ -1066,47 +1077,14 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			await _instaService.SetTypingStatusAsync(userId, token);
 
 			var chunk = chunks[i];
-
-			// 3. Рассчитываем паузу для ТЕКУЩЕГО куска
-			// Чем короче кусок, тем быстрее мы его "печатаем"
 			int typingTime = Math.Clamp(chunk.Length * 90, 2000, 6000);
 			await Task.Delay(typingTime);
 
 			await _instaService.SendMessageAsync(userId, chunk, token);
 
-			// 5. Маленькая пауза между отправкой и началом печати следующего (как будто человек нажал Enter)
 			if (i < chunks.Count - 1)
 			{
 				await Task.Delay(Random.Shared.Next(1000, 2000));
-			}
-		}
-
-		if (chunks.Count == 1)
-		{
-			var random = new Random();
-
-			// Если выпадает число от 1 до 3 (из 10), то отправляем стикер. Шанс 30%.
-			if (random.Next(1, 11) <= 3)
-			{
-				//await _instaService.SetTypingStatusAsync(userId, token);
-
-				// Небольшая задержка перед стикером, чтобы выглядело естественно (1-3 сек)
-				//await Task.Delay(random.Next(1000, 3000));
-
-				//string stickerToSend;
-
-				//if (random.Next(1, 101) > 10)
-				//{
-				//	stickerToSend = "like_heart";
-				//}
-				//else
-				//{
-				//	// Берем случайный URL из нашей коллекции
-				//	int index = random.Next(StickerCollection.Urls.Count);
-				//	stickerToSend = StickerCollection.Urls[index];
-				//}
-
-				//await SendSticker(userId, stickerToSend);
 			}
 		}
 	}
@@ -1116,40 +1094,32 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		var chunks = new List<string>();
 		if (string.IsNullOrEmpty(text)) return chunks;
 
-		// 1. Сначала разбиваем по переносам строк (абзацам)
 		var paragraphs = text.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
 		foreach (var paragraph in paragraphs)
 		{
-			// Если абзац короткий, добавляем его как есть
 			if (paragraph.Length <= maxChunkLength)
 			{
 				chunks.Add(paragraph.Trim());
 				continue;
 			}
 
-			// 2. Если абзац длинный, бьем его на предложения
-			// Используем регулярку, чтобы оставить знаки препинания (.!?) на месте
-			var sentences = System.Text.RegularExpressions.Regex.Split(paragraph, @"(?<=[.!?])\s+");
-
+			var sentences = Regex.Split(paragraph, @"(?<=[.!?])\s+");
 			var currentChunk = "";
 
 			foreach (var sentence in sentences)
 			{
-				// Если текущий кусок + новое предложение влезают в лимит — склеиваем
 				if (currentChunk.Length + sentence.Length <= maxChunkLength)
 				{
 					currentChunk += (currentChunk.Length > 0 ? " " : "") + sentence;
 				}
 				else
 				{
-					// Если не влезают — сохраняем текущий кусок и начинаем новый
 					if (!string.IsNullOrEmpty(currentChunk)) chunks.Add(currentChunk.Trim());
 					currentChunk = sentence;
 				}
 			}
 
-			// Добавляем хвостик
 			if (!string.IsNullOrEmpty(currentChunk)) chunks.Add(currentChunk.Trim());
 		}
 
@@ -1164,10 +1134,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		{
 			lock (mediaList)
 			{
-				// Если хоть одно медиа еще не обработано - возвращаем null (сигнал для Snooze)
 				if (mediaList.Any(m => !m.IsProcessed)) return null;
-
-				// Если все обработаны - собираем все AiResult через пробел
 				return string.Join(" ", mediaList.Select(m => m.AiResult));
 			}
 		}
