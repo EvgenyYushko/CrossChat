@@ -761,7 +761,11 @@ namespace CrossChat.Controllers
 					TodayResponsesCount = c.ResponseLogs.Count(l => l.RespondedAt >= last24h),
 					LastRespondedAt = c.ResponseLogs.Max(l => (DateTime?)l.RespondedAt),
 					CreatedAt = c.CreatedAt,
-					SentMediaCount = c.SentMediaHistory.Count
+					SentMediaCount = c.SentMediaHistory.Count,
+					TotalTokensSpent = c.ResponseLogs.Sum(l => (long)l.TokensSpent),
+					TodayTokensSpent = c.ResponseLogs.Where(l => l.RespondedAt >= last24h).Sum(l => (long)l.TokensSpent),
+					TotalInputTokens = c.ResponseLogs.Sum(l => (long)l.InputTokens),
+					TotalOutputTokens = c.ResponseLogs.Sum(l => (long)l.OutputTokens),
 				})
 				// 🚀 Сортировка: сверху те, кому ответили недавно, затем старые
 				.OrderByDescending(c => c.LastRespondedAt ?? c.CreatedAt)
@@ -781,6 +785,60 @@ namespace CrossChat.Controllers
 			ViewBag.TotalGalleryItemsCount = await _db.InstagramMediaItems
 				.AsNoTracking()
 				.CountAsync(m => m.InstagramSettingsId == botId);
+
+			var botTokenLogs = await _db.BotResponseLogs
+				.AsNoTracking()
+				.Where(l => l.Customer.InstagramSettingsId == botId && l.TokensSpent > 0)
+				.Select(l => new { l.InputTokens, l.OutputTokens, l.ModelName, l.UsageDetailsJson, l.TokensSpent })
+				.ToListAsync();
+
+			var modelBreakdown = new Dictionary<string, (long Input, long Output, int Calls)>(StringComparer.OrdinalIgnoreCase);
+
+			foreach (var log in botTokenLogs)
+			{
+				bool parsedSteps = false;
+				if (!string.IsNullOrWhiteSpace(log.UsageDetailsJson))
+				{
+					try
+					{
+						using var doc = JsonDocument.Parse(log.UsageDetailsJson);
+						foreach (var item in doc.RootElement.EnumerateArray())
+						{
+							string model = item.TryGetProperty("model", out var mp) ? (mp.GetString() ?? "unknown") : "unknown";
+							string step = item.TryGetProperty("step", out var sp) ? (sp.GetString() ?? "") : "";
+							long inp = item.TryGetProperty("input", out var ip) ? ip.GetInt64() : 0;
+							long outp = item.TryGetProperty("output", out var op) ? op.GetInt64() : 0;
+
+							if (string.IsNullOrWhiteSpace(model)) model = "unknown";
+							string key = string.IsNullOrEmpty(step) ? model : $"{model} ({step})";
+
+							modelBreakdown.TryGetValue(key, out var cur);
+							modelBreakdown[key] = (cur.Input + inp, cur.Output + outp, cur.Calls + 1);
+						}
+						parsedSteps = true;
+					}
+					catch { }
+				}
+
+				if (!parsedSteps)
+				{
+					string key = string.IsNullOrWhiteSpace(log.ModelName) ? "unknown" : log.ModelName;
+					modelBreakdown.TryGetValue(key, out var cur);
+					modelBreakdown[key] = (cur.Input + log.InputTokens, cur.Output + log.OutputTokens, cur.Calls + 1);
+				}
+			}
+
+			ViewBag.ModelBreakdown = modelBreakdown
+				.Select(kv => new ModelUsageStatDto
+				{
+					Label = kv.Key,
+					InputTokens = kv.Value.Input,
+					OutputTokens = kv.Value.Output,
+					CallsCount = kv.Value.Calls,
+					EstimatedUsd = EstimateGeminiCostUsd(kv.Key, kv.Value.Input, kv.Value.Output)
+				})
+				.OrderByDescending(x => x.InputTokens + x.OutputTokens)
+				.ToList();
 
 			return View("AiChats", customers);
 		}
@@ -809,10 +867,46 @@ namespace CrossChat.Controllers
 			}
 
 			// Берем последние 20 сообщений (хронологически)
-			var messages = conversation.Messages
+			var recentMessages = conversation.Messages
 				.OrderBy(m => m.CreatedAtUtc)
-				.TakeLast(20)
-				.Select(m => new
+				.TakeLast(25)
+				.ToList();
+
+			var customerLogs = await _db.BotResponseLogs
+				.AsNoTracking()
+				.Where(l => l.Customer.InstagramSettingsId == botId &&
+							l.Customer.InstagramSenderId == senderId &&
+							l.TokensSpent > 0)
+				.OrderByDescending(l => l.Id)
+				.Take(60)
+				.ToListAsync();
+
+			var logByTriggerMsgId = new Dictionary<string, BotResponseLog>();
+			foreach (var l in customerLogs)
+			{
+				if (!string.IsNullOrEmpty(l.MessageId))
+					logByTriggerMsgId.TryAdd(l.MessageId, l);
+			}
+
+			BotResponseLog? pendingTurnLog = null;
+			var messages = new List<object>();
+
+			foreach (var m in recentMessages)
+			{
+				if (m.IsIncoming && !string.IsNullOrEmpty(m.ExternalMessageId) &&
+					logByTriggerMsgId.TryGetValue(m.ExternalMessageId, out var matchedLog))
+				{
+					pendingTurnLog = matchedLog;
+				}
+
+				BotResponseLog? attachedLog = null;
+				if (!m.IsIncoming && m.IsSentByBot && pendingTurnLog != null)
+				{
+					attachedLog = pendingTurnLog;
+					pendingTurnLog = null;
+				}
+
+				messages.Add(new
 				{
 					id = m.Id,
 					text = m.Text,
@@ -820,11 +914,18 @@ namespace CrossChat.Controllers
 					isSentByBot = m.IsSentByBot,
 					time = m.CreatedAtUtc.ToString("dd.MM HH:mm"),
 					mediaUrl = m.MediaUrl,
-					mediaType = m.MediaType
-				})
-				.ToList();
+					mediaType = m.MediaType,
+					tokensSpent = attachedLog?.TokensSpent ?? 0,
+					inputTokens = attachedLog?.InputTokens ?? 0,
+					outputTokens = attachedLog?.OutputTokens ?? 0,
+					modelName = attachedLog?.ModelName,
+					usageDetailsJson = attachedLog?.UsageDetailsJson
+				});
+			}
 
-			return Json(new { messages, conversationId = conversation.Id });
+			// Отдаём последние 20 (сохраняя привязку, если триггер был в первых 5 из 25)
+			var finalMessages = messages.Skip(Math.Max(0, messages.Count - 20)).ToList();
+			return Json(new { messages = finalMessages, conversationId = conversation.Id });
 		}
 
 		// ==========================================================
@@ -1163,6 +1264,28 @@ namespace CrossChat.Controllers
 			return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
 		}
 
+		private static double EstimateGeminiCostUsd(string modelOrLabel, long inputTokens, long outputTokens)
+		{
+			// Ориентировочные тарифы за 1M токенов ($): потом легко подкрутишь под актуальный прайс Google
+			var m = modelOrLabel.ToLowerInvariant();
+			double inPer1M, outPer1M;
+
+			if (m.Contains("decision"))
+			{
+				inPer1M = 0.05; outPer1M = 0.05;
+			}
+			else if (m.Contains("lite"))
+			{
+				inPer1M = 0.10; outPer1M = 0.40;
+			}
+			else
+			{
+				inPer1M = 0.30; outPer1M = 2.50;
+			}
+
+			return (inputTokens / 1_000_000.0) * inPer1M + (outputTokens / 1_000_000.0) * outPer1M;
+		}
+
 		public class ToggleCustomerFlagDto { public int BotId { get; set; } public int CustomerId { get; set; } }
 		public class SetBotFilterModeDto { public int BotId { get; set; } public int Mode { get; set; } }
 
@@ -1170,6 +1293,15 @@ namespace CrossChat.Controllers
 		public class CreateMediaCategoryDto { public int BotId { get; set; } public string Name { get; set; } = string.Empty; public string? Description { get; set; } }
 		public class DeleteMediaCategoryDto { public int CategoryId { get; set; } }
 		public class DeleteGalleryItemDto { public int ItemId { get; set; } }
+
+		public class ModelUsageStatDto
+		{
+			public string Label { get; set; } = string.Empty;
+			public long InputTokens { get; set; }
+			public long OutputTokens { get; set; }
+			public int CallsCount { get; set; }
+			public double EstimatedUsd { get; set; }
+		}
 
 		public class InstagramCustomerAnalysisDto
 		{
@@ -1186,6 +1318,11 @@ namespace CrossChat.Controllers
 			public string? AiContext { get; set; }
 			public bool IsWhitelisted { get; set; }
 			public int SentMediaCount { get; set; }
+			public long TotalTokensSpent { get; set; }
+			public long TodayTokensSpent { get; set; }
+			public long TotalInputTokens { get; set; }
+			public long TotalOutputTokens { get; set; }
+			public double EstimatedCostUsd => EstimateGeminiCostUsd("lite", TotalInputTokens, TotalOutputTokens);
 		}
 	}
 

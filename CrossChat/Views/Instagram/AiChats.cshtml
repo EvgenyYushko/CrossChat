@@ -279,6 +279,11 @@
                 💬 Открыть в Инбоксе
             </a>
         </div>
+
+        <button type="button" onclick="document.getElementById('modelsStatsModal').style.display='flex'"
+		        class="btn" style="padding: 8px 14px; font-size:0.85rem; background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.4); color:#a5b4fc; border-radius:10px; cursor:pointer; font-weight:700;">
+	        📊 Расход по моделям
+        </button>
     </div>
 
     @{
@@ -314,6 +319,10 @@
         int withVision = Model.Count(c => !string.IsNullOrEmpty(c.AiContext) || !string.IsNullOrEmpty(c.AppearanceDescription));
         int totalGallery = ViewBag.TotalGalleryItemsCount ?? 0;
         int totalMediaSent = Model.Sum(c => c.SentMediaCount);
+        long botTotalTokens = Model.Sum(c => c.TotalTokensSpent);
+        long botTodayTokens = Model.Sum(c => c.TodayTokensSpent);
+        var modelStats = ViewBag.ModelBreakdown as List<CrossChat.Controllers.InstagramController.ModelUsageStatDto> ?? new();
+        double botEstimatedUsd = modelStats.Sum(x => x.EstimatedUsd);
     }
     <div class="kpi-row">
         <div class="kpi-box">
@@ -335,6 +344,10 @@
         <div class="kpi-box">
             <span class="kpi-num" style="color: #f59e0b;">@totalMediaSent</span>
             <span class="kpi-label">Медиа отправлено</span>
+        </div>
+        <div class="kpi-box">
+            <span class="kpi-num" style="color: #fbbf24;">@botTotalTokens.ToString("N0")</span>
+            <span class="kpi-label">Токенов (сегодня: @botTodayTokens.ToString("N0") • ~$@botEstimatedUsd.ToString("F4"))</span>
         </div>
     </div>
 
@@ -418,6 +431,11 @@
                                               title="Отправлено фото/видео из Медиатеки этому клиенту">
                                             🖼️ Медиа: <span class="media-count-val">@c.SentMediaCount</span>/@totalGallery
                                         </span>
+                                        <span class="badge-responses"
+                                              style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);"
+                                              title="Входных: @c.TotalInputTokens.ToString("N0") | Выходных: @c.TotalOutputTokens.ToString("N0")">
+                                            🪙 @c.TotalTokensSpent.ToString("N0") ток. (сег: @c.TodayTokensSpent.ToString("N0")) • ~$@c.EstimatedCostUsd.ToString("F4")
+                                        </span>
                                     </div>
                                 </td>
                                 <td>
@@ -500,6 +518,45 @@
     </div>
 </div>
 
+<div id="modelsStatsModal" class="modal-vision-overlay" onclick="this.style.display='none'">
+    <div class="modal-vision-card" style="max-width: 650px;" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--glass-border); padding-bottom:8px;">
+            <h3 style="margin:0; font-size:1.1rem; color:#a5b4fc; font-weight:800;">📊 Расход токенов по моделям и этапам</h3>
+            <button type="button" onclick="document.getElementById('modelsStatsModal').style.display='none'" style="background:none; border:none; color:var(--text-secondary); font-size:1.4rem; cursor:pointer;">&times;</button>
+        </div>
+        @if (modelStats.Count == 0)
+        {
+            <div style="color:var(--text-secondary); padding:1rem; text-align:center;">Пока нет записей с расходом токенов.</div>
+        }
+        else
+        {
+            <div style="max-height:360px; overflow-y:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.82rem; color:var(--text-main);">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--glass-border); color:var(--text-secondary); text-align:left;">
+                            <th style="padding:8px;">Модель (этап)</th>
+                            <th style="padding:8px;">Вызовов</th>
+                            <th style="padding:8px;">In / Out</th>
+                            <th style="padding:8px;">~$</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ms in modelStats)
+                        {
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                <td style="padding:8px; font-family:monospace;">@ms.Label</td>
+                                <td style="padding:8px;">@ms.CallsCount</td>
+                                <td style="padding:8px;">@ms.InputTokens.ToString("N0") / @ms.OutputTokens.ToString("N0")</td>
+                                <td style="padding:8px; color:#10b981; font-weight:700;">$@ms.EstimatedUsd.ToString("F4")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
 @section Scripts {
     <script>
         const botId = Number('@currentBotId') || 0;
@@ -538,9 +595,27 @@
                         const bubble = document.createElement('div');
                         bubble.className = `mini-bubble ${m.isIncoming ? 'mini-incoming' : 'mini-outgoing'}`;
                         const prefix = m.isIncoming ? '👤 Клиент' : (m.isSentByBot ? '🤖 ИИ-Бот' : '👤 Вы');
+                        let tokenBadgeHtml = '';
+                        if (!m.isIncoming && m.isSentByBot && m.tokensSpent > 0) {
+                            let breakdownTip = `Input: ${m.inputTokens} | Output: ${m.outputTokens}`;
+                            if (m.usageDetailsJson) {
+                                try {
+                                    const steps = JSON.parse(m.usageDetailsJson);
+                                    breakdownTip = steps.map(s => `${s.step} [${s.model || '?'}]: ${s.input} in / ${s.output} out`).join('\n');
+                                } catch {}
+                            }
+                            const modelLabel = m.modelName ? ` • ${escapeHtml(m.modelName)}` : '';
+                            tokenBadgeHtml = `
+                                <div title="${escapeHtml(breakdownTip)}"
+                                     style="margin-top:6px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.12); font-size:0.7rem; color:#fde68a; opacity:0.9; cursor:help;">
+                                    🪙 ${m.tokensSpent.toLocaleString()} ток. (${m.inputTokens} in / ${m.outputTokens} out)${modelLabel}
+                                </div>`;
+                        }
+
                         bubble.innerHTML = `
                             <div style="font-size:0.7rem; opacity:0.6; margin-bottom:2px;">${prefix} • ${m.time}</div>
                             <div>${escapeHtml(m.text || '[Медиа]')}</div>
+                            ${tokenBadgeHtml}
                         `;
                         chatBox.appendChild(bubble);
                     });
