@@ -773,8 +773,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 					@"<[^>]+>|\[(?:MEDIA(?:\s+ATTACHED)?|PHOTO|VIDEO|VOICE(?:\s+REPLY\s+MODE)?)\]\s*:?",
 					"",
 					RegexOptions.IgnoreCase).Trim();
-				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken);
-				await _inboxService.SaveBotReplyAsync(conversation.Id, cleanTextReply);
+				await SendLongMessageAsHumanAsync(senderId, cleanTextReply, accessInstaToken, conversation.Id);
 				await _console.Log($"Ответ успешно отправлен пользователю {customer.Username}");
 			}
 
@@ -1068,7 +1067,7 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 		}
 	}
 
-	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token)
+	public async Task SendLongMessageAsHumanAsync(string userId, string fullText, string token, int? conversationId = null)
 	{
 		var chunks = SplitMessageIntoHumanChunks(fullText, 100);
 
@@ -1081,6 +1080,12 @@ public class ReplyConsumer : IConsumer<ProcessDialogReply>
 			await Task.Delay(typingTime);
 
 			await _instaService.SendMessageAsync(userId, chunk, token);
+
+			// Сохраняем ровно тот же кусок, что ушёл в Instagram, чтобы он 1-в-1 совпал с Meta Echo
+			if (conversationId.HasValue)
+			{
+				await _inboxService.SaveBotReplyAsync(conversationId.Value, chunk);
+			}
 
 			if (i < chunks.Count - 1)
 			{
