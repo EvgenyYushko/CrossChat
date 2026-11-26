@@ -379,9 +379,42 @@
 			                <label style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">
 				                Эмодзи для реакций (если несколько — бот выберет случайный):
 			                </label>
-			                <input type="text" name="allowedReactions" value="@(string.IsNullOrWhiteSpace(Model.AllowedReactions) ? "👍" : Model.AllowedReactions)"
-				                   style="width:100%; box-sizing:border-box; background:var(--input-bg); border:1px solid var(--glass-border); color:var(--text-main); padding:10px 14px; border-radius:10px; font-size:1.15rem;"
-				                   placeholder="👍❤️🔥👏">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                                    <label style="font-size:0.85rem; color:var(--text-secondary); margin:0;">
+                                        Эмодзи для случайной реакции (кликните, чтобы выбрать):
+                                    </label>
+                                    <div style="display:flex; gap:6px;">
+                                        <button type="button" onclick="setTgPresetReactions('👍❤🔥🥰👏')"
+                                                style="background:rgba(168,85,247,0.16); border:1px solid rgba(168,85,247,0.35); color:#c084fc; border-radius:8px; padding:4px 9px; font-size:0.75rem; font-weight:700; cursor:pointer;">
+                                            ✨ Популярные
+                                        </button>
+                                        <button type="button" onclick="setTgPresetReactions('👍')"
+                                                style="background:rgba(255,255,255,0.06); border:1px solid var(--glass-border); color:var(--text-secondary); border-radius:8px; padding:4px 9px; font-size:0.75rem; font-weight:700; cursor:pointer;">
+                                            Только 👍
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="tgEmojiChips" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                                    @foreach (var em in new[] { "👍", "❤", "🔥", "🥰", "👏", "😁", "🤩", "🎉", "💯", "👌", "😍", "💋", "⚡" })
+                                    {
+                                        <button type="button" class="tg-emoji-chip" data-emoji="@em" onclick="toggleTgEmoji('@em')"
+                                                style="font-size:1.25rem; padding:6px 11px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(255,255,255,0.04); cursor:pointer; transition:0.15s;">
+                                            @em
+                                        </button>
+                                    }
+                                </div>
+
+                                <input type="text" id="tgReactionsInput" name="allowedReactions"
+                                       value="@(string.IsNullOrWhiteSpace(Model.AllowedReactions) ? "👍" : Model.AllowedReactions.Replace(",", ""))"
+                                       oninput="syncTgEmojiChips()"
+                                       style="width:100%; box-sizing:border-box; background:var(--input-bg); border:1px solid var(--glass-border); color:var(--text-main); padding:10px 14px; border-radius:10px; font-size:1.15rem;"
+                                       placeholder="👍❤🔥">
+                                <small style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+                                    Бот выберет случайный эмодзи из списка и поставит его в порядке очереди (10 сек на сообщение).
+                                </small>
+                            </div>
 			                <small style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
 				                Убедитесь, что выбранные эмодзи разрешены в настройках реакций вашей группы.
 			                </small>
@@ -547,5 +580,47 @@
             }
             return confirm('Отключить этот Telegram-канал от CrossChat?');
         }
+
+        function normalizeEmoji(e) {
+            return (e || '').replace(/\uFE0F/g, '').trim();
+        }
+
+        function syncTgEmojiChips() {
+            const input = document.getElementById('tgReactionsInput');
+            if (!input) return;
+            const val = normalizeEmoji(input.value);
+            document.querySelectorAll('.tg-emoji-chip').forEach(btn => {
+                const em = normalizeEmoji(btn.getAttribute('data-emoji'));
+                const active = val.includes(em);
+                btn.style.background = active ? 'rgba(168, 85, 247, 0.28)' : 'rgba(255,255,255,0.04)';
+                btn.style.borderColor = active ? '#a855f7' : 'var(--glass-border)';
+                btn.style.transform = active ? 'scale(1.06)' : 'scale(1)';
+            });
+        }
+
+        function toggleTgEmoji(emoji) {
+            const input = document.getElementById('tgReactionsInput');
+            if (!input) return;
+            const cleanEm = normalizeEmoji(emoji);
+            let current = normalizeEmoji(input.value);
+
+            if (current.includes(cleanEm)) {
+                current = current.split(cleanEm).join('');
+            } else {
+                current += cleanEm;
+            }
+
+            input.value = current || '👍';
+            syncTgEmojiChips();
+        }
+
+        function setTgPresetReactions(preset) {
+            const input = document.getElementById('tgReactionsInput');
+            if (!input) return;
+            input.value = preset;
+            syncTgEmojiChips();
+        }
+
+        document.addEventListener('DOMContentLoaded', syncTgEmojiChips);
     </script>
 }

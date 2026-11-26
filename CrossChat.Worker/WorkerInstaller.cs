@@ -7,6 +7,7 @@ using CrossChat.Worker.Consumers.BlueSky;
 using CrossChat.Worker.Consumers.Facebook.Comments;
 using CrossChat.Worker.Consumers.FaceBook;
 using CrossChat.Worker.Consumers.Instagram;
+using CrossChat.Worker.Consumers.TelegramChat;
 using CrossChat.Worker.Consumers.Threads;
 using CrossChat.Worker.Consumers.YouTube;
 using CrossChat.Worker.Facades;
@@ -43,6 +44,8 @@ namespace CrossChat.Worker
 
 			x.AddConsumer<YouTubeReplyConsumer>(typeof(YouTubeReplyDefinition));
 			x.AddConsumer<YouTubePublishConsumer>(typeof(YouTubePublishDefinition));
+
+			x.AddConsumer<TelegramGroupReactionConsumer>(typeof(TelegramGroupReactionDefinition));
 
 			x.AddConsumersFromNamespaceContaining<WebhookConsumer>();
 		}

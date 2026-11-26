@@ -5,6 +5,8 @@ using CrossChat.Helpers;
 using CrossChat.Integrations.Enums;
 using CrossChat.Integrations.Interfaces;
 using CrossChat.Integrations.Interfaces.Google;
+using CrossChat.Worker.Contracts;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -16,6 +18,8 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
+using MassTransit; 
+using CrossChat.Worker.Contracts;
 
 namespace CrossChat.Controllers
 {
@@ -32,6 +36,7 @@ namespace CrossChat.Controllers
 		private readonly IGoogleDriveUploader _googleDriveUploader;
 		private readonly IConnectionMultiplexer _redis;
 		private readonly IInboxService _inboxService;
+		private readonly IPublishEndpoint _publishEndpoint;
 
 		public TelegramSystemWebhookController(
 			AppDbContext db,
@@ -42,7 +47,8 @@ namespace CrossChat.Controllers
 			ITelegramService telegramService,
 			IGoogleDriveUploader googleDriveUploader,
 			IConnectionMultiplexer redis,
-			IInboxService inboxService)
+			IInboxService inboxService,
+			IPublishEndpoint publishEndpoint)
 		{
 			_db = db;
 			_cache = cache;
@@ -53,6 +59,7 @@ namespace CrossChat.Controllers
 			_googleDriveUploader = googleDriveUploader;
 			_redis = redis;
 			_inboxService = inboxService;
+			_publishEndpoint = publishEndpoint;
 		}
 
 		public async Task RunLocalBotListener()
@@ -234,21 +241,15 @@ namespace CrossChat.Controllers
 
 						if (group.IsActive && group.AutoReactToMessages && isRealUserMessage)
 						{
-							try
+							await _publishEndpoint.Publish(new TelegramGroupReactionCommand
 							{
-								string emoji = PickRandomTelegramEmoji(group.AllowedReactions);
-								await _telegramBotClient.SetMessageReaction(
-									chatId: groupId,
-									messageId: msg.MessageId,
-									reaction: new ReactionType[] { new ReactionTypeEmoji { Emoji = emoji } },
-									isBig: false);
+								ChatId = groupId,
+								MessageId = msg.MessageId,
+								GroupSettingsId = group.Id,
+								GroupTitle = group.ChannelTitle
+							});
 
-								_logger.LogInformation($"[Telegram Group] Поставлена реакция {emoji} на сообщение #{msg.MessageId} в группе '{group.ChannelTitle}'");
-							}
-							catch (Exception reactEx)
-							{
-								_logger.LogWarning(reactEx, $"[Telegram Group] Не удалось поставить реакцию в группе '{group.ChannelTitle}' (проверьте, разрешён ли этот эмодзи в настройках группы).");
-							}
+							_logger.LogInformation($"⏳ [Telegram Group] Сообщение #{msg.MessageId} в группе '{group.ChannelTitle}' поставлено в очередь (задержка 10с).");
 						}
 					}
 				}
@@ -917,26 +918,6 @@ namespace CrossChat.Controllers
 			{
 				_logger.LogWarning(ex, $"Не удалось отправить ЛС пользователю {tgUserId} в Telegram");
 			}
-		}
-
-		private static string PickRandomTelegramEmoji(string? allowedReactions)
-		{
-			if (string.IsNullOrWhiteSpace(allowedReactions))
-				return "👍";
-
-			var emojis = new List<string>();
-			var enumerator = StringInfo.GetTextElementEnumerator(allowedReactions);
-			while (enumerator.MoveNext())
-			{
-				string el = enumerator.GetTextElement();
-				if (!string.IsNullOrWhiteSpace(el) && el != ",")
-				{
-					emojis.Add(el);
-				}
-			}
-
-			if (emojis.Count == 0) return "👍";
-			return emojis[Random.Shared.Next(emojis.Count)];
 		}
 	}
 }
