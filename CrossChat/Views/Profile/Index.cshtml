@@ -868,7 +868,7 @@
                         <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.441z" />
                     </svg>
                 </div>
-                <h3 style="margin:0; font-size:1.2rem;">Telegram (Каналы)</h3>
+                <h3 style="margin:0; font-size:1.2rem;">Telegram (Каналы и Группы)</h3>
             </div>
 
             <!-- Плюс-кнопка перехода к подключению нового канала -->
@@ -899,17 +899,22 @@
                             else
                             {
                                 <div style="width: 52px; height: 52px; border-radius: 50%; background: #2AABEE; display:flex; align-items:center; justify-content:center; color: white; font-weight: bold; font-size: 1.3rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(42, 171, 238, 0.2);">
-                                    📢
+                                    @(channel.IsGroup ? "👥" : "📢")
                                 </div>
                             }
 
                             <!-- Информация о канале -->
                             <div style="flex-grow: 1;">
-                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">@channel.ChannelTitle</div>
+                                <div style="font-weight:700; font-size: 1.1rem; color: var(--text-main);">
+                                    @channel.ChannelTitle
+                                    <span style="font-size:0.7rem; padding:2px 7px; border-radius:6px; margin-left:6px; vertical-align:middle; background:@(channel.IsGroup ? "rgba(168,85,247,0.18)" : "rgba(42,171,238,0.18)"); color:@(channel.IsGroup ? "#c084fc" : "#38bdf8");">
+                                        @(channel.IsGroup ? "Группа" : "Канал")
+                                    </span>
+                                </div>
                                 <div style="font-size:0.85rem; margin-top:2px;">
                                     @if (channel.IsActive)
                                     {
-                                        <span style='color:#10b981;'>● Канал активен</span>
+                                        <span style='color:#10b981;'>● @(channel.IsGroup ? "Группа активна" : "Канал активен")</span>
                                     }
                                     else
                                     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Helpers;
@@ -171,28 +172,109 @@ namespace CrossChat.Controllers
 				}
 
 				// ===================================================================
+				// 1Б. СЦЕНАРИЙ: Сообщения в Группе / Супергруппе (комментарии к каналу)
+				// ===================================================================
+				if (update.Type == UpdateType.Message &&
+					update.Message != null &&
+					(update.Message.Chat.Type == ChatType.Group || update.Message.Chat.Type == ChatType.Supergroup))
+				{
+					var msg = update.Message;
+					var groupId = msg.Chat.Id;
+
+					var group = await _db.TelegramChannelSettings
+						.FirstOrDefaultAsync(c => c.ChannelId == groupId && c.IsGroup);
+
+					if (group != null)
+					{
+						// А. Мгновенная синхронизация названия/аватарки группы
+						bool groupUpdated = false;
+						if (!string.IsNullOrEmpty(msg.NewChatTitle) && group.ChannelTitle != msg.NewChatTitle)
+						{
+							group.ChannelTitle = msg.NewChatTitle;
+							groupUpdated = true;
+						}
+						if (msg.NewChatPhoto != null && msg.NewChatPhoto.Length > 0)
+						{
+							var biggestPhoto = msg.NewChatPhoto[^1];
+							var newBase64 = await _telegramService.GetChannelAvatarBase64ByFileIdAsync(biggestPhoto.FileId);
+							if (!string.IsNullOrEmpty(newBase64))
+							{
+								group.ProfilePictureUrl = newBase64;
+								groupUpdated = true;
+							}
+						}
+						else if (msg.DeleteChatPhoto == true)
+						{
+							group.ProfilePictureUrl = null;
+							groupUpdated = true;
+						}
+						if (groupUpdated)
+						{
+							await _db.SaveChangesAsync();
+						}
+
+						// Б. Авто-реакция на комментарии живых людей
+						// Отфильтровываем автопересылку постов из канала (IsAutomaticForward), ботов и служебные события
+						bool isServiceMessage =
+							msg.NewChatMembers != null ||
+							msg.LeftChatMember != null ||
+							!string.IsNullOrEmpty(msg.NewChatTitle) ||
+							msg.NewChatPhoto != null ||
+							msg.DeleteChatPhoto == true ||
+							msg.PinnedMessage != null ||
+							msg.GroupChatCreated == true ||
+							msg.SupergroupChatCreated == true;
+
+						bool isRealUserMessage =
+							msg.IsAutomaticForward != true &&
+							msg.SenderChat == null &&
+							msg.From != null &&
+							msg.From.IsBot != true &&
+							!isServiceMessage;
+
+						if (group.IsActive && group.AutoReactToMessages && isRealUserMessage)
+						{
+							try
+							{
+								string emoji = PickRandomTelegramEmoji(group.AllowedReactions);
+								await _telegramBotClient.SetMessageReaction(
+									chatId: groupId,
+									messageId: msg.MessageId,
+									reaction: new ReactionType[] { new ReactionTypeEmoji { Emoji = emoji } },
+									isBig: false);
+
+								_logger.LogInformation($"[Telegram Group] Поставлена реакция {emoji} на сообщение #{msg.MessageId} в группе '{group.ChannelTitle}'");
+							}
+							catch (Exception reactEx)
+							{
+								_logger.LogWarning(reactEx, $"[Telegram Group] Не удалось поставить реакцию в группе '{group.ChannelTitle}' (проверьте, разрешён ли этот эмодзи в настройках группы).");
+							}
+						}
+					}
+				}
+
+				// ===================================================================
 				// 2. СЦЕНАРИЙ: Изменение прав или статуса бота в Канале (MyChatMember)
 				// ===================================================================
 				if (update.Type == UpdateType.MyChatMember && update.MyChatMember != null)
 				{
 					var chatMember = update.MyChatMember;
+					bool isChannel = chatMember.Chat.Type == ChatType.Channel;
+					bool isGroup = chatMember.Chat.Type == ChatType.Group || chatMember.Chat.Type == ChatType.Supergroup;
 
-					if (chatMember.Chat.Type == ChatType.Channel)
+					if (isChannel || isGroup)
 					{
 						var channelId = chatMember.Chat.Id;
-						var channelTitle = chatMember.Chat.Title ?? "Telegram Канал";
+						var channelTitle = chatMember.Chat.Title ?? (isGroup ? "Telegram Группа" : "Telegram Канал");
 						var channelUsername = chatMember.Chat.Username;
-						var addedByTgUserId = chatMember.From.Id; // TgUserId владельца
+						var addedByTgUserId = chatMember.From.Id;
 						var newStatus = chatMember.NewChatMember.Status;
 
-						// -------------------------------------------------------------
-						// А. БОТА НАЗНАЧИЛИ АДМИНИСТРАТОРОМ ИЛИ ИЗМЕНИЛИ ЕГО ПРАВА
-						// -------------------------------------------------------------
 						if (newStatus == ChatMemberStatus.Administrator &&
 							chatMember.NewChatMember is ChatMemberAdministrator adminMember)
 						{
-							// Проверяем главное обязательное право — Публикация сообщений (CanPostMessages)
-							bool hasPostingRights = adminMember.CanPostMessages;
+							// В группе достаточно статуса админа; в канале нужно право публикации постов
+							bool hasRequiredRights = isGroup || adminMember.CanPostMessages;
 
 							var user = await _db.Users
 								.Include(u => u.Profile)
@@ -208,7 +290,6 @@ namespace CrossChat.Controllers
 
 									if (existingChannel == null)
 									{
-										// --- СОЗДАЕМ НОВЫЙ КАНАЛ ---
 										var newChannel = new TelegramChannelSettings
 										{
 											UserId = user.Id,
@@ -216,14 +297,22 @@ namespace CrossChat.Controllers
 											ChannelId = channelId,
 											ChannelTitle = channelTitle,
 											ChannelUsername = channelUsername,
-											IsActive = hasPostingRights, // Активен ТОЛЬКО если даны права на посты
+											IsGroup = isGroup,
+											IsActive = hasRequiredRights,
+											AutoReactToMessages = isGroup,
+											AllowedReactions = "👍",
 											ProfilePictureUrl = await _telegramService.GetChannelAvatarBase64Async(channelId)
 										};
 
 										_db.TelegramChannelSettings.Add(newChannel);
 										await _db.SaveChangesAsync();
 
-										if (hasPostingRights)
+										if (isGroup)
+										{
+											await SendBotMessageAsync(addedByTgUserId,
+												$"✅ <b>Группа «{channelTitle}» успешно подключена!</b>\n\nБот будет автоматически ставить реакции на сообщения участников. Настроить эмодзи можно в личном кабинете CrossChat.");
+										}
+										else if (hasRequiredRights)
 										{
 											await SendBotMessageAsync(addedByTgUserId,
 												$"✅ <b>Канал «{channelTitle}» успешно подключен!</b>\n\nВсе необходимые права выданы. Вы можете настроить автопостинг в личном кабинете CrossChat.");
@@ -236,23 +325,21 @@ namespace CrossChat.Controllers
 									}
 									else
 									{
-										// --- ОБНОВЛЯЕМ ПРАВА СУЩЕСТВУЮЩЕГО КАНАЛА ---
 										bool wasActive = existingChannel.IsActive;
-										existingChannel.IsActive = hasPostingRights;
+										existingChannel.IsGroup = isGroup;
+										existingChannel.IsActive = hasRequiredRights;
 										existingChannel.ChannelTitle = channelTitle;
 										existingChannel.ChannelUsername = channelUsername;
 
 										await _db.SaveChangesAsync();
 
-										if (!wasActive && hasPostingRights)
+										if (!isGroup && !wasActive && hasRequiredRights)
 										{
-											// Права довыдали!
 											await SendBotMessageAsync(addedByTgUserId,
 												$"✅ <b>Права в канале «{channelTitle}» успешно обновлены!</b>\n\nРазрешение на публикацию сообщений получено. Автопостинг снова активен.");
 										}
-										else if (wasActive && !hasPostingRights)
+										else if (!isGroup && wasActive && !hasRequiredRights)
 										{
-											// Права забрали!
 											await SendBotMessageAsync(addedByTgUserId,
 												$"⚠️ <b>В канале «{channelTitle}» урезаны права бота!</b>\n\nУ бота забрали право на публикацию сообщений. Автопостинг приостановлен до восстановления прав.");
 										}
@@ -261,14 +348,10 @@ namespace CrossChat.Controllers
 							}
 							else
 							{
-								// Пользователь еще не связал свой аккаунт на сайте
 								await SendBotMessageAsync(addedByTgUserId,
-									$"⚠️ <b>Бот добавлен в канал «{channelTitle}», но ваш Telegram-аккаунт еще не привязан к сайту!</b>\n\nСначала зайдите в личный кабинет CrossChat и нажмите «Привязать Telegram».");
+									$"⚠️ <b>Бот добавлен в {(isGroup ? "группу" : "канал")} «{channelTitle}», но ваш Telegram-аккаунт еще не привязан к сайту!</b>\n\nСначала зайдите в личный кабинет CrossChat и нажмите «Привязать Telegram».");
 							}
 						}
-						// -------------------------------------------------------------
-						// Б. БОТА УДАЛИЛИ ИЛИ РАЗЖАЛОВАЛИ ИЗ АДМИНОВ В ОБЫЧНЫЕ ПОДПИСЧИКИ
-						// -------------------------------------------------------------
 						else if (newStatus == ChatMemberStatus.Kicked ||
 								 newStatus == ChatMemberStatus.Left ||
 								 newStatus == ChatMemberStatus.Member)
@@ -278,20 +361,22 @@ namespace CrossChat.Controllers
 
 							if (existingChannel != null)
 							{
-								// 1. УМНАЯ ОЧИСТКА ПУБЛИКАЦИЙ В ПЛАНИРОВЩИКЕ И ФАЙЛОВ В GOOGLE DRIVE:
-								await PostCleanupHelper.CleanupLinkedPostsAsync(
-									_db,
-									_googleDriveUploader,
-									NetworkType.TelegramChannel,
-									existingChannel.Id,
-									_logger);
+								if (!existingChannel.IsGroup)
+								{
+									await PostCleanupHelper.CleanupLinkedPostsAsync(
+										_db,
+										_googleDriveUploader,
+										NetworkType.TelegramChannel,
+										existingChannel.Id,
+										_logger);
+								}
 
-								// 2. Удаляем сам канал из БД
+								bool wasGroup = existingChannel.IsGroup;
 								_db.TelegramChannelSettings.Remove(existingChannel);
 								await _db.SaveChangesAsync();
 
 								await SendBotMessageAsync(addedByTgUserId,
-									$"❌ <b>Канал «{channelTitle}» был отсоединен.</b>\n\nБот убран из администраторов. Канал, его настройки и невышедшие публикации удалены с сайта.");
+									$"❌ <b>{(wasGroup ? "Группа" : "Канал")} «{channelTitle}» {(wasGroup ? "отсоединена" : "был отсоединен")}.</b>\n\nБот убран из администраторов. Запись удалена с сайта.");
 							}
 						}
 					}
@@ -832,6 +917,26 @@ namespace CrossChat.Controllers
 			{
 				_logger.LogWarning(ex, $"Не удалось отправить ЛС пользователю {tgUserId} в Telegram");
 			}
+		}
+
+		private static string PickRandomTelegramEmoji(string? allowedReactions)
+		{
+			if (string.IsNullOrWhiteSpace(allowedReactions))
+				return "👍";
+
+			var emojis = new List<string>();
+			var enumerator = StringInfo.GetTextElementEnumerator(allowedReactions);
+			while (enumerator.MoveNext())
+			{
+				string el = enumerator.GetTextElement();
+				if (!string.IsNullOrWhiteSpace(el) && el != ",")
+				{
+					emojis.Add(el);
+				}
+			}
+
+			if (emojis.Count == 0) return "👍";
+			return emojis[Random.Shared.Next(emojis.Count)];
 		}
 	}
 }

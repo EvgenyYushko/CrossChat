@@ -1121,7 +1121,7 @@
                         <!-- Telegram Channels -->
                         @if (Model.TelegramChannelSettingsList != null)
                         {
-                            @foreach (var bot in Model.TelegramChannelSettingsList)
+                            @foreach (var bot in Model.TelegramChannelSettingsList.Where(c => !c.IsGroup))
                             {
                                 var channelDisplayName = !string.IsNullOrWhiteSpace(bot.ChannelTitle)
                                 ? (!string.IsNullOrWhiteSpace(bot.ChannelUsername) ? $"{bot.ChannelTitle} (@{bot.ChannelUsername})" : $"{bot.ChannelTitle} 🔒")

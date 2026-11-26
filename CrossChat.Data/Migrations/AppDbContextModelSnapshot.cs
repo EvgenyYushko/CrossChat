@@ -1107,7 +1107,15 @@ namespace CrossChat.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AllowedReactions")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<bool>("AutoApproveJoinRequests")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AutoReactToMessages")
                         .HasColumnType("boolean");
 
                     b.Property<long>("ChannelId")
@@ -1121,6 +1129,9 @@ namespace CrossChat.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGroup")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("NotifyOnJoinRequests")

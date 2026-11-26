@@ -282,7 +282,7 @@
 
 <div class="container">
     <div class="card">
-        <h1>Telegram Канал</h1>
+        <h1>@(isConnected && Model.IsGroup ? "Telegram Группа" : "Telegram Канал")</h1>
 
         @if (isConnected)
         {
@@ -296,7 +296,7 @@
                 }
                 else
                 {
-                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2.5rem;border-color:#2AABEE;color:white;">📢</div>
+                    <div class="big-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2.5rem;border-color:#2AABEE;color:white;">@(Model.IsGroup ? "👥" : "📢")</div>
                 }
 
                 <div class="username">@Model.ChannelTitle</div>
@@ -317,18 +317,29 @@
                 </div>
             </div>
 
-            <!-- ТРИ КНОПКИ ДЕЙСТВИЯ -->
-            <div class="action-buttons-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 1.5rem; margin-bottom: 1rem;">
-                <a href="/auth/console?provider=telegramchannel&botId=@Model.Id&username=@Model.ChannelTitle" class="btn btn-console" style="padding: 12px 6px;">
-                    💻 Консоль
-                </a>
-                <a href="/planner?profileId=@Model.ProfileId&network=TelegramChannel&botId=@Model.Id" class="btn btn-autoposting" style="padding: 12px 6px;">
-                    📅 Постинг
-                </a>
-                <a href="/telegram-channel/analytics?botId=@Model.Id" class="btn btn-tg" style="padding: 12px 6px;">
-                    📊 Аналитика
-                </a>
-            </div>
+            @if (Model.IsGroup)
+            {
+                <div style="margin-top: 1.5rem; margin-bottom: 1rem;">
+                    <a href="/auth/console?provider=telegramchannel&botId=@Model.Id&username=@Model.ChannelTitle" class="btn btn-console" style="padding: 12px 6px;">
+                        💻 Консоль
+                    </a>
+                </div>
+            }
+            else
+            {
+                <!-- ТРИ КНОПКИ ДЕЙСТВИЯ -->
+                <div class="action-buttons-group" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 1.5rem; margin-bottom: 1rem;">
+                    <a href="/auth/console?provider=telegramchannel&botId=@Model.Id&username=@Model.ChannelTitle" class="btn btn-console" style="padding: 12px 6px;">
+                        💻 Консоль
+                    </a>
+                    <a href="/planner?profileId=@Model.ProfileId&network=TelegramChannel&botId=@Model.Id" class="btn btn-autoposting" style="padding: 12px 6px;">
+                        📅 Постинг
+                    </a>
+                    <a href="/telegram-channel/analytics?botId=@Model.Id" class="btn btn-tg" style="padding: 12px 6px;">
+                        📊 Аналитика
+                    </a>
+                </div>
+            }
 
             <form action="/telegram-channel/update" method="post" class="form-section">
                 <input type="hidden" name="botId" value="@Model.Id" />
@@ -336,7 +347,7 @@
                 <div class="switch-container">
                     <div>
                         <label style="margin:0; font-size: 1.1rem; color: white;">Активность</label>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Разрешить автопостинг в этот канал</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">@(Model.IsGroup ? "Разрешить боту работать в этой группе" : "Разрешить автопостинг в этот канал")</div>
                     </div>
                     <label class="switch">
                         <input type="hidden" name="isActive" value="false" />
@@ -345,10 +356,95 @@
                     </label>
                 </div>
 
-                <div class="form-group">
-                    <label>Системный промпт (Инструкция для нейросети)</label>
-                    <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
-                </div>
+                @if (Model.IsGroup)
+                {
+	                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.25);">
+		                <div style="display: flex; justify-content: space-between; align-items: center;">
+			                <div>
+				                <label style="margin: 0; font-size: 1.05rem; font-weight: 700; color: white; cursor: pointer;">
+					                👍 Авто-реакции на сообщения в группе
+				                </label>
+				                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;">
+					                Бот ставит реакцию на каждый комментарий/сообщение участника (игнорируя авто-посты канала)
+				                </div>
+			                </div>
+			                <label class="switch">
+				                <input type="checkbox" name="autoReactToMessages" value="true" @(Model.AutoReactToMessages ? "checked" : "")>
+				                <span class="slider"></span>
+			                </label>
+			                <input type="hidden" name="autoReactToMessages" value="false">
+		                </div>
+
+		                <div>
+			                <label style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">
+				                Эмодзи для реакций (если несколько — бот выберет случайный):
+			                </label>
+			                <input type="text" name="allowedReactions" value="@(string.IsNullOrWhiteSpace(Model.AllowedReactions) ? "👍" : Model.AllowedReactions)"
+				                   style="width:100%; box-sizing:border-box; background:var(--input-bg); border:1px solid var(--glass-border); color:var(--text-main); padding:10px 14px; border-radius:10px; font-size:1.15rem;"
+				                   placeholder="👍❤️🔥👏">
+			                <small style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+				                Убедитесь, что выбранные эмодзи разрешены в настройках реакций вашей группы.
+			                </small>
+		                </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label>Системный промпт (Инструкция для нейросети)</label>
+                        <textarea name="systemPrompt" required>@Model.SystemPrompt</textarea>
+                    </div>
+
+                    <!-- БЛОК АВТООДОБРЕНИЯ ЗАЯВОК НА ВСТУПЛЕНИЕ (JOIN REQUESTS) -->
+                    <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; background: rgba(42, 171, 238, 0.05); border: 1px solid rgba(42, 171, 238, 0.2);">
+
+                        <!-- Главный переключатель автоодобрения -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label style="margin: 0; font-size: 1.05rem; font-weight: 700; color: white; cursor: pointer;">
+                                    ⚡ Авто-одобрение заявок на вступление
+                                </label>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;">
+                                    Бот будет автоматически принимать новых подписчиков в закрытый канал по ссылке-заявке
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="autoApproveToggle" name="autoApproveJoinRequests" value="true"
+                                       @(Model.AutoApproveJoinRequests ? "checked" : "")
+                                       onchange="document.getElementById('joinSettingsDetails').style.display = this.checked ? 'flex' : 'none';">
+                                <span class="slider"></span>
+                            </label>
+                            <input type="hidden" name="autoApproveJoinRequests" value="false">
+                        </div>
+
+                        <!-- Вложенные настройки уведомлений админа -->
+                        <div id="joinSettingsDetails" style="display: @(Model.AutoApproveJoinRequests ? "flex" : "none"); flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--glass-border);">
+
+                            <!-- Уведомление о входе -->
+                            <label style="display: flex; align-items: center; justify-content: space-between; margin: 0; cursor: pointer;">
+                                <span style="font-size: 0.85rem; color: var(--text-main);">
+                                    🔔 Уведомлять меня в Telegram о новом одобренном подписчике
+                                </span>
+                                <input type="checkbox" name="notifyOnJoinRequests" value="true" @(Model.NotifyOnJoinRequests ? "checked" : "") style="width: 16px; height: 16px; accent-color: #2AABEE;">
+                                <input type="hidden" name="notifyOnJoinRequests" value="false">
+                            </label>
+
+                            <!-- Уведомление о выходе -->
+                            <label style="display: flex; align-items: center; justify-content: space-between; margin: 0; cursor: pointer;">
+                                <span style="font-size: 0.85rem; color: var(--text-main);">
+                                    👋 Уведомлять меня в Telegram, когда подписчик покидает канал
+                                </span>
+                                <input type="checkbox" name="notifyOnMemberLeft" value="true" @(Model.NotifyOnMemberLeft ? "checked" : "") style="width: 16px; height: 16px; accent-color: #2AABEE;">
+                                <input type="hidden" name="notifyOnMemberLeft" value="false">
+                            </label>
+
+                            <!-- Подсказка про права бота -->
+                            <div style="background: rgba(42, 171, 238, 0.1); border-left: 3px solid #2AABEE; padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; color: #bae6fd; line-height: 1.4;">
+                                ⚠️ <strong>Важно:</strong> Убедитесь, что у бота <strong>@@cros_hub_bot</strong> в настройках администраторов канала включено право: <strong>«Пригласительные ссылки» (Invite Users via Links)</strong>, иначе Telegram не разрешит одобрять заявки.
+                            </div>
+                        </div>
+                    </div>
+                }
 
                 <div class="form-group" style="text-align:left; margin-bottom: 1.5rem;">
                     <h4 style="margin-top: 30px; margin-bottom: 15px;">Привязан к профилю</h4>
@@ -363,63 +459,13 @@
                     </select>
                 </div>
 
-                <!-- БЛОК АВТООДОБРЕНИЯ ЗАЯВОК НА ВСТУПЛЕНИЕ (JOIN REQUESTS) -->
-                <div class="switch-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; background: rgba(42, 171, 238, 0.05); border: 1px solid rgba(42, 171, 238, 0.2);">
-    
-                    <!-- Главный переключатель автоодобрения -->
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <label style="margin: 0; font-size: 1.05rem; font-weight: 700; color: white; cursor: pointer;">
-                                ⚡ Авто-одобрение заявок на вступление
-                            </label>
-                            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;">
-                                Бот будет автоматически принимать новых подписчиков в закрытый канал по ссылке-заявке
-                            </div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="autoApproveToggle" name="autoApproveJoinRequests" value="true" 
-                                   @(Model.AutoApproveJoinRequests ? "checked" : "")
-                                   onchange="document.getElementById('joinSettingsDetails').style.display = this.checked ? 'flex' : 'none';">
-                            <span class="slider"></span>
-                        </label>
-                        <input type="hidden" name="autoApproveJoinRequests" value="false">
-                    </div>
-
-                    <!-- Вложенные настройки уведомлений админа -->
-                    <div id="joinSettingsDetails" style="display: @(Model.AutoApproveJoinRequests ? "flex" : "none"); flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--glass-border);">
-        
-                        <!-- Уведомление о входе -->
-                        <label style="display: flex; align-items: center; justify-content: space-between; margin: 0; cursor: pointer;">
-                            <span style="font-size: 0.85rem; color: var(--text-main);">
-                                🔔 Уведомлять меня в Telegram о новом одобренном подписчике
-                            </span>
-                            <input type="checkbox" name="notifyOnJoinRequests" value="true" @(Model.NotifyOnJoinRequests ? "checked" : "") style="width: 16px; height: 16px; accent-color: #2AABEE;">
-                            <input type="hidden" name="notifyOnJoinRequests" value="false">
-                        </label>
-
-                        <!-- Уведомление о выходе -->
-                        <label style="display: flex; align-items: center; justify-content: space-between; margin: 0; cursor: pointer;">
-                            <span style="font-size: 0.85rem; color: var(--text-main);">
-                                👋 Уведомлять меня в Telegram, когда подписчик покидает канал
-                            </span>
-                            <input type="checkbox" name="notifyOnMemberLeft" value="true" @(Model.NotifyOnMemberLeft ? "checked" : "") style="width: 16px; height: 16px; accent-color: #2AABEE;">
-                            <input type="hidden" name="notifyOnMemberLeft" value="false">
-                        </label>
-
-                        <!-- Подсказка про права бота -->
-                        <div style="background: rgba(42, 171, 238, 0.1); border-left: 3px solid #2AABEE; padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; color: #bae6fd; line-height: 1.4;">
-                            ⚠️ <strong>Важно:</strong> Убедитесь, что у бота <strong>@@cros_hub_bot</strong> в настройках администраторов канала включено право: <strong>«Пригласительные ссылки» (Invite Users via Links)</strong>, иначе Telegram не разрешит одобрять заявки.
-                        </div>
-                    </div>
-                </div>
-
                 <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Сохранить настройки</button>
             </form>
 
             <!-- КНОПКА ОТКЛЮЧЕНИЯ КАНАЛА С САЙТА -->
             <form action="/telegram-channel/disconnect" method="post" onsubmit="return confirmDisconnect(@(ViewBag.LinkedPostsCount ?? 0));" style="margin-top: 2rem;">
                 <input type="hidden" name="botId" value="@Model.Id">
-                <button type="submit" class="btn btn-danger">Отключить канал</button>
+                <button type="submit" class="btn btn-danger">@(Model.IsGroup ? "Отключить группу" : "Отключить канал")</button>
             </form>
 
             <div style="margin-top: 1rem; text-align: center; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4;">

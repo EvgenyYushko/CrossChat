@@ -32,5 +32,15 @@ namespace CrossChat.Data.Entities
 
 		// Уведомлять админа в Telegram, когда подписчик покинул канал
 		public bool NotifyOnMemberLeft { get; set; } = false;
+
+		// true = Группа / Супергруппа (например, чат комментариев канала); false = Канал
+		public bool IsGroup { get; set; } = false;
+
+		// Автоматически ставить реакцию на сообщения участников группы
+		public bool AutoReactToMessages { get; set; } = true;
+
+		// Эмодзи для реакций (можно одно "👍", или несколько подряд "👍❤️🔥" — выберет случайную)
+		[MaxLength(100)]
+		public string AllowedReactions { get; set; } = "👍";
 	}
 }

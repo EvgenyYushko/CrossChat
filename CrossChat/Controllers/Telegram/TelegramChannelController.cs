@@ -92,11 +92,13 @@ namespace CrossChat.Controllers
 		[Authorize]
 		public async Task<IActionResult> Update(
 			int botId,
-			string systemPrompt,
+			string? systemPrompt,
 			int profileId,
 			bool autoApproveJoinRequests,
 			bool notifyOnJoinRequests,
-			bool notifyOnMemberLeft)
+			bool notifyOnMemberLeft,
+			bool autoReactToMessages = false,
+			string? allowedReactions = null)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -107,15 +109,21 @@ namespace CrossChat.Controllers
 			{
 				var isActiveRaw = Request.Form["isActive"].ToString();
 				channel.IsActive = isActiveRaw.Contains("true");
-				channel.SystemPrompt = systemPrompt ?? "";
+				channel.SystemPrompt = systemPrompt ?? channel.SystemPrompt ?? "";
 				channel.ProfileId = profileId;
 
 				channel.AutoApproveJoinRequests = autoApproveJoinRequests;
 				channel.NotifyOnJoinRequests = notifyOnJoinRequests;
 				channel.NotifyOnMemberLeft = notifyOnMemberLeft;
 
+				if (channel.IsGroup)
+				{
+					channel.AutoReactToMessages = autoReactToMessages;
+					channel.AllowedReactions = string.IsNullOrWhiteSpace(allowedReactions) ? "👍" : allowedReactions.Trim();
+				}
+
 				await _db.SaveChangesAsync();
-				_logger.LogInformation("✅ [Telegram Channel] Настройки канала '{Title}' обновлены.", channel.ChannelTitle);
+				_logger.LogInformation("✅ [Telegram] Настройки '{Title}' обновлены.", channel.ChannelTitle);
 			}
 
 			return RedirectToAction("Index", new { botId = botId, saved = "true" });
@@ -135,7 +143,8 @@ namespace CrossChat.Controllers
 			if (settings != null)
 			{
 				// 1. Умная очистка публикаций и файлов Google Drive:
-				await CleanupLinkedPostsAsync(NetworkType.TelegramChannel, botId);
+				if (!settings.IsGroup)
+					await CleanupLinkedPostsAsync(NetworkType.TelegramChannel, botId);
 
 				// 2. Бот вежливо выходит из канала в самом Telegram (если может)
 				try
@@ -189,7 +198,7 @@ namespace CrossChat.Controllers
 			};
 
 			// 2. ЕСЛИ КАНАЛ ПУБЛИЧНЫЙ — ПАРСИМ РЕАЛЬНЫЕ ПОСТЫ, ПРОСМОТРЫ И РЕАКЦИИ
-			if (!string.IsNullOrEmpty(channel.ChannelUsername))
+			if (!channel.IsGroup && !string.IsNullOrEmpty(channel.ChannelUsername))
 			{
 				var posts = await _telegramService.GetPublicChannelPostsAsync(channel.ChannelUsername, liveSubscribers);
 				model.Posts = posts;
