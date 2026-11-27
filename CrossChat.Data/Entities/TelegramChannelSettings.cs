@@ -42,5 +42,8 @@ namespace CrossChat.Data.Entities
 		// Эмодзи для реакций (можно одно "👍", или несколько подряд "👍❤️🔥" — выберет случайную)
 		[MaxLength(100)]
 		public string AllowedReactions { get; set; } = "👍";
+
+		// Удалять системные уведомления (смена фото/названия, вход/выход участников, закреп и т.д.)
+		public bool DeleteServiceMessages { get; set; } = false;
 	}
 }

@@ -1,4 +1,3 @@
-using System.Globalization;
 using CrossChat.Data;
 using CrossChat.Data.Entities;
 using CrossChat.Helpers;
@@ -18,8 +17,6 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using static CrossChat.Helpers.TimeZoneHelper;
 using static CrossChat.Infrastructure.Constants.AppConstants;
-using MassTransit; 
-using CrossChat.Worker.Contracts;
 
 namespace CrossChat.Controllers
 {
@@ -221,16 +218,12 @@ namespace CrossChat.Controllers
 						}
 
 						// Б. Авто-реакция на комментарии живых людей
-						// Отфильтровываем автопересылку постов из канала (IsAutomaticForward), ботов и служебные события
-						bool isServiceMessage =
-							msg.NewChatMembers != null ||
-							msg.LeftChatMember != null ||
-							!string.IsNullOrEmpty(msg.NewChatTitle) ||
-							msg.NewChatPhoto != null ||
-							msg.DeleteChatPhoto == true ||
-							msg.PinnedMessage != null ||
-							msg.GroupChatCreated == true ||
-							msg.SupergroupChatCreated == true;
+						bool isServiceMessage = IsTelegramServiceMessage(msg);
+
+						if (group.IsActive && group.DeleteServiceMessages && isServiceMessage)
+						{
+							await TryDeleteServiceMessageAsync(groupId, msg.MessageId, group.ChannelTitle);
+						}
 
 						bool isRealUserMessage =
 							msg.IsAutomaticForward != true &&
@@ -435,6 +428,11 @@ namespace CrossChat.Controllers
 						if (isUpdated)
 						{
 							await _db.SaveChangesAsync();
+						}
+
+						if (channel.IsActive && channel.DeleteServiceMessages && IsTelegramServiceMessage(post))
+						{
+							await TryDeleteServiceMessageAsync(channelId, post.MessageId, channel.ChannelTitle);
 						}
 					}
 				}
@@ -917,6 +915,37 @@ namespace CrossChat.Controllers
 			catch (Exception ex)
 			{
 				_logger.LogWarning(ex, $"Не удалось отправить ЛС пользователю {tgUserId} в Telegram");
+			}
+		}
+
+		private static bool IsTelegramServiceMessage(Message msg)
+		{
+			return (msg.NewChatMembers != null && msg.NewChatMembers.Length > 0) ||
+				   msg.LeftChatMember != null ||
+				   !string.IsNullOrEmpty(msg.NewChatTitle) ||
+				   (msg.NewChatPhoto != null && msg.NewChatPhoto.Length > 0) ||
+				   msg.DeleteChatPhoto == true ||
+				   msg.PinnedMessage != null ||
+				   msg.GroupChatCreated == true ||
+				   msg.SupergroupChatCreated == true ||
+				   msg.ChannelChatCreated == true ||
+				   msg.VideoChatStarted != null ||
+				   msg.VideoChatEnded != null ||
+				   msg.VideoChatScheduled != null ||
+				   msg.VideoChatParticipantsInvited != null ||
+				   msg.MessageAutoDeleteTimerChanged != null;
+		}
+
+		private async Task TryDeleteServiceMessageAsync(long chatId, int messageId, string chatTitle)
+		{
+			try
+			{
+				await _telegramBotClient.DeleteMessage(chatId: chatId, messageId: messageId);
+				_logger.LogInformation($"🧹 [Telegram Cleaner] Удалено системное сообщение #{messageId} в '{chatTitle}'");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, $"⚠️ [Telegram Cleaner] Не удалось удалить системное сообщение #{messageId} в '{chatTitle}'. Проверьте право бота «Удаление сообщений».");
 			}
 		}
 	}

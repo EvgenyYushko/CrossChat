@@ -98,7 +98,8 @@ namespace CrossChat.Controllers
 			bool notifyOnJoinRequests,
 			bool notifyOnMemberLeft,
 			bool autoReactToMessages = false,
-			string? allowedReactions = null)
+			string? allowedReactions = null,
+			bool deleteServiceMessages = false)
 		{
 			var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -115,6 +116,7 @@ namespace CrossChat.Controllers
 				channel.AutoApproveJoinRequests = autoApproveJoinRequests;
 				channel.NotifyOnJoinRequests = notifyOnJoinRequests;
 				channel.NotifyOnMemberLeft = notifyOnMemberLeft;
+				channel.DeleteServiceMessages = deleteServiceMessages;
 
 				if (channel.IsGroup)
 				{

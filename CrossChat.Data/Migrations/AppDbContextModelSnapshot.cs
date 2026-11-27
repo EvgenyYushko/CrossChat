@@ -1128,6 +1128,9 @@ namespace CrossChat.Data.Migrations
                     b.Property<string>("ChannelUsername")
                         .HasColumnType("text");
 
+                    b.Property<bool>("DeleteServiceMessages")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
