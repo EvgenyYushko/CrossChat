@@ -384,6 +384,8 @@ namespace CrossChat.Controllers
 					var post = update.ChannelPost;
 					var channelId = post.Chat.Id;
 
+					_logger.LogInformation("[TG ChannelPost Debug] Chat={ChatId}, MsgId={MsgId}, Type={Type}", post.Chat.Id, post.MessageId, post.Type);
+
 					// Находим канал в базе данных
 					var channel = await _db.TelegramChannelSettings
 						.FirstOrDefaultAsync(c => c.ChannelId == channelId);
@@ -920,20 +922,48 @@ namespace CrossChat.Controllers
 
 		private static bool IsTelegramServiceMessage(Message msg)
 		{
-			return (msg.NewChatMembers != null && msg.NewChatMembers.Length > 0) ||
-				   msg.LeftChatMember != null ||
-				   !string.IsNullOrEmpty(msg.NewChatTitle) ||
-				   (msg.NewChatPhoto != null && msg.NewChatPhoto.Length > 0) ||
-				   msg.DeleteChatPhoto == true ||
-				   msg.PinnedMessage != null ||
-				   msg.GroupChatCreated == true ||
-				   msg.SupergroupChatCreated == true ||
-				   msg.ChannelChatCreated == true ||
-				   msg.VideoChatStarted != null ||
-				   msg.VideoChatEnded != null ||
-				   msg.VideoChatScheduled != null ||
-				   msg.VideoChatParticipantsInvited != null ||
-				   msg.MessageAutoDeleteTimerChanged != null;
+			bool isKnownService =
+				(msg.NewChatMembers != null && msg.NewChatMembers.Length > 0) ||
+				msg.LeftChatMember != null ||
+				!string.IsNullOrEmpty(msg.NewChatTitle) ||
+				(msg.NewChatPhoto != null && msg.NewChatPhoto.Length > 0) ||
+				msg.DeleteChatPhoto == true ||
+				msg.PinnedMessage != null ||
+				msg.GroupChatCreated == true ||
+				msg.SupergroupChatCreated == true ||
+				msg.ChannelChatCreated == true ||
+				msg.VideoChatStarted != null ||
+				msg.VideoChatEnded != null ||
+				msg.VideoChatScheduled != null ||
+				msg.VideoChatParticipantsInvited != null ||
+				msg.MessageAutoDeleteTimerChanged != null;
+
+			if (isKnownService) return true;
+
+			// Если в сообщении нет НИ ОДНОГО вида контента — значит это новое/неизвестное системное уведомление Telegram
+			bool hasAnyContent =
+				!string.IsNullOrEmpty(msg.Text) ||
+				!string.IsNullOrEmpty(msg.Caption) ||
+				msg.Photo != null ||
+				msg.Video != null ||
+				msg.Animation != null ||
+				msg.Audio != null ||
+				msg.Document != null ||
+				msg.Sticker != null ||
+				msg.Voice != null ||
+				msg.VideoNote != null ||
+				msg.Poll != null ||
+				msg.Dice != null ||
+				msg.Location != null ||
+				msg.Venue != null ||
+				msg.Contact != null ||
+				msg.Game != null ||
+				msg.Invoice != null ||
+				msg.Story != null ||
+				msg.PaidMedia != null ||
+				msg.ForwardOrigin != null;
+
+			return !hasAnyContent;
 		}
 
 		private async Task TryDeleteServiceMessageAsync(long chatId, int messageId, string chatTitle)
